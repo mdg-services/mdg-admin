@@ -8,6 +8,7 @@ import * as React from 'react';
 import { conversationKey } from '@/hooks/api/useConversation';
 import { messagesKey } from '@/hooks/api/useMessages';
 import { getSocket } from '@/lib/socket';
+import { useAuthStore } from '@/store/auth';
 
 interface TypingState {
   userId: string;
@@ -41,7 +42,15 @@ export function useConversationSocket(conversationId: string | null) {
           p.some((m) => m.id === payload.message.id),
         );
         if (exists) return curr;
-        const pages = curr.pages.slice();
+        // If this is our own message echoing back, strip any optimistic tmp-* placeholder
+        // first so the bubble doesn't appear twice (and out of order until refresh).
+        const authState = useAuthStore.getState();
+        const currentUserId = authState.user?.id ?? authState.admin?.id;
+        const isOwnEcho =
+          !!currentUserId && payload.message.senderId === currentUserId;
+        const pages = isOwnEcho
+          ? curr.pages.map((p) => p.filter((m) => !m.id.startsWith('tmp-')))
+          : curr.pages.slice();
         const last = pages[pages.length - 1] ?? [];
         pages[pages.length - 1] = [...last, payload.message];
         return { ...curr, pages };

@@ -15,13 +15,13 @@ export default defineConfig({
       // for Node consumers; the bundler resolves to TS source instead.)
       '@dk/shared/schemas': path.resolve(
         __dirname,
-        '../shared/src/schemas/index.ts',
+        './shared/src/schemas/index.ts',
       ),
       '@dk/shared/types': path.resolve(
         __dirname,
-        '../shared/src/types/index.ts',
+        './shared/src/types/index.ts',
       ),
-      '@dk/shared': path.resolve(__dirname, '../shared/src/index.ts'),
+      '@dk/shared': path.resolve(__dirname, './shared/src/index.ts'),
     },
   },
   server: {

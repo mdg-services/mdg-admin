@@ -13,7 +13,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
   },
   "dependencies": {
-    "@dk/shared": "*",
+    "@dk/shared": "file:./shared",
     "@hookform/resolvers": "^3.9.0",
     "@rjsf/core": "^5.21.2",
     "@rjsf/utils": "^5.21.2",

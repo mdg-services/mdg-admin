@@ -71,10 +71,24 @@ export function useSendMessage() {
       const key = messagesKey(vars.conversationId);
       qc.setQueryData<InfiniteData<Message[]>>(key, (curr) => {
         if (!curr) return curr;
-        const pages = curr.pages.map((p) =>
-          p.map((m) => (m.id === ctx?.optimisticId ? saved : m)),
+        // If the socket echo already inserted the real message, just drop the temp.
+        const alreadyHasReal = curr.pages.some((p) =>
+          p.some((m) => m.id === saved.id),
         );
-        return { ...curr, pages };
+        if (alreadyHasReal) {
+          return {
+            ...curr,
+            pages: curr.pages.map((p) =>
+              p.filter((m) => m.id !== ctx?.optimisticId),
+            ),
+          };
+        }
+        return {
+          ...curr,
+          pages: curr.pages.map((p) =>
+            p.map((m) => (m.id === ctx?.optimisticId ? saved : m)),
+          ),
+        };
       });
     },
   });
