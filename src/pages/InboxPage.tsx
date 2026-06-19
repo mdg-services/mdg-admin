@@ -1,7 +1,16 @@
-import type { Attachment, Conversation, Dealer } from '@dk/shared';
+import type {
+  Attachment,
+  Conversation,
+  Dealer,
+  TicketCategory,
+  TicketPriority,
+} from '@dk/shared';
+import { TICKET_CATEGORIES, TICKET_PRIORITIES } from '@dk/shared';
 import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle2,
+  FileText,
+  FileUp,
   Inbox,
   MessageSquare,
   PanelRightClose,
@@ -15,24 +24,55 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Label } from '@/components/ui/Label';
+import { Select } from '@/components/ui/Select';
 import { Spinner } from '@/components/ui/Spinner';
 import { useInboxSocket } from '@/features/chat/useInboxSocket';
 import { useConversationSocket } from '@/features/chat/useConversationSocket';
 import { Composer } from '@/features/chat/Composer';
 import { MessageList } from '@/features/chat/MessageList';
+import { UploadRecordDialog } from '@/features/records/UploadRecordDialog';
 import { useAssignConversation } from '@/hooks/api/useAssignConversation';
 import { useConversation } from '@/hooks/api/useConversation';
 import {
   type InboxFilter,
   useConversations,
 } from '@/hooks/api/useConversations';
+import { useDealerRecords } from '@/hooks/api/useDealerRecords';
 import { useMessages } from '@/hooks/api/useMessages';
 import { useReopenConversation } from '@/hooks/api/useReopenConversation';
 import { useResolveConversation } from '@/hooks/api/useResolveConversation';
 import { useSendMessage } from '@/hooks/api/useSendMessage';
+import { useUpdateTicket } from '@/hooks/api/useUpdateTicket';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import type { Intent } from '@/lib/statusIntent';
 import { useAuthStore } from '@/store/auth';
+
+const PRIORITY_INTENT: Record<TicketPriority, Intent> = {
+  urgent: 'danger',
+  high: 'warning',
+  normal: 'neutral',
+  low: 'info',
+};
+
+const PRIORITY_LABEL: Record<TicketPriority, string> = {
+  urgent: 'Urgent',
+  high: 'High',
+  normal: 'Normal',
+  low: 'Low',
+};
+
+function titleCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function priorityPill(priority?: TicketPriority) {
+  if (!priority || priority === 'normal') return null;
+  return (
+    <Badge intent={PRIORITY_INTENT[priority]}>{PRIORITY_LABEL[priority]}</Badge>
+  );
+}
 
 const FILTERS: Array<{ key: InboxFilter; label: string }> = [
   { key: 'open', label: 'Unassigned' },
@@ -94,6 +134,10 @@ export function InboxPage() {
   const assignConv = useAssignConversation();
   const resolveConv = useResolveConversation();
   const reopenConv = useReopenConversation();
+  const updateTicket = useUpdateTicket();
+
+  const isAdmin = !!admin;
+  const [uploadOpen, setUploadOpen] = React.useState(false);
 
   // Lightweight counts per filter for the rail.
   const openQ = useConversations('open');
@@ -121,6 +165,9 @@ export function InboxPage() {
     enabled: !!dealerId && contextOpen,
     retry: false,
   });
+
+  const recordsQ = useDealerRecords(dealerId);
+  const records = recordsQ.data ?? [];
 
   async function handleSend(payload: {
     body?: string;
@@ -243,9 +290,12 @@ export function InboxPage() {
                         {formatRelative(c.lastMessageAt ?? c.updatedAt)}
                       </span>
                     </div>
-                    <p className="mt-0.5 truncate text-sm text-text-muted">
-                      {c.lastMessagePreview ?? 'No messages yet'}
-                    </p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      {priorityPill(c.priority)}
+                      <p className="min-w-0 flex-1 truncate text-sm text-text-muted">
+                        {c.lastMessagePreview ?? 'No messages yet'}
+                      </p>
+                    </div>
                   </div>
                   {c.unreadByAdmin ? (
                     <span
@@ -345,6 +395,16 @@ export function InboxPage() {
                     Reopen
                   </Button>
                 ) : null}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setUploadOpen(true)}
+                  leftIcon={
+                    <FileUp width={14} height={14} strokeWidth={1.75} />
+                  }
+                >
+                  Upload report
+                </Button>
                 <button
                   type="button"
                   onClick={() => setContextOpen((v) => !v)}
@@ -390,7 +450,56 @@ export function InboxPage() {
               </div>
 
               {contextOpen ? (
-                <aside className="hidden w-72 shrink-0 overflow-y-auto border-l border-border bg-surface p-3 lg:block">
+                <aside className="hidden w-72 shrink-0 space-y-3 overflow-y-auto border-l border-border bg-surface p-3 lg:block">
+                  {isAdmin ? (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm">Ticket</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div>
+                          <Label htmlFor="ticket-priority">Priority</Label>
+                          <Select
+                            id="ticket-priority"
+                            value={conversation.priority ?? 'normal'}
+                            disabled={updateTicket.isPending}
+                            onChange={(e) =>
+                              updateTicket.mutate({
+                                conversationId: conversation.id,
+                                priority: e.target.value as TicketPriority,
+                              })
+                            }
+                          >
+                            {TICKET_PRIORITIES.map((p) => (
+                              <option key={p} value={p}>
+                                {PRIORITY_LABEL[p]}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="ticket-category">Category</Label>
+                          <Select
+                            id="ticket-category"
+                            value={conversation.category ?? 'general'}
+                            disabled={updateTicket.isPending}
+                            onChange={(e) =>
+                              updateTicket.mutate({
+                                conversationId: conversation.id,
+                                category: e.target.value as TicketCategory,
+                              })
+                            }
+                          >
+                            {TICKET_CATEGORIES.map((c) => (
+                              <option key={c} value={c}>
+                                {titleCase(c)}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : null}
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-sm">Dealer</CardTitle>
@@ -430,9 +539,77 @@ export function InboxPage() {
                       )}
                     </CardContent>
                   </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-2">
+                      <CardTitle className="text-sm">
+                        Reports
+                        {records.length > 0 ? (
+                          <span className="ml-1.5 text-text-subtle">
+                            {records.length}
+                          </span>
+                        ) : null}
+                      </CardTitle>
+                      <button
+                        type="button"
+                        onClick={() => setUploadOpen(true)}
+                        aria-label="Upload report"
+                        className="rounded-sm p-1 text-text-muted hover:bg-surface-2 hover:text-text"
+                      >
+                        <FileUp width={15} height={15} strokeWidth={1.75} />
+                      </button>
+                    </CardHeader>
+                    <CardContent className="text-sm">
+                      {recordsQ.isLoading ? (
+                        <div className="flex justify-center py-3">
+                          <Spinner size={16} />
+                        </div>
+                      ) : records.length === 0 ? (
+                        <p className="text-xs text-text-muted">
+                          No reports sent yet.
+                        </p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {records.map((r) => (
+                            <li
+                              key={r.id}
+                              className="flex items-start gap-2"
+                            >
+                              <FileText
+                                width={14}
+                                height={14}
+                                strokeWidth={1.75}
+                                className="mt-0.5 shrink-0 text-text-muted"
+                              />
+                              <div className="min-w-0">
+                                <p className="truncate text-text">
+                                  {r.title}
+                                </p>
+                                {r.periodLabel ? (
+                                  <p className="truncate text-xs text-text-subtle">
+                                    {r.periodLabel}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </CardContent>
+                  </Card>
                 </aside>
               ) : null}
             </div>
+
+            {dealerId ? (
+              <UploadRecordDialog
+                open={uploadOpen}
+                onClose={() => setUploadOpen(false)}
+                dealerId={dealerId}
+                dealerName={conversation.dealerName ?? undefined}
+                conversationId={conversation.id}
+              />
+            ) : null}
           </>
         )}
       </section>
