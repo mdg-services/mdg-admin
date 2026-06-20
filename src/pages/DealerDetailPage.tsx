@@ -8,14 +8,18 @@ import { useDealerQuery } from '@/hooks/api/useDealers';
 
 import { CustomRequestTab } from './dealers/CustomRequestTab';
 import { DealerInfoTab } from './dealers/DealerInfoTab';
+import { DealerMembersTab } from './dealers/DealerMembersTab';
 import { DealerServicesTab } from './dealers/DealerServicesTab';
 import { OnboardingTab } from './dealers/OnboardingTab';
 import { RunsListInline } from './dealers/RunsListInline';
+import { ServicesProvidedTab } from './dealers/ServicesProvidedTab';
 
 const TABS = [
   { id: 'onboarding', label: 'Onboarding' },
   { id: 'info', label: 'Info' },
+  { id: 'members', label: 'Team' },
   { id: 'services', label: 'Services' },
+  { id: 'provided', label: 'Services provided' },
   { id: 'runs', label: 'Run history' },
   { id: 'custom', label: 'Custom requests' },
 ];
@@ -69,7 +73,9 @@ export function DealerDetailPage() {
       <Tabs items={TABS} value={activeTab} onChange={setTab} className="mb-4" />
       {activeTab === 'onboarding' ? <OnboardingTab dealer={dealer} /> : null}
       {activeTab === 'info' ? <DealerInfoTab dealer={dealer} /> : null}
+      {activeTab === 'members' ? <DealerMembersTab dealer={dealer} /> : null}
       {activeTab === 'services' ? <DealerServicesTab dealer={dealer} /> : null}
+      {activeTab === 'provided' ? <ServicesProvidedTab dealer={dealer} /> : null}
       {activeTab === 'runs' ? <RunsListInline dealerId={dealer.id} /> : null}
       {activeTab === 'custom' ? <CustomRequestTab dealer={dealer} /> : null}
     </div>

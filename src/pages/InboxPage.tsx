@@ -1,11 +1,3 @@
-import type {
-  Attachment,
-  Conversation,
-  Dealer,
-  TicketCategory,
-  TicketPriority,
-} from '@dk/shared';
-import { TICKET_CATEGORIES, TICKET_PRIORITIES } from '@dk/shared';
 import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle2,
@@ -27,10 +19,11 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
 import { Spinner } from '@/components/ui/Spinner';
-import { useInboxSocket } from '@/features/chat/useInboxSocket';
-import { useConversationSocket } from '@/features/chat/useConversationSocket';
 import { Composer } from '@/features/chat/Composer';
 import { MessageList } from '@/features/chat/MessageList';
+import { ResolveConversationDialog } from '@/features/chat/ResolveConversationDialog';
+import { useConversationSocket } from '@/features/chat/useConversationSocket';
+import { useInboxSocket } from '@/features/chat/useInboxSocket';
 import { UploadRecordDialog } from '@/features/records/UploadRecordDialog';
 import { useAssignConversation } from '@/hooks/api/useAssignConversation';
 import { useConversation } from '@/hooks/api/useConversation';
@@ -43,11 +36,20 @@ import { useMessages } from '@/hooks/api/useMessages';
 import { useReopenConversation } from '@/hooks/api/useReopenConversation';
 import { useResolveConversation } from '@/hooks/api/useResolveConversation';
 import { useSendMessage } from '@/hooks/api/useSendMessage';
+import { useServicesQuery } from '@/hooks/api/useServices';
 import { useUpdateTicket } from '@/hooks/api/useUpdateTicket';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { Intent } from '@/lib/statusIntent';
 import { useAuthStore } from '@/store/auth';
+import { TICKET_CATEGORIES, TICKET_PRIORITIES } from '@dk/shared';
+import type {
+  Attachment,
+  Conversation,
+  Dealer,
+  TicketCategory,
+  TicketPriority,
+} from '@dk/shared';
 
 const PRIORITY_INTENT: Record<TicketPriority, Intent> = {
   urgent: 'danger',
@@ -65,6 +67,52 @@ const PRIORITY_LABEL: Record<TicketPriority, string> = {
 
 function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function roleLabel(role?: Conversation['memberRole']): string {
+  if (role === 'dealer-owner') return 'Owner';
+  if (role === 'dealer-staff') return 'Manager';
+  return '';
+}
+
+/** A short label for a conversation's member, e.g. "Asha · Manager". */
+function memberLabel(c: Conversation): string {
+  const name = c.memberName?.trim();
+  const title = c.memberTitle?.trim() || roleLabel(c.memberRole);
+  if (name && title) return `${name} · ${title}`;
+  if (name) return name;
+  if (title) return title;
+  return 'Member';
+}
+
+interface DealerGroup {
+  dealerId: string;
+  dealerName: string;
+  items: Conversation[];
+}
+
+/**
+ * Group conversations by their organisation so the two (or more) member chats
+ * under one dealer sit together. Preserves the incoming order of dealers.
+ */
+function groupByDealer(conversations: Conversation[]): DealerGroup[] {
+  const order: string[] = [];
+  const map = new Map<string, DealerGroup>();
+  for (const c of conversations) {
+    const key = c.dealerId;
+    let group = map.get(key);
+    if (!group) {
+      group = {
+        dealerId: key,
+        dealerName: c.dealerName ?? 'Dealer',
+        items: [],
+      };
+      map.set(key, group);
+      order.push(key);
+    }
+    group.items.push(c);
+  }
+  return order.map((k) => map.get(k)!);
 }
 
 function priorityPill(priority?: TicketPriority) {
@@ -138,6 +186,8 @@ export function InboxPage() {
 
   const isAdmin = !!admin;
   const [uploadOpen, setUploadOpen] = React.useState(false);
+  const [resolveOpen, setResolveOpen] = React.useState(false);
+  const servicesQ = useServicesQuery();
 
   // Lightweight counts per filter for the rail.
   const openQ = useConversations('open');
@@ -189,10 +239,6 @@ export function InboxPage() {
     if (!conversation) return;
     // No admin picker yet — pick-up reassigns to self.
     assignConv.mutate({ conversationId: conversation.id });
-  }
-  function handleResolve() {
-    if (!conversation) return;
-    resolveConv.mutate(conversation.id);
   }
   function handleReopen() {
     if (!conversation) return;
@@ -269,41 +315,50 @@ export function InboxPage() {
               />
             </li>
           ) : (
-            conversations.map((c) => (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(c.id)}
-                  className={cn(
-                    'flex w-full items-start gap-2 border-b border-border px-4 py-3 text-left',
-                    selectedId === c.id
-                      ? 'bg-surface-2'
-                      : 'hover:bg-surface-2/60',
-                  )}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate font-medium text-text">
-                        {c.dealerName ?? 'Dealer'}
-                      </span>
-                      <span className="shrink-0 text-xs text-text-subtle">
-                        {formatRelative(c.lastMessageAt ?? c.updatedAt)}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 flex items-center gap-1.5">
-                      {priorityPill(c.priority)}
-                      <p className="min-w-0 flex-1 truncate text-sm text-text-muted">
-                        {c.lastMessagePreview ?? 'No messages yet'}
-                      </p>
-                    </div>
-                  </div>
-                  {c.unreadByAdmin ? (
-                    <span
-                      aria-label="Unread"
-                      className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-brand"
-                    />
-                  ) : null}
-                </button>
+            groupByDealer(conversations).map((group) => (
+              <li key={group.dealerId}>
+                <div className="sticky top-0 z-[1] bg-surface-2/80 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted backdrop-blur">
+                  {group.dealerName}
+                </div>
+                <ul>
+                  {group.items.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(c.id)}
+                        className={cn(
+                          'flex w-full items-start gap-2 border-b border-border px-4 py-3 text-left',
+                          selectedId === c.id
+                            ? 'bg-surface-2'
+                            : 'hover:bg-surface-2/60',
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate font-medium text-text">
+                              {memberLabel(c)}
+                            </span>
+                            <span className="shrink-0 text-xs text-text-subtle">
+                              {formatRelative(c.lastMessageAt ?? c.updatedAt)}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 flex items-center gap-1.5">
+                            {priorityPill(c.priority)}
+                            <p className="min-w-0 flex-1 truncate text-sm text-text-muted">
+                              {c.lastMessagePreview ?? 'No messages yet'}
+                            </p>
+                          </div>
+                        </div>
+                        {c.unreadByAdmin ? (
+                          <span
+                            aria-label="Unread"
+                            className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-brand"
+                          />
+                        ) : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))
           )}
@@ -328,15 +383,16 @@ export function InboxPage() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h2 className="truncate text-base font-semibold text-text">
-                    {conversation.dealerName ?? 'Dealer'}
+                    {memberLabel(conversation)}
                   </h2>
                   {statusBadge(conversation.status)}
                 </div>
-                {conversation.assignedAdminName ? (
-                  <p className="text-xs text-text-muted">
-                    Assigned to {conversation.assignedAdminName}
-                  </p>
-                ) : null}
+                <p className="truncate text-xs text-text-muted">
+                  {conversation.dealerName ?? 'Dealer'}
+                  {conversation.assignedAdminName
+                    ? ` · Assigned to ${conversation.assignedAdminName}`
+                    : null}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 {conversation.status === 'OPEN' ? (
@@ -368,7 +424,7 @@ export function InboxPage() {
                     <Button
                       size="sm"
                       variant="primary"
-                      onClick={handleResolve}
+                      onClick={() => setResolveOpen(true)}
                       loading={resolveConv.isPending}
                       leftIcon={
                         <CheckCircle2
@@ -610,6 +666,21 @@ export function InboxPage() {
                 conversationId={conversation.id}
               />
             ) : null}
+
+            <ResolveConversationDialog
+              open={resolveOpen}
+              onClose={() => setResolveOpen(false)}
+              services={servicesQ.data ?? []}
+              servicesLoading={servicesQ.isLoading}
+              pending={resolveConv.isPending}
+              onResolve={async (values) => {
+                await resolveConv.mutateAsync({
+                  conversationId: conversation.id,
+                  ...values,
+                });
+                setResolveOpen(false);
+              }}
+            />
           </>
         )}
       </section>

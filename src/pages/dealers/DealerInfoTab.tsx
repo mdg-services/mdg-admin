@@ -1,4 +1,3 @@
-import type { Dealer } from '@dk/shared';
 import { ChevronDown, MessageSquare } from 'lucide-react';
 import * as React from 'react';
 
@@ -13,6 +12,7 @@ import {
 } from '@/components/ui';
 import { useDealerAuditQuery } from '@/hooks/api/useDealerAudit';
 import { formatDate, formatDateTime } from '@/lib/format';
+import type { Dealer } from '@dk/shared';
 
 import { PortalCredentialsSection } from './PortalCredentialsSection';
 
@@ -114,72 +114,17 @@ export function DealerInfoTab({ dealer }: Props) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>WhatsApp groups</CardTitle>
-              <CardSubtitle>Created at steps 7 and 8.</CardSubtitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid grid-cols-1 gap-2 text-sm">
-              <Row
-                label="Admin group"
-                value={dealer.whatsappGroups?.adminGroupName ?? 'Not created'}
-              />
-              <Row
-                label="Admin link"
-                value={
-                  dealer.whatsappGroups?.adminGroupInviteLink ? (
-                    <a
-                      href={dealer.whatsappGroups.adminGroupInviteLink}
-                      className="text-brand hover:underline"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open
-                    </a>
-                  ) : (
-                    '—'
-                  )
-                }
-              />
-              <Row
-                label="Dealer group"
-                value={dealer.whatsappGroups?.dealerGroupName ?? 'Not created'}
-              />
-              <Row
-                label="Dealer link"
-                value={
-                  dealer.whatsappGroups?.dealerGroupInviteLink ? (
-                    <a
-                      href={dealer.whatsappGroups.dealerGroupInviteLink}
-                      className="text-brand hover:underline"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open
-                    </a>
-                  ) : (
-                    '—'
-                  )
-                }
-              />
-            </dl>
-          </CardContent>
-        </Card>
-
         <Card className="md:col-span-2">
           <CardHeader>
             <div>
-              <CardTitle>Portal credentials</CardTitle>
-              <CardSubtitle>Provisioned at step 7. Hash is never returned.</CardSubtitle>
+              <CardTitle>App login</CardTitle>
+              <CardSubtitle>Issued at the final onboarding step. Hash is never returned.</CardSubtitle>
             </div>
           </CardHeader>
           <CardContent>
             <dl className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
               <Row
-                label="Username"
+                label="Login email"
                 value={
                   dealer.portalCredentials?.username ? (
                     <span className="font-mono">

@@ -1,13 +1,11 @@
-import type { Dealer, OnboardingStepEntry, OnboardingStepId } from '@dk/shared';
-import { ONBOARDING_STEPS, stepById } from '@dk/shared';
-import { STEP_PAYLOAD_SCHEMAS } from '@dk/shared/schemas';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   Check,
   CircleDot,
   Copy,
+  KeyRound,
   Lock,
-  MessageCircle,
+  RefreshCw,
   RotateCcw,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -33,26 +31,18 @@ import {
   useStepReopenMutation,
 } from '@/hooks/api/useDealerOnboarding';
 import { formatDateTime } from '@/lib/format';
+import { generatePassword } from '@/lib/password';
+import { ONBOARDING_STEPS, stepById } from '@dk/shared';
+import type { Dealer, OnboardingStepEntry, OnboardingStepId } from '@dk/shared';
+import { STEP_PAYLOAD_SCHEMAS } from '@dk/shared/schemas';
 
 interface Props {
   dealer: Dealer;
 }
 
-// ----- WhatsApp helpers ----------------------------------------------------
-
-/** Strip everything except digits — wa.me only accepts the bare number. */
-function waDigits(phone: string): string {
-  return phone.replace(/[^0-9]/g, '');
-}
-
-function waChatUrl(phone: string, message?: string): string {
-  const base = `https://wa.me/${waDigits(phone)}`;
-  if (!message) return base;
-  return `${base}?text=${encodeURIComponent(message)}`;
-}
-
-// Templates: editable defaults the admin uses to compose the WhatsApp message
-// for each "send" step. Keep them factual; the admin can tweak inline.
+// Templates: editable defaults the admin uses to compose the message the dealer
+// receives in the in-app chat for each "send" step. Keep them factual; the
+// admin can tweak inline before marking the step sent.
 const DEFAULT_MESSAGES: Partial<Record<OnboardingStepId, (dealer: Dealer) => string>> = {
   'send-welcome': (d) =>
     `Hi${d.name ? ' ' + d.name : ''}, welcome to Dealer Kavach.
@@ -92,27 +82,6 @@ export function OnboardingTab({ dealer }: Props) {
 
   return (
     <div className="grid gap-4">
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-text">WhatsApp chat with dealer</div>
-            <div className="text-xs text-text-muted">
-              <span className="font-mono">{dealer.phone}</span>
-              {dealer.name ? ` · ${dealer.name}` : null}
-            </div>
-          </div>
-          <a
-            href={waChatUrl(dealer.phone)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-success px-4 text-sm font-semibold text-text-inverse hover:bg-success/90"
-          >
-            <MessageCircle width={16} height={16} strokeWidth={1.75} />
-            Open WhatsApp
-          </a>
-        </CardContent>
-      </Card>
-
       {dealer.status === 'ACTIVE' ? (
         <Card>
           <CardContent>
@@ -211,6 +180,14 @@ function StepCard({
               </p>
             ) : null}
 
+            {/* Once issued, show a copyable credentials panel even after the
+                step is DONE so the admin can re-share the login email. */}
+            {stepId === 'issue-app-login' && isDone && dealer.portalCredentials ? (
+              <div className="mt-3">
+                <IssuedLoginPanel email={dealer.portalCredentials.username} />
+              </div>
+            ) : null}
+
             {isCurrent ? (
               <div className="mt-3">
                 <StepForm dealerId={dealerId} dealer={dealer} stepId={stepId} />
@@ -295,24 +272,20 @@ function StepForm({
       return <PaymentAndGstForm dealerId={dealerId} />;
     case 'assign-code':
       return <AssignCodeForm dealerId={dealerId} />;
-    case 'create-admin-group':
-      return <AdminGroupForm dealerId={dealerId} dealer={dealer} />;
-    case 'create-dealer-group':
-      return <DealerGroupForm dealerId={dealerId} dealer={dealer} />;
+    case 'issue-app-login':
+      return <IssueAppLoginForm dealerId={dealerId} dealer={dealer} />;
   }
 }
 
-// ----- Reusable: compose message + copy + open WhatsApp ---------------------
+// ----- Reusable: compose message + copy --------------------------------------
 
 function ComposeMessageBlock({
   message,
   onChange,
-  phone,
   helper,
 }: {
   message: string;
   onChange: (v: string) => void;
-  phone?: string;
   helper?: string;
 }) {
   const toast = useToast();
@@ -329,42 +302,27 @@ function ComposeMessageBlock({
     }
   }
 
-  const waHref = phone ? waChatUrl(phone, message) : undefined;
-
   return (
     <div className="grid gap-2 rounded-md border border-border bg-surface-2/40 p-3">
       <div className="flex items-center justify-between gap-2">
         <Label htmlFor="compose-message" className="m-0">
           Message to send
         </Label>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={copy}
-            leftIcon={
-              copied ? (
-                <Check width={14} height={14} />
-              ) : (
-                <Copy width={14} height={14} />
-              )
-            }
-          >
-            {copied ? 'Copied' : 'Copy'}
-          </Button>
-          {waHref ? (
-            <a
-              href={waHref}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-success px-3 text-sm font-semibold text-text-inverse hover:bg-success/90"
-            >
-              <MessageCircle width={14} height={14} strokeWidth={1.75} />
-              Open in WhatsApp
-            </a>
-          ) : null}
-        </div>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={copy}
+          leftIcon={
+            copied ? (
+              <Check width={14} height={14} />
+            ) : (
+              <Copy width={14} height={14} />
+            )
+          }
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </Button>
       </div>
       <Textarea
         id="compose-message"
@@ -406,15 +364,14 @@ function SendMessageStep({
 
   const helper =
     stepId === 'send-pdf'
-      ? 'Attach the onboarding PDF in WhatsApp before sending. The note saved here is for the audit trail.'
-      : 'Edit the message inline, then copy or open in WhatsApp.';
+      ? 'Attach the onboarding PDF in the dealer chat before sending. The note saved here is for the audit trail.'
+      : 'Edit the message inline, then copy it and send it in the dealer chat.';
 
   return (
     <div className="grid gap-3">
       <ComposeMessageBlock
         message={message}
         onChange={setMessage}
-        phone={dealer.phone}
         helper={helper}
       />
       <div className="flex justify-end">
@@ -556,7 +513,102 @@ function AssignCodeForm({ dealerId }: { dealerId: string }) {
   );
 }
 
-function AdminGroupForm({
+// ----- Issue app login -------------------------------------------------------
+
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const toast = useToast();
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      toast.success(`${label} copied`);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error('Could not copy — copy manually.');
+    }
+  }
+  return (
+    <Button
+      type="button"
+      variant="secondary"
+      size="sm"
+      onClick={copy}
+      leftIcon={
+        copied ? <Check width={14} height={14} /> : <Copy width={14} height={14} />
+      }
+    >
+      {copied ? 'Copied' : 'Copy'}
+    </Button>
+  );
+}
+
+/** Shown after issue-app-login is done — surfaces the owner's login email. */
+function IssuedLoginPanel({ email }: { email: string }) {
+  return (
+    <div className="grid gap-2 rounded-md border border-success/40 bg-success-soft/50 p-3">
+      <div className="flex items-center gap-2 text-sm font-semibold text-text">
+        <KeyRound width={15} height={15} strokeWidth={1.75} className="text-success" />
+        App login issued
+      </div>
+      <div className="flex items-center justify-between gap-2 rounded-sm border border-border bg-surface px-2 py-1.5">
+        <div className="min-w-0">
+          <div className="text-xs text-text-subtle">Login email</div>
+          <div className="truncate font-mono text-sm text-text">{email}</div>
+        </div>
+        <CopyButton value={email} label="Email" />
+      </div>
+      <p className="text-xs text-text-subtle">
+        The password is set, hashed and never returned. Reopen this step to issue
+        a new password if it needs to be re-shared.
+      </p>
+    </div>
+  );
+}
+
+/** Credentials panel shown immediately after issuing, including the password. */
+function ShareCredentialsPanel({
+  email,
+  password,
+}: {
+  email: string;
+  password: string;
+}) {
+  const both = `Email: ${email}\nPassword: ${password}`;
+  return (
+    <div className="grid gap-2 rounded-md border border-success/50 bg-success-soft/60 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-semibold text-text">
+          <KeyRound width={15} height={15} strokeWidth={1.75} className="text-success" />
+          Share these with the dealer
+        </div>
+        <CopyButton value={both} label="Credentials" />
+      </div>
+      <p className="text-xs text-text-subtle">
+        This password is shown once. Copy it now — it is stored hashed and cannot
+        be retrieved later.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="flex items-center justify-between gap-2 rounded-sm border border-border bg-surface px-2 py-1.5">
+          <div className="min-w-0">
+            <div className="text-xs text-text-subtle">Login email</div>
+            <div className="truncate font-mono text-sm text-text">{email}</div>
+          </div>
+          <CopyButton value={email} label="Email" />
+        </div>
+        <div className="flex items-center justify-between gap-2 rounded-sm border border-border bg-surface px-2 py-1.5">
+          <div className="min-w-0">
+            <div className="text-xs text-text-subtle">Temporary password</div>
+            <div className="truncate font-mono text-sm text-text">{password}</div>
+          </div>
+          <CopyButton value={password} label="Password" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IssueAppLoginForm({
   dealerId,
   dealer,
 }: {
@@ -565,194 +617,156 @@ function AdminGroupForm({
 }) {
   const toast = useToast();
   const mutate = useStepCompleteMutation(dealerId);
-  const schema = STEP_PAYLOAD_SCHEMAS['create-admin-group'];
+  const schema = STEP_PAYLOAD_SCHEMAS['issue-app-login'];
   type Form = {
-    groupName: string;
-    inviteLink: string;
-    username: string;
+    email: string;
+    name: string;
     password: string;
+    phone?: string;
     note?: string;
   };
-  const defaultGroupName = dealer.code ? `${dealer.code}01` : '';
-  const defaultUsername = dealer.code ? `${dealer.code.toLowerCase()}-admin` : '';
-  const defaultWelcome = `Welcome to your dealer admin group on Dealer Kavach.
-
-To set up your portal access, please share:
-1. A username (3+ characters)
-2. A temporary password (8+ characters)
-
-We'll provision your account and you'll be asked to change the password on first login.`;
-  const [welcomeMessage, setWelcomeMessage] = useState(defaultWelcome);
   const {
     register,
     handleSubmit,
+    setValue,
+    getValues,
     formState: { errors },
-    reset,
   } = useForm<Form>({
     resolver: zodResolver(schema),
     defaultValues: {
-      groupName: defaultGroupName,
-      inviteLink: '',
-      username: defaultUsername,
+      email: dealer.ownerContact?.email ?? '',
+      name: dealer.name ?? dealer.ownerContact?.name ?? '',
       password: '',
+      phone: dealer.phone ?? '',
       note: '',
     },
   });
 
+  // Once issued, the credentials are shown once for the admin to hand over.
+  const [issued, setIssued] = useState<{ email: string; password: string } | null>(
+    null,
+  );
+  const [copiedPw, setCopiedPw] = useState(false);
+
+  function fillGenerated() {
+    const pw = generatePassword(14);
+    setValue('password', pw, { shouldValidate: true, shouldDirty: true });
+  }
+
+  async function copyPassword() {
+    try {
+      await navigator.clipboard.writeText(getValues('password'));
+      setCopiedPw(true);
+      toast.success('Password copied');
+      window.setTimeout(() => setCopiedPw(false), 1500);
+    } catch {
+      toast.error('Could not copy — copy manually.');
+    }
+  }
+
   const submit = handleSubmit(async (values) => {
     try {
-      await mutate.mutateAsync({
-        stepId: 'create-admin-group',
-        payload: { ...values, note: values.note || welcomeMessage.slice(0, 500) },
-      });
-      toast.success('Admin group recorded.');
-      reset();
+      await mutate.mutateAsync({ stepId: 'issue-app-login', payload: values });
+      toast.success('App login issued. Dealer is now ACTIVE.');
+      setIssued({ email: values.email.toLowerCase(), password: values.password });
     } catch (e) {
       toast.error((e as Error).message);
     }
   });
 
+  if (issued) {
+    return <ShareCredentialsPanel email={issued.email} password={issued.password} />;
+  }
+
   return (
     <form onSubmit={submit} className="grid gap-3 md:grid-cols-2">
+      <div>
+        <Label htmlFor="app-email" required>
+          Login email
+        </Label>
+        <Input
+          id="app-email"
+          type="email"
+          autoComplete="off"
+          placeholder="owner@example.com"
+          invalid={!!errors.email}
+          {...register('email')}
+        />
+        <FieldError message={errors.email?.message} />
+      </div>
+      <div>
+        <Label htmlFor="app-name" required>
+          Owner name
+        </Label>
+        <Input
+          id="app-name"
+          placeholder="Full name"
+          invalid={!!errors.name}
+          {...register('name')}
+        />
+        <FieldError message={errors.name?.message} />
+      </div>
       <div className="md:col-span-2">
-        <ComposeMessageBlock
-          message={welcomeMessage}
-          onChange={setWelcomeMessage}
-          helper="Send this message in the group after creating it. Copy here, then paste into the new WhatsApp group."
-        />
-      </div>
-      <div>
-        <Label htmlFor="groupName" required>
-          Group name
+        <Label htmlFor="app-password" required>
+          Password
         </Label>
-        <Input
-          id="groupName"
-          invalid={!!errors.groupName}
-          {...register('groupName')}
-        />
-        <FieldError message={errors.groupName?.message} />
-      </div>
-      <div>
-        <Label htmlFor="inviteLink" required>
-          Group invite link
-        </Label>
-        <Input
-          id="inviteLink"
-          placeholder="https://chat.whatsapp.com/…"
-          invalid={!!errors.inviteLink}
-          {...register('inviteLink')}
-        />
-        <FieldError message={errors.inviteLink?.message} />
-      </div>
-      <div className="md:col-span-2 mt-2 border-t border-border pt-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-          Portal credentials provisioned for the dealer
+        <div className="flex items-center gap-2">
+          <Input
+            id="app-password"
+            type="text"
+            autoComplete="new-password"
+            placeholder="At least 8 characters"
+            invalid={!!errors.password}
+            className="font-mono"
+            {...register('password')}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={fillGenerated}
+            leftIcon={<RefreshCw width={14} height={14} />}
+          >
+            Generate
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={copyPassword}
+            leftIcon={
+              copiedPw ? (
+                <Check width={14} height={14} />
+              ) : (
+                <Copy width={14} height={14} />
+              )
+            }
+          >
+            {copiedPw ? 'Copied' : 'Copy'}
+          </Button>
         </div>
-      </div>
-      <div>
-        <Label htmlFor="username" required>
-          Username
-        </Label>
-        <Input
-          id="username"
-          invalid={!!errors.username}
-          {...register('username')}
-        />
-        <FieldError message={errors.username?.message} />
-      </div>
-      <div>
-        <Label htmlFor="password" required>
-          Temporary password
-        </Label>
-        <Input
-          id="password"
-          type="password"
-          autoComplete="new-password"
-          invalid={!!errors.password}
-          {...register('password')}
-        />
         <FieldError message={errors.password?.message} />
         <p className="mt-1 text-xs text-text-subtle">
-          Stored bcrypt-hashed. Dealer will be required to change on first login.
+          Stored bcrypt-hashed. The dealer is asked to change it on first login.
         </p>
       </div>
+      <div>
+        <Label htmlFor="app-phone">Phone (optional)</Label>
+        <Input
+          id="app-phone"
+          placeholder="+91…"
+          invalid={!!errors.phone}
+          {...register('phone')}
+        />
+        <FieldError message={errors.phone?.message} />
+      </div>
       <div className="md:col-span-2">
-        <Label htmlFor="adminGroupNote">Internal note (optional)</Label>
-        <Textarea id="adminGroupNote" rows={2} {...register('note')} />
+        <Label htmlFor="app-note">Internal note (optional)</Label>
+        <Textarea id="app-note" rows={2} {...register('note')} />
       </div>
       <div className="md:col-span-2 flex justify-end">
         <Button type="submit" loading={mutate.isPending}>
-          Mark done
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-function DealerGroupForm({
-  dealerId,
-  dealer,
-}: {
-  dealerId: string;
-  dealer: Dealer;
-}) {
-  const toast = useToast();
-  const mutate = useStepCompleteMutation(dealerId);
-  const schema = STEP_PAYLOAD_SCHEMAS['create-dealer-group'];
-  type Form = { groupName: string; inviteLink: string; note?: string };
-  const defaultGroupName = dealer.code ? `${dealer.code}02` : '';
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = useForm<Form>({
-    resolver: zodResolver(schema),
-    defaultValues: { groupName: defaultGroupName, inviteLink: '', note: '' },
-  });
-
-  const submit = handleSubmit(async (values) => {
-    try {
-      await mutate.mutateAsync({ stepId: 'create-dealer-group', payload: values });
-      toast.success('Dealer group recorded. Dealer is now ACTIVE.');
-      reset();
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  });
-
-  return (
-    <form onSubmit={submit} className="grid gap-3 md:grid-cols-2">
-      <div>
-        <Label htmlFor="dealerGroupName" required>
-          Group name
-        </Label>
-        <Input
-          id="dealerGroupName"
-          invalid={!!errors.groupName}
-          {...register('groupName')}
-        />
-        <FieldError message={errors.groupName?.message} />
-      </div>
-      <div>
-        <Label htmlFor="dealerInviteLink" required>
-          Group invite link
-        </Label>
-        <Input
-          id="dealerInviteLink"
-          placeholder="https://chat.whatsapp.com/…"
-          invalid={!!errors.inviteLink}
-          {...register('inviteLink')}
-        />
-        <FieldError message={errors.inviteLink?.message} />
-      </div>
-      <div className="md:col-span-2">
-        <Label htmlFor="dealerGroupNote">Internal note (optional)</Label>
-        <Textarea id="dealerGroupNote" rows={2} {...register('note')} />
-      </div>
-      <div className="md:col-span-2 flex justify-end">
-        <Button type="submit" loading={mutate.isPending}>
-          Mark done — activate dealer
+          Issue login — activate dealer
         </Button>
       </div>
     </form>

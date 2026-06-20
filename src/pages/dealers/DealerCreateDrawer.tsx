@@ -35,7 +35,7 @@ export function DealerCreateDrawer({ open, onClose, loading, onSubmit }: Props) 
         reset();
       }}
       title="Add dealer"
-      description="Start onboarding by capturing the dealer's WhatsApp number. The rest of the journey is tracked step by step."
+      description="Start onboarding by capturing the dealer's phone number. The rest of the journey is tracked step by step."
       footer={
         <>
           <Button
@@ -56,7 +56,7 @@ export function DealerCreateDrawer({ open, onClose, loading, onSubmit }: Props) 
       <form onSubmit={submit} noValidate className="grid gap-4">
         <div>
           <Label htmlFor="phone" required>
-            WhatsApp number
+            Phone number
           </Label>
           <Input
             id="phone"
