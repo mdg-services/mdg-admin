@@ -1,8 +1,11 @@
-import type { Attachment } from '@dk/shared';
-import { Paperclip } from 'lucide-react';
+import { Pause, Paperclip, Play } from 'lucide-react';
 import * as React from 'react';
 
+import type { Attachment } from '@dk/shared';
+
 import { Dialog } from '@/components/ui/Dialog';
+import { cn } from '@/lib/cn';
+import { formatDuration } from '@/lib/uploadAttachment';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -10,8 +13,75 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Inline audio player for a received voice note. */
+function VoiceMessage({ attachment }: { attachment: Attachment }) {
+  const audioRef = React.useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = React.useState(false);
+  const [currentMs, setCurrentMs] = React.useState(0);
+  const [loadedMs, setLoadedMs] = React.useState<number | null>(null);
+
+  const totalMs = attachment.durationMs ?? loadedMs ?? 0;
+  const progress = totalMs > 0 ? Math.min(100, (currentMs / totalMs) * 100) : 0;
+
+  const toggle = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (el.paused) void el.play();
+    else el.pause();
+  };
+
+  return (
+    <div className="flex min-w-[180px] items-center gap-2.5 rounded-lg border border-border bg-surface px-2.5 py-2">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={playing ? 'Pause voice message' : 'Play voice message'}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand"
+      >
+        {playing ? (
+          <Pause width={15} strokeWidth={2} />
+        ) : (
+          <Play width={15} strokeWidth={2} className="translate-x-[1px]" />
+        )}
+      </button>
+      <div className="flex flex-1 flex-col gap-1">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+          <div
+            className="h-full rounded-full bg-brand"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <span className="text-[11px] tabular-nums text-text-subtle">
+          {formatDuration(playing || currentMs > 0 ? currentMs : totalMs)}
+        </span>
+      </div>
+      <audio
+        ref={audioRef}
+        src={attachment.url}
+        preload="metadata"
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => {
+          setPlaying(false);
+          setCurrentMs(0);
+        }}
+        onTimeUpdate={(e) => setCurrentMs(e.currentTarget.currentTime * 1000)}
+        onLoadedMetadata={(e) => {
+          const d = e.currentTarget.duration;
+          if (Number.isFinite(d) && d > 0) setLoadedMs(d * 1000);
+        }}
+        className={cn('hidden')}
+      />
+    </div>
+  );
+}
+
 export function AttachmentPreview({ attachment }: { attachment: Attachment }) {
   const [open, setOpen] = React.useState(false);
+
+  if (attachment.kind === 'audio' && attachment.url) {
+    return <VoiceMessage attachment={attachment} />;
+  }
 
   if (attachment.kind === 'image' && attachment.url) {
     return (
