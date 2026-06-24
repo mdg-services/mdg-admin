@@ -145,9 +145,13 @@ export function Composer({ conversationId, onSend, disabled }: ComposerProps) {
   async function stopAndSendVoice() {
     const rec = await recorder.stop();
     if (!rec || rec.blob.size === 0) return;
-    const ext = extForMime(rec.mimeType);
+    // Normalise to a clean base audio MIME (strip ";codecs=…", guarantee audio/*)
+    // so the presign allowlist accepts it and the S3 PUT matches the signed type.
+    let mime = ((rec.mimeType || rec.blob.type || 'audio/webm').split(';')[0] || 'audio/webm').trim();
+    if (!mime.startsWith('audio/')) mime = 'audio/webm';
+    const ext = extForMime(mime);
     const file = new File([rec.blob], `voice-${Date.now()}.${ext}`, {
-      type: rec.blob.type || rec.mimeType,
+      type: mime,
     });
     setSending(true);
     setError(null);
