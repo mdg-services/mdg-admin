@@ -1,5 +1,5 @@
 import type { Message } from '@dk/shared';
-import { CheckCheck } from 'lucide-react';
+import { Check, CheckCheck, Clock } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 
@@ -9,6 +9,26 @@ interface MessageBubbleProps {
   message: Message;
   currentUserId: string;
   isLastOwn?: boolean;
+}
+
+/** WhatsApp-style delivery state for one of the current user's own messages. */
+function MessageTicks({ message }: { message: Message }) {
+  if (message.id.startsWith('tmp-')) {
+    return <Clock width={12} height={12} strokeWidth={2} className="opacity-70" />;
+  }
+  const seen = (message.readBy ?? []).some((id) => id && id !== message.senderId);
+  if (seen) {
+    return (
+      <CheckCheck width={13} height={13} strokeWidth={2} className="text-[#34b7f1]" aria-label="Read" />
+    );
+  }
+  const delivered = (message.deliveredTo ?? []).some(
+    (id) => id && id !== message.senderId,
+  );
+  if (delivered) {
+    return <CheckCheck width={13} height={13} strokeWidth={2} aria-label="Delivered" />;
+  }
+  return <Check width={13} height={13} strokeWidth={2} aria-label="Sent" />;
 }
 
 function formatTime(iso: string): string {
@@ -23,11 +43,8 @@ function formatTime(iso: string): string {
 export function MessageBubble({
   message,
   currentUserId,
-  isLastOwn,
 }: MessageBubbleProps) {
   const own = message.senderId === currentUserId;
-  const readByOthers =
-    own && message.readBy.some((id) => id && id !== currentUserId);
 
   return (
     <div
@@ -72,15 +89,7 @@ export function MessageBubble({
         )}
       >
         <span>{formatTime(message.createdAt)}</span>
-        {isLastOwn && readByOthers ? (
-          <CheckCheck
-            width={12}
-            height={12}
-            strokeWidth={2}
-            className="text-info"
-            aria-label="Read"
-          />
-        ) : null}
+        {own ? <MessageTicks message={message} /> : null}
       </div>
     </div>
   );

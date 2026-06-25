@@ -172,11 +172,26 @@ export function InboxPage() {
   const conversation = selectedQ.data ?? null;
 
   const messagesQ = useMessages(selectedId);
-  useConversationSocket(selectedId);
+  const { markRead } = useConversationSocket(selectedId);
   const messages = React.useMemo(
     () => (messagesQ.data?.pages ?? []).flat(),
     [messagesQ.data],
   );
+
+  // Mark the dealer's messages read once the conversation is open, so their
+  // sent ticks turn blue. Covers history loaded over HTTP.
+  React.useEffect(() => {
+    if (!currentUserId) return;
+    const unread = messages
+      .filter(
+        (m) =>
+          !m.id.startsWith('tmp-') &&
+          m.senderId !== currentUserId &&
+          !m.readBy.includes(currentUserId),
+      )
+      .map((m) => m.id);
+    if (unread.length > 0) markRead(unread);
+  }, [messages, currentUserId, markRead]);
 
   const sendMessage = useSendMessage();
   const assignConv = useAssignConversation();

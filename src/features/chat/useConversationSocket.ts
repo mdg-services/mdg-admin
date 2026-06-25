@@ -20,6 +20,31 @@ export function useConversationSocket(conversationId: string | null) {
   const qc = useQueryClient();
   const [typing, setTyping] = React.useState<TypingState | null>(null);
 
+  const applyReceipt = React.useCallback(
+    (field: 'deliveredTo' | 'readBy', userId: string, ids: string[]) => {
+      if (!conversationId || ids.length === 0) return;
+      const idSet = new Set(ids);
+      qc.setQueryData<InfiniteData<Message[]>>(
+        messagesKey(conversationId),
+        (curr) => {
+          if (!curr) return curr;
+          return {
+            ...curr,
+            pages: curr.pages.map((page) =>
+              page.map((m) => {
+                if (!idSet.has(m.id)) return m;
+                const arr = m[field] ?? [];
+                if (arr.includes(userId)) return m;
+                return { ...m, [field]: [...arr, userId] };
+              }),
+            ),
+          };
+        },
+      );
+    },
+    [conversationId, qc],
+  );
+
   React.useEffect(() => {
     if (!conversationId) return;
     const socket = getSocket();
@@ -56,6 +81,17 @@ export function useConversationSocket(conversationId: string | null) {
         return { ...curr, pages };
       });
       qc.setQueryData(conversationKey(conversationId), payload.conversation);
+
+      // The conversation is open in the inbox, so the other party's message is
+      // read on arrival.
+      const authState = useAuthStore.getState();
+      const currentUserId = authState.user?.id ?? authState.admin?.id;
+      if (currentUserId && payload.message.senderId !== currentUserId) {
+        socket.emit('read', {
+          conversationId,
+          messageIds: [payload.message.id],
+        });
+      }
     };
 
     const onTyping = (payload: {
@@ -71,15 +107,38 @@ export function useConversationSocket(conversationId: string | null) {
       });
     };
 
+    const onDelivered = (payload: {
+      conversationId: string;
+      userId: string;
+      messageIds: string[];
+    }) => {
+      if (payload.conversationId !== conversationId) return;
+      applyReceipt('deliveredTo', payload.userId, payload.messageIds);
+    };
+
+    const onRead = (payload: {
+      conversationId: string;
+      userId: string;
+      messageIds: string[];
+    }) => {
+      if (payload.conversationId !== conversationId) return;
+      applyReceipt('deliveredTo', payload.userId, payload.messageIds);
+      applyReceipt('readBy', payload.userId, payload.messageIds);
+    };
+
     socket.on('message:new', onMessage);
     socket.on('typing', onTyping);
+    socket.on('delivered', onDelivered);
+    socket.on('read', onRead);
 
     return () => {
       socket.off('message:new', onMessage);
       socket.off('typing', onTyping);
+      socket.off('delivered', onDelivered);
+      socket.off('read', onRead);
       socket.emit('conversation:leave', conversationId);
     };
-  }, [conversationId, qc]);
+  }, [conversationId, qc, applyReceipt]);
 
   // Auto-clear typing indicator after 3s.
   React.useEffect(() => {
@@ -88,5 +147,14 @@ export function useConversationSocket(conversationId: string | null) {
     return () => window.clearTimeout(t);
   }, [typing]);
 
-  return { typing };
+  const markRead = React.useCallback(
+    (messageIds: string[]) => {
+      if (!conversationId || messageIds.length === 0) return;
+      const socket = getSocket();
+      socket?.emit('read', { conversationId, messageIds });
+    },
+    [conversationId],
+  );
+
+  return { typing, markRead };
 }
