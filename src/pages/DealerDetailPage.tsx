@@ -1,6 +1,6 @@
 import { AlertCircle } from 'lucide-react';
 import * as React from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState, Skeleton, StatusChip, Tabs } from '@/components/ui';
@@ -8,6 +8,7 @@ import { useDealerQuery } from '@/hooks/api/useDealers';
 
 import { CustomRequestTab } from './dealers/CustomRequestTab';
 import { DealerInfoTab } from './dealers/DealerInfoTab';
+import { DealerKavachTab } from './dealers/DealerKavachTab';
 import { DealerMembersTab } from './dealers/DealerMembersTab';
 import { DealerServicesTab } from './dealers/DealerServicesTab';
 import { OnboardingTab } from './dealers/OnboardingTab';
@@ -19,20 +20,29 @@ const TABS = [
   { id: 'info', label: 'Info' },
   { id: 'members', label: 'Team' },
   { id: 'services', label: 'Services' },
+  { id: 'kavach', label: 'Kavach' },
   { id: 'provided', label: 'Services provided' },
   { id: 'runs', label: 'Run history' },
   { id: 'custom', label: 'Custom requests' },
 ];
 
+const TAB_IDS = TABS.map((t) => t.id);
+
 export function DealerDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const { data: dealer, isLoading, isError, error } = useDealerQuery(id);
   const [tab, setTab] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!dealer || tab) return;
+    const requested = searchParams.get('tab');
+    if (requested && TAB_IDS.includes(requested)) {
+      setTab(requested);
+      return;
+    }
     setTab(dealer.status === 'ACTIVE' ? 'info' : 'onboarding');
-  }, [dealer, tab]);
+  }, [dealer, tab, searchParams]);
 
   if (isLoading) {
     return (
@@ -75,6 +85,7 @@ export function DealerDetailPage() {
       {activeTab === 'info' ? <DealerInfoTab dealer={dealer} /> : null}
       {activeTab === 'members' ? <DealerMembersTab dealer={dealer} /> : null}
       {activeTab === 'services' ? <DealerServicesTab dealer={dealer} /> : null}
+      {activeTab === 'kavach' ? <DealerKavachTab dealer={dealer} /> : null}
       {activeTab === 'provided' ? <ServicesProvidedTab dealer={dealer} /> : null}
       {activeTab === 'runs' ? <RunsListInline dealerId={dealer.id} /> : null}
       {activeTab === 'custom' ? <CustomRequestTab dealer={dealer} /> : null}

@@ -8,6 +8,7 @@ import {
   Plug,
   Search,
   Shield,
+  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
 import * as React from 'react';
@@ -27,6 +28,7 @@ const NAV_ITEMS: Array<{
   { to: '/inbox', label: 'Inbox', icon: MessageSquare },
   { to: '/overview', label: 'Overview', icon: LayoutDashboard },
   { to: '/dealers', label: 'Dealers', icon: Building2 },
+  { to: '/kavach', label: 'Kavach', icon: ShieldCheck },
   { to: '/services', label: 'Service Catalog', icon: Plug },
   { to: '/runs', label: 'Run History', icon: Activity },
 ];

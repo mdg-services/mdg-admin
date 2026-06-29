@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom';
+import { Route, Routes , Navigate } from 'react-router-dom';
 
 import { AppShell } from '@/components/layout/AppShell';
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
@@ -6,12 +6,12 @@ import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { DealerDetailPage } from '@/pages/DealerDetailPage';
 import { DealersPage } from '@/pages/DealersPage';
 import { InboxPage } from '@/pages/InboxPage';
+import { KavachDashboardPage } from '@/pages/KavachDashboardPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { OverviewPage } from '@/pages/OverviewPage';
 import { RunHistoryPage } from '@/pages/RunHistoryPage';
 import { ServiceCatalogPage } from '@/pages/ServiceCatalogPage';
-import { Navigate } from 'react-router-dom';
 
 export default function App() {
   return (
@@ -30,6 +30,7 @@ export default function App() {
           <Route path="overview" element={<OverviewPage />} />
           <Route path="dealers" element={<DealersPage />} />
           <Route path="dealers/:id" element={<DealerDetailPage />} />
+          <Route path="kavach" element={<KavachDashboardPage />} />
           <Route path="services" element={<ServiceCatalogPage />} />
           <Route path="runs" element={<RunHistoryPage />} />
         </Route>
