@@ -1,7 +1,7 @@
-import type { Message } from '@dk/shared';
 import { Check, CheckCheck, Clock } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
+import type { Message } from '@dk/shared';
 
 import { AttachmentPreview } from './AttachmentPreview';
 

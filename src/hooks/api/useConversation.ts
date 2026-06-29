@@ -1,7 +1,7 @@
-import type { Conversation } from '@dk/shared';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import type { Conversation } from '@dk/shared';
 
 export const conversationKey = (id: string | null | undefined) =>
   ['conversation', id] as const;

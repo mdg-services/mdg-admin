@@ -1,9 +1,9 @@
-import type { Conversation, Message } from '@dk/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import * as React from 'react';
 
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
+import type { Conversation, Message } from '@dk/shared';
 
 export function useInboxSocket() {
   const qc = useQueryClient();

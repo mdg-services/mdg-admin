@@ -1,7 +1,7 @@
-import type { Paginated, ServiceRun, ServiceRunStatus } from '@dk/shared';
 import { useQuery } from '@tanstack/react-query';
 
 import { api, type QueryParams } from '@/lib/api';
+import type { Paginated, ServiceRun, ServiceRunStatus } from '@dk/shared';
 
 export interface RunsListParams {
   dealerId?: string;

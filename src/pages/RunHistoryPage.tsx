@@ -1,4 +1,3 @@
-import type { ServiceRun, ServiceRunStatus } from '@dk/shared';
 import { AlertCircle, Clock } from 'lucide-react';
 import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -20,6 +19,7 @@ import {
 } from '@/components/ui';
 import { useRunsQuery } from '@/hooks/api/useRuns';
 import { formatDateTime, formatDuration, groupByDay } from '@/lib/format';
+import type { ServiceRun, ServiceRunStatus } from '@dk/shared';
 
 const STATUSES: Array<{ value: '' | ServiceRunStatus; label: string }> = [
   { value: '', label: 'All statuses' },

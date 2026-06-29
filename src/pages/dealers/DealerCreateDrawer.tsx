@@ -1,8 +1,8 @@
-import { dealerCreateSchema, type DealerCreateInput } from '@dk/shared/schemas';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 
 import { Button, Drawer, FieldError, Input, Label } from '@/components/ui';
+import { dealerCreateSchema, type DealerCreateInput } from '@dk/shared/schemas';
 
 interface Props {
   open: boolean;

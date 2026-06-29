@@ -1,4 +1,3 @@
-import type { ServiceRun } from '@dk/shared';
 import { Download } from 'lucide-react';
 import * as React from 'react';
 
@@ -19,6 +18,7 @@ import { useRunDetail } from '@/hooks/api/useRunDetail';
 import { useRunsQuery } from '@/hooks/api/useRuns';
 import { formatDateTime, formatDuration } from '@/lib/format';
 import type { ServiceRunWithSteps } from '@/types/serviceRun';
+import type { ServiceRun } from '@dk/shared';
 
 import { RunStepTimeline } from './RunStepTimeline';
 

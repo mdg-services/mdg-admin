@@ -1,5 +1,3 @@
-import type { Cadence, ServicePluginCatalogEntry } from '@dk/shared';
-import type { AttachServiceInput } from '@dk/shared/schemas';
 import Form from '@rjsf/core';
 import type { RJSFSchema } from '@rjsf/utils';
 import validator from '@rjsf/validator-ajv8';
@@ -14,6 +12,8 @@ import {
 } from '@/components/ui';
 import { useServicesQuery } from '@/hooks/api/useServices';
 import { statusIntent } from '@/lib/statusIntent';
+import type { Cadence, ServicePluginCatalogEntry } from '@dk/shared';
+import type { AttachServiceInput } from '@dk/shared/schemas';
 
 const CADENCE_OPTIONS: Array<{ value: '' | Cadence; label: string }> = [
   { value: '', label: 'Plugin default' },

@@ -1,11 +1,11 @@
 import { Pause, Paperclip, Play } from 'lucide-react';
 import * as React from 'react';
 
-import type { Attachment } from '@dk/shared';
 
 import { Dialog } from '@/components/ui/Dialog';
 import { cn } from '@/lib/cn';
 import { formatDuration } from '@/lib/uploadAttachment';
+import type { Attachment } from '@dk/shared';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

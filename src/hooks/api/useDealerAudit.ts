@@ -1,7 +1,7 @@
-import type { AuditLog, Paginated } from '@dk/shared';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import type { AuditLog, Paginated } from '@dk/shared';
 
 export function useDealerAuditQuery(
   id: string | undefined,

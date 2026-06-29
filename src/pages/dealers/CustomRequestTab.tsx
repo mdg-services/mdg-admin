@@ -1,4 +1,3 @@
-import type { Dealer } from '@dk/shared';
 import { Send } from 'lucide-react';
 import * as React from 'react';
 
@@ -17,6 +16,7 @@ import {
   useRunNow,
 } from '@/hooks/api/useDealerServices';
 import { ApiError } from '@/lib/api';
+import type { Dealer } from '@dk/shared';
 
 import { RunsListInline } from './RunsListInline';
 

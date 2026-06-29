@@ -1,8 +1,9 @@
-import type { Conversation } from '@dk/shared';
-import type { UpdateTicketInput } from '@dk/shared/schemas';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import type { Conversation } from '@dk/shared';
+import type { UpdateTicketInput } from '@dk/shared/schemas';
+
 
 import { conversationKey } from './useConversation';
 

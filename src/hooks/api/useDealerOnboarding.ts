@@ -1,8 +1,9 @@
-import type { Dealer, DealerOnboarding, OnboardingStepId } from '@dk/shared';
-import type { StepReopenInput } from '@dk/shared/schemas';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import type { Dealer, DealerOnboarding, OnboardingStepId } from '@dk/shared';
+import type { StepReopenInput } from '@dk/shared/schemas';
+
 
 export function useDealerOnboardingQuery(dealerId: string | undefined) {
   return useQuery({

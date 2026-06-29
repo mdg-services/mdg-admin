@@ -1,7 +1,7 @@
-import type { Message } from '@dk/shared';
 import { useInfiniteQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import type { Message } from '@dk/shared';
 
 export const messagesKey = (conversationId: string | null | undefined) =>
   ['messages', conversationId] as const;

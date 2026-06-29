@@ -1,5 +1,3 @@
-import type { Attachment, RecordType } from '@dk/shared';
-import { RECORD_TYPES, RECORD_TYPE_LABELS } from '@dk/shared';
 import { FileUp, Paperclip, X } from 'lucide-react';
 import * as React from 'react';
 
@@ -16,6 +14,8 @@ import {
   MAX_ATTACHMENT_BYTES,
   uploadAttachment,
 } from '@/lib/uploadAttachment';
+import { RECORD_TYPES, RECORD_TYPE_LABELS } from '@dk/shared';
+import type { Attachment, RecordType } from '@dk/shared';
 
 interface UploadRecordDialogProps {
   open: boolean;

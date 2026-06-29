@@ -1,6 +1,6 @@
+import { clearAuth, getAuthToken } from '@/store/auth';
 import type { ApiError as ApiErrorEnvelope, ApiResponse } from '@dk/shared';
 
-import { clearAuth, getAuthToken } from '@/store/auth';
 
 const BASE_URL: string =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??

@@ -1,3 +1,4 @@
+import { statusIntent } from '@/lib/statusIntent';
 import type {
   Cadence,
   DealerServiceStatus,
@@ -6,7 +7,6 @@ import type {
   SlaTier,
 } from '@dk/shared';
 
-import { statusIntent } from '@/lib/statusIntent';
 
 import { Badge } from './Badge';
 

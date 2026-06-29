@@ -1,4 +1,3 @@
-import { loginSchema, type LoginInput } from '@dk/shared/schemas';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Shield } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -8,6 +7,7 @@ import { Button, FieldError, Input, Label, useToast } from '@/components/ui';
 import { useLoginMutation } from '@/hooks/api/useAuth';
 import { ApiError } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
+import { loginSchema, type LoginInput } from '@dk/shared/schemas';
 
 type LoginValues = LoginInput;
 

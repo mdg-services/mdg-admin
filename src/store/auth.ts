@@ -1,6 +1,7 @@
-import type { Admin, User } from '@dk/shared';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+
+import type { Admin, User } from '@dk/shared';
 
 interface AuthState {
   token: string | null;

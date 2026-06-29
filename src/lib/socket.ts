@@ -1,7 +1,7 @@
-import type { ClientToServerEvents, ServerToClientEvents } from '@dk/shared';
 import { io, type Socket } from 'socket.io-client';
 
 import { useAuthStore } from '@/store/auth';
+import type { ClientToServerEvents, ServerToClientEvents } from '@dk/shared';
 
 export type ChatSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 

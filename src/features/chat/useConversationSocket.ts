@@ -1,4 +1,3 @@
-import type { Conversation, Message } from '@dk/shared';
 import {
   type InfiniteData,
   useQueryClient,
@@ -9,6 +8,7 @@ import { conversationKey } from '@/hooks/api/useConversation';
 import { messagesKey } from '@/hooks/api/useMessages';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
+import type { Conversation, Message } from '@dk/shared';
 
 interface TypingState {
   userId: string;

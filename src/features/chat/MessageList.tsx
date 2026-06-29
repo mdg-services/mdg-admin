@@ -1,5 +1,6 @@
-import type { Message } from '@dk/shared';
 import * as React from 'react';
+
+import type { Message } from '@dk/shared';
 
 import { MessageBubble } from './MessageBubble';
 

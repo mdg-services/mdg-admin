@@ -1,4 +1,3 @@
-import type { Attachment, Message } from '@dk/shared';
 import {
   type InfiniteData,
   useMutation,
@@ -7,6 +6,7 @@ import {
 
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
+import type { Attachment, Message } from '@dk/shared';
 
 import { messagesKey } from './useMessages';
 

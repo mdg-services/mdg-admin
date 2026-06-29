@@ -1,7 +1,6 @@
 import { Mic, Paperclip, Send, Trash2, X } from 'lucide-react';
 import * as React from 'react';
 
-import type { Attachment } from '@dk/shared';
 
 import { Button } from '@/components/ui/Button';
 import { Textarea } from '@/components/ui/Textarea';
@@ -12,6 +11,7 @@ import {
   uploadAttachment,
 } from '@/lib/uploadAttachment';
 import { useVoiceRecorder } from '@/lib/useVoiceRecorder';
+import type { Attachment } from '@dk/shared';
 
 function extForMime(mimeType: string): string {
   if (mimeType.includes('mp4') || mimeType.includes('aac')) return 'm4a';

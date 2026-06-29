@@ -1,7 +1,7 @@
-import type { ServicePluginCatalogEntry } from '@dk/shared';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import type { ServicePluginCatalogEntry } from '@dk/shared';
 
 export function useServicesQuery() {
   return useQuery({

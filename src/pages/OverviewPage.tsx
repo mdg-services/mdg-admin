@@ -1,4 +1,3 @@
-import type { ServiceRun } from '@dk/shared';
 import {
   Activity,
   AlertCircle,
@@ -28,6 +27,7 @@ import {
 } from '@/components/ui';
 import { useOverviewQuery } from '@/hooks/api/useOverview';
 import { formatDateTime, formatDuration } from '@/lib/format';
+import type { ServiceRun } from '@dk/shared';
 
 export function OverviewPage() {
   const { data, isLoading, isError, error } = useOverviewQuery();

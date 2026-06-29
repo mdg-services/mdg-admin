@@ -1,4 +1,3 @@
-import type { DealerStatus } from '@dk/shared';
 import { AlertCircle, Building2, Plus, Search } from 'lucide-react';
 import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -25,6 +24,7 @@ import {
 import { useCreateDealer, useDealersQuery } from '@/hooks/api/useDealers';
 import { ApiError } from '@/lib/api';
 import { formatDate } from '@/lib/format';
+import type { DealerStatus } from '@dk/shared';
 
 import { DealerCreateDrawer } from './dealers/DealerCreateDrawer';
 

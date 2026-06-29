@@ -1,7 +1,7 @@
-import type { Conversation } from '@dk/shared';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import type { Conversation } from '@dk/shared';
 
 export type InboxFilter = 'open' | 'assigned' | 'mine' | 'resolved';
 

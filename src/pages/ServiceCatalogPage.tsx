@@ -1,4 +1,3 @@
-import type { ServicePluginCatalogEntry } from '@dk/shared';
 import { AlertCircle, Plug } from 'lucide-react';
 import * as React from 'react';
 
@@ -14,6 +13,7 @@ import {
 } from '@/components/ui';
 import { useServicesQuery } from '@/hooks/api/useServices';
 import { statusIntent } from '@/lib/statusIntent';
+import type { ServicePluginCatalogEntry } from '@dk/shared';
 
 export function ServiceCatalogPage() {
   const { data, isLoading, isError, error } = useServicesQuery();

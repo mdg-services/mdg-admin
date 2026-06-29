@@ -1,4 +1,3 @@
-import type { Dealer, DealerService } from '@dk/shared';
 import { AlertCircle, Pause, Play, Plug, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import * as React from 'react';
 
@@ -27,6 +26,7 @@ import {
 } from '@/hooks/api/useDealerServices';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
+import type { Dealer, DealerService } from '@dk/shared';
 
 import { AttachServiceDialog } from './AttachServiceDialog';
 

@@ -1,7 +1,7 @@
-import type { DealerRecord, RecordType } from '@dk/shared';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import type { DealerRecord, RecordType } from '@dk/shared';
 
 export const dealerRecordsKey = (
   dealerId: string | null | undefined,
