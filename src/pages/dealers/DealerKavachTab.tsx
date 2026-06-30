@@ -1,4 +1,12 @@
-import { AlertCircle, Inbox, Plus, ShieldCheck } from 'lucide-react';
+import {
+  AlertCircle,
+  Inbox,
+  Pause,
+  Play,
+  Plus,
+  RotateCw,
+  ShieldCheck,
+} from 'lucide-react';
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -8,6 +16,7 @@ import {
   Card,
   CardContent,
   EmptyState,
+  Select,
   Skeleton,
   useToast,
 } from '@/components/ui';
@@ -21,6 +30,7 @@ import {
   useMarkKavachItemDone,
   useSetKavachItemPaused,
   useSetKavachSosCompliance,
+  useUpdateKavachProgramme,
 } from '@/hooks/api/useKavach';
 import { ApiError } from '@/lib/api';
 import {
@@ -38,6 +48,12 @@ interface Props {
   dealer: Dealer;
 }
 
+/** 00:00–23:00 IST, as a fixed reminder-hour option list. */
+const REMINDER_HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => ({
+  value: h,
+  label: `${String(h).padStart(2, '0')}:00 IST`,
+}));
+
 export function DealerKavachTab({ dealer }: Props) {
   const toast = useToast();
   const [addOpen, setAddOpen] = React.useState(false);
@@ -47,6 +63,7 @@ export function DealerKavachTab({ dealer }: Props) {
   const itemsQ = useKavachItemsQuery(dealer.id);
 
   const initiate = useInitiateKavachProgramme(dealer.id);
+  const updateProgramme = useUpdateKavachProgramme(dealer.id);
   const addCustom = useAddCustomKavachItem(dealer.id);
   const markDone = useMarkKavachItemDone(dealer.id);
   const setPaused = useSetKavachItemPaused(dealer.id);
@@ -108,6 +125,7 @@ export function DealerKavachTab({ dealer }: Props) {
   }
 
   const programme = programmeQ.data;
+  const isPaused = programme.status === 'PAUSED';
   const items = itemsQ.data ?? [];
 
   // Group items by cadence bucket, preserving the canonical order.
@@ -137,6 +155,7 @@ export function DealerKavachTab({ dealer }: Props) {
                     {pct}%
                   </span>
                   <Badge intent={operationalIntent(pct)}>operational</Badge>
+                  {isPaused ? <Badge intent="warning">Paused</Badge> : null}
                 </div>
                 <p className="text-sm text-text-muted">
                   {programme.outlet.retailOutletName} · RO SAP{' '}
@@ -148,7 +167,65 @@ export function DealerKavachTab({ dealer }: Props) {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <label
+                  htmlFor="kavach-digest-hour"
+                  className="text-xs text-text-muted"
+                >
+                  Digest time
+                </label>
+                <Select
+                  id="kavach-digest-hour"
+                  className="h-9 w-auto"
+                  value={programme.reminderHour ?? ''}
+                  disabled={updateProgramme.isPending}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    // Placeholder (global default) → no-op; only send a concrete hour.
+                    if (raw === '') return;
+                    void withBusy(
+                      'programme',
+                      () =>
+                        updateProgramme.mutateAsync({
+                          reminderHour: Number(raw),
+                        }),
+                      'Digest time updated',
+                    );
+                  }}
+                >
+                  <option value="">Default (08:00 IST)</option>
+                  {REMINDER_HOUR_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busyId === 'programme'}
+                leftIcon={
+                  isPaused ? (
+                    <Play width={16} height={16} strokeWidth={1.75} />
+                  ) : (
+                    <Pause width={16} height={16} strokeWidth={1.75} />
+                  )
+                }
+                onClick={() =>
+                  withBusy(
+                    'programme',
+                    () =>
+                      updateProgramme.mutateAsync({
+                        status: isPaused ? 'ACTIVE' : 'PAUSED',
+                      }),
+                    isPaused ? 'Programme resumed' : 'Programme paused',
+                  )
+                }
+              >
+                {isPaused ? 'Resume' : 'Pause programme'}
+              </Button>
               <Button
                 variant="secondary"
                 size="sm"
@@ -195,12 +272,38 @@ export function DealerKavachTab({ dealer }: Props) {
       </div>
 
       {/* Items grouped by bucket */}
+      <div
+        className={
+          isPaused
+            ? 'pointer-events-none select-none opacity-60'
+            : undefined
+        }
+        aria-disabled={isPaused || undefined}
+      >
       {itemsQ.isLoading ? (
         <Card>
           <CardContent>
             <Skeleton className="h-32 w-full" />
           </CardContent>
         </Card>
+      ) : itemsQ.isError ? (
+        <EmptyState
+          icon={<AlertCircle width={28} height={28} strokeWidth={1.75} />}
+          title="Could not load items"
+          description={
+            itemsQ.error instanceof ApiError
+              ? itemsQ.error.message
+              : 'Something went wrong while loading the tracked items.'
+          }
+          cta={
+            <Button
+              leftIcon={<RotateCw width={16} height={16} strokeWidth={1.75} />}
+              onClick={() => void itemsQ.refetch()}
+            >
+              Retry
+            </Button>
+          }
+        />
       ) : items.length === 0 ? (
         <EmptyState
           icon={<ShieldCheck width={28} height={28} strokeWidth={1.75} />}
@@ -216,7 +319,8 @@ export function DealerKavachTab({ dealer }: Props) {
           }
         />
       ) : (
-        orderedBuckets.map((bucket) => {
+        <div className="grid gap-4">
+        {orderedBuckets.map((bucket) => {
           const bucketItems = grouped.get(bucket) ?? [];
           return (
             <Card key={bucket}>
@@ -289,8 +393,10 @@ export function DealerKavachTab({ dealer }: Props) {
               </CardContent>
             </Card>
           );
-        })
+        })}
+        </div>
       )}
+      </div>
 
       <AddCustomItemDialog
         open={addOpen}

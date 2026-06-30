@@ -168,7 +168,14 @@ export function AddCustomItemDialog({
 
         <div>
           <Label htmlFor="domain">Domain (optional)</Label>
-          <Select id="domain" {...register('domain')}>
+          <Select
+            id="domain"
+            {...register('domain', {
+              // Empty-string default must coerce to undefined: the shared
+              // enum is `.optional()` (accepts undefined, rejects '').
+              setValueAs: (v) => (v === '' ? undefined : v),
+            })}
+          >
             <option value="">— derive default —</option>
             {DOMAIN_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>

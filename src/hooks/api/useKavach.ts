@@ -12,6 +12,7 @@ import type {
   InitiateKavachProgrammeInput,
   SetKavachItemPausedInput,
   SetKavachSosComplianceInput,
+  UpdateKavachProgrammeInput,
 } from '@dk/shared/schemas';
 
 
@@ -114,6 +115,22 @@ export function useInitiateKavachProgramme(dealerId: string) {
   });
 }
 
+/** Update programme-level settings (status pause/resume, digest reminder hour). */
+export function useUpdateKavachProgramme(dealerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateKavachProgrammeInput) =>
+      api.patch<KavachProgramme>(
+        `/dealers/${dealerId}/kavach/programme`,
+        input,
+      ),
+    onSuccess: (data) => {
+      qc.setQueryData(kavachKeys.programme(dealerId), data);
+      qc.invalidateQueries({ queryKey: kavachKeys.dashboard });
+    },
+  });
+}
+
 /** Add a per-dealer custom item. */
 export function useAddCustomKavachItem(dealerId: string) {
   const invalidate = useItemInvalidation(dealerId);
@@ -169,7 +186,7 @@ export function useDeleteKavachItem(dealerId: string) {
   const invalidate = useItemInvalidation(dealerId);
   return useMutation({
     mutationFn: (itemId: string) =>
-      api.del<{ id: string }>(`/kavach/items/${itemId}`),
+      api.del<{ removed: boolean }>(`/kavach/items/${itemId}`),
     onSuccess: invalidate,
   });
 }
