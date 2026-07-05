@@ -9,6 +9,7 @@ import {
   Search,
   Shield,
   ShieldCheck,
+  UserCog,
   type LucideIcon,
 } from 'lucide-react';
 import * as React from 'react';
@@ -31,6 +32,7 @@ const NAV_ITEMS: Array<{
   { to: '/kavach', label: 'Kavach', icon: ShieldCheck },
   { to: '/services', label: 'Service Catalog', icon: Plug },
   { to: '/runs', label: 'Run History', icon: Activity },
+  { to: '/settings/team', label: 'Team', icon: UserCog },
 ];
 
 export function AppShell() {

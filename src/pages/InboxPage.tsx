@@ -7,10 +7,12 @@ import {
   MessageSquare,
   PanelRightClose,
   PanelRightOpen,
+  Plus,
   RotateCcw,
   UserPlus,
 } from 'lucide-react';
 import * as React from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -21,6 +23,7 @@ import { Select } from '@/components/ui/Select';
 import { Spinner } from '@/components/ui/Spinner';
 import { Composer } from '@/features/chat/Composer';
 import { MessageList } from '@/features/chat/MessageList';
+import { NewConversationDialog } from '@/features/chat/NewConversationDialog';
 import { ResolveConversationDialog } from '@/features/chat/ResolveConversationDialog';
 import { useConversationSocket } from '@/features/chat/useConversationSocket';
 import { useInboxSocket } from '@/features/chat/useInboxSocket';
@@ -161,9 +164,35 @@ export function InboxPage() {
   const admin = useAuthStore((s) => s.admin);
   const currentUserId = user?.id ?? admin?.id ?? '';
 
-  const [filter, setFilter] = React.useState<InboxFilter>('mine');
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  // Deep-link support: `/inbox?c=<id>` (e.g. from a dealer's members tab) opens
+  // that thread. Read the param up front and seed the initial selection from it,
+  // so it wins over the auto-select-first effect below (which would otherwise
+  // race it to a different thread when the default list is warm in cache). Also
+  // switch to a filter that shows a freshly started, unassigned chat.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkId = searchParams.get('c');
+
+  const [filter, setFilter] = React.useState<InboxFilter>(deepLinkId ? 'open' : 'mine');
+  const [selectedId, setSelectedId] = React.useState<string | null>(deepLinkId);
   const [contextOpen, setContextOpen] = React.useState(true);
+  const [newOpen, setNewOpen] = React.useState(false);
+
+  // Honour later `?c=` changes (in-session navigation) too, then strip the param
+  // so refresh/back doesn't re-trigger it.
+  React.useEffect(() => {
+    const c = searchParams.get('c');
+    if (!c) return;
+    setSelectedId(c);
+    setFilter('open');
+    const next = new URLSearchParams(searchParams);
+    next.delete('c');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  function handleStarted(conversationId: string) {
+    setFilter('open');
+    setSelectedId(conversationId);
+  }
 
   const conversationsQ = useConversations(filter);
   const conversations = conversationsQ.data ?? [];
@@ -216,12 +245,14 @@ export function InboxPage() {
     resolved: resolvedQ.data?.length,
   };
 
-  // Auto-select first conversation when list loads and nothing selected.
+  // Auto-select first conversation when list loads and nothing selected. Yield
+  // to a pending deep-link so we never override an explicit `?c=` selection.
   React.useEffect(() => {
+    if (searchParams.get('c')) return;
     if (!selectedId && conversations.length > 0) {
       setSelectedId(conversations[0]!.id);
     }
-  }, [conversations, selectedId]);
+  }, [conversations, selectedId, searchParams]);
 
   const dealerId = conversation?.dealerId ?? null;
   const dealerQ = useQuery({
@@ -310,11 +341,21 @@ export function InboxPage() {
 
       {/* Conversation list */}
       <section className="hidden w-80 shrink-0 flex-col border-r border-border bg-surface md:flex">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
           <h3 className="text-sm font-semibold text-text">
             {FILTERS.find((f) => f.key === filter)?.label}
           </h3>
-          {conversationsQ.isFetching ? <Spinner size={14} /> : null}
+          <div className="flex items-center gap-2">
+            {conversationsQ.isFetching ? <Spinner size={14} /> : null}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setNewOpen(true)}
+              leftIcon={<Plus width={14} height={14} strokeWidth={1.75} />}
+            >
+              New
+            </Button>
+          </div>
         </div>
         <ul className="flex-1 overflow-y-auto">
           {conversationsQ.isLoading ? (
@@ -699,6 +740,12 @@ export function InboxPage() {
           </>
         )}
       </section>
+
+      <NewConversationDialog
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        onStarted={handleStarted}
+      />
     </div>
   );
 }

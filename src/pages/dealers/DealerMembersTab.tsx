@@ -1,7 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Check, Copy, RefreshCw, UserPlus, Users } from 'lucide-react';
+import { Check, Copy, MessageSquare, RefreshCw, UserPlus, Users } from 'lucide-react';
 import * as React from 'react';
 import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 
 import {
@@ -33,6 +34,7 @@ import {
   useDeleteDealerUser,
   useUpdateDealerUser,
 } from '@/hooks/api/useDealerUsers';
+import { useStartConversation } from '@/hooks/api/useStartConversation';
 import { ApiError } from '@/lib/api';
 import { generatePassword } from '@/lib/password';
 import type { Dealer, User } from '@dk/shared';
@@ -69,8 +71,19 @@ export function DealerMembersTab({ dealer }: Props) {
   const { data: users, isLoading } = useDealerUsers(dealer.id);
   const updateUser = useUpdateDealerUser(dealer.id);
   const deleteUser = useDeleteDealerUser(dealer.id);
+  const startConv = useStartConversation();
+  const navigate = useNavigate();
   const toast = useToast();
   const [addOpen, setAddOpen] = React.useState(false);
+
+  async function messageMember(u: User) {
+    try {
+      const convo = await startConv.mutateAsync(u.id);
+      navigate(`/inbox?c=${convo.id}`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not open chat');
+    }
+  }
 
   async function toggleStatus(u: User) {
     try {
@@ -150,18 +163,37 @@ export function DealerMembersTab({ dealer }: Props) {
                     )}
                   </TD>
                   <TD className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleStatus(u)}
-                      loading={
-                        (deleteUser.isPending || updateUser.isPending) &&
-                        (deleteUser.variables === u.id ||
-                          updateUser.variables?.id === u.id)
-                      }
-                    >
-                      {u.status === 'ACTIVE' ? 'Suspend' : 'Reactivate'}
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => messageMember(u)}
+                        disabled={u.status !== 'ACTIVE'}
+                        title={
+                          u.status !== 'ACTIVE'
+                            ? 'Reactivate this member to start a chat'
+                            : undefined
+                        }
+                        loading={startConv.isPending && startConv.variables === u.id}
+                        leftIcon={
+                          <MessageSquare width={14} height={14} strokeWidth={1.75} />
+                        }
+                      >
+                        Message
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleStatus(u)}
+                        loading={
+                          (deleteUser.isPending || updateUser.isPending) &&
+                          (deleteUser.variables === u.id ||
+                            updateUser.variables?.id === u.id)
+                        }
+                      >
+                        {u.status === 'ACTIVE' ? 'Suspend' : 'Reactivate'}
+                      </Button>
+                    </div>
                   </TD>
                 </TRow>
               ))}
