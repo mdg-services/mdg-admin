@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   FileText,
   FileUp,
+  Flag,
   Inbox,
   MessageSquare,
   PanelRightClose,
@@ -32,6 +33,7 @@ import { useAssignConversation } from '@/hooks/api/useAssignConversation';
 import { useConversation } from '@/hooks/api/useConversation';
 import {
   type InboxFilter,
+  useConversationCounts,
   useConversations,
 } from '@/hooks/api/useConversations';
 import { useDealerRecords } from '@/hooks/api/useDealerRecords';
@@ -45,7 +47,7 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { Intent } from '@/lib/statusIntent';
 import { useAuthStore } from '@/store/auth';
-import { TICKET_CATEGORIES, TICKET_PRIORITIES } from '@dk/shared';
+import { TICKET_CATEGORIES, TICKET_PRIORITIES, ticketFlagLevel } from '@dk/shared';
 import type {
   Attachment,
   Conversation,
@@ -128,7 +130,7 @@ function priorityPill(priority?: TicketPriority) {
 const FILTERS: Array<{ key: InboxFilter; label: string }> = [
   { key: 'open', label: 'Unassigned' },
   { key: 'mine', label: 'Mine' },
-  { key: 'assigned', label: 'All open' },
+  { key: 'all', label: 'All open' },
   { key: 'resolved', label: 'Resolved' },
 ];
 
@@ -157,6 +159,35 @@ function statusBadge(status: Conversation['status']) {
   return <Badge intent="success">Resolved</Badge>;
 }
 
+/**
+ * Reply-SLA flag: how long the client has been waiting for a reply. Turns amber
+ * at 1.5h and red at 3h so a slipping ticket draws the whole team's attention; a
+ * ⚑ also shows when the ticket was auto-returned to the pool for a missed SLA.
+ */
+function TicketFlagBadge({
+  conversation,
+  now,
+}: {
+  conversation: Conversation;
+  now: number;
+}) {
+  const level = ticketFlagLevel(conversation.awaitingReplySince, now);
+  if (level === 'none' && !conversation.flagged) return null;
+  const intent: Intent = level === 'urgent' ? 'danger' : 'warning';
+  const label =
+    level === 'none'
+      ? 'Returned'
+      : `Waiting ${formatRelative(conversation.awaitingReplySince ?? undefined)}`;
+  return (
+    <Badge intent={intent}>
+      <span className="inline-flex items-center gap-0.5">
+        <Flag width={11} height={11} strokeWidth={2} />
+        {label}
+      </span>
+    </Badge>
+  );
+}
+
 export function InboxPage() {
   useInboxSocket();
 
@@ -172,10 +203,18 @@ export function InboxPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const deepLinkId = searchParams.get('c');
 
-  const [filter, setFilter] = React.useState<InboxFilter>(deepLinkId ? 'open' : 'mine');
+  const [filter, setFilter] = React.useState<InboxFilter>(deepLinkId ? 'all' : 'mine');
   const [selectedId, setSelectedId] = React.useState<string | null>(deepLinkId);
   const [contextOpen, setContextOpen] = React.useState(true);
   const [newOpen, setNewOpen] = React.useState(false);
+
+  // Ticks once a minute so the reply-SLA flag colours advance on their own,
+  // without waiting for new data to arrive.
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(t);
+  }, []);
 
   // Honour later `?c=` changes (in-session navigation) too, then strip the param
   // so refresh/back doesn't re-trigger it.
@@ -183,14 +222,14 @@ export function InboxPage() {
     const c = searchParams.get('c');
     if (!c) return;
     setSelectedId(c);
-    setFilter('open');
+    setFilter('all');
     const next = new URLSearchParams(searchParams);
     next.delete('c');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
   function handleStarted(conversationId: string) {
-    setFilter('open');
+    setFilter('all');
     setSelectedId(conversationId);
   }
 
@@ -233,16 +272,15 @@ export function InboxPage() {
   const [resolveOpen, setResolveOpen] = React.useState(false);
   const servicesQ = useServicesQuery();
 
-  // Lightweight counts per filter for the rail.
-  const openQ = useConversations('open');
-  const mineQ = useConversations('mine');
-  const assignedQ = useConversations('assigned');
-  const resolvedQ = useConversations('resolved');
-  const countMap: Record<InboxFilter, number | undefined> = {
-    open: openQ.data?.length,
-    mine: mineQ.data?.length,
-    assigned: assignedQ.data?.length,
-    resolved: resolvedQ.data?.length,
+  // One lightweight counts round-trip for the rail badges, instead of four
+  // full decorated list fetches.
+  const countsQ = useConversationCounts();
+  const countMap: Partial<Record<InboxFilter, number | undefined>> = {
+    open: countsQ.data?.open,
+    mine: countsQ.data?.mine,
+    all: countsQ.data?.all,
+    resolved: countsQ.data?.resolved,
+    flagged: countsQ.data?.flagged,
   };
 
   // Auto-select first conversation when list loads and nothing selected. Yield
@@ -400,6 +438,7 @@ export function InboxPage() {
                           </div>
                           <div className="mt-0.5 flex items-center gap-1.5">
                             {priorityPill(c.priority)}
+                            <TicketFlagBadge conversation={c} now={now} />
                             <p className="min-w-0 flex-1 truncate text-sm text-text-muted">
                               {c.lastMessagePreview ?? 'No messages yet'}
                             </p>
@@ -442,6 +481,7 @@ export function InboxPage() {
                     {memberLabel(conversation)}
                   </h2>
                   {statusBadge(conversation.status)}
+                  <TicketFlagBadge conversation={conversation} now={now} />
                 </div>
                 <p className="truncate text-xs text-text-muted">
                   {conversation.dealerName ?? 'Dealer'}
