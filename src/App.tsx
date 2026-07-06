@@ -3,6 +3,7 @@ import { Route, Routes , Navigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
+import { ActivityPage } from '@/pages/ActivityPage';
 import { AdminsPage } from '@/pages/AdminsPage';
 import { DealerDetailPage } from '@/pages/DealerDetailPage';
 import { DealersPage } from '@/pages/DealersPage';
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="kavach" element={<KavachDashboardPage />} />
           <Route path="services" element={<ServiceCatalogPage />} />
           <Route path="runs" element={<RunHistoryPage />} />
+          <Route path="activity" element={<ActivityPage />} />
           <Route path="settings/team" element={<AdminsPage />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />

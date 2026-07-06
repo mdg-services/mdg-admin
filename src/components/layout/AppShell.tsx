@@ -6,6 +6,7 @@ import {
   LogOut,
   MessageSquare,
   Plug,
+  ScrollText,
   Search,
   Shield,
   ShieldCheck,
@@ -32,6 +33,7 @@ const NAV_ITEMS: Array<{
   { to: '/kavach', label: 'Kavach', icon: ShieldCheck },
   { to: '/services', label: 'Service Catalog', icon: Plug },
   { to: '/runs', label: 'Run History', icon: Activity },
+  { to: '/activity', label: 'Activity', icon: ScrollText },
   { to: '/settings/team', label: 'Team', icon: UserCog },
 ];
 
