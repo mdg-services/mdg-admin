@@ -319,9 +319,9 @@ export function InboxPage() {
     if (!conversation) return;
     assignConv.mutate({ conversationId: conversation.id });
   }
-  function handleReassign() {
+  function handleTakeOver() {
     if (!conversation) return;
-    // No admin picker yet — pick-up reassigns to self.
+    // No admin picker yet — this claims the ticket for the current admin.
     assignConv.mutate({ conversationId: conversation.id });
   }
   function handleReopen() {
@@ -506,17 +506,19 @@ export function InboxPage() {
                 ) : null}
                 {conversation.status === 'ASSIGNED' ? (
                   <>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={handleReassign}
-                      loading={assignConv.isPending}
-                      leftIcon={
-                        <UserPlus width={14} height={14} strokeWidth={1.75} />
-                      }
-                    >
-                      Reassign
-                    </Button>
+                    {conversation.assignedAdminId !== currentUserId ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={handleTakeOver}
+                        loading={assignConv.isPending}
+                        leftIcon={
+                          <UserPlus width={14} height={14} strokeWidth={1.75} />
+                        }
+                      >
+                        Take over
+                      </Button>
+                    ) : null}
                     <Button
                       size="sm"
                       variant="primary"

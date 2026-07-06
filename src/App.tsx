@@ -3,6 +3,7 @@ import { Route, Routes , Navigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
+import { RequireSuperAdmin } from '@/components/layout/RequireSuperAdmin';
 import { ActivityPage } from '@/pages/ActivityPage';
 import { AdminsPage } from '@/pages/AdminsPage';
 import { DealerDetailPage } from '@/pages/DealerDetailPage';
@@ -35,8 +36,22 @@ export default function App() {
           <Route path="kavach" element={<KavachDashboardPage />} />
           <Route path="services" element={<ServiceCatalogPage />} />
           <Route path="runs" element={<RunHistoryPage />} />
-          <Route path="activity" element={<ActivityPage />} />
-          <Route path="settings/team" element={<AdminsPage />} />
+          <Route
+            path="activity"
+            element={
+              <RequireSuperAdmin>
+                <ActivityPage />
+              </RequireSuperAdmin>
+            }
+          />
+          <Route
+            path="settings/team"
+            element={
+              <RequireSuperAdmin>
+                <AdminsPage />
+              </RequireSuperAdmin>
+            }
+          />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

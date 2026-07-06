@@ -18,6 +18,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { Input } from '@/components/ui';
 import { useConversations } from '@/hooks/api/useConversations';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/store/auth';
 
@@ -26,6 +27,8 @@ const NAV_ITEMS: Array<{
   label: string;
   icon: LucideIcon;
   end?: boolean;
+  /** Visible only to super-admins (Activity log, team management). */
+  superAdminOnly?: boolean;
 }> = [
   { to: '/inbox', label: 'Inbox', icon: MessageSquare },
   { to: '/overview', label: 'Overview', icon: LayoutDashboard },
@@ -33,8 +36,8 @@ const NAV_ITEMS: Array<{
   { to: '/kavach', label: 'Kavach', icon: ShieldCheck },
   { to: '/services', label: 'Service Catalog', icon: Plug },
   { to: '/runs', label: 'Run History', icon: Activity },
-  { to: '/activity', label: 'Activity', icon: ScrollText },
-  { to: '/settings/team', label: 'Team', icon: UserCog },
+  { to: '/activity', label: 'Activity', icon: ScrollText, superAdminOnly: true },
+  { to: '/settings/team', label: 'Team', icon: UserCog, superAdminOnly: true },
 ];
 
 export function AppShell() {
@@ -43,6 +46,8 @@ export function AppShell() {
   const navigate = useNavigate();
   const mineQ = useConversations('mine');
   const unreadCount = (mineQ.data ?? []).filter((c) => c.unreadByAdmin).length;
+  const isSuperAdmin = useIsSuperAdmin();
+  const navItems = NAV_ITEMS.filter((item) => !item.superAdminOnly || isSuperAdmin);
 
   function onLogout() {
     logout();
@@ -60,7 +65,7 @@ export function AppShell() {
         </div>
         <nav className="flex-1 overflow-y-auto px-2 py-3">
           <ul className="flex flex-col gap-0.5">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <li key={item.to}>
                 <NavLink
                   to={item.to}

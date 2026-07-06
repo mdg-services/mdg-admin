@@ -20,6 +20,7 @@ function adminFromUser(u: User): Admin {
     email: u.email,
     name: u.name,
     roles: [u.role],
+    isSuperAdmin: u.isSuperAdmin ?? false,
     ...(u.lastLoginAt !== undefined ? { lastLoginAt: u.lastLoginAt } : {}),
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
