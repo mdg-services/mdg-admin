@@ -11,6 +11,7 @@ import {
   Shield,
   ShieldCheck,
   UserCog,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 import * as React from 'react';
@@ -36,6 +37,7 @@ const NAV_ITEMS: Array<{
   { to: '/kavach', label: 'Kavach', icon: ShieldCheck },
   { to: '/services', label: 'Service Catalog', icon: Plug },
   { to: '/runs', label: 'Run History', icon: Activity },
+  { to: '/users', label: 'All Users', icon: Users, superAdminOnly: true },
   { to: '/activity', label: 'Activity', icon: ScrollText, superAdminOnly: true },
   { to: '/settings/team', label: 'Team', icon: UserCog, superAdminOnly: true },
 ];

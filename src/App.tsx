@@ -6,6 +6,7 @@ import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { RequireSuperAdmin } from '@/components/layout/RequireSuperAdmin';
 import { ActivityPage } from '@/pages/ActivityPage';
 import { AdminsPage } from '@/pages/AdminsPage';
+import { AllUsersPage } from '@/pages/AllUsersPage';
 import { DealerDetailPage } from '@/pages/DealerDetailPage';
 import { DealersPage } from '@/pages/DealersPage';
 import { InboxPage } from '@/pages/InboxPage';
@@ -41,6 +42,14 @@ export default function App() {
             element={
               <RequireSuperAdmin>
                 <ActivityPage />
+              </RequireSuperAdmin>
+            }
+          />
+          <Route
+            path="users"
+            element={
+              <RequireSuperAdmin>
+                <AllUsersPage />
               </RequireSuperAdmin>
             }
           />
