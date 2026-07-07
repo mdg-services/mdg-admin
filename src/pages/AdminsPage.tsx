@@ -261,7 +261,7 @@ function AddAdminDialog({ open, onClose }: { open: boolean; onClose: () => void 
           <Label htmlFor="admin-password" required>
             Password
           </Label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               id="admin-password"
               type="text"
@@ -365,7 +365,7 @@ function ResetPasswordDialog({
         <Label htmlFor="reset-password" required>
           New password
         </Label>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Input
             id="reset-password"
             type="text"

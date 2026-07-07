@@ -369,7 +369,7 @@ function AddMemberDialog({
           <Label htmlFor="member-password" required>
             Password
           </Label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               id="member-password"
               type="text"

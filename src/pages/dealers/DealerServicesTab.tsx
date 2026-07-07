@@ -92,7 +92,7 @@ export function DealerServicesTab({ dealer }: Props) {
   return (
     <Card>
       <CardContent className="p-0">
-        <div className="flex items-center justify-between gap-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
             <p className="text-base font-semibold text-text">
               Attached services

@@ -710,7 +710,7 @@ function IssueAppLoginForm({
         <Label htmlFor="app-password" required>
           Password
         </Label>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Input
             id="app-password"
             type="text"

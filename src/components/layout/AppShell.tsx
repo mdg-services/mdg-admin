@@ -4,6 +4,7 @@ import {
   ChevronDown,
   LayoutDashboard,
   LogOut,
+  Menu,
   MessageSquare,
   Plug,
   ScrollText,
@@ -12,6 +13,7 @@ import {
   ShieldCheck,
   UserCog,
   Users,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import * as React from 'react';
@@ -42,6 +44,60 @@ const NAV_ITEMS: Array<{
   { to: '/settings/team', label: 'Team', icon: UserCog, superAdminOnly: true },
 ];
 
+type NavItem = (typeof NAV_ITEMS)[number];
+
+function NavList({
+  items,
+  unreadCount,
+  onNavigate,
+}: {
+  items: NavItem[];
+  unreadCount: number;
+  onNavigate?: () => void;
+}) {
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {items.map((item) => (
+        <li key={item.to}>
+          <NavLink
+            to={item.to}
+            end={item.to === '/'}
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-brand-soft text-brand'
+                  : 'text-text-muted hover:bg-surface-2 hover:text-text',
+              )
+            }
+          >
+            <item.icon width={18} height={18} strokeWidth={1.75} />
+            <span className="flex-1">{item.label}</span>
+            {item.to === '/inbox' && unreadCount > 0 ? (
+              <span
+                aria-label={`${unreadCount} unread`}
+                className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-text-inverse"
+              >
+                {unreadCount}
+              </span>
+            ) : null}
+          </NavLink>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function BrandMark() {
+  return (
+    <div className="flex items-center gap-2">
+      <Shield width={20} height={20} strokeWidth={1.75} className="text-brand" />
+      <span className="text-base font-semibold text-text">Dealer Kavach</span>
+    </div>
+  );
+}
+
 export function AppShell() {
   const admin = useAuthStore((s) => s.admin);
   const logout = useAuthStore((s) => s.logout);
@@ -50,6 +106,7 @@ export function AppShell() {
   const unreadCount = (mineQ.data ?? []).filter((c) => c.unreadByAdmin).length;
   const isSuperAdmin = useIsSuperAdmin();
   const navItems = NAV_ITEMS.filter((item) => !item.superAdminOnly || isSuperAdmin);
+  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
 
   function onLogout() {
     logout();
@@ -58,52 +115,67 @@ export function AppShell() {
 
   return (
     <div className="flex h-full min-h-screen w-full">
+      {/* Desktop sidebar (≥ md) */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface md:flex">
         <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-          <Shield width={20} height={20} strokeWidth={1.75} className="text-brand" />
-          <span className="text-base font-semibold text-text">
-            Dealer Kavach
-          </span>
+          <BrandMark />
         </div>
         <nav className="flex-1 overflow-y-auto px-2 py-3">
-          <ul className="flex flex-col gap-0.5">
-            {navItems.map((item) => (
-              <li key={item.to}>
-                <NavLink
-                  to={item.to}
-                  end={item.to === '/'}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                      isActive
-                        ? 'bg-brand-soft text-brand'
-                        : 'text-text-muted hover:bg-surface-2 hover:text-text',
-                    )
-                  }
-                >
-                  <item.icon width={18} height={18} strokeWidth={1.75} />
-                  <span className="flex-1">{item.label}</span>
-                  {item.to === '/inbox' && unreadCount > 0 ? (
-                    <span
-                      aria-label={`${unreadCount} unread`}
-                      className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-text-inverse"
-                    >
-                      {unreadCount}
-                    </span>
-                  ) : null}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
+          <NavList items={navItems} unreadCount={unreadCount} />
         </nav>
-        <div className="border-t border-border p-3 text-xs text-text-subtle">
-          v0.1.0
-        </div>
+        <div className="border-t border-border p-3 text-xs text-text-subtle">v0.1.0</div>
       </aside>
 
+      {/* Mobile nav drawer (< md) */}
+      {mobileNavOpen ? (
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <div className="absolute inset-y-0 left-0 flex w-64 max-w-[80%] flex-col border-r border-border bg-surface shadow-xl">
+            <div className="flex h-14 items-center justify-between border-b border-border px-4">
+              <BrandMark />
+              <button
+                type="button"
+                aria-label="Close menu"
+                onClick={() => setMobileNavOpen(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-md text-text-muted hover:bg-surface-2"
+              >
+                <X width={18} height={18} strokeWidth={1.75} />
+              </button>
+            </div>
+            <nav className="flex-1 overflow-y-auto px-2 py-3">
+              <NavList
+                items={navItems}
+                unreadCount={unreadCount}
+                onNavigate={() => setMobileNavOpen(false)}
+              />
+            </nav>
+            <div className="border-t border-border p-3 text-xs text-text-subtle">
+              v0.1.0
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-border bg-surface px-4">
-          <div className="relative max-w-md flex-1">
+        <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-border bg-surface px-3 md:gap-3 md:px-4">
+          {/* Mobile: hamburger + brand (the sidebar is hidden < md) */}
+          <button
+            type="button"
+            aria-label="Open menu"
+            onClick={() => setMobileNavOpen(true)}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 md:hidden"
+          >
+            <Menu width={20} height={20} strokeWidth={1.75} />
+          </button>
+          <div className="md:hidden">
+            <BrandMark />
+          </div>
+
+          {/* Desktop: search (hidden on mobile — it is a disabled placeholder) */}
+          <div className="relative hidden max-w-md flex-1 md:block">
             <Search
               width={16}
               height={16}
@@ -118,7 +190,11 @@ export function AppShell() {
             />
           </div>
           <div className="ml-auto">
-            <AdminMenu name={admin?.name ?? 'Admin'} email={admin?.email ?? ''} onLogout={onLogout} />
+            <AdminMenu
+              name={admin?.name ?? 'Admin'}
+              email={admin?.email ?? ''}
+              onLogout={onLogout}
+            />
           </div>
         </header>
         <main className="flex-1 overflow-x-hidden bg-bg p-4 md:p-6">

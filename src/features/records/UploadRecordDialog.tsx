@@ -185,7 +185,7 @@ export function UploadRecordDialog({
                 }}
                 disabled={submitting}
                 aria-label="Remove file"
-                className="rounded-sm p-1 text-text-muted hover:bg-surface-2 hover:text-text"
+                className="rounded-sm p-2 text-text-muted hover:bg-surface-2 hover:text-text"
               >
                 <X width={14} height={14} strokeWidth={1.75} />
               </button>

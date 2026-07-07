@@ -1,16 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle2,
+  ChevronLeft,
   FileText,
   FileUp,
   Flag,
   Inbox,
+  Info,
   MessageSquare,
   PanelRightClose,
   PanelRightOpen,
   Plus,
   RotateCcw,
   UserPlus,
+  X,
 } from 'lucide-react';
 import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -43,6 +46,7 @@ import { useResolveConversation } from '@/hooks/api/useResolveConversation';
 import { useSendMessage } from '@/hooks/api/useSendMessage';
 import { useServicesQuery } from '@/hooks/api/useServices';
 import { useUpdateTicket } from '@/hooks/api/useUpdateTicket';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { Intent } from '@/lib/statusIntent';
@@ -207,6 +211,10 @@ export function InboxPage() {
   const [selectedId, setSelectedId] = React.useState<string | null>(deepLinkId);
   const [contextOpen, setContextOpen] = React.useState(true);
   const [newOpen, setNewOpen] = React.useState(false);
+  // Below lg the context panel (ticket controls, dealer, reports) is a slide-over
+  // instead of an inline column, so it stays reachable on phones/tablets.
+  const [mobileContextOpen, setMobileContextOpen] = React.useState(false);
+  const isLg = useMediaQuery('(min-width: 1024px)');
 
   // Ticks once a minute so the reply-SLA flag colours advance on their own,
   // without waiting for new data to arrive.
@@ -286,11 +294,21 @@ export function InboxPage() {
   // Auto-select first conversation when list loads and nothing selected. Yield
   // to a pending deep-link so we never override an explicit `?c=` selection.
   React.useEffect(() => {
+    // On mobile the list IS the landing view — don't jump into a chat and hide
+    // it. Auto-select only on ≥ lg, where the list stays visible beside the thread.
+    if (!isLg) return;
     if (searchParams.get('c')) return;
     if (!selectedId && conversations.length > 0) {
       setSelectedId(conversations[0]!.id);
     }
-  }, [conversations, selectedId, searchParams]);
+  }, [conversations, selectedId, searchParams, isLg]);
+
+  // Close the mobile details slide-over whenever the open conversation changes
+  // (via a deep link or a just-created chat), so it never lingers over a
+  // different thread. Safe: opening the panel does not change selectedId.
+  React.useEffect(() => {
+    if (!isLg) setMobileContextOpen(false);
+  }, [selectedId, isLg]);
 
   const dealerId = conversation?.dealerId ?? null;
   const dealerQ = useQuery({
@@ -330,7 +348,7 @@ export function InboxPage() {
   }
 
   return (
-    <div className="-m-4 flex h-[calc(100vh-3.5rem)] md:-m-6">
+    <div className="-m-4 flex h-[calc(100dvh-3.5rem)] md:-m-6">
       {/* Left rail */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface md:flex">
         <div className="px-4 py-3">
@@ -377,8 +395,13 @@ export function InboxPage() {
         </nav>
       </aside>
 
-      {/* Conversation list */}
-      <section className="hidden w-80 shrink-0 flex-col border-r border-border bg-surface md:flex">
+      {/* Conversation list — full-width on mobile, hidden once a chat is open */}
+      <section
+        className={cn(
+          'w-full shrink-0 flex-col border-r border-border bg-surface md:flex md:w-80',
+          selectedId ? 'hidden' : 'flex',
+        )}
+      >
         <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
           <h3 className="text-sm font-semibold text-text">
             {FILTERS.find((f) => f.key === filter)?.label}
@@ -394,6 +417,32 @@ export function InboxPage() {
               New
             </Button>
           </div>
+        </div>
+        {/* Mobile filter chips (the desktop filter rail is hidden < md) */}
+        <div className="flex gap-1.5 overflow-x-auto border-b border-border px-3 py-2 md:hidden">
+          {FILTERS.map((f) => {
+            const active = filter === f.key;
+            const count = countMap[f.key];
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => {
+                  setFilter(f.key);
+                  setSelectedId(null);
+                }}
+                className={cn(
+                  'flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium',
+                  active
+                    ? 'bg-brand text-text-inverse'
+                    : 'bg-surface-2 text-text-muted',
+                )}
+              >
+                {f.label}
+                {typeof count === 'number' ? <span>· {count}</span> : null}
+              </button>
+            );
+          })}
         </div>
         <ul className="flex-1 overflow-y-auto">
           {conversationsQ.isLoading ? (
@@ -460,8 +509,13 @@ export function InboxPage() {
         </ul>
       </section>
 
-      {/* Active chat */}
-      <section className="flex min-w-0 flex-1 flex-col bg-bg">
+      {/* Active chat — full-screen on mobile once a conversation is selected */}
+      <section
+        className={cn(
+          'min-w-0 flex-1 flex-col bg-bg md:flex',
+          selectedId ? 'flex' : 'hidden',
+        )}
+      >
         {!conversation ? (
           <div className="flex h-full items-center justify-center">
             <EmptyState
@@ -474,8 +528,20 @@ export function InboxPage() {
           </div>
         ) : (
           <>
-            <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
-              <div className="min-w-0">
+            <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-3 py-3 md:px-4">
+              <div className="flex min-w-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedId(null);
+                    setMobileContextOpen(false);
+                  }}
+                  aria-label="Back to conversations"
+                  className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 md:hidden"
+                >
+                  <ChevronLeft width={20} height={20} strokeWidth={1.75} />
+                </button>
+                <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h2 className="truncate text-base font-semibold text-text">
                     {memberLabel(conversation)}
@@ -489,8 +555,9 @@ export function InboxPage() {
                     ? ` · Assigned to ${conversation.assignedAdminName}`
                     : null}
                 </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 {conversation.status === 'OPEN' ? (
                   <Button
                     size="sm"
@@ -561,6 +628,14 @@ export function InboxPage() {
                 </Button>
                 <button
                   type="button"
+                  onClick={() => setMobileContextOpen(true)}
+                  aria-label="Show details"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text lg:hidden"
+                >
+                  <Info width={18} height={18} strokeWidth={1.75} />
+                </button>
+                <button
+                  type="button"
                   onClick={() => setContextOpen((v) => !v)}
                   aria-label={contextOpen ? 'Hide context' : 'Show context'}
                   className="hidden rounded-md p-1.5 text-text-muted hover:bg-surface-2 hover:text-text lg:inline-flex"
@@ -603,8 +678,35 @@ export function InboxPage() {
                 />
               </div>
 
-              {contextOpen ? (
-                <aside className="hidden w-72 shrink-0 space-y-3 overflow-y-auto border-l border-border bg-surface p-3 lg:block">
+              {(isLg && contextOpen) || (!isLg && mobileContextOpen) ? (
+                <>
+                  {!isLg ? (
+                    <div
+                      className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+                      onClick={() => setMobileContextOpen(false)}
+                    />
+                  ) : null}
+                  <aside
+                    className={cn(
+                      'space-y-3 overflow-y-auto border-l border-border bg-surface p-3',
+                      isLg
+                        ? 'w-72 shrink-0'
+                        : 'fixed inset-y-0 right-0 z-50 w-80 max-w-[85%] shadow-xl',
+                    )}
+                  >
+                  {!isLg ? (
+                    <div className="mb-1 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-text">Details</h3>
+                      <button
+                        type="button"
+                        aria-label="Close details"
+                        onClick={() => setMobileContextOpen(false)}
+                        className="flex h-9 w-9 items-center justify-center rounded-md text-text-muted hover:bg-surface-2"
+                      >
+                        <X width={18} height={18} strokeWidth={1.75} />
+                      </button>
+                    </div>
+                  ) : null}
                   {isAdmin ? (
                     <Card>
                       <CardHeader>
@@ -751,7 +853,8 @@ export function InboxPage() {
                       )}
                     </CardContent>
                   </Card>
-                </aside>
+                  </aside>
+                </>
               ) : null}
             </div>
 

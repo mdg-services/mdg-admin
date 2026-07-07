@@ -336,7 +336,7 @@ function EditUserDialog({
         </div>
         <div>
           <Label htmlFor="edit-password">New password</Label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               id="edit-password"
               type="text"

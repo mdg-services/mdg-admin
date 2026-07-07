@@ -66,7 +66,7 @@ export function Drawer({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-sm p-1 text-text-muted hover:bg-surface-2"
+            className="-mr-1 rounded-sm p-2 text-text-muted hover:bg-surface-2"
           >
             <X width={16} height={16} strokeWidth={1.75} />
           </button>

@@ -238,7 +238,7 @@ export function DealersPage() {
 function ListSkeleton() {
   return (
     <div className="p-4">
-      <div className="grid grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
         {Array.from({ length: 18 }).map((_, i) => (
           <Skeleton key={i} className="h-8" />
         ))}

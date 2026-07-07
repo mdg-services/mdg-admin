@@ -19,7 +19,7 @@ export function Tabs({ items, value, onChange, className }: TabsProps) {
     <div
       role="tablist"
       className={cn(
-        'flex items-center gap-1 border-b border-border',
+        'flex items-center gap-1 overflow-x-auto border-b border-border scrollbar-thin',
         className,
       )}
     >
@@ -33,7 +33,7 @@ export function Tabs({ items, value, onChange, className }: TabsProps) {
             aria-selected={active}
             onClick={() => onChange(item.id)}
             className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+              '-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors',
               active
                 ? 'border-brand text-text'
                 : 'border-transparent text-text-muted hover:text-text',
