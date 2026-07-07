@@ -11,6 +11,7 @@ import { DealerInfoTab } from './dealers/DealerInfoTab';
 import { DealerKavachTab } from './dealers/DealerKavachTab';
 import { DealerMembersTab } from './dealers/DealerMembersTab';
 import { DealerServicesTab } from './dealers/DealerServicesTab';
+import { DealerStaffTab } from './dealers/DealerStaffTab';
 import { OnboardingTab } from './dealers/OnboardingTab';
 import { RunsListInline } from './dealers/RunsListInline';
 import { ServicesProvidedTab } from './dealers/ServicesProvidedTab';
@@ -21,6 +22,7 @@ const TABS = [
   { id: 'members', label: 'Team' },
   { id: 'services', label: 'Services' },
   { id: 'kavach', label: 'Kavach' },
+  { id: 'staff', label: 'Staff & points' },
   { id: 'provided', label: 'Services provided' },
   { id: 'runs', label: 'Run history' },
   { id: 'custom', label: 'Custom requests' },
@@ -86,6 +88,7 @@ export function DealerDetailPage() {
       {activeTab === 'members' ? <DealerMembersTab dealer={dealer} /> : null}
       {activeTab === 'services' ? <DealerServicesTab dealer={dealer} /> : null}
       {activeTab === 'kavach' ? <DealerKavachTab dealer={dealer} /> : null}
+      {activeTab === 'staff' ? <DealerStaffTab dealer={dealer} /> : null}
       {activeTab === 'provided' ? <ServicesProvidedTab dealer={dealer} /> : null}
       {activeTab === 'runs' ? <RunsListInline dealerId={dealer.id} /> : null}
       {activeTab === 'custom' ? <CustomRequestTab dealer={dealer} /> : null}
