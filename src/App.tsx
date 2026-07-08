@@ -16,6 +16,7 @@ import { NotFoundPage } from '@/pages/NotFoundPage';
 import { OverviewPage } from '@/pages/OverviewPage';
 import { RunHistoryPage } from '@/pages/RunHistoryPage';
 import { ServiceCatalogPage } from '@/pages/ServiceCatalogPage';
+import { WorkListDefaultsPage } from '@/pages/WorkListDefaultsPage';
 
 export default function App() {
   return (
@@ -50,6 +51,14 @@ export default function App() {
             element={
               <RequireSuperAdmin>
                 <AllUsersPage />
+              </RequireSuperAdmin>
+            }
+          />
+          <Route
+            path="work-list"
+            element={
+              <RequireSuperAdmin>
+                <WorkListDefaultsPage />
               </RequireSuperAdmin>
             }
           />

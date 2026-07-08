@@ -3,6 +3,7 @@ import {
   Building2,
   ChevronDown,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   Menu,
   MessageSquare,
@@ -40,6 +41,7 @@ const NAV_ITEMS: Array<{
   { to: '/services', label: 'Service Catalog', icon: Plug },
   { to: '/runs', label: 'Run History', icon: Activity },
   { to: '/users', label: 'All Users', icon: Users, superAdminOnly: true },
+  { to: '/work-list', label: 'Work list', icon: ListChecks, superAdminOnly: true },
   { to: '/activity', label: 'Activity', icon: ScrollText, superAdminOnly: true },
   { to: '/settings/team', label: 'Team', icon: UserCog, superAdminOnly: true },
 ];
