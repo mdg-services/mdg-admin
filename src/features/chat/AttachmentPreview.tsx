@@ -1,13 +1,16 @@
-import { Pause, Paperclip, Play } from 'lucide-react';
+import { Download, Pause, Paperclip, Play } from 'lucide-react';
 import * as React from 'react';
 
 
+import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
+import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/cn';
+import { downloadAttachment } from '@/lib/downloadAttachment';
 import { formatDuration } from '@/lib/uploadAttachment';
 import type { Attachment } from '@dk/shared';
 
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -77,7 +80,20 @@ function VoiceMessage({ attachment }: { attachment: Attachment }) {
 }
 
 export function AttachmentPreview({ attachment }: { attachment: Attachment }) {
+  const toast = useToast();
   const [open, setOpen] = React.useState(false);
+  const [downloading, setDownloading] = React.useState(false);
+
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      await downloadAttachment(attachment);
+    } catch {
+      toast.error('Download failed');
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   if (attachment.kind === 'audio' && attachment.url) {
     return <VoiceMessage attachment={attachment} />;
@@ -104,6 +120,17 @@ export function AttachmentPreview({ attachment }: { attachment: Attachment }) {
           onClose={() => setOpen(false)}
           size="lg"
           title={attachment.filename}
+          footer={
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={downloading}
+              onClick={() => void handleDownload()}
+              leftIcon={<Download width={14} height={14} strokeWidth={1.75} />}
+            >
+              Download
+            </Button>
+          }
         >
           <img
             src={attachment.url}

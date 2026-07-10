@@ -26,8 +26,16 @@ import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
 import { Spinner } from '@/components/ui/Spinner';
 import { Composer } from '@/features/chat/Composer';
+import { MediaGalleryCard } from '@/features/chat/MediaGalleryCard';
+import { MessageInfoDialog } from '@/features/chat/MessageInfoDialog';
 import { MessageList } from '@/features/chat/MessageList';
 import { NewConversationDialog } from '@/features/chat/NewConversationDialog';
+import { ReactionsDialog } from '@/features/chat/ReactionsDialog';
+import {
+  buildReplyContext,
+  replyPreviewText,
+  replySenderLabel,
+} from '@/features/chat/replyPreview';
 import { ResolveConversationDialog } from '@/features/chat/ResolveConversationDialog';
 import { useConversationSocket } from '@/features/chat/useConversationSocket';
 import { useInboxSocket } from '@/features/chat/useInboxSocket';
@@ -41,6 +49,7 @@ import {
 } from '@/hooks/api/useConversations';
 import { useDealerRecords } from '@/hooks/api/useDealerRecords';
 import { useMessages } from '@/hooks/api/useMessages';
+import { useReactToMessage } from '@/hooks/api/useReactToMessage';
 import { useReopenConversation } from '@/hooks/api/useReopenConversation';
 import { useResolveConversation } from '@/hooks/api/useResolveConversation';
 import { useSendMessage } from '@/hooks/api/useSendMessage';
@@ -56,6 +65,7 @@ import type {
   Attachment,
   Conversation,
   Dealer,
+  Message,
   TicketCategory,
   TicketPriority,
 } from '@dk/shared';
@@ -254,6 +264,40 @@ export function InboxPage() {
     [messagesQ.data],
   );
 
+  // Reply-quote + per-message dialogs. The dialogs track ids (not message
+  // objects) so they read live cache data while reactions/receipts change.
+  const [replyTo, setReplyTo] = React.useState<Message | null>(null);
+  const [infoForId, setInfoForId] = React.useState<string | null>(null);
+  const [reactionsForId, setReactionsForId] = React.useState<string | null>(
+    null,
+  );
+
+  // Never carry reply/dialog state across threads.
+  React.useEffect(() => {
+    setReplyTo(null);
+    setInfoForId(null);
+    setReactionsForId(null);
+  }, [selectedId]);
+
+  const infoMessage = infoForId
+    ? (messages.find((m) => m.id === infoForId) ?? null)
+    : null;
+  const reactionsMessage = reactionsForId
+    ? (messages.find((m) => m.id === reactionsForId) ?? null)
+    : null;
+
+  // The who-reacted dialog closes itself once the last reaction is removed;
+  // drop the id too, or a later reaction would spontaneously reopen it.
+  React.useEffect(() => {
+    if (
+      reactionsForId &&
+      reactionsMessage &&
+      (reactionsMessage.reactions?.length ?? 0) === 0
+    ) {
+      setReactionsForId(null);
+    }
+  }, [reactionsForId, reactionsMessage]);
+
   // Mark the dealer's messages read once the conversation is open, so their
   // sent ticks turn blue. Covers history loaded over HTTP.
   React.useEffect(() => {
@@ -274,6 +318,43 @@ export function InboxPage() {
   const resolveConv = useResolveConversation();
   const reopenConv = useReopenConversation();
   const updateTicket = useUpdateTicket();
+  const { mutate: reactToMessage } = useReactToMessage();
+
+  // Stable handlers — MessageBubble is memoized, so anything that flows down
+  // to it must not change identity per render.
+  const handleReply = React.useCallback((m: Message) => setReplyTo(m), []);
+  const handleCancelReply = React.useCallback(() => setReplyTo(null), []);
+  const handleOpenInfo = React.useCallback(
+    (m: Message) => setInfoForId(m.id),
+    [],
+  );
+  const handleOpenReactions = React.useCallback(
+    (m: Message) => setReactionsForId(m.id),
+    [],
+  );
+  const handleToggleReaction = React.useCallback(
+    (m: Message, emoji: string) => {
+      if (m.id.startsWith('tmp-')) return;
+      const mine = m.reactions?.find((r) => r.userId === currentUserId);
+      reactToMessage({
+        conversationId: m.conversationId,
+        messageId: m.id,
+        emoji,
+        remove: mine?.emoji === emoji,
+      });
+    },
+    [currentUserId, reactToMessage],
+  );
+
+  const composerReply = React.useMemo(() => {
+    if (!replyTo) return null;
+    const ctx = buildReplyContext(replyTo);
+    return {
+      senderLabel: replySenderLabel(ctx, currentUserId),
+      snippet: replyPreviewText(ctx),
+      ...(ctx.imageUrl ? { imageUrl: ctx.imageUrl } : {}),
+    };
+  }, [replyTo, currentUserId]);
 
   const isAdmin = !!admin;
   const [uploadOpen, setUploadOpen] = React.useState(false);
@@ -326,11 +407,17 @@ export function InboxPage() {
     attachments: Attachment[];
   }) {
     if (!conversation) return;
+    // An optimistic (tmp-) id can't be replied to server-side; skip the quote.
+    const reply = replyTo && !replyTo.id.startsWith('tmp-') ? replyTo : null;
     await sendMessage.mutateAsync({
       conversationId: conversation.id,
       body: payload.body,
       attachments: payload.attachments,
+      ...(reply
+        ? { replyToMessageId: reply.id, replyTo: buildReplyContext(reply) }
+        : {}),
     });
+    setReplyTo(null);
   }
 
   function handlePickUp() {
@@ -666,8 +753,16 @@ export function InboxPage() {
                     </div>
                   ) : (
                     <MessageList
+                      key={conversation.id}
                       messages={messages}
                       currentUserId={currentUserId}
+                      hasEarlier={messagesQ.hasNextPage}
+                      loadingEarlier={messagesQ.isFetchingNextPage}
+                      onLoadEarlier={messagesQ.fetchNextPage}
+                      onReply={handleReply}
+                      onToggleReaction={handleToggleReaction}
+                      onOpenReactions={handleOpenReactions}
+                      onOpenInfo={handleOpenInfo}
                     />
                   )}
                 </div>
@@ -675,6 +770,8 @@ export function InboxPage() {
                   conversationId={conversation.id}
                   onSend={handleSend}
                   disabled={conversation.status === 'RESOLVED'}
+                  replyingTo={composerReply}
+                  onCancelReply={handleCancelReply}
                 />
               </div>
 
@@ -853,6 +950,8 @@ export function InboxPage() {
                       )}
                     </CardContent>
                   </Card>
+
+                  <MediaGalleryCard conversationId={conversation.id} />
                   </aside>
                 </>
               ) : null}
@@ -867,6 +966,20 @@ export function InboxPage() {
                 conversationId={conversation.id}
               />
             ) : null}
+
+            <ReactionsDialog
+              message={reactionsMessage}
+              conversation={conversation}
+              currentUserId={currentUserId}
+              onRemove={handleToggleReaction}
+              onClose={() => setReactionsForId(null)}
+            />
+
+            <MessageInfoDialog
+              message={infoMessage}
+              conversation={conversation}
+              onClose={() => setInfoForId(null)}
+            />
 
             <ResolveConversationDialog
               open={resolveOpen}

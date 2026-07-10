@@ -1,14 +1,26 @@
-import { Check, CheckCheck, Clock, FileText } from 'lucide-react';
+import { Check, CheckCheck, ChevronDown, Clock, FileText } from 'lucide-react';
+import * as React from 'react';
 
 import { cn } from '@/lib/cn';
-import type { Message } from '@dk/shared';
+import { linkify } from '@/lib/linkify';
+import { useLongPress } from '@/lib/useLongPress';
+import type { Message, MessageReaction } from '@dk/shared';
 
 import { AttachmentPreview } from './AttachmentPreview';
+import { replyPreviewText, replySenderLabel } from './replyPreview';
 
 interface MessageBubbleProps {
   message: Message;
   currentUserId: string;
   isLastOwn?: boolean;
+  /** True while the action menu is open for THIS message (chevron = toggle). */
+  isMenuOpen?: boolean;
+  /** Opens the message action menu at a viewport point. */
+  onOpenMenu?: (message: Message, anchor: { x: number; y: number }) => void;
+  /** Scrolls to (and flashes) the quoted original. */
+  onJumpTo?: (messageId: string) => void;
+  /** Opens the who-reacted dialog. */
+  onOpenReactions?: (message: Message) => void;
 }
 
 /** WhatsApp-style delivery state for one of the current user's own messages. */
@@ -84,10 +96,49 @@ function CardMessage({ message }: { message: Message }) {
   );
 }
 
-export function MessageBubble({
+/** Group reactions into per-emoji chips, first-seen order, own flagged. */
+function groupReactions(
+  reactions: MessageReaction[],
+  currentUserId: string,
+): Array<{ emoji: string; count: number; mine: boolean }> {
+  const order: string[] = [];
+  const map = new Map<string, { emoji: string; count: number; mine: boolean }>();
+  for (const r of reactions) {
+    let g = map.get(r.emoji);
+    if (!g) {
+      g = { emoji: r.emoji, count: 0, mine: false };
+      map.set(r.emoji, g);
+      order.push(r.emoji);
+    }
+    g.count += 1;
+    if (r.userId === currentUserId) g.mine = true;
+  }
+  return order.map((e) => map.get(e)!);
+}
+
+export const MessageBubble = React.memo(function MessageBubble({
   message,
   currentUserId,
+  isMenuOpen,
+  onOpenMenu,
+  onJumpTo,
+  onOpenReactions,
 }: MessageBubbleProps) {
+  // Touch path into the same menu the hover chevron / right-click opens.
+  // Hooks run before the card/system early returns to keep their order stable.
+  const openMenuAtPoint = React.useCallback(
+    (point: { x: number; y: number }) => onOpenMenu?.(message, point),
+    [message, onOpenMenu],
+  );
+  const longPress = useLongPress(openMenuAtPoint);
+
+  // Chevron toggle: the menu closes itself on any outside pointerdown —
+  // including one on the chevron — before this button's click fires. Capture
+  // whether the menu was open at pointerdown (same event dispatch, so the
+  // prop is still the pre-close value) and have the click only reopen when it
+  // was not.
+  const menuWasOpenRef = React.useRef(false);
+
   if (message.card) {
     return <CardMessage message={message} />;
   }
@@ -102,6 +153,8 @@ export function MessageBubble({
   const adminSide = message.senderRole === 'admin';
   const own = message.senderId === currentUserId;
   const showName = Boolean(message.senderName) && !own;
+  const replyTo = message.replyTo;
+  const reactions = message.reactions ?? [];
 
   return (
     <div
@@ -117,16 +170,95 @@ export function MessageBubble({
       ) : null}
       <div
         className={cn(
-          'max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm',
+          'group relative max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm',
           own
             ? 'rounded-br-md bg-brand text-text-inverse'
             : adminSide
               ? 'rounded-br-md bg-brand-soft text-brand'
               : 'rounded-bl-md bg-surface-2 text-text',
         )}
+        onContextMenu={
+          onOpenMenu
+            ? (e) => {
+                e.preventDefault();
+                onOpenMenu(message, { x: e.clientX, y: e.clientY });
+              }
+            : undefined
+        }
+        onPointerDown={longPress.onPointerDown}
+        onPointerMove={longPress.onPointerMove}
+        onPointerUp={longPress.onPointerUp}
+        onPointerCancel={longPress.onPointerCancel}
+        onClickCapture={longPress.onClickCapture}
       >
+        {onOpenMenu ? (
+          <button
+            type="button"
+            aria-label="Message actions"
+            onPointerDown={() => {
+              menuWasOpenRef.current = !!isMenuOpen;
+            }}
+            onClick={(e) => {
+              const wasOpen = menuWasOpenRef.current;
+              menuWasOpenRef.current = false;
+              if (wasOpen) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              onOpenMenu(message, { x: rect.left, y: rect.bottom + 2 });
+            }}
+            className={cn(
+              'absolute right-1 top-1 rounded-full p-0.5 opacity-0 transition-opacity',
+              'focus-visible:opacity-100 group-hover:opacity-100',
+              own
+                ? 'bg-brand-hover text-text-inverse'
+                : adminSide
+                  ? 'bg-brand-soft text-brand'
+                  : 'bg-surface text-text-muted',
+            )}
+          >
+            <ChevronDown width={14} height={14} strokeWidth={2} />
+          </button>
+        ) : null}
+        {replyTo ? (
+          <button
+            type="button"
+            onClick={() => onJumpTo?.(replyTo.messageId)}
+            className={cn(
+              'mb-1.5 flex w-full items-center gap-2 rounded-lg border-l-[3px] px-2 py-1 text-left',
+              own ? 'border-white/70 bg-black/15' : 'border-brand bg-surface/70',
+            )}
+          >
+            <span className="min-w-0 flex-1">
+              <span
+                className={cn(
+                  'block truncate text-xs font-semibold',
+                  own ? 'text-text-inverse' : 'text-brand',
+                )}
+              >
+                {replySenderLabel(replyTo, currentUserId)}
+              </span>
+              <span
+                className={cn(
+                  'block truncate text-xs',
+                  own ? 'text-text-inverse/85' : 'text-text-muted',
+                )}
+              >
+                {replyPreviewText(replyTo)}
+              </span>
+            </span>
+            {replyTo.imageUrl ? (
+              <img
+                src={replyTo.imageUrl}
+                alt=""
+                loading="lazy"
+                className="h-9 w-9 shrink-0 rounded-md object-cover"
+              />
+            ) : null}
+          </button>
+        ) : null}
         {message.body ? (
-          <p className="whitespace-pre-wrap break-words">{message.body}</p>
+          <p className="whitespace-pre-wrap break-words">
+            {linkify(message.body)}
+          </p>
         ) : null}
         {message.attachments.length > 0 ? (
           <div
@@ -141,6 +273,32 @@ export function MessageBubble({
           </div>
         ) : null}
       </div>
+      {reactions.length > 0 ? (
+        <div
+          className={cn(
+            'relative z-[1] -mt-2 flex flex-wrap gap-1',
+            adminSide ? 'justify-end pr-2' : 'pl-2',
+          )}
+        >
+          {groupReactions(reactions, currentUserId).map((g) => (
+            <button
+              key={g.emoji}
+              type="button"
+              onClick={() => onOpenReactions?.(message)}
+              aria-label={`${g.emoji} ${g.count}, see who reacted`}
+              className={cn(
+                'flex items-center gap-0.5 rounded-full border bg-surface px-1.5 py-0.5 text-[13px] leading-none shadow-sm',
+                g.mine ? 'border-brand' : 'border-border',
+              )}
+            >
+              <span aria-hidden>{g.emoji}</span>
+              {g.count > 1 ? (
+                <span className="text-[11px] text-text-muted">{g.count}</span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div
         className={cn(
           'flex items-center gap-1 px-1 text-[11px] text-text-subtle',
@@ -152,4 +310,4 @@ export function MessageBubble({
       </div>
     </div>
   );
-}
+});

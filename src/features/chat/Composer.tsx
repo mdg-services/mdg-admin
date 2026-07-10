@@ -26,6 +26,13 @@ interface StagedFile {
   previewUrl?: string;
 }
 
+/** Display-ready summary of the message being replied to. */
+export interface ComposerReplyPreview {
+  senderLabel: string;
+  snippet: string;
+  imageUrl?: string;
+}
+
 interface ComposerProps {
   conversationId: string;
   onSend: (payload: {
@@ -33,6 +40,9 @@ interface ComposerProps {
     attachments: Attachment[];
   }) => Promise<void>;
   disabled?: boolean;
+  /** When set, a reply-quote strip shows above the input. */
+  replyingTo?: ComposerReplyPreview | null;
+  onCancelReply?: () => void;
 }
 
 const ACCEPT =
@@ -41,7 +51,13 @@ const ACCEPT =
 const LINE_HEIGHT = 20;
 const MAX_ROWS = 6;
 
-export function Composer({ conversationId, onSend, disabled }: ComposerProps) {
+export function Composer({
+  conversationId,
+  onSend,
+  disabled,
+  replyingTo,
+  onCancelReply,
+}: ComposerProps) {
   const [body, setBody] = React.useState('');
   const [files, setFiles] = React.useState<StagedFile[]>([]);
   const [sending, setSending] = React.useState(false);
@@ -58,6 +74,11 @@ export function Composer({ conversationId, onSend, disabled }: ComposerProps) {
     const next = Math.min(ta.scrollHeight, LINE_HEIGHT * MAX_ROWS + 16);
     ta.style.height = `${next}px`;
   }, [body]);
+
+  // Starting a reply drops focus straight into the input.
+  React.useEffect(() => {
+    if (replyingTo) textareaRef.current?.focus();
+  }, [replyingTo]);
 
   const hasContent = body.trim().length > 0 || files.length > 0;
   const busy = sending || disabled;
@@ -167,6 +188,33 @@ export function Composer({ conversationId, onSend, disabled }: ComposerProps) {
 
   return (
     <div className="border-t border-border bg-surface px-3 py-2">
+      {replyingTo ? (
+        <div className="mb-2 flex items-center gap-2 rounded-md border-l-[3px] border-brand bg-surface-2 px-2.5 py-1.5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold text-brand">
+              {replyingTo.senderLabel}
+            </p>
+            <p className="truncate text-xs text-text-muted">
+              {replyingTo.snippet}
+            </p>
+          </div>
+          {replyingTo.imageUrl ? (
+            <img
+              src={replyingTo.imageUrl}
+              alt=""
+              className="h-9 w-9 shrink-0 rounded-md object-cover"
+            />
+          ) : null}
+          <button
+            type="button"
+            onClick={onCancelReply}
+            aria-label="Cancel reply"
+            className="shrink-0 rounded-sm p-1 text-text-muted hover:bg-surface hover:text-text"
+          >
+            <X width={14} height={14} strokeWidth={1.75} />
+          </button>
+        </div>
+      ) : null}
       {files.length > 0 ? (
         <div className="mb-2 flex flex-wrap gap-2">
           {files.map((s) =>

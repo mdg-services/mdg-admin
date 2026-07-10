@@ -61,3 +61,16 @@
     scrollbar-width: thin;
   }
 }
+
+/* Jump-to-quote: a 2s background pulse on the targeted message row. */
+@keyframes message-flash {
+  from {
+    background-color: var(--color-brand-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.message-flash {
+  animation: message-flash 2s ease-out;
+}

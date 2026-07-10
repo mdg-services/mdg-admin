@@ -6,7 +6,7 @@ import {
 
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
-import type { Attachment, Message } from '@dk/shared';
+import type { Attachment, Message, MessageReplyContext } from '@dk/shared';
 
 import { messagesKey } from './useMessages';
 
@@ -14,6 +14,10 @@ interface SendMessageVars {
   conversationId: string;
   body?: string;
   attachments?: Attachment[];
+  /** Id of the message being replied to; the server builds the stored snapshot. */
+  replyToMessageId?: string;
+  /** Client-built snapshot so the optimistic bubble renders its quote. */
+  replyTo?: MessageReplyContext;
 }
 
 export function useSendMessage() {
@@ -28,6 +32,7 @@ export function useSendMessage() {
       if (vars.attachments && vars.attachments.length > 0) {
         payload.attachments = vars.attachments;
       }
+      if (vars.replyToMessageId) payload.replyToMessageId = vars.replyToMessageId;
       return api.post<Message>(
         `/conversations/${vars.conversationId}/messages`,
         payload,
@@ -46,6 +51,7 @@ export function useSendMessage() {
         senderName: user?.name ?? admin?.name ?? 'You',
         body: vars.body ?? '',
         attachments: vars.attachments ?? [],
+        ...(vars.replyTo ? { replyTo: vars.replyTo } : {}),
         readBy: [],
         createdAt: new Date().toISOString(),
       };

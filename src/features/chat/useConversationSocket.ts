@@ -8,7 +8,7 @@ import { conversationKey } from '@/hooks/api/useConversation';
 import { messagesKey } from '@/hooks/api/useMessages';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
-import type { Conversation, Message } from '@dk/shared';
+import type { Conversation, Message, MessageReaction } from '@dk/shared';
 
 interface TypingState {
   userId: string;
@@ -94,6 +94,32 @@ export function useConversationSocket(conversationId: string | null) {
       }
     };
 
+    // Replace the message's reaction set wholesale with the server's
+    // authoritative array — idempotent, so the optimistic-toggle echo is safe.
+    const onReaction = (payload: {
+      conversationId: string;
+      messageId: string;
+      reactions: MessageReaction[];
+    }) => {
+      if (payload.conversationId !== conversationId) return;
+      qc.setQueryData<InfiniteData<Message[]>>(
+        messagesKey(conversationId),
+        (curr) => {
+          if (!curr) return curr;
+          return {
+            ...curr,
+            pages: curr.pages.map((page) =>
+              page.map((m) =>
+                m.id === payload.messageId
+                  ? { ...m, reactions: payload.reactions }
+                  : m,
+              ),
+            ),
+          };
+        },
+      );
+    };
+
     const onTyping = (payload: {
       conversationId: string;
       userId: string;
@@ -127,12 +153,14 @@ export function useConversationSocket(conversationId: string | null) {
     };
 
     socket.on('message:new', onMessage);
+    socket.on('message:reaction', onReaction);
     socket.on('typing', onTyping);
     socket.on('delivered', onDelivered);
     socket.on('read', onRead);
 
     return () => {
       socket.off('message:new', onMessage);
+      socket.off('message:reaction', onReaction);
       socket.off('typing', onTyping);
       socket.off('delivered', onDelivered);
       socket.off('read', onRead);
