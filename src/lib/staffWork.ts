@@ -6,9 +6,12 @@
  */
 import type {
   StaffPointDistribution,
+  StaffPricingMode,
   StaffWorkDomain,
   StaffWorkUnit,
 } from '@dk/shared';
+
+import type { Intent } from './statusIntent';
 
 export const DOMAIN_ORDER: StaffWorkDomain[] = [
   'cleaning',
@@ -62,6 +65,25 @@ export function unitLabel(u?: StaffWorkUnit): string {
 
 export function distributionLabel(d: StaffPointDistribution): string {
   return DISTRIBUTION_LABELS[d];
+}
+
+/**
+ * How a work's base points are set. Labour points are derived from the four
+ * factors (time + skill + effort + responsibility); incentive points are a
+ * typed sales/acquisition reward. Surfaced as a chip so the two are readable.
+ */
+export const PRICING_MODE_LABELS: Record<StaffPricingMode, string> = {
+  labour: 'Labour · derived',
+  incentive: 'Incentive · typed',
+};
+
+export function pricingModeLabel(m: StaffPricingMode): string {
+  return PRICING_MODE_LABELS[m];
+}
+
+/** Badge intent for a pricing mode (info = typed incentive, neutral = derived labour). */
+export function pricingModeIntent(m: StaffPricingMode): Intent {
+  return m === 'incentive' ? 'info' : 'neutral';
 }
 
 /** Trim points to at most 2 dp, dropping trailing zeros (points may be fractional). */

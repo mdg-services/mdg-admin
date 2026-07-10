@@ -43,11 +43,16 @@ import {
   domainLabel,
   DOMAIN_ORDER,
   fmtPoints,
+  pricingModeIntent,
+  pricingModeLabel,
   unitLabel,
 } from '@/lib/staffWork';
 import {
+  deriveBasePoints,
   STAFF_POINT_DISTRIBUTIONS,
+  STAFF_PRICING_MODES,
   STAFF_WORK_UNITS,
+  type StaffPricingMode,
   type StaffWorkItem,
 } from '@dk/shared';
 import {
@@ -193,10 +198,15 @@ export function WorkListDefaultsPage() {
                           </div>
                         </TD>
                         <TD className="text-text-muted">
-                          {distributionLabel(it.distribution)}
-                          {it.unit ? (
-                            <span className="text-text-subtle"> · {unitLabel(it.unit)}</span>
-                          ) : null}
+                          <div>
+                            {distributionLabel(it.distribution)}
+                            {it.unit ? (
+                              <span className="text-text-subtle"> · {unitLabel(it.unit)}</span>
+                            ) : null}
+                          </div>
+                          <Badge intent={pricingModeIntent(it.pricingMode)} className="mt-1">
+                            {pricingModeLabel(it.pricingMode)}
+                          </Badge>
                         </TD>
                         <TD className="text-right tabular-nums">{fmtPoints(it.points)}</TD>
                         <TD>
@@ -267,9 +277,45 @@ const CREATE_DEFAULTS: CreateStaffWorkItemInput = {
   labelHi: '',
   points: 0,
   distribution: 'FLAT',
+  pricingMode: 'labour',
+  // Left blank (not 0) so the "required" prompt fires on submit rather than
+  // pre-filling an invalid value — `timeMin` must be positive.
+  timeMin: undefined,
+  skill: 0,
+  effort: 0,
+  responsibility: 0,
   domain: 'cleaning',
   requiresApproval: false,
 };
+
+/** Live derived-points preview from the four watched labour factors. */
+function derivePreview(v: {
+  timeMin?: number;
+  skill?: number;
+  effort?: number;
+  responsibility?: number;
+}): number {
+  return deriveBasePoints({
+    timeMin: v.timeMin ?? 0,
+    skill: v.skill ?? 0,
+    effort: v.effort ?? 0,
+    responsibility: v.responsibility ?? 0,
+  });
+}
+
+/**
+ * For a labour work the server derives `points` from the factors, so we must NOT
+ * send a stale hand-typed value. Strips `points` off a labour payload (JSON drops
+ * the undefined key); leaves an incentive payload's typed points intact.
+ */
+function stripDerivedPoints<T extends { pricingMode?: StaffPricingMode; points?: number }>(
+  values: T,
+): T {
+  if ((values.pricingMode ?? 'labour') === 'labour') {
+    return { ...values, points: undefined };
+  }
+  return values;
+}
 
 function CreateWorkItemDialog({
   open,
@@ -286,6 +332,7 @@ function CreateWorkItemDialog({
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<CreateStaffWorkItemInput>({
     resolver: zodResolver(createStaffWorkItemSchema),
@@ -297,10 +344,23 @@ function CreateWorkItemDialog({
   }, [open, reset]);
 
   const isPerUnit = watch('distribution') === 'PER_UNIT';
+  const pricingMode = (watch('pricingMode') ?? 'labour') as StaffPricingMode;
+
+  // Switching to incentive hides `timeMin`; clear it so a leftover (e.g. an
+  // invalid 0) on the now-hidden field can't silently block submit.
+  React.useEffect(() => {
+    if (pricingMode === 'incentive') setValue('timeMin', undefined);
+  }, [pricingMode, setValue]);
+  const derivedPoints = derivePreview({
+    timeMin: watch('timeMin'),
+    skill: watch('skill'),
+    effort: watch('effort'),
+    responsibility: watch('responsibility'),
+  });
 
   const submit = handleSubmit(async (values) => {
     try {
-      await create.mutateAsync(values);
+      await create.mutateAsync(stripDerivedPoints(values));
       toast.success('Work item created');
       onClose();
     } catch (err) {
@@ -358,6 +418,8 @@ function CreateWorkItemDialog({
           register={register as never}
           errors={errors as never}
           isPerUnit={isPerUnit}
+          pricingMode={pricingMode}
+          derivedPoints={derivedPoints}
         />
       </form>
     </Dialog>
@@ -381,6 +443,7 @@ function EditWorkItemDialog({
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<UpdateStaffWorkItemInput>({
     resolver: zodResolver(updateStaffWorkItemSchema),
@@ -396,6 +459,11 @@ function EditWorkItemDialog({
         labelHi: item.labelHi,
         points: item.points,
         distribution: item.distribution,
+        pricingMode: item.pricingMode,
+        timeMin: item.timeMin,
+        skill: item.skill,
+        effort: item.effort,
+        responsibility: item.responsibility,
         unit: item.unit,
         unitLabelEn: item.unitLabelEn,
         unitLabelHi: item.unitLabelHi,
@@ -409,11 +477,24 @@ function EditWorkItemDialog({
   }, [item, reset]);
 
   const isPerUnit = watch('distribution') === 'PER_UNIT';
+  const pricingMode = (watch('pricingMode') ?? 'labour') as StaffPricingMode;
+  const derivedPoints = derivePreview({
+    timeMin: watch('timeMin'),
+    skill: watch('skill'),
+    effort: watch('effort'),
+    responsibility: watch('responsibility'),
+  });
+
+  // Converting a work to incentive hides `timeMin`; clear the leftover so it
+  // can't fail validation on a field the user can no longer see.
+  React.useEffect(() => {
+    if (pricingMode === 'incentive') setValue('timeMin', undefined);
+  }, [pricingMode, setValue]);
 
   const submit = handleSubmit(async (values) => {
     if (!item) return;
     try {
-      await update.mutateAsync({ code: item.code, ...values });
+      await update.mutateAsync({ code: item.code, ...stripDerivedPoints(values) });
       toast.success('Work item updated');
       onClose();
     } catch (err) {
@@ -468,6 +549,8 @@ function EditWorkItemDialog({
           register={register as never}
           errors={errors as never}
           isPerUnit={isPerUnit}
+          pricingMode={pricingMode}
+          derivedPoints={derivedPoints}
         />
 
         <label className="flex items-center gap-2 text-sm text-text">
@@ -492,9 +575,20 @@ interface SharedFieldsProps {
   register: UseFormRegister<CreateStaffWorkItemInput>;
   errors: FieldErrors<CreateStaffWorkItemInput>;
   isPerUnit: boolean;
+  /** Watched pricing mode — drives whether Points is typed or a derived readout. */
+  pricingMode: StaffPricingMode;
+  /** Live derived value shown (read-only) for labour works. */
+  derivedPoints: number;
 }
 
-function FormFieldsShared({ register, errors, isPerUnit }: SharedFieldsProps) {
+function FormFieldsShared({
+  register,
+  errors,
+  isPerUnit,
+  pricingMode,
+  derivedPoints,
+}: SharedFieldsProps) {
+  const isLabour = pricingMode === 'labour';
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -533,18 +627,16 @@ function FormFieldsShared({ register, errors, isPerUnit }: SharedFieldsProps) {
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
-          <Label htmlFor="wi-points" required>
-            Points
+          <Label htmlFor="wi-pricingMode" required>
+            Pricing mode
           </Label>
-          <Input
-            id="wi-points"
-            type="number"
-            step="any"
-            min={0}
-            invalid={!!errors.points}
-            {...register('points', { setValueAs: numberSetValueAs })}
-          />
-          <FieldError message={errors.points?.message} />
+          <Select id="wi-pricingMode" {...register('pricingMode')}>
+            {STAFF_PRICING_MODES.map((m) => (
+              <option key={m} value={m}>
+                {pricingModeLabel(m)}
+              </option>
+            ))}
+          </Select>
         </div>
         <div>
           <Label htmlFor="wi-distribution" required>
@@ -571,6 +663,110 @@ function FormFieldsShared({ register, errors, isPerUnit }: SharedFieldsProps) {
           </Select>
         </div>
       </div>
+
+      {isLabour ? (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="wi-timeMin" required>
+                Time (minutes)
+              </Label>
+              <Input
+                id="wi-timeMin"
+                type="number"
+                step="any"
+                min={0}
+                invalid={!!errors.timeMin}
+                {...register('timeMin', { setValueAs: numberSetValueAs })}
+              />
+              <FieldError message={errors.timeMin?.message} />
+              <p className="mt-1 text-xs text-text-subtle">
+                {isPerUnit
+                  ? 'Hands-on minutes per unit (per vehicle / ₹1,000 / guest …).'
+                  : 'Hands-on minutes for the whole job.'}
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="wi-derivedPoints">Points (auto-derived)</Label>
+              <div
+                id="wi-derivedPoints"
+                aria-live="polite"
+                className="flex h-9 items-center rounded-sm border border-border bg-surface-2 px-3 text-sm font-medium tabular-nums text-text"
+              >
+                {fmtPoints(derivedPoints)}
+              </div>
+              <p className="mt-1 text-xs text-text-subtle">
+                Computed from time, skill, effort &amp; responsibility.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <Label htmlFor="wi-skill" required>
+                Skill (0–100)
+              </Label>
+              <Input
+                id="wi-skill"
+                type="number"
+                min={0}
+                max={100}
+                invalid={!!errors.skill}
+                {...register('skill', { setValueAs: numberSetValueAs })}
+              />
+              <FieldError message={errors.skill?.message} />
+            </div>
+            <div>
+              <Label htmlFor="wi-effort" required>
+                Effort (0–100)
+              </Label>
+              <Input
+                id="wi-effort"
+                type="number"
+                min={0}
+                max={100}
+                invalid={!!errors.effort}
+                {...register('effort', { setValueAs: numberSetValueAs })}
+              />
+              <FieldError message={errors.effort?.message} />
+            </div>
+            <div>
+              <Label htmlFor="wi-responsibility" required>
+                Responsibility (0–100)
+              </Label>
+              <Input
+                id="wi-responsibility"
+                type="number"
+                min={0}
+                max={100}
+                invalid={!!errors.responsibility}
+                {...register('responsibility', { setValueAs: numberSetValueAs })}
+              />
+              <FieldError message={errors.responsibility?.message} />
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <Label htmlFor="wi-points" required>
+              Points
+            </Label>
+            <Input
+              id="wi-points"
+              type="number"
+              step="any"
+              min={0}
+              invalid={!!errors.points}
+              {...register('points', { setValueAs: numberSetValueAs })}
+            />
+            <FieldError message={errors.points?.message} />
+            <p className="mt-1 text-xs text-text-subtle">
+              Typed reward value for sales / acquisition works.
+            </p>
+          </div>
+        </div>
+      )}
 
       {isPerUnit ? (
         <div className="grid gap-3 sm:grid-cols-3">

@@ -43,13 +43,17 @@ import {
   DOMAIN_ORDER,
   fmtPoints,
   makeLocalId,
+  pricingModeIntent,
+  pricingModeLabel,
 } from '@/lib/staffWork';
-import type {
-  Dealer,
-  DealerWorkList,
-  StaffPointDistribution,
-  StaffWorkDomain,
-  StaffWorkUnit,
+import {
+  deriveBasePoints,
+  type Dealer,
+  type DealerWorkList,
+  type StaffPointDistribution,
+  type StaffPricingMode,
+  type StaffWorkDomain,
+  type StaffWorkUnit,
 } from '@dk/shared';
 import type { DealerCustomWorkItemInput } from '@dk/shared/schemas';
 
@@ -69,6 +73,11 @@ interface DefaultRow {
   labelHi: string;
   points: number;
   distribution: StaffPointDistribution;
+  pricingMode: StaffPricingMode;
+  timeMin?: number;
+  skill?: number;
+  effort?: number;
+  responsibility?: number;
   unit?: StaffWorkUnit;
   domain: StaffWorkDomain;
   srNo: number;
@@ -81,14 +90,38 @@ function stripLocal(items: EditableCustomItem[]): DealerCustomWorkItemInput[] {
     code: x.code,
     labelEn: x.labelEn,
     labelHi: x.labelHi,
-    points: x.points,
+    // Labour points are derived server-side, so leave `points` off a labour item
+    // (JSON drops the undefined key); incentive items keep their typed value.
+    points: x.pricingMode === 'labour' ? undefined : x.points,
     distribution: x.distribution,
+    pricingMode: x.pricingMode,
+    timeMin: x.timeMin,
+    skill: x.skill,
+    effort: x.effort,
+    responsibility: x.responsibility,
     unit: x.unit,
     unitLabelEn: x.unitLabelEn,
     unitLabelHi: x.unitLabelHi,
     domain: x.domain,
     active: x.active,
   }));
+}
+
+/**
+ * The points to DISPLAY for a custom item: a labour item's stored `points` may be
+ * absent (derived server-side), so mirror the server's `deriveBasePoints` locally
+ * for a faithful preview. Incentive items use their typed value.
+ */
+function customPoints(c: EditableCustomItem): number {
+  if (c.pricingMode === 'labour') {
+    return deriveBasePoints({
+      timeMin: c.timeMin ?? 0,
+      skill: c.skill ?? 0,
+      effort: c.effort ?? 0,
+      responsibility: c.responsibility ?? 0,
+    });
+  }
+  return c.points ?? 0;
 }
 
 function normalize(h: string[], c: EditableCustomItem[]): string {
@@ -145,6 +178,11 @@ export function DealerWorkListTab({ dealer }: Props) {
         labelHi: it.labelHi,
         points: it.points,
         distribution: it.distribution,
+        pricingMode: it.pricingMode,
+        timeMin: it.timeMin,
+        skill: it.skill,
+        effort: it.effort,
+        responsibility: it.responsibility,
         unit: it.unit,
         domain: it.domain,
         srNo: it.srNo,
@@ -159,6 +197,11 @@ export function DealerWorkListTab({ dealer }: Props) {
         labelHi: it.labelHi,
         points: it.points,
         distribution: it.distribution,
+        pricingMode: it.pricingMode,
+        timeMin: it.timeMin,
+        skill: it.skill,
+        effort: it.effort,
+        responsibility: it.responsibility,
         unit: it.unit,
         domain: it.domain,
         srNo: it.srNo,
@@ -173,6 +216,7 @@ export function DealerWorkListTab({ dealer }: Props) {
           labelHi: '',
           points: 0,
           distribution: 'FLAT',
+          pricingMode: 'labour',
           domain: 'misc',
           srNo: 1_000_000,
           known: false,
@@ -450,9 +494,14 @@ export function DealerWorkListTab({ dealer }: Props) {
                     </TD>
                     <TD className="text-text-muted">{domainLabel(c.domain)}</TD>
                     <TD className="text-text-muted">
-                      {distributionLabel(c.distribution)}
+                      <div>{distributionLabel(c.distribution)}</div>
+                      <Badge intent={pricingModeIntent(c.pricingMode)} className="mt-1">
+                        {pricingModeLabel(c.pricingMode)}
+                      </Badge>
                     </TD>
-                    <TD className="text-right tabular-nums">{fmtPoints(c.points)}</TD>
+                    <TD className="text-right tabular-nums">
+                      {fmtPoints(customPoints(c))}
+                    </TD>
                     <TD>
                       <Badge intent={c.active ? 'success' : 'neutral'}>
                         {c.active ? 'Active' : 'Inactive'}
