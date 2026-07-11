@@ -16,9 +16,11 @@ const VARIANTS: Record<Variant, string> = {
   danger: 'bg-danger text-white hover:bg-danger/90',
 };
 
+// The `min-h-11` floor (44px) only wins below `md`; `md:min-h-8`/`md:min-h-9`
+// restores the original desktop density so ≥ md looks identical to before.
 const SIZES: Record<Size, string> = {
-  sm: 'h-8 px-3 text-sm gap-1.5',
-  md: 'h-9 px-4 text-sm gap-2',
+  sm: 'h-8 min-h-11 md:min-h-0 px-3 text-sm gap-1.5',
+  md: 'h-9 min-h-11 md:min-h-0 px-4 text-sm gap-2',
 };
 
 export interface ButtonProps

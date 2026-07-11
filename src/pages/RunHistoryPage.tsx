@@ -165,22 +165,41 @@ export function RunHistoryPage() {
                     {g.items.map((r) => (
                       <li
                         key={r.id}
-                        className="flex cursor-pointer items-center gap-3 px-4 py-2 text-sm hover:bg-surface-2"
+                        className="min-h-11 cursor-pointer px-4 py-2 text-sm hover:bg-surface-2 md:min-h-0"
                         onClick={() => setOpen(r)}
                       >
-                        <StatusChip kind="run" value={r.status} />
-                        <span className="min-w-0 flex-1 truncate font-medium text-text">
-                          {r.serviceId}
-                        </span>
-                        <span className="hidden text-xs text-text-muted md:inline">
-                          {r.dealerId.slice(-6)}
-                        </span>
-                        <span className="text-xs text-text-muted">
-                          {formatDateTime(r.startedAt)}
-                        </span>
-                        <span className="text-xs text-text-subtle">
-                          {formatDuration(r.durationMs)}
-                        </span>
+                        {/* Desktop: single dense row (unchanged). */}
+                        <div className="hidden items-center gap-3 md:flex">
+                          <StatusChip kind="run" value={r.status} />
+                          <span className="min-w-0 flex-1 truncate font-medium text-text">
+                            {r.serviceId}
+                          </span>
+                          <span className="hidden text-xs text-text-muted md:inline">
+                            {r.dealerId.slice(-6)}
+                          </span>
+                          <span className="text-xs text-text-muted">
+                            {formatDateTime(r.startedAt)}
+                          </span>
+                          <span className="text-xs text-text-subtle">
+                            {formatDuration(r.durationMs)}
+                          </span>
+                        </div>
+                        {/* Mobile: two lines. */}
+                        <div className="flex flex-col gap-1 md:hidden">
+                          <div className="flex items-center gap-2">
+                            <StatusChip kind="run" value={r.status} />
+                            <span className="min-w-0 flex-1 truncate font-medium text-text">
+                              {r.serviceId}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                            <span>{formatDateTime(r.startedAt)}</span>
+                            <span className="text-text-subtle">·</span>
+                            <span className="text-text-subtle">
+                              {formatDuration(r.durationMs)}
+                            </span>
+                          </div>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -268,7 +287,7 @@ function Field({
       <p className="text-xs uppercase tracking-wide text-text-subtle">
         {label}
       </p>
-      <p className="text-text">{value}</p>
+      <p className="break-words text-text">{value}</p>
     </div>
   );
 }

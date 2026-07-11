@@ -27,6 +27,7 @@ import {
   FieldError,
   Input,
   Label,
+  MobileCardList,
   Skeleton,
   TBody,
   TD,
@@ -43,6 +44,7 @@ import {
   useUpdateUser,
 } from '@/hooks/api/useAllUsers';
 import { ApiError } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import { generatePassword } from '@/lib/password';
 import { selectUser, useAuthStore } from '@/store/auth';
 import type { DealerUserGroup, User } from '@dk/shared';
@@ -226,57 +228,108 @@ function GroupCard({
         </Badge>
       </div>
       <CardContent className="pt-0">
-        <Table>
-          <THead>
-            <TRow>
-              <TH>Name</TH>
-              <TH>Email</TH>
-              <TH>Role</TH>
-              <TH>Status</TH>
-              <TH className="text-right">Actions</TH>
-            </TRow>
-          </THead>
-          <TBody>
-            {group.users.map((u) => (
-              <TRow key={u.id} className={u.archivedAt ? 'opacity-60' : undefined}>
-                <TD className="font-medium">
-                  {u.name}
-                  {u.title ? (
-                    <span className="ml-2 text-xs font-normal text-text-subtle">
-                      {u.title}
-                    </span>
-                  ) : null}
-                </TD>
-                <TD className="font-mono text-xs">{u.email}</TD>
-                <TD>
-                  <Badge intent={u.role === 'admin' ? 'info' : 'neutral'}>
-                    {ROLE_LABEL[u.role]}
-                    {u.isSuperAdmin ? ' · Super' : ''}
-                  </Badge>
-                </TD>
-                <TD>
-                  {u.archivedAt ? (
-                    <Badge intent="danger">Archived</Badge>
-                  ) : u.status === 'ACTIVE' ? (
-                    <Badge intent="success">Active</Badge>
-                  ) : (
-                    <Badge intent="neutral">Suspended</Badge>
-                  )}
-                </TD>
-                <TD className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onManage(u)}
-                    leftIcon={<Settings2 width={14} height={14} strokeWidth={1.75} />}
-                  >
-                    Manage
-                  </Button>
-                </TD>
+        {/* Desktop table (≥ md) */}
+        <div className="hidden md:block">
+          <Table>
+            <THead>
+              <TRow>
+                <TH>Name</TH>
+                <TH>Email</TH>
+                <TH>Role</TH>
+                <TH>Status</TH>
+                <TH className="text-right">Actions</TH>
               </TRow>
-            ))}
-          </TBody>
-        </Table>
+            </THead>
+            <TBody>
+              {group.users.map((u) => (
+                <TRow key={u.id} className={u.archivedAt ? 'opacity-60' : undefined}>
+                  <TD className="font-medium">
+                    {u.name}
+                    {u.title ? (
+                      <span className="ml-2 text-xs font-normal text-text-subtle">
+                        {u.title}
+                      </span>
+                    ) : null}
+                  </TD>
+                  <TD className="font-mono text-xs">{u.email}</TD>
+                  <TD>
+                    <Badge intent={u.role === 'admin' ? 'info' : 'neutral'}>
+                      {ROLE_LABEL[u.role]}
+                      {u.isSuperAdmin ? ' · Super' : ''}
+                    </Badge>
+                  </TD>
+                  <TD>
+                    {u.archivedAt ? (
+                      <Badge intent="danger">Archived</Badge>
+                    ) : u.status === 'ACTIVE' ? (
+                      <Badge intent="success">Active</Badge>
+                    ) : (
+                      <Badge intent="neutral">Suspended</Badge>
+                    )}
+                  </TD>
+                  <TD className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onManage(u)}
+                      leftIcon={<Settings2 width={14} height={14} strokeWidth={1.75} />}
+                    >
+                      Manage
+                    </Button>
+                  </TD>
+                </TRow>
+              ))}
+            </TBody>
+          </Table>
+        </div>
+
+        {/* Mobile card-stack (< md) */}
+        <MobileCardList
+          className="pt-1"
+          cards={group.users.map((u) => ({
+            key: u.id,
+            primary: (
+              <span
+                className={cn(
+                  'block truncate font-medium text-text',
+                  u.archivedAt && 'opacity-60',
+                )}
+              >
+                {u.name}
+                {u.title ? (
+                  <span className="ml-2 text-xs font-normal text-text-subtle">
+                    {u.title}
+                  </span>
+                ) : null}
+              </span>
+            ),
+            primaryRight: (
+              <Badge intent={u.role === 'admin' ? 'info' : 'neutral'}>
+                {ROLE_LABEL[u.role]}
+                {u.isSuperAdmin ? ' · Super' : ''}
+              </Badge>
+            ),
+            secondary: <span className="block truncate font-mono">{u.email}</span>,
+            meta: u.archivedAt ? (
+              <Badge intent="danger">Archived</Badge>
+            ) : u.status === 'ACTIVE' ? (
+              <Badge intent="success">Active</Badge>
+            ) : (
+              <Badge intent="neutral">Suspended</Badge>
+            ),
+            actions: (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                onClick={() => onManage(u)}
+                leftIcon={<Settings2 width={14} height={14} strokeWidth={1.75} />}
+              >
+                Manage
+              </Button>
+            ),
+          }))}
+        />
       </CardContent>
     </Card>
   );
@@ -461,7 +514,7 @@ function ManageUserDialog({
               {/* Login access */}
               <section>
                 <SectionTitle>Login access</SectionTitle>
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-sm text-text-muted">
                     {user.status === 'ACTIVE'
                       ? 'Active — can sign in.'
@@ -488,7 +541,7 @@ function ManageUserDialog({
               {isDealerMember ? (
                 <section>
                   <SectionTitle>Role</SectionTitle>
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-sm text-text-muted">
                       Currently <span className="font-medium text-text">{ROLE_LABEL[user.role]}</span>.
                       Switching to {ROLE_LABEL[otherRole]} resets their chat threads.
@@ -525,7 +578,7 @@ function ManageUserDialog({
               {isAdmin ? (
                 <section>
                   <SectionTitle>Super-admin tier</SectionTitle>
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-sm text-text-muted">
                       {user.isSuperAdmin
                         ? 'Can view the Activity log and manage the team.'
@@ -621,7 +674,7 @@ function ManageUserDialog({
           <section className="rounded-sm border border-border-strong/60 p-3">
             <SectionTitle>{isArchived ? 'Restore' : 'Archive'}</SectionTitle>
             {isArchived ? (
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-text-muted">
                   Bring this user back into the roster. Their login stays disabled until
                   you reactivate them.
@@ -638,7 +691,7 @@ function ManageUserDialog({
                 </Button>
               </div>
             ) : (
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-text-muted">
                   Disable this login and hide them from the roster. Reversible — their
                   record and chat history are kept.

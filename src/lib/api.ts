@@ -37,7 +37,7 @@ export interface RequestOptions {
   anonymous?: boolean;
 }
 
-function buildUrl(path: string, query?: RequestOptions['query']): string {
+export function buildUrl(path: string, query?: RequestOptions['query']): string {
   const url = new URL(
     path.startsWith('http')
       ? path

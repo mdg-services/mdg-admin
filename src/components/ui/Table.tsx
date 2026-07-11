@@ -8,7 +8,7 @@ export function Table({
   ...rest
 }: React.HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="w-full overflow-x-auto overscroll-x-contain">
       <table
         className={cn('w-full border-collapse text-sm', className)}
         {...rest}

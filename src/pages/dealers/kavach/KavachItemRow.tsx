@@ -106,6 +106,7 @@ export function KavachItemRow({
           <Button
             variant="ghost"
             size="sm"
+            className="min-w-11 md:min-w-0"
             disabled={busy || item.paused || item.escalation.escalated}
             onClick={() => onEscalate(item)}
             aria-label="Escalate to inbox"
@@ -118,6 +119,7 @@ export function KavachItemRow({
         <Button
           variant="ghost"
           size="sm"
+          className="min-w-11 md:min-w-0"
           disabled={busy}
           onClick={() => onTogglePause(item)}
           aria-label={item.paused ? 'Resume' : 'Pause'}
@@ -134,6 +136,7 @@ export function KavachItemRow({
           <Button
             variant="ghost"
             size="sm"
+            className="min-w-11 md:min-w-0"
             disabled={busy}
             onClick={() => onDelete(item)}
             aria-label="Delete custom item"

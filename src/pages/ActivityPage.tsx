@@ -10,6 +10,7 @@ import {
   Dialog,
   EmptyState,
   Input,
+  MobileCardList,
   Pagination,
   Select,
   Skeleton,
@@ -212,52 +213,89 @@ export function ActivityPage() {
             />
           ) : data ? (
             <>
-              <Table>
-                <THead>
-                  <TRow>
-                    <TH>Time</TH>
-                    <TH>Actor</TH>
-                    <TH>Action</TH>
-                    <TH>Entity</TH>
-                    <TH>Target</TH>
-                    <TH>IP</TH>
-                  </TRow>
-                </THead>
-                <TBody>
-                  {data.items.map((row) => (
-                    <TRow key={row.id} clickable onClick={() => setSelected(row)}>
-                      <TD className="whitespace-nowrap text-text-muted">
-                        {formatDateTime(row.at)}
-                      </TD>
-                      <TD>
-                        <div className="flex flex-col">
-                          <span className="font-medium">
-                            {row.actorName || row.actorEmail || 'System'}
-                          </span>
-                          <span className="text-xs text-text-subtle">
-                            {roleLabel(row.actorRole)}
-                          </span>
-                        </div>
-                      </TD>
-                      <TD>
-                        <Badge intent={actionIntent(row.action)}>
-                          {humanize(row.action)}
-                        </Badge>
-                      </TD>
-                      <TD className="text-text-muted">{row.entity}</TD>
-                      <TD
-                        className="max-w-[10rem] truncate font-mono text-xs text-text-muted"
-                        title={row.entityId}
-                      >
-                        {row.entityId}
-                      </TD>
-                      <TD className="font-mono text-xs text-text-subtle">
-                        {row.ip ?? '—'}
-                      </TD>
+              {/* Desktop table (≥ md) */}
+              <div className="hidden md:block">
+                <Table>
+                  <THead>
+                    <TRow>
+                      <TH>Time</TH>
+                      <TH>Actor</TH>
+                      <TH>Action</TH>
+                      <TH>Entity</TH>
+                      <TH>Target</TH>
+                      <TH>IP</TH>
                     </TRow>
-                  ))}
-                </TBody>
-              </Table>
+                  </THead>
+                  <TBody>
+                    {data.items.map((row) => (
+                      <TRow key={row.id} clickable onClick={() => setSelected(row)}>
+                        <TD className="whitespace-nowrap text-text-muted">
+                          {formatDateTime(row.at)}
+                        </TD>
+                        <TD>
+                          <div className="flex flex-col">
+                            <span className="font-medium">
+                              {row.actorName || row.actorEmail || 'System'}
+                            </span>
+                            <span className="text-xs text-text-subtle">
+                              {roleLabel(row.actorRole)}
+                            </span>
+                          </div>
+                        </TD>
+                        <TD>
+                          <Badge intent={actionIntent(row.action)}>
+                            {humanize(row.action)}
+                          </Badge>
+                        </TD>
+                        <TD className="text-text-muted">{row.entity}</TD>
+                        <TD
+                          className="max-w-[10rem] truncate font-mono text-xs text-text-muted"
+                          title={row.entityId}
+                        >
+                          {row.entityId}
+                        </TD>
+                        <TD className="font-mono text-xs text-text-subtle">
+                          {row.ip ?? '—'}
+                        </TD>
+                      </TRow>
+                    ))}
+                  </TBody>
+                </Table>
+              </div>
+
+              {/* Mobile card-stack (< md) */}
+              <MobileCardList
+                className="p-3"
+                cards={data.items.map((row) => ({
+                  key: row.id,
+                  onClick: () => setSelected(row),
+                  primary: (
+                    <Badge intent={actionIntent(row.action)}>
+                      {humanize(row.action)}
+                    </Badge>
+                  ),
+                  primaryRight: (
+                    <span className="whitespace-nowrap text-xs text-text-subtle">
+                      {formatDateTime(row.at)}
+                    </span>
+                  ),
+                  secondary: (
+                    <span className="block">
+                      <span className="font-medium text-text">
+                        {row.actorName || row.actorEmail || 'System'}
+                      </span>
+                      <span className="ml-1.5 text-xs text-text-subtle">
+                        {roleLabel(row.actorRole)}
+                      </span>
+                    </span>
+                  ),
+                  meta: (
+                    <span className="block truncate font-mono">
+                      {row.entity} · {row.entityId}
+                    </span>
+                  ),
+                }))}
+              />
               <Pagination
                 page={data.page}
                 pageSize={data.pageSize}

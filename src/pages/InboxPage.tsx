@@ -8,6 +8,7 @@ import {
   Inbox,
   Info,
   MessageSquare,
+  MoreVertical,
   PanelRightClose,
   PanelRightOpen,
   Plus,
@@ -16,7 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import * as React from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -24,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
+import { Sheet, SheetItem } from '@/components/ui/Sheet';
 import { Spinner } from '@/components/ui/Spinner';
 import { Composer } from '@/features/chat/Composer';
 import { MediaGalleryCard } from '@/features/chat/MediaGalleryCard';
@@ -215,12 +217,14 @@ export function InboxPage() {
   // race it to a different thread when the default list is warm in cache). Also
   // switch to a filter that shows a freshly started, unassigned chat.
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const deepLinkId = searchParams.get('c');
 
   const [filter, setFilter] = React.useState<InboxFilter>(deepLinkId ? 'all' : 'mine');
   const [selectedId, setSelectedId] = React.useState<string | null>(deepLinkId);
   const [contextOpen, setContextOpen] = React.useState(true);
   const [newOpen, setNewOpen] = React.useState(false);
+  const [threadMenuOpen, setThreadMenuOpen] = React.useState(false);
   // Below lg the context panel (ticket controls, dealer, reports) is a slide-over
   // instead of an inline column, so it stays reachable on phones/tablets.
   const [mobileContextOpen, setMobileContextOpen] = React.useState(false);
@@ -234,21 +238,56 @@ export function InboxPage() {
     return () => window.clearInterval(t);
   }, []);
 
-  // Honour later `?c=` changes (in-session navigation) too, then strip the param
-  // so refresh/back doesn't re-trigger it.
+  // Keep the selection in sync with the `?c=` param.
+  //  - Desktop (≥ lg): consume a deep link once, seed selection into state, then
+  //    strip the param so refresh/back doesn't re-trigger it. Both panes are
+  //    visible so React state is the source of truth.
+  //  - Mobile (< lg): the URL IS the source of truth. Opening a thread pushes
+  //    `?c=<id>` (see `openConversation`) and we never strip it, so Android
+  //    hardware-back pops the entry and returns to the list instead of exiting.
   React.useEffect(() => {
     const c = searchParams.get('c');
-    if (!c) return;
-    setSelectedId(c);
-    setFilter('all');
-    const next = new URLSearchParams(searchParams);
-    next.delete('c');
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams]);
+    if (isLg) {
+      if (!c) return;
+      setSelectedId(c);
+      setFilter('all');
+      const next = new URLSearchParams(searchParams);
+      next.delete('c');
+      setSearchParams(next, { replace: true });
+    } else {
+      setSelectedId(c);
+      if (c) setFilter('all');
+    }
+  }, [searchParams, setSearchParams, isLg]);
+
+  // Open a conversation. On mobile this pushes `?c=<id>` (a real history entry,
+  // so hardware-back returns to the list); on desktop it sets state directly.
+  const openConversation = React.useCallback(
+    (id: string) => {
+      if (isLg) {
+        setSelectedId(id);
+      } else {
+        const next = new URLSearchParams(searchParams);
+        next.set('c', id);
+        setSearchParams(next);
+      }
+    },
+    [isLg, searchParams, setSearchParams],
+  );
+
+  // Close the open thread: pop the pushed `?c=` on mobile (matches hardware
+  // back), clear state on desktop.
+  const closeConversation = React.useCallback(() => {
+    if (isLg) {
+      setSelectedId(null);
+    } else {
+      navigate(-1);
+    }
+  }, [isLg, navigate]);
 
   function handleStarted(conversationId: string) {
     setFilter('all');
-    setSelectedId(conversationId);
+    openConversation(conversationId);
   }
 
   const conversationsQ = useConversations(filter);
@@ -435,7 +474,7 @@ export function InboxPage() {
   }
 
   return (
-    <div className="-m-4 flex h-[calc(100dvh-3.5rem)] md:-m-6">
+    <div className="-m-4 flex h-full md:-m-6">
       {/* Left rail */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface md:flex">
         <div className="px-4 py-3">
@@ -519,7 +558,7 @@ export function InboxPage() {
                   setSelectedId(null);
                 }}
                 className={cn(
-                  'flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium',
+                  'flex min-h-11 shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium md:min-h-0',
                   active
                     ? 'bg-brand text-text-inverse'
                     : 'bg-surface-2 text-text-muted',
@@ -555,9 +594,9 @@ export function InboxPage() {
                     <li key={c.id}>
                       <button
                         type="button"
-                        onClick={() => setSelectedId(c.id)}
+                        onClick={() => openConversation(c.id)}
                         className={cn(
-                          'flex w-full items-start gap-2 border-b border-border px-4 py-3 text-left',
+                          'flex min-h-11 w-full items-start gap-2 border-b border-border px-4 py-3 text-left',
                           selectedId === c.id
                             ? 'bg-surface-2'
                             : 'hover:bg-surface-2/60',
@@ -620,11 +659,11 @@ export function InboxPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setSelectedId(null);
                     setMobileContextOpen(false);
+                    closeConversation();
                   }}
                   aria-label="Back to conversations"
-                  className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 md:hidden"
+                  className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 md:hidden"
                 >
                   <ChevronLeft width={20} height={20} strokeWidth={1.75} />
                 </button>
@@ -644,7 +683,69 @@ export function InboxPage() {
                 </p>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center justify-end gap-2">
+              {/* Mobile action cluster: one primary by status + details + a
+                  kebab holding the rest (Take over / Upload report). */}
+              <div className="flex items-center gap-1 md:hidden">
+                {conversation.status === 'OPEN' ? (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={handlePickUp}
+                    loading={assignConv.isPending}
+                    leftIcon={
+                      <UserPlus width={14} height={14} strokeWidth={1.75} />
+                    }
+                  >
+                    Pick up
+                  </Button>
+                ) : null}
+                {conversation.status === 'ASSIGNED' ? (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => setResolveOpen(true)}
+                    loading={resolveConv.isPending}
+                    leftIcon={
+                      <CheckCircle2 width={14} height={14} strokeWidth={1.75} />
+                    }
+                  >
+                    Resolve
+                  </Button>
+                ) : null}
+                {conversation.status === 'RESOLVED' ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleReopen}
+                    loading={reopenConv.isPending}
+                    leftIcon={
+                      <RotateCcw width={14} height={14} strokeWidth={1.75} />
+                    }
+                  >
+                    Reopen
+                  </Button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setMobileContextOpen(true)}
+                  aria-label="Show details"
+                  className="flex h-11 w-11 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text"
+                >
+                  <Info width={18} height={18} strokeWidth={1.75} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setThreadMenuOpen(true)}
+                  aria-label="More actions"
+                  aria-expanded={threadMenuOpen}
+                  className="flex h-11 w-11 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text"
+                >
+                  <MoreVertical width={18} height={18} strokeWidth={1.75} />
+                </button>
+              </div>
+
+              {/* Desktop action row: the full inline set (unchanged). */}
+              <div className="hidden flex-wrap items-center justify-end gap-2 md:flex">
                 {conversation.status === 'OPEN' ? (
                   <Button
                     size="sm"
@@ -798,7 +899,7 @@ export function InboxPage() {
                         type="button"
                         aria-label="Close details"
                         onClick={() => setMobileContextOpen(false)}
-                        className="flex h-9 w-9 items-center justify-center rounded-md text-text-muted hover:bg-surface-2"
+                        className="flex h-11 w-11 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 md:h-9 md:w-9"
                       >
                         <X width={18} height={18} strokeWidth={1.75} />
                       </button>
@@ -995,6 +1096,35 @@ export function InboxPage() {
                 setResolveOpen(false);
               }}
             />
+
+            {/* Mobile-only overflow actions moved out of the thread header. */}
+            <Sheet
+              open={threadMenuOpen}
+              onClose={() => setThreadMenuOpen(false)}
+              title="Actions"
+            >
+              {conversation.status === 'ASSIGNED' &&
+              conversation.assignedAdminId !== currentUserId ? (
+                <SheetItem
+                  icon={<UserPlus width={20} height={20} strokeWidth={1.75} />}
+                  onClick={() => {
+                    setThreadMenuOpen(false);
+                    handleTakeOver();
+                  }}
+                >
+                  Take over
+                </SheetItem>
+              ) : null}
+              <SheetItem
+                icon={<FileUp width={20} height={20} strokeWidth={1.75} />}
+                onClick={() => {
+                  setThreadMenuOpen(false);
+                  setUploadOpen(true);
+                }}
+              >
+                Upload report
+              </SheetItem>
+            </Sheet>
           </>
         )}
       </section>

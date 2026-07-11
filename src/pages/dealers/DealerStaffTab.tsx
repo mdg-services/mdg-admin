@@ -23,6 +23,7 @@ import {
   CardTitle,
   Dialog,
   EmptyState,
+  MobileCardList,
   Skeleton,
   Table,
   TBody,
@@ -184,7 +185,7 @@ export function DealerStaffTab({ dealer }: Props) {
     <div className="grid gap-4">
       {/* Date-window control + award CTA */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="inline-flex rounded-md border border-border-strong p-0.5">
             {PRESETS.map((p) => (
               <button
@@ -202,7 +203,7 @@ export function DealerStaffTab({ dealer }: Props) {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="text-sm text-text-muted">
               Showing{' '}
               <span className="font-medium text-text">{windowLabel}</span>
@@ -218,6 +219,7 @@ export function DealerStaffTab({ dealer }: Props) {
             </div>
             <Button
               size="sm"
+              className="shrink-0"
               onClick={() => setAwardOpen(true)}
               leftIcon={<Award width={14} height={14} strokeWidth={1.75} />}
             >
@@ -260,32 +262,76 @@ export function DealerStaffTab({ dealer }: Props) {
               description="No worker earned points during the selected date range."
             />
           ) : (
-            <Table>
-              <THead>
-                <TRow>
-                  <TH className="w-12">#</TH>
-                  <TH>Worker</TH>
-                  <TH>Status</TH>
-                  <TH className="text-right">Awards</TH>
-                  <TH className="text-right">Points</TH>
-                </TRow>
-              </THead>
-              <TBody>
-                {summary.rows.map((row, i) => {
+            <>
+              {/* Desktop table (≥ md) */}
+              <div className="hidden md:block">
+                <Table>
+                  <THead>
+                    <TRow>
+                      <TH className="w-12">#</TH>
+                      <TH>Worker</TH>
+                      <TH>Status</TH>
+                      <TH className="text-right">Awards</TH>
+                      <TH className="text-right">Points</TH>
+                    </TRow>
+                  </THead>
+                  <TBody>
+                    {summary.rows.map((row, i) => {
+                      const hitTarget =
+                        typeof targetPoints === 'number' &&
+                        row.totalPoints >= targetPoints;
+                      return (
+                        <TRow key={row.employeeId}>
+                          <TD className="text-text-muted tabular-nums">{i + 1}</TD>
+                          <TD className="font-medium">{row.employeeName}</TD>
+                          <TD>
+                            <EmployeeStatusChip status={row.status} />
+                          </TD>
+                          <TD className="text-right tabular-nums text-text-muted">
+                            {row.awardCount}
+                          </TD>
+                          <TD className="text-right">
+                            <span className="tabular-nums font-semibold">
+                              {fmtPoints(row.totalPoints)}
+                            </span>
+                            {typeof targetPoints === 'number' ? (
+                              <span
+                                className={
+                                  hitTarget
+                                    ? 'ml-1 text-xs text-success'
+                                    : 'ml-1 text-xs text-text-subtle'
+                                }
+                              >
+                                / {fmtPoints(targetPoints)}
+                              </span>
+                            ) : null}
+                          </TD>
+                        </TRow>
+                      );
+                    })}
+                  </TBody>
+                </Table>
+              </div>
+
+              {/* Mobile card-stack (< md) */}
+              <MobileCardList
+                className="p-3"
+                cards={summary.rows.map((row, i) => {
                   const hitTarget =
                     typeof targetPoints === 'number' &&
                     row.totalPoints >= targetPoints;
-                  return (
-                    <TRow key={row.employeeId}>
-                      <TD className="text-text-muted tabular-nums">{i + 1}</TD>
-                      <TD className="font-medium">{row.employeeName}</TD>
-                      <TD>
-                        <EmployeeStatusChip status={row.status} />
-                      </TD>
-                      <TD className="text-right tabular-nums text-text-muted">
-                        {row.awardCount}
-                      </TD>
-                      <TD className="text-right">
+                  return {
+                    key: row.employeeId,
+                    primary: (
+                      <span className="block truncate font-medium text-text">
+                        <span className="text-text-muted tabular-nums">
+                          #{i + 1}
+                        </span>{' '}
+                        {row.employeeName}
+                      </span>
+                    ),
+                    primaryRight: (
+                      <span className="whitespace-nowrap">
                         <span className="tabular-nums font-semibold">
                           {fmtPoints(row.totalPoints)}
                         </span>
@@ -300,19 +346,25 @@ export function DealerStaffTab({ dealer }: Props) {
                             / {fmtPoints(targetPoints)}
                           </span>
                         ) : null}
-                      </TD>
-                    </TRow>
-                  );
+                      </span>
+                    ),
+                    meta: (
+                      <span className="flex items-center gap-1.5">
+                        <EmployeeStatusChip status={row.status} />
+                        <span>· {row.awardCount} awards</span>
+                      </span>
+                    ),
+                  };
                 })}
-              </TBody>
-            </Table>
+              />
+            </>
           )}
         </CardContent>
       </Card>
 
       {/* Roster */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-col gap-3 sm:flex-row">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Users width={16} height={16} strokeWidth={1.75} />
@@ -322,11 +374,11 @@ export function DealerStaffTab({ dealer }: Props) {
               Workers on this dealer&apos;s staff, with window and lifetime points.
             </CardSubtitle>
           </div>
-          <div className="flex shrink-0 items-center gap-3">
-            <label className="flex items-center gap-2 text-sm text-text-muted">
+          <div className="flex shrink-0 flex-wrap items-center gap-3">
+            <label className="flex min-h-11 items-center gap-2 text-sm text-text-muted md:min-h-0">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-border-strong accent-brand"
+                className="h-5 w-5 rounded border-border-strong accent-brand md:h-4 md:w-4"
                 checked={includeInactive}
                 onChange={(e) => setIncludeInactive(e.target.checked)}
               />
@@ -373,67 +425,133 @@ export function DealerStaffTab({ dealer }: Props) {
               }
             />
           ) : (
-            <Table>
-              <THead>
-                <TRow>
-                  <TH>Worker</TH>
-                  <TH>Designation</TH>
-                  <TH>Status</TH>
-                  <TH className="text-right">Window pts</TH>
-                  <TH className="text-right">Lifetime pts</TH>
-                  <TH className="text-right">Actions</TH>
-                </TRow>
-              </THead>
-              <TBody>
-                {roster.map((emp) => {
+            <>
+              {/* Desktop table (≥ md) */}
+              <div className="hidden md:block">
+                <Table>
+                  <THead>
+                    <TRow>
+                      <TH>Worker</TH>
+                      <TH>Designation</TH>
+                      <TH>Status</TH>
+                      <TH className="text-right">Window pts</TH>
+                      <TH className="text-right">Lifetime pts</TH>
+                      <TH className="text-right">Actions</TH>
+                    </TRow>
+                  </THead>
+                  <TBody>
+                    {roster.map((emp) => {
+                      const busy =
+                        updateEmployee.isPending &&
+                        updateEmployee.variables?.id === emp.id;
+                      return (
+                        <TRow key={emp.id}>
+                          <TD>
+                            <div className="font-medium">{emp.name}</div>
+                            {emp.phone ? (
+                              <div className="text-xs text-text-muted">{emp.phone}</div>
+                            ) : null}
+                          </TD>
+                          <TD className="text-text-muted">{emp.designation ?? '—'}</TD>
+                          <TD>
+                            <EmployeeStatusChip status={emp.status} />
+                          </TD>
+                          <TD className="text-right tabular-nums">
+                            {fmtPoints(emp.pointsInWindow)}
+                          </TD>
+                          <TD className="text-right tabular-nums text-text-muted">
+                            {fmtPoints(emp.totalPoints)}
+                          </TD>
+                          <TD className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEditWorker(emp)}
+                                leftIcon={
+                                  <Pencil width={14} height={14} strokeWidth={1.75} />
+                                }
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                loading={busy}
+                                onClick={() => toggleWorkerStatus(emp)}
+                              >
+                                {emp.status === 'ACTIVE' ? 'Remove' : 'Reactivate'}
+                              </Button>
+                            </div>
+                          </TD>
+                        </TRow>
+                      );
+                    })}
+                  </TBody>
+                </Table>
+              </div>
+
+              {/* Mobile card-stack (< md) */}
+              <MobileCardList
+                className="p-3"
+                cards={roster.map((emp) => {
                   const busy =
                     updateEmployee.isPending &&
                     updateEmployee.variables?.id === emp.id;
-                  return (
-                    <TRow key={emp.id}>
-                      <TD>
-                        <div className="font-medium">{emp.name}</div>
-                        {emp.phone ? (
-                          <div className="text-xs text-text-muted">{emp.phone}</div>
+                  return {
+                    key: emp.id,
+                    primary: (
+                      <span className="block truncate font-medium text-text">
+                        {emp.name}
+                        {emp.designation ? (
+                          <span className="ml-2 text-xs font-normal text-text-subtle">
+                            {emp.designation}
+                          </span>
                         ) : null}
-                      </TD>
-                      <TD className="text-text-muted">{emp.designation ?? '—'}</TD>
-                      <TD>
-                        <EmployeeStatusChip status={emp.status} />
-                      </TD>
-                      <TD className="text-right tabular-nums">
-                        {fmtPoints(emp.pointsInWindow)}
-                      </TD>
-                      <TD className="text-right tabular-nums text-text-muted">
-                        {fmtPoints(emp.totalPoints)}
-                      </TD>
-                      <TD className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditWorker(emp)}
-                            leftIcon={
-                              <Pencil width={14} height={14} strokeWidth={1.75} />
-                            }
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            loading={busy}
-                            onClick={() => toggleWorkerStatus(emp)}
-                          >
-                            {emp.status === 'ACTIVE' ? 'Remove' : 'Reactivate'}
-                          </Button>
-                        </div>
-                      </TD>
-                    </TRow>
-                  );
+                      </span>
+                    ),
+                    primaryRight: <EmployeeStatusChip status={emp.status} />,
+                    secondary: emp.phone ? (
+                      <span className="block">{emp.phone}</span>
+                    ) : undefined,
+                    meta: (
+                      <span>
+                        Window{' '}
+                        <span className="tabular-nums text-text-muted">
+                          {fmtPoints(emp.pointsInWindow)}
+                        </span>{' '}
+                        · Lifetime{' '}
+                        <span className="tabular-nums text-text-muted">
+                          {fmtPoints(emp.totalPoints)}
+                        </span>
+                      </span>
+                    ),
+                    actions: (
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => openEditWorker(emp)}
+                          leftIcon={
+                            <Pencil width={14} height={14} strokeWidth={1.75} />
+                          }
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          loading={busy}
+                          onClick={() => toggleWorkerStatus(emp)}
+                        >
+                          {emp.status === 'ACTIVE' ? 'Remove' : 'Reactivate'}
+                        </Button>
+                      </div>
+                    ),
+                  };
                 })}
-              </TBody>
-            </Table>
+              />
+            </>
           )}
         </CardContent>
       </Card>
@@ -483,36 +601,70 @@ export function DealerStaffTab({ dealer }: Props) {
                   </span>
                 ) : null}
               </div>
-              <Table>
-                <THead>
-                  <TRow>
-                    <TH>Worker</TH>
-                    <TH>Work</TH>
-                    <TH className="text-right">Points</TH>
-                  </TRow>
-                </THead>
-                <TBody>
-                  {draft.lineItems.map((li, i) => (
-                    <TRow key={`${li.employeeId}-${li.workItemCode}-${i}`}>
-                      <TD className="font-medium">{li.employeeName}</TD>
-                      <TD>
-                        {li.workLabelEn}
-                        {li.workLabelHi ? (
-                          <span className="text-text-subtle"> / {li.workLabelHi}</span>
-                        ) : null}
-                        {li.source === 'custom' ? (
-                          <Badge intent="info" className="ml-2">
-                            Custom
-                          </Badge>
-                        ) : null}
-                      </TD>
-                      <TD className="text-right tabular-nums font-semibold">
-                        {fmtPoints(li.points)}
-                      </TD>
+              {/* Desktop table (≥ md) */}
+              <div className="hidden md:block">
+                <Table>
+                  <THead>
+                    <TRow>
+                      <TH>Worker</TH>
+                      <TH>Work</TH>
+                      <TH className="text-right">Points</TH>
                     </TRow>
-                  ))}
-                </TBody>
-              </Table>
+                  </THead>
+                  <TBody>
+                    {draft.lineItems.map((li, i) => (
+                      <TRow key={`${li.employeeId}-${li.workItemCode}-${i}`}>
+                        <TD className="font-medium">{li.employeeName}</TD>
+                        <TD>
+                          {li.workLabelEn}
+                          {li.workLabelHi ? (
+                            <span className="text-text-subtle"> / {li.workLabelHi}</span>
+                          ) : null}
+                          {li.source === 'custom' ? (
+                            <Badge intent="info" className="ml-2">
+                              Custom
+                            </Badge>
+                          ) : null}
+                        </TD>
+                        <TD className="text-right tabular-nums font-semibold">
+                          {fmtPoints(li.points)}
+                        </TD>
+                      </TRow>
+                    ))}
+                  </TBody>
+                </Table>
+              </div>
+
+              {/* Mobile card-stack (< md) */}
+              <MobileCardList
+                className="p-3"
+                cards={draft.lineItems.map((li, i) => ({
+                  key: `${li.employeeId}-${li.workItemCode}-${i}`,
+                  primary: (
+                    <span className="block truncate font-medium text-text">
+                      {li.employeeName}
+                    </span>
+                  ),
+                  primaryRight: (
+                    <span className="tabular-nums font-semibold">
+                      {fmtPoints(li.points)}
+                    </span>
+                  ),
+                  secondary: (
+                    <span>
+                      {li.workLabelEn}
+                      {li.workLabelHi ? (
+                        <span className="text-text-subtle"> / {li.workLabelHi}</span>
+                      ) : null}
+                      {li.source === 'custom' ? (
+                        <Badge intent="info" className="ml-2">
+                          Custom
+                        </Badge>
+                      ) : null}
+                    </span>
+                  ),
+                }))}
+              />
             </>
           )}
         </CardContent>
@@ -551,59 +703,110 @@ export function DealerStaffTab({ dealer }: Props) {
               description="Finalized batches with a hardcopy photo will appear here."
             />
           ) : (
-            <Table>
-              <THead>
-                <TRow>
-                  <TH>Work date</TH>
-                  <TH className="text-right">Workers</TH>
-                  <TH className="text-right">Entries</TH>
-                  <TH className="text-right">Points</TH>
-                  <TH>Submitted by</TH>
-                  <TH>Hardcopy</TH>
-                </TRow>
-              </THead>
-              <TBody>
-                {batches.map((b) => (
-                  <TRow key={b.id}>
-                    <TD className="whitespace-nowrap">{formatDate(b.workDate)}</TD>
-                    <TD className="text-right tabular-nums">{b.employeeCount}</TD>
-                    <TD className="text-right tabular-nums text-text-muted">
-                      {b.entryCount}
-                    </TD>
-                    <TD className="text-right tabular-nums font-semibold">
+            <>
+              {/* Desktop table (≥ md) */}
+              <div className="hidden md:block">
+                <Table>
+                  <THead>
+                    <TRow>
+                      <TH>Work date</TH>
+                      <TH className="text-right">Workers</TH>
+                      <TH className="text-right">Entries</TH>
+                      <TH className="text-right">Points</TH>
+                      <TH>Submitted by</TH>
+                      <TH>Hardcopy</TH>
+                    </TRow>
+                  </THead>
+                  <TBody>
+                    {batches.map((b) => (
+                      <TRow key={b.id}>
+                        <TD className="whitespace-nowrap">{formatDate(b.workDate)}</TD>
+                        <TD className="text-right tabular-nums">{b.employeeCount}</TD>
+                        <TD className="text-right tabular-nums text-text-muted">
+                          {b.entryCount}
+                        </TD>
+                        <TD className="text-right tabular-nums font-semibold">
+                          {fmtPoints(b.totalPoints)}
+                        </TD>
+                        <TD className="text-text-muted">
+                          <div>{b.awardedByName ?? '—'}</div>
+                          <div className="text-xs text-text-subtle">
+                            {formatDateTime(b.createdAt)}
+                          </div>
+                        </TD>
+                        <TD>
+                          {b.hardCopyImageUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => setPhotoUrl(b.hardCopyImageUrl ?? null)}
+                              className="block h-11 w-11 overflow-hidden rounded-sm border border-border hover:ring-2 hover:ring-focus-ring"
+                              aria-label="View hardcopy photo"
+                            >
+                              <img
+                                src={b.hardCopyImageUrl}
+                                alt="Hardcopy"
+                                className="h-full w-full object-cover"
+                              />
+                            </button>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs text-text-subtle">
+                              <ImageIcon width={14} height={14} strokeWidth={1.75} />
+                              Not available
+                            </span>
+                          )}
+                        </TD>
+                      </TRow>
+                    ))}
+                  </TBody>
+                </Table>
+              </div>
+
+              {/* Mobile card-stack (< md) */}
+              <MobileCardList
+                className="p-3"
+                cards={batches.map((b) => ({
+                  key: b.id,
+                  primary: (
+                    <span className="block font-medium text-text">
+                      {formatDate(b.workDate)}
+                    </span>
+                  ),
+                  primaryRight: (
+                    <span className="tabular-nums font-semibold">
                       {fmtPoints(b.totalPoints)}
-                    </TD>
-                    <TD className="text-text-muted">
-                      <div>{b.awardedByName ?? '—'}</div>
-                      <div className="text-xs text-text-subtle">
-                        {formatDateTime(b.createdAt)}
-                      </div>
-                    </TD>
-                    <TD>
-                      {b.hardCopyImageUrl ? (
-                        <button
-                          type="button"
-                          onClick={() => setPhotoUrl(b.hardCopyImageUrl ?? null)}
-                          className="block h-11 w-11 overflow-hidden rounded-sm border border-border hover:ring-2 hover:ring-focus-ring"
-                          aria-label="View hardcopy photo"
-                        >
-                          <img
-                            src={b.hardCopyImageUrl}
-                            alt="Hardcopy"
-                            className="h-full w-full object-cover"
-                          />
-                        </button>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-xs text-text-subtle">
-                          <ImageIcon width={14} height={14} strokeWidth={1.75} />
-                          Not available
-                        </span>
-                      )}
-                    </TD>
-                  </TRow>
-                ))}
-              </TBody>
-            </Table>
+                    </span>
+                  ),
+                  meta: (
+                    <span>
+                      {b.employeeCount} workers · {b.entryCount} entries ·{' '}
+                      {b.awardedByName ?? '—'}
+                    </span>
+                  ),
+                  actions: b.hardCopyImageUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => setPhotoUrl(b.hardCopyImageUrl ?? null)}
+                      className="flex items-center gap-2 rounded-sm text-sm text-text-muted"
+                      aria-label="View hardcopy photo"
+                    >
+                      <span className="block h-11 w-11 overflow-hidden rounded-sm border border-border">
+                        <img
+                          src={b.hardCopyImageUrl}
+                          alt="Hardcopy"
+                          className="h-full w-full object-cover"
+                        />
+                      </span>
+                      View hardcopy
+                    </button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs text-text-subtle">
+                      <ImageIcon width={14} height={14} strokeWidth={1.75} />
+                      No hardcopy available
+                    </span>
+                  ),
+                }))}
+              />
+            </>
           )}
         </CardContent>
       </Card>
@@ -641,50 +844,97 @@ export function DealerStaffTab({ dealer }: Props) {
               description="No points were awarded during the selected date range."
             />
           ) : (
-            <Table>
-              <THead>
-                <TRow>
-                  <TH>Work date</TH>
-                  <TH>Worker</TH>
-                  <TH>Work</TH>
-                  <TH className="text-right">Points</TH>
-                  <TH>Awarded by</TH>
-                  <TH className="text-right">Actions</TH>
-                </TRow>
-              </THead>
-              <TBody>
-                {awards.map((a) => (
-                  <TRow key={a.id}>
-                    <TD className="whitespace-nowrap text-text-muted">
-                      {formatDate(a.workDate)}
-                    </TD>
-                    <TD className="font-medium">
+            <>
+              {/* Desktop table (≥ md) */}
+              <div className="hidden md:block">
+                <Table>
+                  <THead>
+                    <TRow>
+                      <TH>Work date</TH>
+                      <TH>Worker</TH>
+                      <TH>Work</TH>
+                      <TH className="text-right">Points</TH>
+                      <TH>Awarded by</TH>
+                      <TH className="text-right">Actions</TH>
+                    </TRow>
+                  </THead>
+                  <TBody>
+                    {awards.map((a) => (
+                      <TRow key={a.id}>
+                        <TD className="whitespace-nowrap text-text-muted">
+                          {formatDate(a.workDate)}
+                        </TD>
+                        <TD className="font-medium">
+                          {nameById.get(a.employeeId) ?? 'Unknown worker'}
+                        </TD>
+                        <TD>
+                          <div>{a.workLabelEn}</div>
+                          {a.note ? (
+                            <div className="text-xs text-text-muted">{a.note}</div>
+                          ) : null}
+                        </TD>
+                        <TD className="text-right tabular-nums font-semibold">
+                          {fmtPoints(a.points)}
+                        </TD>
+                        <TD className="text-text-muted">{a.awardedByName ?? '—'}</TD>
+                        <TD className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setUndoTarget(a)}
+                            leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
+                          >
+                            Undo
+                          </Button>
+                        </TD>
+                      </TRow>
+                    ))}
+                  </TBody>
+                </Table>
+              </div>
+
+              {/* Mobile card-stack (< md) */}
+              <MobileCardList
+                className="p-3"
+                cards={awards.map((a) => ({
+                  key: a.id,
+                  primary: (
+                    <span className="block truncate font-medium text-text">
                       {nameById.get(a.employeeId) ?? 'Unknown worker'}
-                    </TD>
-                    <TD>
-                      <div>{a.workLabelEn}</div>
-                      {a.note ? (
-                        <div className="text-xs text-text-muted">{a.note}</div>
-                      ) : null}
-                    </TD>
-                    <TD className="text-right tabular-nums font-semibold">
+                    </span>
+                  ),
+                  primaryRight: (
+                    <span className="tabular-nums font-semibold">
                       {fmtPoints(a.points)}
-                    </TD>
-                    <TD className="text-text-muted">{a.awardedByName ?? '—'}</TD>
-                    <TD className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setUndoTarget(a)}
-                        leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
-                      >
-                        Undo
-                      </Button>
-                    </TD>
-                  </TRow>
-                ))}
-              </TBody>
-            </Table>
+                    </span>
+                  ),
+                  secondary: (
+                    <span>
+                      {a.workLabelEn}
+                      {a.note ? (
+                        <span className="block text-xs text-text-muted">{a.note}</span>
+                      ) : null}
+                    </span>
+                  ),
+                  meta: (
+                    <span>
+                      {formatDate(a.workDate)} · {a.awardedByName ?? '—'}
+                    </span>
+                  ),
+                  actions: (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => setUndoTarget(a)}
+                      leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
+                    >
+                      Undo
+                    </Button>
+                  ),
+                }))}
+              />
+            </>
           )}
         </CardContent>
       </Card>
@@ -713,7 +963,10 @@ export function DealerStaffTab({ dealer }: Props) {
             : undefined
         }
         footer={
-          <>
+          // Stack full-width on mobile (each button is large and unambiguous;
+          // the two destructive "Undo" variants are no longer side-by-side at
+          // thumb width). Desktop keeps the right-aligned row.
+          <div className="grid w-full grid-cols-1 gap-2 md:flex md:justify-end md:gap-2">
             <Button variant="secondary" onClick={() => setUndoTarget(null)}>
               Cancel
             </Button>
@@ -733,7 +986,7 @@ export function DealerStaffTab({ dealer }: Props) {
             >
               Undo this entry
             </Button>
-          </>
+          </div>
         }
       >
         <p className="text-sm text-text-muted">

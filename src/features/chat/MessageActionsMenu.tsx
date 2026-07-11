@@ -2,6 +2,7 @@ import { Copy, Download, Info, Reply } from 'lucide-react';
 import * as React from 'react';
 
 import { useToast } from '@/components/ui/Toast';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
 import { downloadAttachment } from '@/lib/downloadAttachment';
 import type { Attachment, Message } from '@dk/shared';
@@ -39,7 +40,7 @@ function MenuRow({
       type="button"
       role="menuitem"
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-text hover:bg-surface-2"
+      className="flex min-h-11 w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-text hover:bg-surface-2 md:min-h-0"
     >
       <span className="shrink-0 text-text-muted">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -48,9 +49,9 @@ function MenuRow({
 }
 
 /**
- * Hand-rolled message context menu (no popover primitive in this app): a
- * fixed-position card anchored to the opening point, flipped above when it
- * would overflow the viewport, closed on outside click / Escape / scroll.
+ * Message context menu. A fixed-position popover anchored to the opening point
+ * at `≥ md` (unchanged), and a full-width bottom sheet below `md` so it clears
+ * the thumb zone and never overflows a 360px screen (§3.3).
  */
 export function MessageActionsMenu({
   message,
@@ -62,14 +63,17 @@ export function MessageActionsMenu({
   onClose,
 }: MessageActionsMenuProps) {
   const toast = useToast();
+  const isMd = useMediaQuery('(min-width: 768px)');
   const cardRef = React.useRef<HTMLDivElement>(null);
   const [pos, setPos] = React.useState<{ left: number; top: number } | null>(
     null,
   );
 
-  // Measure after render, then place: below the anchor when it fits, above
-  // otherwise, clamped inside the viewport.
+  // Desktop only: measure after render, then place below the anchor when it
+  // fits, above otherwise, clamped inside the viewport. The mobile sheet ignores
+  // the anchor.
   React.useLayoutEffect(() => {
+    if (!isMd) return;
     const el = cardRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -85,7 +89,7 @@ export function MessageActionsMenu({
       left: Math.max(VIEWPORT_MARGIN, left),
       top: Math.max(VIEWPORT_MARGIN, top),
     });
-  }, [anchor.x, anchor.y, message.id]);
+  }, [anchor.x, anchor.y, message.id, isMd]);
 
   React.useEffect(() => {
     const onPointerDown = (e: PointerEvent) => {
@@ -94,19 +98,23 @@ export function MessageActionsMenu({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
-    // Capture-phase so scrolls inside the message list (not on window) count.
-    const onScroll = () => onClose();
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown);
-    window.addEventListener('scroll', onScroll, true);
-    window.addEventListener('resize', onClose);
+    // The desktop popover follows the anchor, so a scroll/resize invalidates it
+    // and closes. The mobile sheet is a fixed overlay — keep it open.
+    let onScroll: (() => void) | undefined;
+    if (isMd) {
+      onScroll = () => onClose();
+      window.addEventListener('scroll', onScroll, true);
+      window.addEventListener('resize', onClose);
+    }
     return () => {
       document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('scroll', onScroll, true);
+      if (onScroll) window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onClose);
     };
-  }, [onClose]);
+  }, [onClose, isMd]);
 
   const isTemp = message.id.startsWith('tmp-');
   const own = message.senderId === currentUserId;
@@ -133,19 +141,8 @@ export function MessageActionsMenu({
     }
   }
 
-  return (
-    <div
-      ref={cardRef}
-      role="menu"
-      aria-label="Message actions"
-      style={{
-        position: 'fixed',
-        left: pos?.left ?? anchor.x,
-        top: pos?.top ?? anchor.y,
-        visibility: pos ? 'visible' : 'hidden',
-      }}
-      className="z-50 w-60 rounded-md border border-border bg-surface py-1 shadow-md"
-    >
+  const content = (
+    <>
       {!isTemp ? (
         <>
           <div className="flex items-center justify-between gap-0.5 px-2 pb-1.5 pt-1">
@@ -160,7 +157,7 @@ export function MessageActionsMenu({
                   onToggleReaction(message, emoji);
                 }}
                 className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded-full text-lg hover:bg-surface-2',
+                  'flex h-11 w-11 items-center justify-center rounded-full text-2xl hover:bg-surface-2 md:h-8 md:w-8 md:text-lg',
                   ownEmoji === emoji && 'bg-brand-soft ring-1 ring-brand',
                 )}
               >
@@ -206,6 +203,44 @@ export function MessageActionsMenu({
           }}
         />
       ) : null}
+    </>
+  );
+
+  // Mobile: a bottom sheet. The dimmed overlay isn't tappable-to-close on its
+  // own — the global outside-pointerdown handler (cardRef) covers that.
+  if (!isMd) {
+    return (
+      <div
+        className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40"
+        role="menu"
+        aria-label="Message actions"
+      >
+        <div
+          ref={cardRef}
+          className="w-full rounded-t-2xl border-t border-border bg-surface pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-lg animate-sheet-up"
+        >
+          <div className="mx-auto mb-1 mt-2 h-1 w-9 rounded-full bg-border-strong" />
+          <div className="py-1">{content}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop: anchored popover.
+  return (
+    <div
+      ref={cardRef}
+      role="menu"
+      aria-label="Message actions"
+      style={{
+        position: 'fixed',
+        left: pos?.left ?? anchor.x,
+        top: pos?.top ?? anchor.y,
+        visibility: pos ? 'visible' : 'hidden',
+      }}
+      className="z-50 w-60 rounded-md border border-border bg-surface py-1 shadow-md"
+    >
+      {content}
     </div>
   );
 }

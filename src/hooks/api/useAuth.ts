@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import { postToNative } from '@/lib/nativeBridge';
 import { useAuthStore } from '@/store/auth';
 import type { Admin, LoginResponse, User } from '@dk/shared';
 import type { LoginInput } from '@dk/shared/schemas';
@@ -43,6 +44,9 @@ export function useLoginMutation() {
         (data as { admin?: Admin }).admin ??
         (user ? adminFromUser(user) : null);
       login(data.token, admin, user);
+      // Tell the native shell (if any) to register for push notifications.
+      // No-op in a normal browser.
+      postToNative({ type: 'auth:login', token: data.token });
     },
   });
 }

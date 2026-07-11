@@ -238,11 +238,11 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
               {activeWorkers.map((w) => (
                 <label
                   key={w.id}
-                  className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-surface-2"
+                  className="flex min-h-11 items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-surface-2 md:min-h-0"
                 >
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-border-strong accent-brand"
+                    className="h-5 w-5 rounded border-border-strong accent-brand md:h-4 md:w-4"
                     checked={selected.has(w.id)}
                     onChange={() => toggleWorker(w.id)}
                   />

@@ -18,6 +18,7 @@ import {
   FieldError,
   Input,
   Label,
+  MobileCardList,
   Select,
   Skeleton,
   TBody,
@@ -139,66 +140,128 @@ export function DealerMembersTab({ dealer }: Props) {
             }
           />
         ) : (
-          <Table>
-            <THead>
-              <TRow>
-                <TH>Name</TH>
-                <TH>Role / title</TH>
-                <TH>Email</TH>
-                <TH>Status</TH>
-                <TH className="text-right">Actions</TH>
-              </TRow>
-            </THead>
-            <TBody>
-              {users.map((u) => (
-                <TRow key={u.id}>
-                  <TD className="font-medium">{u.name}</TD>
-                  <TD>{memberRoleLabel(u)}</TD>
-                  <TD className="font-mono text-xs">{u.email}</TD>
-                  <TD>
-                    {u.status === 'ACTIVE' ? (
-                      <Badge intent="success">Active</Badge>
-                    ) : (
-                      <Badge intent="neutral">Suspended</Badge>
-                    )}
-                  </TD>
-                  <TD className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => messageMember(u)}
-                        disabled={u.status !== 'ACTIVE'}
-                        title={
-                          u.status !== 'ACTIVE'
-                            ? 'Reactivate this member to start a chat'
-                            : undefined
-                        }
-                        loading={startConv.isPending && startConv.variables === u.id}
-                        leftIcon={
-                          <MessageSquare width={14} height={14} strokeWidth={1.75} />
-                        }
-                      >
-                        Message
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => toggleStatus(u)}
-                        loading={
-                          (deleteUser.isPending || updateUser.isPending) &&
-                          (deleteUser.variables === u.id ||
-                            updateUser.variables?.id === u.id)
-                        }
-                      >
-                        {u.status === 'ACTIVE' ? 'Suspend' : 'Reactivate'}
-                      </Button>
-                    </div>
-                  </TD>
-                </TRow>
-              ))}
-            </TBody>
-          </Table>
+          <>
+            {/* Desktop table (≥ md) */}
+            <div className="hidden md:block">
+              <Table>
+                <THead>
+                  <TRow>
+                    <TH>Name</TH>
+                    <TH>Role / title</TH>
+                    <TH>Email</TH>
+                    <TH>Status</TH>
+                    <TH className="text-right">Actions</TH>
+                  </TRow>
+                </THead>
+                <TBody>
+                  {users.map((u) => (
+                    <TRow key={u.id}>
+                      <TD className="font-medium">{u.name}</TD>
+                      <TD>{memberRoleLabel(u)}</TD>
+                      <TD className="font-mono text-xs">{u.email}</TD>
+                      <TD>
+                        {u.status === 'ACTIVE' ? (
+                          <Badge intent="success">Active</Badge>
+                        ) : (
+                          <Badge intent="neutral">Suspended</Badge>
+                        )}
+                      </TD>
+                      <TD className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => messageMember(u)}
+                            disabled={u.status !== 'ACTIVE'}
+                            title={
+                              u.status !== 'ACTIVE'
+                                ? 'Reactivate this member to start a chat'
+                                : undefined
+                            }
+                            loading={startConv.isPending && startConv.variables === u.id}
+                            leftIcon={
+                              <MessageSquare width={14} height={14} strokeWidth={1.75} />
+                            }
+                          >
+                            Message
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleStatus(u)}
+                            loading={
+                              (deleteUser.isPending || updateUser.isPending) &&
+                              (deleteUser.variables === u.id ||
+                                updateUser.variables?.id === u.id)
+                            }
+                          >
+                            {u.status === 'ACTIVE' ? 'Suspend' : 'Reactivate'}
+                          </Button>
+                        </div>
+                      </TD>
+                    </TRow>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+
+            {/* Mobile card-stack (< md) */}
+            <MobileCardList
+              cards={users.map((u) => ({
+                key: u.id,
+                primary: (
+                  <span className="block truncate font-medium text-text">
+                    {u.name}
+                    <span className="ml-2 text-xs font-normal text-text-subtle">
+                      {memberRoleLabel(u)}
+                    </span>
+                  </span>
+                ),
+                primaryRight:
+                  u.status === 'ACTIVE' ? (
+                    <Badge intent="success">Active</Badge>
+                  ) : (
+                    <Badge intent="neutral">Suspended</Badge>
+                  ),
+                secondary: (
+                  <span className="block truncate font-mono">{u.email}</span>
+                ),
+                actions: (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => messageMember(u)}
+                      disabled={u.status !== 'ACTIVE'}
+                      title={
+                        u.status !== 'ACTIVE'
+                          ? 'Reactivate this member to start a chat'
+                          : undefined
+                      }
+                      loading={startConv.isPending && startConv.variables === u.id}
+                      leftIcon={
+                        <MessageSquare width={14} height={14} strokeWidth={1.75} />
+                      }
+                    >
+                      Message
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => toggleStatus(u)}
+                      loading={
+                        (deleteUser.isPending || updateUser.isPending) &&
+                        (deleteUser.variables === u.id ||
+                          updateUser.variables?.id === u.id)
+                      }
+                    >
+                      {u.status === 'ACTIVE' ? 'Suspend' : 'Reactivate'}
+                    </Button>
+                  </div>
+                ),
+              }))}
+            />
+          </>
         )}
       </CardContent>
 

@@ -6,7 +6,9 @@ import {
   Button,
   Card,
   CardContent,
+  Dialog,
   EmptyState,
+  MobileCardList,
   Skeleton,
   StatusChip,
   Table,
@@ -34,9 +36,16 @@ interface Props {
   dealer: Dealer;
 }
 
+/** 44px icon button used in the mobile service-card action row. */
+const ICON_BTN =
+  'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border-strong bg-surface text-text hover:bg-surface-2';
+
 export function DealerServicesTab({ dealer }: Props) {
   const toast = useToast();
   const [attachOpen, setAttachOpen] = React.useState(false);
+  const [detachTarget, setDetachTarget] = React.useState<DealerService | null>(
+    null,
+  );
 
   const { data, isLoading } = useDealerServicesQuery(dealer.id);
   const attach = useAttachDealerService(dealer.id);
@@ -78,11 +87,16 @@ export function DealerServicesTab({ dealer }: Props) {
     }
   }
 
-  async function onDelete(ds: DealerService) {
-    if (!window.confirm(`Detach ${ds.serviceId}?`)) return;
+  function onDelete(ds: DealerService) {
+    setDetachTarget(ds);
+  }
+
+  async function confirmDetach() {
+    if (!detachTarget) return;
     try {
-      await remove.mutateAsync(ds.id);
+      await remove.mutateAsync(detachTarget.id);
       toast.success('Service detached');
+      setDetachTarget(null);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Delete failed';
       toast.error(msg);
@@ -114,7 +128,10 @@ export function DealerServicesTab({ dealer }: Props) {
             <Skeleton className="h-8 w-full" />
           </div>
         ) : data && data.length > 0 ? (
-          <Table>
+          <>
+            {/* Desktop table (≥ md) */}
+            <div className="hidden md:block">
+            <Table>
             <THead>
               <TRow>
                 <TH>Service</TH>
@@ -209,6 +226,77 @@ export function DealerServicesTab({ dealer }: Props) {
               ))}
             </TBody>
           </Table>
+          </div>
+
+          {/* Mobile card-stack (< md) */}
+          <MobileCardList
+            className="p-4 pt-0"
+            cards={data.map((ds) => ({
+              key: ds.id,
+              primary: (
+                <span className="inline-flex flex-wrap items-center gap-2 font-medium text-text">
+                  {ds.serviceId}
+                  {isStale(ds) ? (
+                    <Badge
+                      intent="warning"
+                      title="Hasn't run today — click Run now to refresh"
+                      aria-label="Hasn't run today — click Run now to refresh"
+                      className="gap-1"
+                    >
+                      <AlertCircle width={12} height={12} strokeWidth={1.75} />
+                      stale
+                    </Badge>
+                  ) : null}
+                </span>
+              ),
+              primaryRight: <StatusChip kind="dealerService" value={ds.status} />,
+              meta: (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <Badge intent="neutral">{ds.cadence}</Badge>
+                  <span>Last {formatDateTime(ds.lastRunAt)}</span>
+                  <span>· Next {formatDateTime(ds.nextRunAt)}</span>
+                </span>
+              ),
+              actions: (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onRunNow(ds)}
+                    aria-label="Run now"
+                    className={ICON_BTN}
+                  >
+                    <RefreshCw width={18} height={18} strokeWidth={1.75} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onToggle(ds)}
+                    aria-label={ds.status === 'ACTIVE' ? 'Pause' : 'Resume'}
+                    className={ICON_BTN}
+                  >
+                    {ds.status === 'ACTIVE' ? (
+                      <Pause width={18} height={18} strokeWidth={1.75} />
+                    ) : (
+                      <Play width={18} height={18} strokeWidth={1.75} />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(ds)}
+                    aria-label="Detach service"
+                    className={ICON_BTN}
+                  >
+                    <Trash2
+                      width={18}
+                      height={18}
+                      strokeWidth={1.75}
+                      className="text-danger"
+                    />
+                  </button>
+                </div>
+              ),
+            }))}
+          />
+          </>
         ) : (
           <EmptyState
             icon={<Plug width={28} height={28} strokeWidth={1.75} />}
@@ -243,6 +331,36 @@ export function DealerServicesTab({ dealer }: Props) {
           }
         }}
       />
+
+      <Dialog
+        open={!!detachTarget}
+        onClose={() => setDetachTarget(null)}
+        title="Detach service"
+        description={
+          detachTarget
+            ? `Stop running “${detachTarget.serviceId}” for this dealer?`
+            : undefined
+        }
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDetachTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={confirmDetach}
+              loading={remove.isPending}
+            >
+              Detach
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-text-muted">
+          This removes the plugin and its schedule from the dealer. Past run
+          history is kept. You can re-attach it later.
+        </p>
+      </Dialog>
     </Card>
   );
 }

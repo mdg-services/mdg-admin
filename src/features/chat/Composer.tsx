@@ -4,7 +4,9 @@ import * as React from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Textarea } from '@/components/ui/Textarea';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
+import { isNativeShell, requestNativeMicPermission } from '@/lib/nativeBridge';
 import {
   MAX_ATTACHMENT_BYTES,
   formatDuration,
@@ -82,6 +84,14 @@ export function Composer({
 
   const hasContent = body.trim().length > 0 || files.length > 0;
   const busy = sending || disabled;
+  const isMd = useMediaQuery('(min-width: 768px)');
+  // A resolved chat disables the composer; say why. On phones drop the desktop
+  // keyboard hint (no Cmd/Ctrl; it just truncates in a narrow field).
+  const placeholder = disabled
+    ? 'This chat is resolved — reopen to reply.'
+    : isMd
+      ? 'Type a message... (Cmd/Ctrl+Enter to send)'
+      : 'Type a message…';
 
   function pickFiles(list: FileList | null) {
     if (!list) return;
@@ -159,6 +169,19 @@ export function Composer({
     setError(null);
     const ok = await recorder.start();
     if (!ok) {
+      // Mic blocked (permission denied / unsupported). Inside the native shell
+      // the WebView's getUserMedia can't trigger the Android runtime prompt on
+      // its own — ask the shell to request it just-in-time. If the user grants
+      // it, prompt them to try again; otherwise fall back to the settings hint.
+      // In a plain browser requestNativeMicPermission resolves false, so this
+      // goes straight to the hint.
+      if (isNativeShell()) {
+        const granted = await requestNativeMicPermission();
+        if (granted) {
+          setError('Microphone enabled. Tap the mic again to record.');
+          return;
+        }
+      }
       setError('Microphone unavailable. Check browser permissions.');
     }
   }
@@ -266,7 +289,7 @@ export function Composer({
             type="button"
             onClick={() => recorder.cancel()}
             aria-label="Cancel recording"
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text md:h-9 md:w-9"
           >
             <Trash2 width={18} height={18} strokeWidth={1.75} />
           </button>
@@ -302,7 +325,7 @@ export function Composer({
             disabled={busy}
             aria-label="Attach files"
             className={cn(
-              'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-text-muted',
+              'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted md:h-9 md:w-9',
               'hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-60',
             )}
           >
@@ -314,7 +337,7 @@ export function Composer({
             onChange={(e) => setBody(e.target.value)}
             onKeyDown={onKeyDown}
             rows={1}
-            placeholder="Type a message... (Cmd/Ctrl+Enter to send)"
+            placeholder={placeholder}
             disabled={busy}
             className="min-h-[36px] resize-none"
           />
@@ -336,7 +359,7 @@ export function Composer({
               aria-label="Record voice message"
               title={recorder.supported ? 'Record voice message' : 'Recording not supported'}
               className={cn(
-                'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-text-muted',
+                'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted md:h-9 md:w-9',
                 'hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-60',
               )}
             >

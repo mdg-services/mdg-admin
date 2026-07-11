@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   EmptyState,
+  MobileCardList,
   Skeleton,
   Table,
   TBody,
@@ -70,6 +71,9 @@ export function KavachDashboardPage() {
               description="Initiate a Kavach programme from a dealer's detail page to start tracking their compliance health here."
             />
           ) : (
+            <>
+            {/* Desktop table (≥ md) */}
+            <div className="hidden md:block">
             <Table>
               <THead>
                 <TRow>
@@ -142,6 +146,55 @@ export function KavachDashboardPage() {
                 ))}
               </TBody>
             </Table>
+            </div>
+
+            {/* Mobile card-stack (< md) */}
+            <MobileCardList
+              className="p-3"
+              cards={rows.map((r) => ({
+                key: r.programmeId,
+                onClick: () => navigate(`/dealers/${r.dealerId}?tab=kavach`),
+                primary: (
+                  <span className="block truncate font-medium text-text">
+                    {r.dealerName}
+                  </span>
+                ),
+                primaryRight: (
+                  <Badge intent={operationalIntent(r.overallPct)}>
+                    {Math.round(r.overallPct)}%
+                  </Badge>
+                ),
+                secondary: (
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-mono">{r.dealerCode || '—'}</span>
+                    {r.worstPriority ? (
+                      <Badge intent={priorityIntent(r.worstPriority)}>
+                        {r.worstPriority}
+                      </Badge>
+                    ) : null}
+                  </span>
+                ),
+                meta: (
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className={r.expiredCount > 0 ? 'text-danger' : undefined}>
+                      Expired {r.expiredCount}
+                    </span>
+                    <span
+                      className={r.expiringSoonCount > 0 ? 'text-warning' : undefined}
+                    >
+                      · Expiring {r.expiringSoonCount}
+                    </span>
+                    <span
+                      className={r.escalatedCount > 0 ? 'text-danger' : undefined}
+                    >
+                      · Escalated {r.escalatedCount}
+                    </span>
+                    <span>· {formatDateTime(r.lastEvaluatedAt)}</span>
+                  </span>
+                ),
+              }))}
+            />
+            </>
           )}
         </CardContent>
       </Card>

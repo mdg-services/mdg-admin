@@ -9,6 +9,7 @@ import {
   CardContent,
   EmptyState,
   Input,
+  MobileCardList,
   Pagination,
   Select,
   Skeleton,
@@ -162,42 +163,74 @@ export function DealersPage() {
             />
           ) : data ? (
             <>
-              <Table>
-                <THead>
-                  <TRow>
-                    <TH>Name</TH>
-                    <TH>Code</TH>
-                    <TH>Phone</TH>
-                    <TH>Status</TH>
-                    <TH>Progress</TH>
-                    <TH>Onboarded</TH>
-                  </TRow>
-                </THead>
-                <TBody>
-                  {data.items.map((d) => (
-                    <TRow
-                      key={d.id}
-                      clickable
-                      onClick={() => navigate(`/dealers/${d.id}`)}
-                    >
-                      <TD className="font-medium">{d.name ?? '—'}</TD>
-                      <TD className="font-mono text-text-muted">
-                        {d.code ?? '—'}
-                      </TD>
-                      <TD className="text-text-muted">{d.phone}</TD>
-                      <TD>
-                        <StatusChip kind="dealer" value={d.status} />
-                      </TD>
-                      <TD className="text-text-muted">
-                        {d.onboarding.completedStepCount}/{TOTAL_STEPS}
-                      </TD>
-                      <TD className="text-text-muted">
-                        {formatDate(d.onboardingDate)}
-                      </TD>
+              {/* Desktop table (≥ md) */}
+              <div className="hidden md:block">
+                <Table>
+                  <THead>
+                    <TRow>
+                      <TH>Name</TH>
+                      <TH>Code</TH>
+                      <TH>Phone</TH>
+                      <TH>Status</TH>
+                      <TH>Progress</TH>
+                      <TH>Onboarded</TH>
                     </TRow>
-                  ))}
-                </TBody>
-              </Table>
+                  </THead>
+                  <TBody>
+                    {data.items.map((d) => (
+                      <TRow
+                        key={d.id}
+                        clickable
+                        onClick={() => navigate(`/dealers/${d.id}`)}
+                      >
+                        <TD className="font-medium">{d.name ?? '—'}</TD>
+                        <TD className="font-mono text-text-muted">
+                          {d.code ?? '—'}
+                        </TD>
+                        <TD className="text-text-muted">{d.phone}</TD>
+                        <TD>
+                          <StatusChip kind="dealer" value={d.status} />
+                        </TD>
+                        <TD className="text-text-muted">
+                          {d.onboarding.completedStepCount}/{TOTAL_STEPS}
+                        </TD>
+                        <TD className="text-text-muted">
+                          {formatDate(d.onboardingDate)}
+                        </TD>
+                      </TRow>
+                    ))}
+                  </TBody>
+                </Table>
+              </div>
+
+              {/* Mobile card-stack (< md) */}
+              <MobileCardList
+                className="p-3"
+                cards={data.items.map((d) => ({
+                  key: d.id,
+                  onClick: () => navigate(`/dealers/${d.id}`),
+                  primary: (
+                    <span className="block truncate font-medium text-text">
+                      {d.name ?? '—'}
+                    </span>
+                  ),
+                  primaryRight: <StatusChip kind="dealer" value={d.status} />,
+                  secondary: (
+                    <span className="truncate">
+                      <span className="font-mono">{d.code ?? '—'}</span>
+                      {' · '}
+                      {d.phone}
+                    </span>
+                  ),
+                  meta: (
+                    <span>
+                      Progress {d.onboarding.completedStepCount}/{TOTAL_STEPS}
+                      {' · Onboarded '}
+                      {formatDate(d.onboardingDate)}
+                    </span>
+                  ),
+                }))}
+              />
               <Pagination
                 page={data.page}
                 pageSize={data.pageSize}

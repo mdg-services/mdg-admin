@@ -1,52 +1,29 @@
 import {
-  Activity,
-  Building2,
   ChevronDown,
-  LayoutDashboard,
-  ListChecks,
+  ChevronLeft,
   LogOut,
-  Menu,
-  MessageSquare,
-  Plug,
-  ScrollText,
   Search,
   Shield,
-  ShieldCheck,
-  UserCog,
-  Users,
-  X,
-  type LucideIcon,
 } from 'lucide-react';
 import * as React from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import {
+  matchPath,
+  NavLink,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom';
 
 import { Input } from '@/components/ui';
 import { useConversations } from '@/hooks/api/useConversations';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { usePushBridge } from '@/hooks/usePushBridge';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/store/auth';
 
-const NAV_ITEMS: Array<{
-  to: string;
-  label: string;
-  icon: LucideIcon;
-  end?: boolean;
-  /** Visible only to super-admins (Activity log, team management). */
-  superAdminOnly?: boolean;
-}> = [
-  { to: '/inbox', label: 'Inbox', icon: MessageSquare },
-  { to: '/overview', label: 'Overview', icon: LayoutDashboard },
-  { to: '/dealers', label: 'Dealers', icon: Building2 },
-  { to: '/kavach', label: 'Kavach', icon: ShieldCheck },
-  { to: '/services', label: 'Service Catalog', icon: Plug },
-  { to: '/runs', label: 'Run History', icon: Activity },
-  { to: '/users', label: 'All Users', icon: Users, superAdminOnly: true },
-  { to: '/work-list', label: 'Work list', icon: ListChecks, superAdminOnly: true },
-  { to: '/activity', label: 'Activity', icon: ScrollText, superAdminOnly: true },
-  { to: '/settings/team', label: 'Team', icon: UserCog, superAdminOnly: true },
-];
-
-type NavItem = (typeof NAV_ITEMS)[number];
+import { MobileTabBar } from './MobileTabBar';
+import { NAV_ITEMS, type NavItem } from './navItems';
 
 function NavList({
   items,
@@ -101,14 +78,24 @@ function BrandMark() {
 }
 
 export function AppShell() {
+  usePushBridge(); // register push token + handle deep links from native
   const admin = useAuthStore((s) => s.admin);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const mineQ = useConversations('mine');
   const unreadCount = (mineQ.data ?? []).filter((c) => c.unreadByAdmin).length;
   const isSuperAdmin = useIsSuperAdmin();
   const navItems = NAV_ITEMS.filter((item) => !item.superAdminOnly || isSuperAdmin);
-  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+
+  // A full-screen drill-in: `/dealers/:id` (guarded against the `/dealers` list).
+  const isDealerDetail = !!matchPath('/dealers/:id', location.pathname);
+  // A thread is open when `?c=<id>` rides on the Inbox URL (§3.1).
+  const inThread = location.pathname === '/inbox' && searchParams.has('c');
+  // The bottom bar shows on top-level list screens and hides on full-screen
+  // drill-ins so chat/detail own the whole viewport (native "push hides tabs").
+  const showTabBar = !isDealerDetail && !inThread;
 
   function onLogout() {
     logout();
@@ -116,8 +103,12 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex h-full min-h-screen w-full">
-      {/* Desktop sidebar (≥ md) */}
+    // Fixed-height flex column so the mobile tab bar pins and `main` scrolls
+    // between the header and the bar. `h-full` (not `h-screen`) so the body's
+    // safe-area-inset-top padding is not double-counted and the bar stays on
+    // screen; safe-top = 0 on desktop, so this matches the old desktop height.
+    <div className="flex h-full w-full">
+      {/* Desktop sidebar (≥ md) — unchanged. */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface md:flex">
         <div className="flex h-14 items-center gap-2 border-b border-border px-4">
           <BrandMark />
@@ -128,53 +119,23 @@ export function AppShell() {
         <div className="border-t border-border p-3 text-xs text-text-subtle">v0.1.0</div>
       </aside>
 
-      {/* Mobile nav drawer (< md) */}
-      {mobileNavOpen ? (
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setMobileNavOpen(false)}
-          />
-          <div className="absolute inset-y-0 left-0 flex w-64 max-w-[80%] flex-col border-r border-border bg-surface shadow-xl">
-            <div className="flex h-14 items-center justify-between border-b border-border px-4">
-              <BrandMark />
-              <button
-                type="button"
-                aria-label="Close menu"
-                onClick={() => setMobileNavOpen(false)}
-                className="flex h-9 w-9 items-center justify-center rounded-md text-text-muted hover:bg-surface-2"
-              >
-                <X width={18} height={18} strokeWidth={1.75} />
-              </button>
-            </div>
-            <nav className="flex-1 overflow-y-auto px-2 py-3">
-              <NavList
-                items={navItems}
-                unreadCount={unreadCount}
-                onNavigate={() => setMobileNavOpen(false)}
-              />
-            </nav>
-            <div className="border-t border-border p-3 text-xs text-text-subtle">
-              v0.1.0
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-border bg-surface px-3 md:gap-3 md:px-4">
-          {/* Mobile: hamburger + brand (the sidebar is hidden < md) */}
-          <button
-            type="button"
-            aria-label="Open menu"
-            onClick={() => setMobileNavOpen(true)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 md:hidden"
-          >
-            <Menu width={20} height={20} strokeWidth={1.75} />
-          </button>
-          <div className="md:hidden">
-            <BrandMark />
-          </div>
+          {/* Mobile: a back chevron on a drill-in, otherwise the brand. Both md:hidden. */}
+          {isDealerDetail ? (
+            <button
+              type="button"
+              aria-label="Back"
+              onClick={() => navigate(-1)}
+              className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 md:hidden"
+            >
+              <ChevronLeft width={22} height={22} strokeWidth={1.75} />
+            </button>
+          ) : (
+            <div className="md:hidden">
+              <BrandMark />
+            </div>
+          )}
 
           {/* Desktop: search (hidden on mobile — it is a disabled placeholder) */}
           <div className="relative hidden max-w-md flex-1 md:block">
@@ -199,9 +160,10 @@ export function AppShell() {
             />
           </div>
         </header>
-        <main className="flex-1 overflow-x-hidden bg-bg p-4 md:p-6">
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-bg p-4 md:p-6">
           <Outlet />
         </main>
+        {showTabBar ? <MobileTabBar className="md:hidden" /> : null}
       </div>
     </div>
   );
@@ -241,7 +203,7 @@ function AdminMenu({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-surface-2"
+        className="flex min-h-11 items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-surface-2 md:min-h-0"
         aria-haspopup="menu"
         aria-expanded={open}
       >

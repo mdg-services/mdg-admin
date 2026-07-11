@@ -20,6 +20,7 @@ import {
   CardSubtitle,
   CardTitle,
   EmptyState,
+  MobileCardList,
   Skeleton,
   Table,
   TBody,
@@ -37,6 +38,7 @@ import {
 import { useStaffWorkCatalogQuery } from '@/hooks/api/useStaffWorkCatalog';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { ApiError } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import {
   distributionLabel,
   domainLabel,
@@ -316,9 +318,11 @@ export function DealerWorkListTab({ dealer }: Props) {
   }
 
   return (
-    <div className="grid gap-4">
-      {/* Summary + save bar */}
-      <Card>
+    <div className="flex flex-col gap-4">
+      {/* Summary + save bar. On mobile it renders last and sticks to the bottom
+          (above the tab bar) so Save stays reachable during a long hide/show
+          session; on desktop it keeps its place at the top. */}
+      <Card className="sticky bottom-0 z-10 order-last md:static md:order-none">
         <CardContent className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm">
             <div className="flex items-center gap-2">
@@ -384,62 +388,121 @@ export function DealerWorkListTab({ dealer }: Props) {
               description="The global default catalog is empty."
             />
           ) : (
-            <Table>
-              <THead>
-                <TRow>
-                  <TH>Work</TH>
-                  <TH>Domain</TH>
-                  <TH className="text-right">Points</TH>
-                  <TH className="text-right">Visibility</TH>
-                </TRow>
-              </THead>
-              <TBody>
-                {defaultRows.map((r) => {
-                  const hidden = hiddenSet.has(r.code);
-                  return (
-                    <TRow key={r.code} className={hidden ? 'opacity-60' : undefined}>
-                      <TD>
-                        <div className="font-medium">{r.labelEn}</div>
-                        {r.labelHi ? (
-                          <div className="text-xs text-text-muted">{r.labelHi}</div>
-                        ) : (
-                          <div className="text-xs text-text-subtle">
-                            <code>{r.code}</code>
-                          </div>
-                        )}
-                      </TD>
-                      <TD className="text-text-muted">{domainLabel(r.domain)}</TD>
-                      <TD className="text-right tabular-nums">
-                        {r.known ? fmtPoints(r.points) : '—'}
-                      </TD>
-                      <TD className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleHidden(r.code, !hidden)}
-                          leftIcon={
-                            hidden ? (
-                              <EyeOff width={14} height={14} strokeWidth={1.75} />
-                            ) : (
-                              <Eye width={14} height={14} strokeWidth={1.75} />
-                            )
-                          }
-                        >
-                          {hidden ? 'Hidden' : 'Shown'}
-                        </Button>
-                      </TD>
+            <>
+              {/* Desktop table (≥ md) */}
+              <div className="hidden md:block">
+                <Table>
+                  <THead>
+                    <TRow>
+                      <TH>Work</TH>
+                      <TH>Domain</TH>
+                      <TH className="text-right">Points</TH>
+                      <TH className="text-right">Visibility</TH>
                     </TRow>
-                  );
+                  </THead>
+                  <TBody>
+                    {defaultRows.map((r) => {
+                      const hidden = hiddenSet.has(r.code);
+                      return (
+                        <TRow key={r.code} className={hidden ? 'opacity-60' : undefined}>
+                          <TD>
+                            <div className="font-medium">{r.labelEn}</div>
+                            {r.labelHi ? (
+                              <div className="text-xs text-text-muted">{r.labelHi}</div>
+                            ) : (
+                              <div className="text-xs text-text-subtle">
+                                <code>{r.code}</code>
+                              </div>
+                            )}
+                          </TD>
+                          <TD className="text-text-muted">{domainLabel(r.domain)}</TD>
+                          <TD className="text-right tabular-nums">
+                            {r.known ? fmtPoints(r.points) : '—'}
+                          </TD>
+                          <TD className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleHidden(r.code, !hidden)}
+                              leftIcon={
+                                hidden ? (
+                                  <EyeOff width={14} height={14} strokeWidth={1.75} />
+                                ) : (
+                                  <Eye width={14} height={14} strokeWidth={1.75} />
+                                )
+                              }
+                            >
+                              {hidden ? 'Hidden' : 'Shown'}
+                            </Button>
+                          </TD>
+                        </TRow>
+                      );
+                    })}
+                  </TBody>
+                </Table>
+              </div>
+
+              {/* Mobile card-stack (< md) */}
+              <MobileCardList
+                className="p-3"
+                cards={defaultRows.map((r) => {
+                  const hidden = hiddenSet.has(r.code);
+                  return {
+                    key: r.code,
+                    primary: (
+                      <span
+                        className={cn(
+                          'block truncate font-medium text-text',
+                          hidden && 'opacity-60',
+                        )}
+                      >
+                        {r.labelEn}
+                      </span>
+                    ),
+                    primaryRight: (
+                      <span className="tabular-nums text-text-muted">
+                        {r.known ? fmtPoints(r.points) : '—'}
+                      </span>
+                    ),
+                    secondary: (
+                      <span className="block">
+                        {r.labelHi ? (
+                          r.labelHi
+                        ) : (
+                          <code className="text-xs">{r.code}</code>
+                        )}
+                        {' · '}
+                        {domainLabel(r.domain)}
+                      </span>
+                    ),
+                    actions: (
+                      <Button
+                        variant={hidden ? 'secondary' : 'primary'}
+                        size="sm"
+                        className="w-full"
+                        onClick={() => toggleHidden(r.code, !hidden)}
+                        leftIcon={
+                          hidden ? (
+                            <EyeOff width={14} height={14} strokeWidth={1.75} />
+                          ) : (
+                            <Eye width={14} height={14} strokeWidth={1.75} />
+                          )
+                        }
+                      >
+                        {hidden ? 'Hidden — tap to show' : 'Shown — tap to hide'}
+                      </Button>
+                    ),
+                  };
                 })}
-              </TBody>
-            </Table>
+              />
+            </>
           )}
         </CardContent>
       </Card>
 
       {/* Custom items */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-col gap-3 sm:flex-row">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Sparkles width={16} height={16} strokeWidth={1.75} />
@@ -451,6 +514,7 @@ export function DealerWorkListTab({ dealer }: Props) {
           </div>
           <Button
             size="sm"
+            className="shrink-0"
             onClick={openAddCustom}
             leftIcon={<Plus width={14} height={14} strokeWidth={1.75} />}
           >
@@ -474,67 +538,128 @@ export function DealerWorkListTab({ dealer }: Props) {
               }
             />
           ) : (
-            <Table>
-              <THead>
-                <TRow>
-                  <TH>Work</TH>
-                  <TH>Domain</TH>
-                  <TH>Distribution</TH>
-                  <TH className="text-right">Points</TH>
-                  <TH>Status</TH>
-                  <TH className="text-right">Actions</TH>
-                </TRow>
-              </THead>
-              <TBody>
-                {customItems.map((c) => (
-                  <TRow key={c._localId}>
-                    <TD>
-                      <div className="font-medium">{c.labelEn}</div>
-                      <div className="text-xs text-text-muted">{c.labelHi}</div>
-                    </TD>
-                    <TD className="text-text-muted">{domainLabel(c.domain)}</TD>
-                    <TD className="text-text-muted">
-                      <div>{distributionLabel(c.distribution)}</div>
-                      <Badge intent={pricingModeIntent(c.pricingMode)} className="mt-1">
-                        {pricingModeLabel(c.pricingMode)}
-                      </Badge>
-                    </TD>
-                    <TD className="text-right tabular-nums">
-                      {fmtPoints(customPoints(c))}
-                    </TD>
-                    <TD>
+            <>
+              {/* Desktop table (≥ md) */}
+              <div className="hidden md:block">
+                <Table>
+                  <THead>
+                    <TRow>
+                      <TH>Work</TH>
+                      <TH>Domain</TH>
+                      <TH>Distribution</TH>
+                      <TH className="text-right">Points</TH>
+                      <TH>Status</TH>
+                      <TH className="text-right">Actions</TH>
+                    </TRow>
+                  </THead>
+                  <TBody>
+                    {customItems.map((c) => (
+                      <TRow key={c._localId}>
+                        <TD>
+                          <div className="font-medium">{c.labelEn}</div>
+                          <div className="text-xs text-text-muted">{c.labelHi}</div>
+                        </TD>
+                        <TD className="text-text-muted">{domainLabel(c.domain)}</TD>
+                        <TD className="text-text-muted">
+                          <div>{distributionLabel(c.distribution)}</div>
+                          <Badge intent={pricingModeIntent(c.pricingMode)} className="mt-1">
+                            {pricingModeLabel(c.pricingMode)}
+                          </Badge>
+                        </TD>
+                        <TD className="text-right tabular-nums">
+                          {fmtPoints(customPoints(c))}
+                        </TD>
+                        <TD>
+                          <Badge intent={c.active ? 'success' : 'neutral'}>
+                            {c.active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </TD>
+                        <TD className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditCustom(c)}
+                              leftIcon={
+                                <Pencil width={14} height={14} strokeWidth={1.75} />
+                              }
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeCustom(c._localId)}
+                              leftIcon={
+                                <Trash2 width={14} height={14} strokeWidth={1.75} />
+                              }
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </TD>
+                      </TRow>
+                    ))}
+                  </TBody>
+                </Table>
+              </div>
+
+              {/* Mobile card-stack (< md) */}
+              <MobileCardList
+                className="p-3"
+                cards={customItems.map((c) => ({
+                  key: c._localId,
+                  primary: (
+                    <span className="block truncate font-medium text-text">
+                      {c.labelEn}
+                      {c.labelHi ? (
+                        <span className="ml-1 text-xs font-normal text-text-muted">
+                          / {c.labelHi}
+                        </span>
+                      ) : null}
+                    </span>
+                  ),
+                  primaryRight: (
+                    <span className="flex items-center gap-1.5">
+                      <span className="tabular-nums font-semibold">
+                        {fmtPoints(customPoints(c))}
+                      </span>
                       <Badge intent={c.active ? 'success' : 'neutral'}>
                         {c.active ? 'Active' : 'Inactive'}
                       </Badge>
-                    </TD>
-                    <TD className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEditCustom(c)}
-                          leftIcon={
-                            <Pencil width={14} height={14} strokeWidth={1.75} />
-                          }
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeCustom(c._localId)}
-                          leftIcon={
-                            <Trash2 width={14} height={14} strokeWidth={1.75} />
-                          }
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    </TD>
-                  </TRow>
-                ))}
-              </TBody>
-            </Table>
+                    </span>
+                  ),
+                  meta: (
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {domainLabel(c.domain)} · {distributionLabel(c.distribution)}
+                      <Badge intent={pricingModeIntent(c.pricingMode)}>
+                        {pricingModeLabel(c.pricingMode)}
+                      </Badge>
+                    </span>
+                  ),
+                  actions: (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => openEditCustom(c)}
+                        leftIcon={<Pencil width={14} height={14} strokeWidth={1.75} />}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => removeCustom(c._localId)}
+                        leftIcon={<Trash2 width={14} height={14} strokeWidth={1.75} />}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ),
+                }))}
+              />
+            </>
           )}
         </CardContent>
       </Card>

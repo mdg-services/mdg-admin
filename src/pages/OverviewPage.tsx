@@ -16,6 +16,7 @@ import {
   CardSubtitle,
   CardTitle,
   EmptyState,
+  MobileCardList,
   Skeleton,
   StatusChip,
   Table,
@@ -176,35 +177,65 @@ function RecentFailures({
     );
   }
   return (
-    <Table>
-      <THead>
-        <TRow>
-          <TH>Service</TH>
-          <TH>Dealer</TH>
-          <TH>Started</TH>
-          <TH>Status</TH>
-        </TRow>
-      </THead>
-      <TBody>
-        {failures.map((r) => (
-          <TRow key={r.id}>
-            <TD className="font-medium">{r.serviceId}</TD>
-            <TD>
+    <>
+      {/* Desktop table (≥ md) */}
+      <div className="hidden md:block">
+        <Table>
+          <THead>
+            <TRow>
+              <TH>Service</TH>
+              <TH>Dealer</TH>
+              <TH>Started</TH>
+              <TH>Status</TH>
+            </TRow>
+          </THead>
+          <TBody>
+            {failures.map((r) => (
+              <TRow key={r.id}>
+                <TD className="font-medium">{r.serviceId}</TD>
+                <TD>
+                  <Link
+                    to={`/dealers/${r.dealerId}`}
+                    className="text-brand hover:underline"
+                  >
+                    {r.dealerId.slice(-6)}
+                  </Link>
+                </TD>
+                <TD className="text-text-muted">{formatDateTime(r.startedAt)}</TD>
+                <TD>
+                  <StatusChip kind="run" value={r.status} />
+                </TD>
+              </TRow>
+            ))}
+          </TBody>
+        </Table>
+      </div>
+
+      {/* Mobile card-stack (< md) */}
+      <MobileCardList
+        className="p-3"
+        cards={failures.map((r) => ({
+          key: r.id,
+          primary: (
+            <span className="block truncate font-medium text-text">
+              {r.serviceId}
+            </span>
+          ),
+          primaryRight: <StatusChip kind="run" value={r.status} />,
+          meta: (
+            <span>
+              {formatDateTime(r.startedAt)} ·{' '}
               <Link
                 to={`/dealers/${r.dealerId}`}
                 className="text-brand hover:underline"
               >
                 {r.dealerId.slice(-6)}
               </Link>
-            </TD>
-            <TD className="text-text-muted">{formatDateTime(r.startedAt)}</TD>
-            <TD>
-              <StatusChip kind="run" value={r.status} />
-            </TD>
-          </TRow>
-        ))}
-      </TBody>
-    </Table>
+            </span>
+          ),
+        }))}
+      />
+    </>
   );
 }
 

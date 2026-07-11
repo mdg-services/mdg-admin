@@ -153,7 +153,7 @@ export function AttachServiceDialog({
               </Label>
               <input
                 id="customCron"
-                className="h-9 w-full rounded-sm border border-border-strong bg-surface px-3 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+                className="h-11 w-full rounded-sm border border-border-strong bg-surface px-3 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:h-9"
                 placeholder="0 9 * * 1"
                 value={customCron}
                 onChange={(e) => setCustomCron(e.target.value)}
@@ -206,13 +206,13 @@ function PluginPicker({
             onClick={() => onPick(s)}
             className="flex w-full items-start justify-between gap-3 rounded-md border border-border bg-surface p-3 text-left hover:bg-surface-2"
           >
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-text">{s.name}</p>
-              <p className="mt-0.5 truncate text-xs text-text-muted">
+              <p className="mt-0.5 break-words text-xs text-text-muted">
                 {s.description}
               </p>
             </div>
-            <Badge intent={statusIntent('cadence', s.cadence)}>
+            <Badge intent={statusIntent('cadence', s.cadence)} className="shrink-0">
               {s.cadence}
             </Badge>
           </button>
@@ -228,7 +228,7 @@ function PluginPicker({
  */
 function RJSFContainer({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rjsf [&_label]:text-sm [&_label]:font-medium [&_label]:text-text [&_input]:h-9 [&_input]:w-full [&_input]:rounded-sm [&_input]:border [&_input]:border-border-strong [&_input]:bg-surface [&_input]:px-3 [&_input]:text-sm [&_textarea]:w-full [&_textarea]:rounded-sm [&_textarea]:border [&_textarea]:border-border-strong [&_textarea]:bg-surface [&_textarea]:px-3 [&_textarea]:py-2 [&_textarea]:text-sm [&_select]:h-9 [&_select]:w-full [&_select]:rounded-sm [&_select]:border [&_select]:border-border-strong [&_select]:bg-surface [&_select]:px-2 [&_select]:text-sm [&_.field]:mb-3 [&_.field-description]:text-xs [&_.field-description]:text-text-subtle [&_.error-detail]:text-xs [&_.error-detail]:text-danger">
+    <div className="rjsf [&_label]:text-sm [&_label]:font-medium [&_label]:text-text [&_input]:h-11 md:[&_input]:h-9 [&_input]:w-full [&_input]:rounded-sm [&_input]:border [&_input]:border-border-strong [&_input]:bg-surface [&_input]:px-3 [&_input]:text-sm [&_textarea]:w-full [&_textarea]:rounded-sm [&_textarea]:border [&_textarea]:border-border-strong [&_textarea]:bg-surface [&_textarea]:px-3 [&_textarea]:py-2 [&_textarea]:text-sm [&_select]:h-11 md:[&_select]:h-9 [&_select]:w-full [&_select]:rounded-sm [&_select]:border [&_select]:border-border-strong [&_select]:bg-surface [&_select]:px-2 [&_select]:text-sm [&_.field]:mb-3 [&_.field-description]:text-xs [&_.field-description]:text-text-subtle [&_.error-detail]:text-xs [&_.error-detail]:text-danger">
       {children}
     </div>
   );

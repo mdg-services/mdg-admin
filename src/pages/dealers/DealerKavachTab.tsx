@@ -15,6 +15,7 @@ import {
   Button,
   Card,
   CardContent,
+  Dialog,
   EmptyState,
   Select,
   Skeleton,
@@ -58,6 +59,7 @@ export function DealerKavachTab({ dealer }: Props) {
   const toast = useToast();
   const [addOpen, setAddOpen] = React.useState(false);
   const [busyId, setBusyId] = React.useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<KavachItem | null>(null);
 
   const programmeQ = useKavachProgrammeQuery(dealer.id);
   const itemsQ = useKavachItemsQuery(dealer.id);
@@ -378,15 +380,7 @@ export function DealerKavachTab({ dealer }: Props) {
                           'Escalated to inbox',
                         )
                       }
-                      onDelete={(i) => {
-                        if (!window.confirm(`Delete custom item "${i.labelEn}"?`))
-                          return;
-                        void withBusy(
-                          i.id,
-                          () => remove.mutateAsync(i.id),
-                          'Custom item deleted',
-                        );
-                      }}
+                      onDelete={(i) => setDeleteTarget(i)}
                     />
                   ))}
                 </div>
@@ -414,6 +408,42 @@ export function DealerKavachTab({ dealer }: Props) {
           }
         }}
       />
+
+      <Dialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete custom item"
+        description={
+          deleteTarget ? `Delete “${deleteTarget.labelEn}”?` : undefined
+        }
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              loading={remove.isPending}
+              onClick={() => {
+                const target = deleteTarget;
+                if (!target) return;
+                void withBusy(
+                  target.id,
+                  () => remove.mutateAsync(target.id),
+                  'Custom item deleted',
+                ).finally(() => setDeleteTarget(null));
+              }}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-text-muted">
+          This removes the custom compliance item from this dealer&apos;s
+          programme. This can&apos;t be undone.
+        </p>
+      </Dialog>
     </div>
   );
 }
