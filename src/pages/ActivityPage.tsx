@@ -75,7 +75,10 @@ function humanize(s: string): string {
 function roleLabel(role?: string | null): string {
   if (!role) return '—';
   if (role === 'dealer-owner') return 'Owner';
-  if (role === 'dealer-staff') return 'Staff';
+  // `dealer-staff` is the MANAGER login role — a person with an app account, not
+  // a warrior (a roster record with no login). InboxPage, AllUsersPage and
+  // DealerMembersTab already call it "Manager"; this was the odd one out.
+  if (role === 'dealer-staff') return 'Manager';
   if (role === 'admin') return 'Admin';
   return role;
 }

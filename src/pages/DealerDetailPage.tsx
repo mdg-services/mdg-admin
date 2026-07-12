@@ -23,7 +23,7 @@ const TABS = [
   { id: 'members', label: 'Team' },
   { id: 'services', label: 'Services' },
   { id: 'kavach', label: 'Kavach' },
-  { id: 'staff', label: 'Staff & points' },
+  { id: 'staff', label: 'Warriors & points' },
   { id: 'work-list', label: 'Work list' },
   { id: 'provided', label: 'Services provided' },
   { id: 'runs', label: 'Run history' },

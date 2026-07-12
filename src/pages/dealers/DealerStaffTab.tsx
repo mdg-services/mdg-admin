@@ -259,7 +259,7 @@ export function DealerStaffTab({ dealer }: Props) {
             <EmptyState
               icon={<Trophy width={28} height={28} strokeWidth={1.75} />}
               title="No points in this window"
-              description="No worker earned points during the selected date range."
+              description="No warrior earned points during the selected date range."
             />
           ) : (
             <>
@@ -269,7 +269,7 @@ export function DealerStaffTab({ dealer }: Props) {
                   <THead>
                     <TRow>
                       <TH className="w-12">#</TH>
-                      <TH>Worker</TH>
+                      <TH>Warrior</TH>
                       <TH>Status</TH>
                       <TH className="text-right">Awards</TH>
                       <TH className="text-right">Points</TH>
@@ -389,7 +389,7 @@ export function DealerStaffTab({ dealer }: Props) {
               onClick={openAddWorker}
               leftIcon={<UserPlus width={14} height={14} strokeWidth={1.75} />}
             >
-              Add worker
+              Add warrior
             </Button>
           </div>
         </CardHeader>
@@ -408,11 +408,11 @@ export function DealerStaffTab({ dealer }: Props) {
           ) : roster.length === 0 ? (
             <EmptyState
               icon={<Users width={28} height={28} strokeWidth={1.75} />}
-              title="No staff on record"
+              title="No warriors on record"
               description={
                 includeInactive
-                  ? 'This dealer has not added any workers yet.'
-                  : 'No active workers. Enable “Include inactive” to see workers who have left.'
+                  ? 'This dealer has not added any warriors yet.'
+                  : 'No active warriors. Enable “Include inactive” to see warriors who have left.'
               }
               cta={
                 <Button
@@ -420,7 +420,7 @@ export function DealerStaffTab({ dealer }: Props) {
                   onClick={openAddWorker}
                   leftIcon={<UserPlus width={14} height={14} strokeWidth={1.75} />}
                 >
-                  Add worker
+                  Add warrior
                 </Button>
               }
             />
@@ -431,7 +431,7 @@ export function DealerStaffTab({ dealer }: Props) {
                 <Table>
                   <THead>
                     <TRow>
-                      <TH>Worker</TH>
+                      <TH>Warrior</TH>
                       <TH>Designation</TH>
                       <TH>Status</TH>
                       <TH className="text-right">Window pts</TH>
@@ -606,7 +606,7 @@ export function DealerStaffTab({ dealer }: Props) {
                 <Table>
                   <THead>
                     <TRow>
-                      <TH>Worker</TH>
+                      <TH>Warrior</TH>
                       <TH>Work</TH>
                       <TH className="text-right">Points</TH>
                     </TRow>
@@ -851,7 +851,7 @@ export function DealerStaffTab({ dealer }: Props) {
                   <THead>
                     <TRow>
                       <TH>Work date</TH>
-                      <TH>Worker</TH>
+                      <TH>Warrior</TH>
                       <TH>Work</TH>
                       <TH className="text-right">Points</TH>
                       <TH>Awarded by</TH>

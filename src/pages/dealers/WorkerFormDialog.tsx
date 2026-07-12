@@ -65,15 +65,15 @@ export function WorkerFormDialog({ dealerId, open, onClose, employee }: Props) {
           phone: values.phone ?? undefined,
           designation: values.designation ?? undefined,
         });
-        toast.success('Worker updated');
+        toast.success('Warrior updated');
       } else {
         await add.mutateAsync(values);
-        toast.success('Worker added');
+        toast.success('Warrior added');
       }
       onClose();
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : 'Could not save worker',
+        err instanceof ApiError ? err.message : 'Could not save warrior',
       );
     }
   });
@@ -82,11 +82,11 @@ export function WorkerFormDialog({ dealerId, open, onClose, employee }: Props) {
     <Dialog
       open={open}
       onClose={onClose}
-      title={isEdit ? 'Edit worker' : 'Add worker'}
+      title={isEdit ? 'Edit warrior' : 'Add warrior'}
       description={
         isEdit
-          ? 'Update this worker’s details.'
-          : 'Add a worker to this dealer’s roster. Workers are dealer-owned records, not app logins.'
+          ? 'Update this warrior’s details.'
+          : 'Add a warrior to this dealer’s roster. Warriors are dealer-owned records, not app logins.'
       }
       footer={
         <>
@@ -94,7 +94,7 @@ export function WorkerFormDialog({ dealerId, open, onClose, employee }: Props) {
             Cancel
           </Button>
           <Button onClick={submit} loading={add.isPending || update.isPending}>
-            {isEdit ? 'Save changes' : 'Add worker'}
+            {isEdit ? 'Save changes' : 'Add warrior'}
           </Button>
         </>
       }

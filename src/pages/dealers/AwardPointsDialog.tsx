@@ -24,6 +24,7 @@ import {
   todayYmd,
   unitLabel,
 } from '@/lib/staffWork';
+import { WORK_NOTE_MAX, requiresDescription } from '@dk/shared';
 import type {
   AwardStaffWorkSelection,
   EmployeeWithPoints,
@@ -43,6 +44,8 @@ interface WorkRow {
   /** Text inputs; parsed to numbers on submit. */
   quantity: string;
   amountRupees: string;
+  /** What was done — required for the catch-all "Other …" works. */
+  note: string;
 }
 
 /** Estimated total points across the selected workers for one work row. */
@@ -126,7 +129,7 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
   function addRow() {
     setRows((curr) => [
       ...curr,
-      { _id: makeLocalId(), workItemCode: firstCode, quantity: '', amountRupees: '' },
+      { _id: makeLocalId(), workItemCode: firstCode, quantity: '', amountRupees: '', note: '' },
     ]);
   }
 
@@ -152,7 +155,7 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
 
   async function submit() {
     if (workerCount === 0) {
-      toast.error('Select at least one worker');
+      toast.error('Select at least one warrior');
       return;
     }
     const usableRows = rows.filter((r) => r.workItemCode);
@@ -182,6 +185,19 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
           sel.quantity = q;
         }
       }
+      // The catch-all works record nothing on their own. The server rejects an
+      // undescribed one, so catch it here and name the offending row — otherwise
+      // the admin just gets a 400 with nothing to act on.
+      if (requiresDescription(r.workItemCode)) {
+        const note = r.note.trim();
+        if (!note) {
+          toast.error(`Describe what was done for "${item?.labelEn ?? r.workItemCode}"`);
+          return;
+        }
+        sel.note = note;
+      } else if (r.note.trim()) {
+        sel.note = r.note.trim();
+      }
       items.push(sel);
     }
 
@@ -209,7 +225,7 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
       onClose={onClose}
       size="lg"
       title="Award points"
-      description="Pick the workers and the work(s) they did. Points are computed server-side from the dealer's effective work list."
+      description="Pick the warriors and the work(s) they did. Points are computed server-side from the dealer's effective work list."
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -228,10 +244,10 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
       <div className="grid gap-4">
         {/* Workers */}
         <div>
-          <Label>Workers</Label>
+          <Label>Warriors</Label>
           {activeWorkers.length === 0 ? (
             <p className="text-sm text-text-muted">
-              No active workers. Add a worker to the roster first.
+              No active warriors. Add a warrior to the roster first.
             </p>
           ) : (
             <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto rounded-sm border border-border p-2 sm:grid-cols-2">
@@ -354,6 +370,23 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
                     >
                       Remove
                     </Button>
+
+                    {/* Spans the row: "Other cleaning work" says nothing on its
+                        own, so it has to say what was actually done. */}
+                    {requiresDescription(r.workItemCode) ? (
+                      <div className="sm:col-span-3">
+                        <Label htmlFor={`note-${r._id}`} required>
+                          What was done?
+                        </Label>
+                        <Input
+                          id={`note-${r._id}`}
+                          value={r.note}
+                          maxLength={WORK_NOTE_MAX}
+                          placeholder="e.g. washed the canopy"
+                          onChange={(e) => updateRow(r._id, { note: e.target.value })}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
