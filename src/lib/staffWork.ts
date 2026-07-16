@@ -22,6 +22,7 @@ export const DOMAIN_ORDER: StaffWorkDomain[] = [
   'sales',
   'office',
   'customer',
+  'kitchen',
   'misc',
 ];
 
@@ -34,6 +35,7 @@ export const DOMAIN_LABELS: Record<StaffWorkDomain, string> = {
   sales: 'Sales',
   office: 'Office',
   customer: 'Customer',
+  kitchen: 'Kitchen',
   misc: 'Miscellaneous',
 };
 
