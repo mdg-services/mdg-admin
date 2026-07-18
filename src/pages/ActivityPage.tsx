@@ -32,6 +32,13 @@ import { AUDIT_ACTIONS, AUDIT_ENTITIES, type AuditLog } from '@dk/shared';
 
 const PAGE_SIZE = 25;
 
+/**
+ * The `GET /audit` response now includes a resolved, human-readable target
+ * name (`entityName`) alongside the raw `entityId`. `AuditLog` from `@dk/shared`
+ * doesn't declare it, so widen it locally rather than touching the shared type.
+ */
+type AuditRow = AuditLog & { entityName?: string | null };
+
 /** Colour the action badge by the kind of change, purely for scannability. */
 function actionIntent(action: string): Intent {
   if (
@@ -40,6 +47,8 @@ function actionIntent(action: string): Intent {
     action === 'CONVERSATION_AUTO_UNASSIGNED' ||
     action === 'ADMIN_PASSWORD_RESET' ||
     action === 'IRAS_CREDENTIALS_CLEAR' ||
+    action === 'SDMS_CREDENTIALS_CLEAR' ||
+    action === 'STAFF_DRAFT_CLEAR' ||
     action === 'STAFF_POINTS_UNDO'
   ) {
     return 'danger';
@@ -50,7 +59,8 @@ function actionIntent(action: string): Intent {
     action === 'ADMIN_CREATE' ||
     action === 'SERVICE_ATTACH' ||
     action === 'CONVERSATION_STARTED' ||
-    action === 'CONVERSATION_RESOLVED'
+    action === 'CONVERSATION_RESOLVED' ||
+    action === 'CREDIT_DOD_SHARE'
   ) {
     return 'success';
   }
@@ -60,6 +70,9 @@ function actionIntent(action: string): Intent {
   if (
     action === 'RECORD_VIEWED' ||
     action === 'ARTIFACT_DOWNLOAD' ||
+    action === 'ATTACHMENT_DOWNLOAD' ||
+    action === 'IRAS_CREDENTIALS_SET' ||
+    action === 'SDMS_CREDENTIALS_SET' ||
     action === 'CONVERSATION_ASSIGNED' ||
     action === 'CONVERSATION_REASSIGNED'
   ) {
@@ -85,7 +98,7 @@ function roleLabel(role?: string | null): string {
 
 export function ActivityPage() {
   const [search, setSearch] = useSearchParams();
-  const [selected, setSelected] = React.useState<AuditLog | null>(null);
+  const [selected, setSelected] = React.useState<AuditRow | null>(null);
 
   const actorId = search.get('actorId') ?? '';
   const entity = search.get('entity') ?? '';
@@ -230,7 +243,7 @@ export function ActivityPage() {
                     </TRow>
                   </THead>
                   <TBody>
-                    {data.items.map((row) => (
+                    {(data.items as AuditRow[]).map((row) => (
                       <TRow key={row.id} clickable onClick={() => setSelected(row)}>
                         <TD className="whitespace-nowrap text-text-muted">
                           {formatDateTime(row.at)}
@@ -251,12 +264,21 @@ export function ActivityPage() {
                           </Badge>
                         </TD>
                         <TD className="text-text-muted">{row.entity}</TD>
-                        <TD
-                          className="max-w-[10rem] truncate font-mono text-xs text-text-muted"
-                          title={row.entityId}
-                        >
-                          {row.entityId}
-                        </TD>
+                        {row.entityName ? (
+                          <TD
+                            className="max-w-[10rem] truncate text-text-muted"
+                            title={row.entityId}
+                          >
+                            {row.entityName}
+                          </TD>
+                        ) : (
+                          <TD
+                            className="max-w-[10rem] truncate font-mono text-xs text-text-muted"
+                            title={row.entityId}
+                          >
+                            {row.entityId}
+                          </TD>
+                        )}
                         <TD className="font-mono text-xs text-text-subtle">
                           {row.ip ?? '—'}
                         </TD>
@@ -269,7 +291,7 @@ export function ActivityPage() {
               {/* Mobile card-stack (< md) */}
               <MobileCardList
                 className="p-3"
-                cards={data.items.map((row) => ({
+                cards={(data.items as AuditRow[]).map((row) => ({
                   key: row.id,
                   onClick: () => setSelected(row),
                   primary: (
@@ -294,7 +316,7 @@ export function ActivityPage() {
                   ),
                   meta: (
                     <span className="block truncate font-mono">
-                      {row.entity} · {row.entityId}
+                      {row.entity} · {row.entityName ?? row.entityId}
                     </span>
                   ),
                 }))}
@@ -322,7 +344,7 @@ function AuditDetailDialog({
   row,
   onClose,
 }: {
-  row: AuditLog | null;
+  row: AuditRow | null;
   onClose: () => void;
 }) {
   return (
@@ -340,7 +362,14 @@ function AuditDetailDialog({
             <DetailRow label="Role" value={roleLabel(row.actorRole)} />
             <DetailRow label="Actor email" value={row.actorEmail ?? '—'} />
             <DetailRow label="Actor id" value={row.actorId} mono />
-            <DetailRow label="Entity" value={`${row.entity} · ${row.entityId}`} mono />
+            <DetailRow
+              label="Entity"
+              value={`${row.entity} · ${row.entityName ?? row.entityId}`}
+              mono={!row.entityName}
+            />
+            {row.entityName ? (
+              <DetailRow label="Entity id" value={row.entityId} mono />
+            ) : null}
             <DetailRow
               label="Request"
               value={row.method || row.path ? `${row.method ?? ''} ${row.path ?? ''}`.trim() : '—'}
