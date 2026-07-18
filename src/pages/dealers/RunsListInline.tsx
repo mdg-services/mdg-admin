@@ -17,10 +17,17 @@ import {
 import { useRunDetail } from '@/hooks/api/useRunDetail';
 import { useRunsQuery } from '@/hooks/api/useRuns';
 import { formatDateTime, formatDuration } from '@/lib/format';
-import type { ServiceRunWithSteps } from '@/types/serviceRun';
+import type {
+  CreditDodRunOutput,
+  ServiceRunWithSteps,
+} from '@/types/serviceRun';
 import type { ServiceRun } from '@dk/shared';
 
+import { CreditDodFailurePanel } from './CreditDodFailurePanel';
+import { CreditDodReportCard } from './CreditDodReportCard';
 import { RunStepTimeline } from './RunStepTimeline';
+
+const CREDIT_DOD_SERVICE_ID = 'credit-dod-monitoring';
 
 const API_BASE_URL: string =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
@@ -130,6 +137,13 @@ function RunDetail({
   const steps = run.steps ?? [];
   const artifacts = run.artifacts ?? [];
 
+  const buildArtifactUrl = (artifactId: string) =>
+    `${API_BASE_URL.replace(/\/$/, '')}/runs/${run.id}/artifacts/${artifactId}/download`;
+
+  const isCreditDod = run.serviceId === CREDIT_DOD_SERVICE_ID;
+  const isCreditDodFailure =
+    isCreditDod && (run.status === 'FAILED' || !run.output);
+
   return (
     <div className="grid gap-3 text-sm">
       <div className="grid grid-cols-2 gap-2">
@@ -153,7 +167,7 @@ function RunDetail({
         </section>
       ) : null}
 
-      {run.error ? (
+      {run.error && !isCreditDodFailure ? (
         <section>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
             Error
@@ -165,14 +179,35 @@ function RunDetail({
         </section>
       ) : null}
 
-      <section>
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
-          Output
-        </p>
-        <pre className="max-h-72 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
-          {JSON.stringify(run.output ?? null, null, 2)}
-        </pre>
-      </section>
+      {isCreditDodFailure ? (
+        <section>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+            Failure
+          </p>
+          <CreditDodFailurePanel
+            run={run}
+            buildArtifactUrl={buildArtifactUrl}
+          />
+        </section>
+      ) : (
+        <section>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
+            Output
+          </p>
+          {isCreditDod && run.output ? (
+            <CreditDodReportCard
+              output={run.output as unknown as CreditDodRunOutput}
+              artifacts={artifacts}
+              runId={run.id}
+              buildArtifactUrl={buildArtifactUrl}
+            />
+          ) : (
+            <pre className="max-h-72 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
+              {JSON.stringify(run.output ?? null, null, 2)}
+            </pre>
+          )}
+        </section>
+      )}
 
       {artifacts.length > 0 ? (
         <section>
@@ -196,7 +231,7 @@ function RunDetail({
                   </p>
                 </div>
                 <a
-                  href={`${API_BASE_URL.replace(/\/$/, '')}/runs/${run.id}/artifacts/${a.id}/download`}
+                  href={buildArtifactUrl(a.id)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 text-sm font-semibold text-text hover:bg-surface-2"

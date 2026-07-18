@@ -46,6 +46,15 @@ export function formatDuration(ms?: number | null): string {
   return `${m}m ${rem}s`;
 }
 
+/** Rupees with Indian digit grouping, e.g. 1234567.5 → "₹12,34,567.50". */
+export function inrFormat(n?: number | null): string {
+  if (n === undefined || n === null || !Number.isFinite(n)) return '-';
+  return `₹${n.toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export function groupByDay<T extends { startedAt: string }>(
   items: T[],
 ): Array<{ day: string; items: T[] }> {

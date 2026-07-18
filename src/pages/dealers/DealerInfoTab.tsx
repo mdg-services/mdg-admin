@@ -15,6 +15,7 @@ import { formatDate, formatDateTime } from '@/lib/format';
 import type { Dealer } from '@dk/shared';
 
 import { PortalCredentialsSection } from './PortalCredentialsSection';
+import { SdmsCredentialsSection } from './SdmsCredentialsSection';
 
 interface Props {
   dealer: Dealer;
@@ -160,6 +161,8 @@ export function DealerInfoTab({ dealer }: Props) {
       </div>
 
       <PortalCredentialsSection dealerId={dealer.id} />
+
+      <SdmsCredentialsSection dealerId={dealer.id} />
 
       <AuditAccordion dealerId={dealer.id} />
     </div>

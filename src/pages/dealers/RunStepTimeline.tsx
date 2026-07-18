@@ -80,10 +80,63 @@ export function RunStepTimeline({ steps }: Props) {
                 </pre>
               </details>
             ) : null}
+
+            <StepMeta meta={step.meta} status={step.status} />
           </li>
         );
       })}
     </ol>
+  );
+}
+
+function formatMetaValue(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * Renders a step's `meta` as a compact, muted key/value block. Unobtrusive by
+ * default (collapsed behind a toggle); expanded automatically on error steps so
+ * the failure `code`/`hint`/`phase` are visible without a click.
+ */
+function StepMeta({
+  meta,
+  status,
+}: {
+  meta: ServiceRunStep['meta'];
+  status: ServiceRunStep['status'];
+}) {
+  if (!meta) return null;
+  const entries = Object.entries(meta);
+  if (entries.length === 0) return null;
+
+  return (
+    <details className="mt-1.5 text-xs" open={status === 'error'}>
+      <summary className="cursor-pointer select-none text-text-subtle hover:text-text-muted">
+        Details
+      </summary>
+      <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 overflow-x-auto rounded-sm bg-surface-2 p-2 font-mono text-text-muted">
+        {entries.map(([key, value]) => (
+          <React.Fragment key={key}>
+            <dt className="whitespace-nowrap text-text-subtle">{key}</dt>
+            <dd className="min-w-0 whitespace-pre-wrap break-words">
+              {formatMetaValue(value)}
+            </dd>
+          </React.Fragment>
+        ))}
+      </dl>
+    </details>
   );
 }
 
