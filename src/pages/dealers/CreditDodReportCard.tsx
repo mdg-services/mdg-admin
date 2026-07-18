@@ -14,30 +14,18 @@ import {
 } from '@/hooks/api/useCreditDod';
 import { ApiError } from '@/lib/api';
 import { formatDate, inrFormat } from '@/lib/format';
-import type {
-  CreditDodRunOutput,
-  ServiceRunArtifact,
-} from '@/types/serviceRun';
-
-const CARD_IMAGE_FILENAME = 'credit_dod_card.png';
+import type { CreditDodRunOutput } from '@/types/serviceRun';
 
 interface Props {
   output: CreditDodRunOutput;
-  artifacts: ServiceRunArtifact[];
   runId: string;
-  buildArtifactUrl: (artifactId: string) => string;
+  /** Signed URL for the rendered card image (`credit_dod_card.png`). */
+  cardImageUrl?: string;
 }
 
-export function CreditDodReportCard({
-  output,
-  artifacts,
-  runId,
-  buildArtifactUrl,
-}: Props) {
+export function CreditDodReportCard({ output, runId, cardImageUrl }: Props) {
   const toast = useToast();
   const { card } = output;
-
-  const cardImage = artifacts.find((a) => a.filename === CARD_IMAGE_FILENAME);
 
   const { data: snapshot } = useCreditDodSnapshot(output.snapshotId);
   const shareMutation = useShareCreditDodSnapshot(output.snapshotId, runId);
@@ -60,62 +48,91 @@ export function CreditDodReportCard({
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start">
-        {cardImage ? (
-          <img
-            src={buildArtifactUrl(cardImage.id)}
-            alt="Credit & DOD card"
-            className="w-full rounded-md border border-border bg-surface-2"
-            style={{ maxWidth: 480 }}
-          />
-        ) : (
-          <div
-            className="flex h-40 w-full items-center justify-center rounded-md border border-dashed border-border bg-surface-2 text-xs text-text-muted"
-            style={{ maxWidth: 480 }}
-          >
-            Card image not available
-          </div>
-        )}
-
-        <div className="min-w-0 flex-1">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <ValueRow label="Due amount" value={inrFormat(card.dueAmount)} />
-            <ValueRow
-              label="Due date"
-              value={card.dueDate ? formatDate(card.dueDate) : '-'}
-            />
-            <ValueRow
-              label="Current limit"
-              value={inrFormat(card.currentLimit)}
-            />
-            <ValueRow
-              label="Availed limit"
-              value={inrFormat(card.availedLimit)}
-            />
-            <ValueRow
-              label="Available limit"
-              value={inrFormat(card.availableLimit)}
-            />
-            <ValueRow label="Form of limit" value={card.formOfLimit} />
-          </dl>
-
-          <div className="mt-3 grid gap-1 text-xs text-text-muted">
-            <p>Risk category: {output.riskCategory ?? '-'}</p>
-            <p>
-              Window: {formatDate(output.window.fromDate)} &rarr;{' '}
-              {formatDate(output.window.toDate)}
-            </p>
-            <ReconcileIndicator
-              reconciles={output.reconciles}
-              receivable={output.totalReceivableReported}
-            />
-          </div>
+      {/* Card image on top, full width (capped), never overlapping. */}
+      {cardImageUrl ? (
+        <img
+          src={cardImageUrl}
+          alt="Credit & DOD card"
+          className="h-auto w-full rounded-md border border-border bg-surface-2"
+          style={{ maxWidth: 520 }}
+        />
+      ) : (
+        <div
+          className="flex h-40 w-full items-center justify-center rounded-md border border-dashed border-border bg-surface-2 text-xs text-text-muted"
+          style={{ maxWidth: 520 }}
+        >
+          Card image not available
         </div>
+      )}
+
+      {/* Values as a single-column, wrap-safe definition list (label left,
+          value right). Avoids the 2-up grid that overlapped in the modal. */}
+      <dl className="rounded-md border border-border">
+        <DefRow label="Due amount" value={inrFormat(card.dueAmount)} />
+        <DefRow
+          label="Due date"
+          value={card.dueDate ? formatDate(card.dueDate) : '-'}
+        />
+        <DefRow label="Current limit" value={inrFormat(card.currentLimit)} />
+        <DefRow label="Availed limit" value={inrFormat(card.availedLimit)} />
+        <DefRow
+          label="Available limit"
+          value={inrFormat(card.availableLimit)}
+        />
+        <DefRow label="Form of limit" value={card.formOfLimit} />
+      </dl>
+
+      {output.openingCarriedForward ? (
+        <div className="flex items-start gap-2 rounded-md border border-warning bg-warning-soft p-2.5 text-xs font-medium text-warning">
+          <AlertTriangle
+            width={14}
+            height={14}
+            strokeWidth={1.75}
+            className="mt-0.5 shrink-0"
+            aria-hidden
+          />
+          <span>
+            Due date is an estimate — look-back didn&apos;t reach a balance
+            reset.
+          </span>
+        </div>
+      ) : null}
+
+      {/* Muted metadata block. */}
+      <div className="grid gap-1.5 text-xs text-text-muted">
+        <MetaRow label="Risk category" value={output.riskCategory ?? '-'} />
+        <MetaRow
+          label="Window"
+          value={
+            <>
+              {formatDate(output.window.fromDate)} &rarr;{' '}
+              {formatDate(output.window.toDate)}
+            </>
+          }
+        />
+        {typeof output.transactionCount === 'number' ? (
+          <MetaRow
+            label="Transactions maintained"
+            value={
+              <span className="tabular-nums">
+                {output.transactionCount.toLocaleString('en-IN')}
+              </span>
+            }
+          />
+        ) : null}
+        <ReconcileIndicator
+          reconciles={output.reconciles}
+          receivable={output.totalReceivableReported}
+        />
       </div>
 
       <div>
         {alreadyShared ? (
-          <Button variant="secondary" disabled leftIcon={<Check width={14} height={14} strokeWidth={1.75} />}>
+          <Button
+            variant="secondary"
+            disabled
+            leftIcon={<Check width={14} height={14} strokeWidth={1.75} />}
+          >
             Shared
           </Button>
         ) : (
@@ -173,13 +190,28 @@ export function CreditDodReportCard({
   );
 }
 
-function ValueRow({ label, value }: { label: string; value: React.ReactNode }) {
+function DefRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div>
-      <dt className="text-xs uppercase tracking-wide text-text-subtle">
-        {label}
-      </dt>
-      <dd className="font-medium text-text">{value}</dd>
+    <div className="flex items-baseline justify-between gap-4 border-b border-border px-3 py-2 text-sm last:border-b-0">
+      <dt className="text-text-muted">{label}</dt>
+      <dd className="break-words text-right font-medium tabular-nums text-text">
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function MetaRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <span>{label}</span>
+      <span className="text-right text-text">{value}</span>
     </div>
   );
 }
@@ -197,8 +229,8 @@ function ReconcileIndicator({
     <p
       className={
         reconciles
-          ? 'flex items-center gap-1.5 font-medium text-green-600'
-          : 'flex items-center gap-1.5 font-medium text-danger'
+          ? 'mt-0.5 flex items-center gap-1.5 font-medium text-green-600'
+          : 'mt-0.5 flex items-center gap-1.5 font-medium text-danger'
       }
     >
       {reconciles ? (

@@ -28,6 +28,7 @@ import { CreditDodReportCard } from './CreditDodReportCard';
 import { RunStepTimeline } from './RunStepTimeline';
 
 const CREDIT_DOD_SERVICE_ID = 'credit-dod-monitoring';
+const CARD_IMAGE_FILENAME = 'credit_dod_card.png';
 
 const API_BASE_URL: string =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
@@ -137,8 +138,22 @@ function RunDetail({
   const steps = run.steps ?? [];
   const artifacts = run.artifacts ?? [];
 
+  // Token-gated legacy route; only usable as a fallback for older runs that
+  // predate signed URLs (a plain <img>/<a> can't send a bearer token).
   const buildArtifactUrl = (artifactId: string) =>
     `${API_BASE_URL.replace(/\/$/, '')}/runs/${run.id}/artifacts/${artifactId}/download`;
+
+  // Prefer the short-lived signed URL (no auth header needed); fall back to the
+  // token-gated route only when the run predates `artifactUrls`.
+  const resolveArtifactUrl = (artifactId: string) =>
+    run.artifactUrls?.[artifactId] ?? buildArtifactUrl(artifactId);
+
+  const cardArtifact = artifacts.find(
+    (a) => a.filename === CARD_IMAGE_FILENAME,
+  );
+  const cardImageUrl = cardArtifact
+    ? resolveArtifactUrl(cardArtifact.id)
+    : undefined;
 
   const isCreditDod = run.serviceId === CREDIT_DOD_SERVICE_ID;
   const isCreditDodFailure =
@@ -186,7 +201,7 @@ function RunDetail({
           </p>
           <CreditDodFailurePanel
             run={run}
-            buildArtifactUrl={buildArtifactUrl}
+            buildArtifactUrl={resolveArtifactUrl}
           />
         </section>
       ) : (
@@ -197,9 +212,8 @@ function RunDetail({
           {isCreditDod && run.output ? (
             <CreditDodReportCard
               output={run.output as unknown as CreditDodRunOutput}
-              artifacts={artifacts}
               runId={run.id}
-              buildArtifactUrl={buildArtifactUrl}
+              cardImageUrl={cardImageUrl}
             />
           ) : (
             <pre className="max-h-72 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
@@ -231,9 +245,8 @@ function RunDetail({
                   </p>
                 </div>
                 <a
-                  href={buildArtifactUrl(a.id)}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={resolveArtifactUrl(a.id)}
+                  download
                   className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 text-sm font-semibold text-text hover:bg-surface-2"
                 >
                   <Download width={14} height={14} strokeWidth={1.75} />

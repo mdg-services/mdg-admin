@@ -7,6 +7,7 @@ import { EmptyState, Skeleton, StatusChip, Tabs } from '@/components/ui';
 import { useDealerQuery } from '@/hooks/api/useDealers';
 
 import { CustomRequestTab } from './dealers/CustomRequestTab';
+import { DealerCreditDodTab } from './dealers/DealerCreditDodTab';
 import { DealerInfoTab } from './dealers/DealerInfoTab';
 import { DealerKavachTab } from './dealers/DealerKavachTab';
 import { DealerMembersTab } from './dealers/DealerMembersTab';
@@ -26,6 +27,7 @@ const TABS = [
   { id: 'staff', label: 'Warriors & points' },
   { id: 'work-list', label: 'Work list' },
   { id: 'provided', label: 'Services provided' },
+  { id: 'credit-dod', label: 'Credit & DOD' },
   { id: 'runs', label: 'Run history' },
   { id: 'custom', label: 'Custom requests' },
 ];
@@ -101,6 +103,9 @@ export function DealerDetailPage() {
       {activeTab === 'staff' ? <DealerStaffTab dealer={dealer} /> : null}
       {activeTab === 'work-list' ? <DealerWorkListTab dealer={dealer} /> : null}
       {activeTab === 'provided' ? <ServicesProvidedTab dealer={dealer} /> : null}
+      {activeTab === 'credit-dod' ? (
+        <DealerCreditDodTab dealer={dealer} />
+      ) : null}
       {activeTab === 'runs' ? <RunsListInline dealerId={dealer.id} /> : null}
       {activeTab === 'custom' ? <CustomRequestTab dealer={dealer} /> : null}
     </div>

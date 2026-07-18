@@ -29,6 +29,13 @@ export interface ServiceRunArtifact {
 export interface ServiceRunWithSteps extends ServiceRun {
   steps?: ServiceRunStep[];
   artifacts?: ServiceRunArtifact[];
+  /**
+   * Map of `artifactId` -> short-lived signed URL. These can be used directly
+   * as `<img src>` / `<a href download>` WITHOUT a bearer token. Absent on
+   * older runs, in which case callers fall back to the token-gated
+   * `/runs/:id/artifacts/:id/download` route.
+   */
+  artifactUrls?: Record<string, string>;
 }
 
 export interface IrasCredentialsStatus {
@@ -70,6 +77,19 @@ export interface CreditDodRunOutput {
   loginAttempts: number;
   cardKey: string;
   rawArtifacts: { padStatementKey?: string; creditMonitoringKey?: string };
+  /** Number of maintained PAD transactions this run accounts for. */
+  transactionCount?: number;
+  /** Transactions newly appended by this run. */
+  newRows?: number;
+  /** Whether this run appended to an existing ledger rather than rebuilding it. */
+  incremental?: boolean;
+  /**
+   * True when the look-back window never reached a balance reset, so the
+   * opening balance was carried forward and the due date is an estimate.
+   */
+  openingCarriedForward?: boolean;
+  /** Whether the card image was rendered for this run. */
+  cardRendered?: boolean;
 }
 
 export interface CreditDodShareState {
