@@ -1,5 +1,7 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
+  CalendarClock,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -15,6 +17,8 @@ import {
   Card,
   CardContent,
   EmptyState,
+  Input,
+  Label,
   Skeleton,
   Table,
   TBody,
@@ -22,24 +26,39 @@ import {
   TH,
   THead,
   TRow,
+  useToast,
 } from '@/components/ui';
 import {
   useCreditDodLedger,
   useCreditDodSnapshots,
 } from '@/hooks/api/useCreditDod';
-import { ApiError } from '@/lib/api';
+import { useDealerServicesQuery, useRunNow } from '@/hooks/api/useDealerServices';
+import { api, ApiError } from '@/lib/api';
 import { formatDate, formatDateTime, inrFormat } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
 import type { CreditDodSnapshotRecord } from '@/types/creditDod';
-import type { Dealer } from '@dk/shared';
+import type { Dealer, ServiceRun } from '@dk/shared';
 
 interface Props {
   dealer: Dealer;
 }
 
+const CREDIT_DOD_PLUGIN = 'credit-dod-monitoring';
+
 /** ₹ amount, or an em-dash placeholder for empty/zero cells. */
 function money(n: number | null | undefined): string {
   return n ? inrFormat(n) : '-';
+}
+
+/** Two-digit pad. */
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+/** `YYYY-MM-DD` (from a date input) → `dd-mm-yyyy` (the SDMS / asOf format). */
+function isoToDmy(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  return `${d}-${m}-${y}`;
 }
 
 const STATE_INTENT: Record<string, Intent> = {
@@ -51,9 +70,138 @@ const STATE_INTENT: Record<string, Intent> = {
 export function DealerCreditDodTab({ dealer }: Props) {
   return (
     <div className="grid gap-4">
+      <BackdatedGenerateCard dealerId={dealer.id} />
       <LedgerCard dealerId={dealer.id} />
       <SnapshotHistoryCard dealerId={dealer.id} />
     </div>
+  );
+}
+
+/**
+ * Generate a Credit & DOD report AS OF a past date. Runs the service statelessly
+ * (a back-dated run never touches the maintained ledger) via the standard
+ * run-now path with an `asOf` override, then surfaces the new snapshot in the
+ * Report history below once the run finishes.
+ */
+function BackdatedGenerateCard({ dealerId }: { dealerId: string }) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const { data: services } = useDealerServicesQuery(dealerId);
+  const creditDodDs = (services ?? []).find(
+    (s) => s.serviceId === CREDIT_DOD_PLUGIN,
+  );
+  const runNow = useRunNow(dealerId);
+
+  const [date, setDate] = React.useState('');
+  const [activeRunId, setActiveRunId] = React.useState<string | null>(null);
+
+  const now = new Date();
+  const maxDate = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+
+  // Poll the triggered run until it finishes, then refresh the snapshot history.
+  const runPoll = useQuery({
+    queryKey: ['run', activeRunId],
+    queryFn: () => api.get<ServiceRun>(`/runs/${activeRunId}`),
+    enabled: !!activeRunId,
+    refetchInterval: (query) => {
+      const st = query.state.data?.status;
+      return st === 'SUCCESS' || st === 'FAILED' ? false : 3000;
+    },
+  });
+
+  React.useEffect(() => {
+    const st = runPoll.data?.status;
+    if (!activeRunId || (st !== 'SUCCESS' && st !== 'FAILED')) return;
+    if (st === 'SUCCESS') {
+      void qc.invalidateQueries({ queryKey: ['creditDodSnapshots', dealerId] });
+      toast.success('Back-dated report ready — see Report history below.');
+    } else {
+      // Name the dealer's own tab, not the global /runs page — that one is
+      // super-admin-only now, so it would be a dead end for a plain admin.
+      toast.error("The back-dated run failed. Open this dealer's Run history tab for details.");
+    }
+    setActiveRunId(null);
+  }, [runPoll.data?.status, activeRunId, dealerId, qc, toast]);
+
+  const busy = runNow.isPending || activeRunId !== null;
+
+  async function generate() {
+    if (!creditDodDs) {
+      toast.error('Attach the Credit & DOD service to this dealer first.');
+      return;
+    }
+    if (!date) {
+      toast.error('Pick a date to generate the report for.');
+      return;
+    }
+    if (date > maxDate) {
+      toast.error('Pick a date in the past (or today).');
+      return;
+    }
+    try {
+      const { runId } = await runNow.mutateAsync({
+        dsId: creditDodDs.id,
+        body: { configOverride: { asOf: isoToDmy(date) } },
+      });
+      setActiveRunId(runId);
+      toast.success(
+        `Generating the report as of ${formatDate(isoToDmy(date))} — it'll appear below shortly.`,
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : 'Could not start the back-dated run',
+      );
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <CalendarClock
+              width={18}
+              height={18}
+              strokeWidth={1.75}
+              className="shrink-0 text-brand"
+            />
+            <p className="text-base font-semibold text-text">
+              Generate a back-dated report
+            </p>
+          </div>
+          <p className="mt-1 text-sm text-text-muted">
+            Reconstruct the Credit &amp; DOD card as of any past date. This runs
+            without touching the live ledger.
+          </p>
+        </div>
+        <div className="flex items-end gap-2">
+          <div>
+            <Label htmlFor="cd-asof">As-of date</Label>
+            <Input
+              id="cd-asof"
+              type="date"
+              value={date}
+              max={maxDate}
+              onChange={(e) => setDate(e.target.value)}
+              disabled={busy || !creditDodDs}
+              className="w-44"
+            />
+          </div>
+          <Button onClick={generate} loading={busy} disabled={!creditDodDs}>
+            Generate
+          </Button>
+        </div>
+      </CardContent>
+      {!creditDodDs ? (
+        <div className="border-t border-border px-4 py-2 text-xs text-text-subtle">
+          The Credit &amp; DOD service isn&apos;t attached to this dealer yet.
+        </div>
+      ) : busy ? (
+        <div className="border-t border-border px-4 py-2 text-xs text-text-muted">
+          Generating… a live capture takes about a minute.
+        </div>
+      ) : null}
+    </Card>
   );
 }
 
@@ -247,7 +395,14 @@ function SnapshotHistoryCard({ dealerId }: { dealerId: string }) {
                         )}
                       </TD>
                       <TD className="whitespace-nowrap text-text-muted">
-                        {formatDateTime(s.capturedAt)}
+                        <div className="flex items-center gap-2">
+                          <span>{formatDateTime(s.capturedAt)}</span>
+                          {s.backdated ? (
+                            <Badge intent="info">
+                              As of {s.asOf ? formatDate(s.asOf) : '—'}
+                            </Badge>
+                          ) : null}
+                        </div>
                       </TD>
                       <TD className="whitespace-nowrap text-right font-medium tabular-nums">
                         {inrFormat(s.dueAmount)}
@@ -331,6 +486,12 @@ function SnapshotDetail({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
           snapshot.window.toDate,
         )}`}
       />
+      {snapshot.backdated ? (
+        <DetailRow
+          label="As of (back-dated)"
+          value={snapshot.asOf ? formatDate(snapshot.asOf) : '-'}
+        />
+      ) : null}
     </dl>
   );
 }

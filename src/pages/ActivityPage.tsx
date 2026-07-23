@@ -60,7 +60,8 @@ function actionIntent(action: string): Intent {
     action === 'SERVICE_ATTACH' ||
     action === 'CONVERSATION_STARTED' ||
     action === 'CONVERSATION_RESOLVED' ||
-    action === 'CREDIT_DOD_SHARE'
+    action === 'CREDIT_DOD_SHARE' ||
+    action === 'BANK_HOLIDAY_CONFIRM'
   ) {
     return 'success';
   }

@@ -12,10 +12,12 @@ import {
   Skeleton,
 } from '@/components/ui';
 import { useServicesQuery } from '@/hooks/api/useServices';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { statusIntent } from '@/lib/statusIntent';
 import type { ServicePluginCatalogEntry } from '@dk/shared';
 
 export function ServiceCatalogPage() {
+  const isSuperAdmin = useIsSuperAdmin();
   const { data, isLoading, isError, error } = useServicesQuery();
   const [selected, setSelected] = React.useState<ServicePluginCatalogEntry | null>(
     null,
@@ -109,14 +111,19 @@ export function ServiceCatalogPage() {
                 }
               />
             </div>
-            <section>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
-                Config schema
-              </p>
-              <pre className="max-h-96 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
-                {JSON.stringify(selected.defaultConfigSchema, null, 2)}
-              </pre>
-            </section>
+            {/* The raw plugin config schema is engineer-grade; the page itself
+                is super-admin only, and this is gated again so the drawer can
+                be reused elsewhere without leaking it. */}
+            {isSuperAdmin ? (
+              <section>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  Config schema
+                </p>
+                <pre className="max-h-96 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
+                  {JSON.stringify(selected.defaultConfigSchema, null, 2)}
+                </pre>
+              </section>
+            ) : null}
           </div>
         ) : null}
       </Drawer>

@@ -2,6 +2,7 @@ import { CheckCircle2, XCircle } from 'lucide-react';
 import * as React from 'react';
 
 import { Spinner } from '@/components/ui';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { cn } from '@/lib/cn';
 import { formatDuration } from '@/lib/format';
 import type { ServiceRunStep } from '@/types/serviceRun';
@@ -30,7 +31,16 @@ function isInFlight(steps: ServiceRunStep[], index: number): boolean {
   return true;
 }
 
+/**
+ * The per-step trace of a service run: names, timings, error stacks and step
+ * `meta`. This is pure diagnostics — a plain admin only cares about the
+ * outcome — so the component renders nothing unless the viewer is a
+ * super-admin. Callers should gate their section heading on the same flag so no
+ * empty "Steps" header is left behind.
+ */
 export function RunStepTimeline({ steps }: Props) {
+  const isSuperAdmin = useIsSuperAdmin();
+  if (!isSuperAdmin) return null;
   if (steps.length === 0) return null;
 
   return (
@@ -45,8 +55,8 @@ export function RunStepTimeline({ steps }: Props) {
             <span
               className={cn(
                 'absolute -left-[1.4rem] flex h-5 w-5 items-center justify-center rounded-full bg-surface',
-                step.status === 'error' && 'text-red-600',
-                step.status === 'ok' && 'text-green-600',
+                step.status === 'error' && 'text-danger',
+                step.status === 'ok' && 'text-success',
               )}
               aria-hidden
             >
@@ -71,7 +81,7 @@ export function RunStepTimeline({ steps }: Props) {
 
             {step.status === 'error' && step.error ? (
               <details className="mt-2 rounded-md border border-border bg-surface-2 p-2 text-xs">
-                <summary className="cursor-pointer select-none font-medium text-red-600">
+                <summary className="cursor-pointer select-none font-medium text-danger">
                   Error details
                 </summary>
                 <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap font-mono text-xs text-text">
@@ -153,7 +163,7 @@ function StepIcon({
         width={18}
         height={18}
         strokeWidth={1.75}
-        className="text-green-600"
+        className="text-success"
       />
     );
   }
@@ -163,7 +173,7 @@ function StepIcon({
         width={18}
         height={18}
         strokeWidth={1.75}
-        className="text-red-600"
+        className="text-danger"
       />
     );
   }

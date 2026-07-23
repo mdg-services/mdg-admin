@@ -3,6 +3,7 @@ import type {
   Cadence,
   DealerServiceStatus,
   DealerStatus,
+  IrasSnapshotStatus,
   ServiceRunStatus,
   SlaTier,
 } from '@dk/shared';
@@ -10,13 +11,20 @@ import type {
 
 import { Badge } from './Badge';
 
-type Kind = 'dealer' | 'dealerService' | 'run' | 'sla' | 'cadence';
+type Kind =
+  | 'dealer'
+  | 'dealerService'
+  | 'run'
+  | 'sla'
+  | 'cadence'
+  | 'irasSnapshot';
 type ValueMap = {
   dealer: DealerStatus;
   dealerService: DealerServiceStatus;
   run: ServiceRunStatus;
   sla: SlaTier;
   cadence: Cadence;
+  irasSnapshot: IrasSnapshotStatus;
 };
 
 export function StatusChip<K extends Kind>({

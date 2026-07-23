@@ -34,6 +34,10 @@ export interface CreditDodSnapshotRecord {
   capturedAt: string;
   code: string;
   window: { fromDate: string; toDate: string };
+  /** dd-mm-yyyy the report was generated "as of" (back-dated run), else null. */
+  asOf: string | null;
+  /** True when this snapshot was a stateless back-dated backfill. */
+  backdated: boolean;
   riskCategory: string | null;
   currentLimit: number;
   availedLimit: number;

@@ -4,7 +4,7 @@ import { api } from '@/lib/api';
 import type { ServiceRunWithSteps } from '@/types/serviceRun';
 
 export interface UseRunDetailOptions {
-  /** Poll every 2s while the run status is RUNNING. */
+  /** Poll every 2s while the run is still PENDING or RUNNING. */
   pollWhileRunning?: boolean;
 }
 
@@ -20,7 +20,11 @@ export function useRunDetail(
     refetchInterval: (query) => {
       if (!pollWhileRunning) return false;
       const data = query.state.data as ServiceRunWithSteps | undefined;
-      return data?.status === 'RUNNING' ? 2000 : false;
+      // A queued run hasn't started yet — keep polling so the in-progress
+      // notice resolves into the result on its own.
+      return data?.status === 'RUNNING' || data?.status === 'PENDING'
+        ? 2000
+        : false;
     },
   });
 }

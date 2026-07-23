@@ -18,7 +18,9 @@ import {
   StatusChip,
 } from '@/components/ui';
 import { useRunsQuery } from '@/hooks/api/useRuns';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { formatDateTime, formatDuration, groupByDay } from '@/lib/format';
+import { serviceLabel } from '@/lib/serviceLabel';
 import type { ServiceRun, ServiceRunStatus } from '@dk/shared';
 
 const STATUSES: Array<{ value: '' | ServiceRunStatus; label: string }> = [
@@ -238,11 +240,21 @@ export function RunHistoryPage() {
   );
 }
 
+/**
+ * This whole page is a super-admin surface (see the `RequireSuperAdmin` route
+ * guard and the `superAdminOnly` nav entry), but the raw error stack and the
+ * output JSON dump are gated on the role here too, so relaxing the route later
+ * can't quietly expose engineer-grade detail to a plain admin.
+ */
 function RunDetail({ run }: { run: ServiceRun }) {
+  const isSuperAdmin = useIsSuperAdmin();
   return (
     <div className="grid gap-3 text-sm">
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Service" value={run.serviceId} />
+        <Field
+          label="Service"
+          value={isSuperAdmin ? run.serviceId : serviceLabel(run.serviceId)}
+        />
         <Field
           label="Status"
           value={<StatusChip kind="run" value={run.status} />}
@@ -250,27 +262,39 @@ function RunDetail({ run }: { run: ServiceRun }) {
         <Field label="Started" value={formatDateTime(run.startedAt)} />
         <Field label="Finished" value={formatDateTime(run.finishedAt)} />
         <Field label="Duration" value={formatDuration(run.durationMs)} />
-        <Field label="Dealer" value={run.dealerId} />
+        {isSuperAdmin ? <Field label="Dealer" value={run.dealerId} /> : null}
       </div>
-      {run.error ? (
-        <section>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
-            Error
-          </p>
-          <pre className="overflow-auto rounded-md bg-surface-2 p-3 text-xs">
-            {run.error.message}
-            {run.error.stack ? `\n${run.error.stack}` : ''}
-          </pre>
-        </section>
-      ) : null}
-      <section>
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
-          Output
+      {isSuperAdmin ? (
+        <>
+          {run.error ? (
+            <section>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Error
+              </p>
+              <pre className="overflow-auto rounded-md bg-surface-2 p-3 text-xs">
+                {run.error.message}
+                {run.error.stack ? `\n${run.error.stack}` : ''}
+              </pre>
+            </section>
+          ) : null}
+          <section>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
+              Output
+            </p>
+            <pre className="max-h-72 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
+              {JSON.stringify(run.output ?? null, null, 2)}
+            </pre>
+          </section>
+        </>
+      ) : (
+        <p className="text-sm text-text-muted">
+          {run.status === 'FAILED'
+            ? "This run didn't finish. Please retry; if it keeps happening, contact the MDG team."
+            : run.status === 'SUCCESS'
+              ? 'This run completed successfully.'
+              : 'This run is still in progress — the result appears here once it finishes.'}
         </p>
-        <pre className="max-h-72 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
-          {JSON.stringify(run.output ?? null, null, 2)}
-        </pre>
-      </section>
+      )}
     </div>
   );
 }

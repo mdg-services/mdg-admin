@@ -7,6 +7,8 @@ import { RequireSuperAdmin } from '@/components/layout/RequireSuperAdmin';
 import { ActivityPage } from '@/pages/ActivityPage';
 import { AdminsPage } from '@/pages/AdminsPage';
 import { AllUsersPage } from '@/pages/AllUsersPage';
+import { BankHolidaysPage } from '@/pages/BankHolidaysPage';
+import { DataVaultPage } from '@/pages/DataVaultPage';
 import { DealerDetailPage } from '@/pages/DealerDetailPage';
 import { DealersPage } from '@/pages/DealersPage';
 import { InboxPage } from '@/pages/InboxPage';
@@ -36,8 +38,28 @@ export default function App() {
           <Route path="dealers" element={<DealersPage />} />
           <Route path="dealers/:id" element={<DealerDetailPage />} />
           <Route path="kavach" element={<KavachDashboardPage />} />
-          <Route path="services" element={<ServiceCatalogPage />} />
-          <Route path="runs" element={<RunHistoryPage />} />
+          {/* Plain admins are the audience here — the Vault is where they read
+              every dealer's collected IRAS data, so it is NOT super-admin only. */}
+          <Route path="data-vault" element={<DataVaultPage />} />
+          {/* The plugin catalog and the raw run log are engineer surfaces —
+              plain admins get outcomes on the dealer screens instead. Keep
+              these in step with `superAdminOnly` in navItems.ts. */}
+          <Route
+            path="services"
+            element={
+              <RequireSuperAdmin>
+                <ServiceCatalogPage />
+              </RequireSuperAdmin>
+            }
+          />
+          <Route
+            path="runs"
+            element={
+              <RequireSuperAdmin>
+                <RunHistoryPage />
+              </RequireSuperAdmin>
+            }
+          />
           <Route
             path="activity"
             element={
@@ -59,6 +81,14 @@ export default function App() {
             element={
               <RequireSuperAdmin>
                 <WorkListDefaultsPage />
+              </RequireSuperAdmin>
+            }
+          />
+          <Route
+            path="bank-holidays"
+            element={
+              <RequireSuperAdmin>
+                <BankHolidaysPage />
               </RequireSuperAdmin>
             }
           />

@@ -11,10 +11,12 @@ import {
   Textarea,
   useToast,
 } from '@/components/ui';
+import { useMeQuery } from '@/hooks/api/useAuth';
 import {
   useDealerServicesQuery,
   useRunNow,
 } from '@/hooks/api/useDealerServices';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { ApiError } from '@/lib/api';
 import type { Dealer } from '@dk/shared';
 
@@ -26,8 +28,15 @@ interface Props {
   dealer: Dealer;
 }
 
+/**
+ * Hand-written JSON dispatched straight at a plugin — an engineer surface, not
+ * an outcome. Super-admins only; the tab is also hidden from the strip in
+ * `DealerDetailPage`, this guard covers a direct `?tab=custom` deep link.
+ */
 export function CustomRequestTab({ dealer }: Props) {
   const toast = useToast();
+  const meQ = useMeQuery();
+  const isSuperAdmin = useIsSuperAdmin();
   const { data: services } = useDealerServicesQuery(dealer.id);
   const runNow = useRunNow(dealer.id);
 
@@ -37,6 +46,22 @@ export function CustomRequestTab({ dealer }: Props) {
 
   const [payload, setPayload] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
+
+  if (!isSuperAdmin) {
+    // Hold while /auth/me is still deciding, so a super-admin never sees a flash
+    // of the "not available" copy.
+    if (meQ.isLoading) return null;
+    return (
+      <Card>
+        <CardContent>
+          <EmptyState
+            title="Not available"
+            description="Ad-hoc requests are raised with the MDG team, who run them for you."
+          />
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!customRequest) {
     return (

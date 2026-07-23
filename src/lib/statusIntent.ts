@@ -2,6 +2,7 @@ import type {
   Cadence,
   DealerServiceStatus,
   DealerStatus,
+  IrasSnapshotStatus,
   ServiceRunStatus,
   SlaTier,
 } from '@dk/shared';
@@ -27,6 +28,10 @@ export function statusIntent(
 ): Intent;
 export function statusIntent(kind: 'sla', v: SlaTier): Intent;
 export function statusIntent(kind: 'cadence', v: Cadence): Intent;
+export function statusIntent(
+  kind: 'irasSnapshot',
+  v: IrasSnapshotStatus,
+): Intent;
 export function statusIntent(kind: string, v: string): Intent {
   switch (kind) {
     case 'dealer':
@@ -51,6 +56,11 @@ export function statusIntent(kind: string, v: string): Intent {
       return 'neutral';
     case 'cadence':
       if (v === 'ON_DEMAND') return 'info';
+      return 'neutral';
+    case 'irasSnapshot':
+      if (v === 'COMPLETE') return 'success';
+      if (v === 'PARTIAL') return 'warning';
+      if (v === 'FAILED') return 'danger';
       return 'neutral';
     default:
       return 'neutral';

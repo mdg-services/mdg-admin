@@ -27,8 +27,20 @@ export interface ServiceRunArtifact {
 }
 
 export interface ServiceRunWithSteps extends ServiceRun {
+  /**
+   * Per-step trace. Diagnostics — the API only serialises this for
+   * super-admins, so treat it as absent in the plain-admin view.
+   */
   steps?: ServiceRunStep[];
   artifacts?: ServiceRunArtifact[];
+  /**
+   * Stable failure code for a FAILED run (e.g. `LOGIN_REJECTED`), serialised at
+   * the top level for every role so the plain-language failure copy works even
+   * when `steps`/`error` are withheld.
+   */
+  failureCode?: string;
+  /** Optional plain-language next step served alongside `failureCode`. */
+  failureHint?: string;
   /**
    * Map of `artifactId` -> short-lived signed URL. These can be used directly
    * as `<img src>` / `<a href download>` WITHOUT a bearer token. Absent on
@@ -100,6 +112,10 @@ export interface CreditDodShareState {
 
 export interface CreditDodSnapshot {
   shared: CreditDodShareState | null;
+  /** dd-mm-yyyy the report was generated "as of" (back-dated run), else null. */
+  asOf?: string | null;
+  /** True when this snapshot was a stateless back-dated backfill. */
+  backdated?: boolean;
 }
 
 /** Result of POST /credit-dod/snapshots/:id/share. */

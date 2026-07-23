@@ -2,7 +2,9 @@ import {
   Activity,
   AlertCircle,
   Building2,
+  CalendarDays,
   CheckCircle2,
+  ChevronRight,
   Clock,
   Plug,
 } from 'lucide-react';
@@ -26,21 +28,70 @@ import {
   THead,
   TRow,
 } from '@/components/ui';
+import { useBankHolidayPendingQuery } from '@/hooks/api/useBankHolidays';
 import { useOverviewQuery } from '@/hooks/api/useOverview';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { cn } from '@/lib/cn';
 import { formatDateTime, formatDuration } from '@/lib/format';
+import { serviceLabel } from '@/lib/serviceLabel';
 import type { ServiceRun } from '@dk/shared';
 
+/**
+ * Super-admin nudge to confirm the national holidays the library suggests for the
+ * current/coming month — enabled holidays roll the DOD due date forward, so an
+ * unconfirmed month silently uses only weekends. Hidden when nothing is pending.
+ */
+function HolidayConfirmBanner() {
+  const isSuperAdmin = useIsSuperAdmin();
+  const { data } = useBankHolidayPendingQuery();
+  if (!isSuperAdmin || !data || data.totalCount === 0) return null;
+  const months = data.months.map((m) => m.label).join(', ');
+  return (
+    <Link
+      to="/bank-holidays"
+      className="mb-4 flex items-center gap-3 rounded-lg border border-border bg-brand-soft px-4 py-3 transition-colors hover:bg-surface-2"
+    >
+      <CalendarDays
+        width={20}
+        height={20}
+        strokeWidth={1.75}
+        className="shrink-0 text-brand"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-text">
+          {data.totalCount} national holiday{data.totalCount === 1 ? '' : 's'} need
+          confirmation
+        </p>
+        <p className="truncate text-xs text-text-muted">
+          Confirm {months} so the Credit &amp; DOD due dates roll forward correctly.
+        </p>
+      </div>
+      <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-brand">
+        Review
+        <ChevronRight width={16} height={16} strokeWidth={2} />
+      </span>
+    </Link>
+  );
+}
+
 export function OverviewPage() {
+  const isSuperAdmin = useIsSuperAdmin();
   const { data, isLoading, isError, error } = useOverviewQuery();
 
   return (
     <div>
       <PageHeader
         title="Overview"
-        subtitle="At-a-glance view of dealers, services, and recent runs."
+        subtitle={
+          isSuperAdmin
+            ? 'At-a-glance view of dealers, services, and recent runs.'
+            : 'At-a-glance view of dealers and services.'
+        }
       />
 
-      {isLoading ? <KpiSkeleton /> : null}
+      <HolidayConfirmBanner />
+
+      {isLoading ? <KpiSkeleton count={isSuperAdmin ? 5 : 2} /> : null}
       {isError ? (
         <EmptyState
           icon={<AlertCircle width={28} height={28} strokeWidth={1.75} />}
@@ -51,7 +102,16 @@ export function OverviewPage() {
 
       {data ? (
         <>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+          {/* Run throughput / failure-rate KPIs describe how the machinery is
+              doing, not what a dealer got — super-admins only. */}
+          <div
+            className={cn(
+              'grid gap-3',
+              isSuperAdmin
+                ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
+                : 'grid-cols-2 sm:max-w-lg',
+            )}
+          >
             <Kpi
               label="Dealers"
               value={data.dealers.total}
@@ -62,37 +122,54 @@ export function OverviewPage() {
               value={data.services.active}
               icon={<Plug width={18} height={18} strokeWidth={1.75} />}
             />
-            <Kpi
-              label="Runs (24h)"
-              value={data.runs.last24h}
-              icon={<Activity width={18} height={18} strokeWidth={1.75} />}
-            />
-            <Kpi
-              label="Failed (24h)"
-              value={data.runs.failedLast24h}
-              icon={<AlertCircle width={18} height={18} strokeWidth={1.75} />}
-              tone="danger"
-            />
-            <Kpi
-              label="Success rate"
-              value={`${Math.round(data.runs.successRate24h * 100)}%`}
-              icon={<CheckCircle2 width={18} height={18} strokeWidth={1.75} />}
-              tone="success"
-            />
+            {isSuperAdmin ? (
+              <>
+                <Kpi
+                  label="Runs (24h)"
+                  value={data.runs.last24h}
+                  icon={<Activity width={18} height={18} strokeWidth={1.75} />}
+                />
+                <Kpi
+                  label="Failed (24h)"
+                  value={data.runs.failedLast24h}
+                  icon={
+                    <AlertCircle width={18} height={18} strokeWidth={1.75} />
+                  }
+                  tone="danger"
+                />
+                <Kpi
+                  label="Success rate"
+                  value={`${Math.round(data.runs.successRate24h * 100)}%`}
+                  icon={
+                    <CheckCircle2 width={18} height={18} strokeWidth={1.75} />
+                  }
+                  tone="success"
+                />
+              </>
+            ) : null}
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <div>
-                  <CardTitle>Recent failures</CardTitle>
-                  <CardSubtitle>Newest failed runs.</CardSubtitle>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <RecentFailures runs={data.recentRuns} />
-              </CardContent>
-            </Card>
+          <div
+            className={cn(
+              'mt-6 grid grid-cols-1 gap-4',
+              isSuperAdmin ? 'lg:grid-cols-2' : null,
+            )}
+          >
+            {/* Failure triage is a super-admin job; both the desktop table and
+                the mobile card stack live inside this card. */}
+            {isSuperAdmin ? (
+              <Card>
+                <CardHeader>
+                  <div>
+                    <CardTitle>Recent failures</CardTitle>
+                    <CardSubtitle>Newest failed runs.</CardSubtitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <RecentFailures runs={data.recentRuns} />
+                </CardContent>
+              </Card>
+            ) : null}
             <Card>
               <CardHeader>
                 <div>
@@ -146,10 +223,17 @@ function Kpi({
   );
 }
 
-function KpiSkeleton() {
+function KpiSkeleton({ count = 5 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-      {Array.from({ length: 5 }).map((_, i) => (
+    <div
+      className={cn(
+        'grid gap-3',
+        count > 2
+          ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
+          : 'grid-cols-2 sm:max-w-lg',
+      )}
+    >
+      {Array.from({ length: count }).map((_, i) => (
         <Card key={i}>
           <CardContent>
             <Skeleton className="h-4 w-24" />
@@ -244,6 +328,7 @@ function UpcomingRuns({
 }: {
   runs: ServiceRun[];
 }) {
+  const isSuperAdmin = useIsSuperAdmin();
   if (runs.length === 0) {
     return (
       <EmptyState
@@ -260,7 +345,9 @@ function UpcomingRuns({
           key={r.id}
           className="flex items-center justify-between gap-3 py-2 text-sm"
         >
-          <span className="font-medium text-text">{r.serviceId}</span>
+          <span className="font-medium text-text">
+            {isSuperAdmin ? r.serviceId : serviceLabel(r.serviceId)}
+          </span>
           <span className="text-text-muted">
             {formatDateTime(r.startedAt)}
           </span>

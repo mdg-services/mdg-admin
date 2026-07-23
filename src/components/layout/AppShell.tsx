@@ -16,6 +16,7 @@ import {
 } from 'react-router-dom';
 
 import { Input } from '@/components/ui';
+import { useBankHolidayPendingQuery } from '@/hooks/api/useBankHolidays';
 import { useConversations } from '@/hooks/api/useConversations';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { usePushBridge } from '@/hooks/usePushBridge';
@@ -27,43 +28,47 @@ import { NAV_ITEMS, type NavItem } from './navItems';
 
 function NavList({
   items,
-  unreadCount,
+  badges,
   onNavigate,
 }: {
   items: NavItem[];
-  unreadCount: number;
+  /** Count badge to show next to a nav item, keyed by its route. */
+  badges: Record<string, number>;
   onNavigate?: () => void;
 }) {
   return (
     <ul className="flex flex-col gap-0.5">
-      {items.map((item) => (
-        <li key={item.to}>
-          <NavLink
-            to={item.to}
-            end={item.to === '/'}
-            onClick={onNavigate}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-brand-soft text-brand'
-                  : 'text-text-muted hover:bg-surface-2 hover:text-text',
-              )
-            }
-          >
-            <item.icon width={18} height={18} strokeWidth={1.75} />
-            <span className="flex-1">{item.label}</span>
-            {item.to === '/inbox' && unreadCount > 0 ? (
-              <span
-                aria-label={`${unreadCount} unread`}
-                className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-text-inverse"
-              >
-                {unreadCount}
-              </span>
-            ) : null}
-          </NavLink>
-        </li>
-      ))}
+      {items.map((item) => {
+        const badge = badges[item.to] ?? 0;
+        return (
+          <li key={item.to}>
+            <NavLink
+              to={item.to}
+              end={item.to === '/'}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-brand-soft text-brand'
+                    : 'text-text-muted hover:bg-surface-2 hover:text-text',
+                )
+              }
+            >
+              <item.icon width={18} height={18} strokeWidth={1.75} />
+              <span className="flex-1">{item.label}</span>
+              {badge > 0 ? (
+                <span
+                  aria-label={`${badge} pending`}
+                  className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-text-inverse"
+                >
+                  {badge}
+                </span>
+              ) : null}
+            </NavLink>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -88,6 +93,12 @@ export function AppShell() {
   const unreadCount = (mineQ.data ?? []).filter((c) => c.unreadByAdmin).length;
   const isSuperAdmin = useIsSuperAdmin();
   const navItems = NAV_ITEMS.filter((item) => !item.superAdminOnly || isSuperAdmin);
+  // Nav count badges keyed by route: unread chats + unconfirmed national holidays.
+  const pendingHolidaysQ = useBankHolidayPendingQuery();
+  const navBadges: Record<string, number> = {
+    '/inbox': unreadCount,
+    '/bank-holidays': pendingHolidaysQ.data?.totalCount ?? 0,
+  };
 
   // A full-screen drill-in: `/dealers/:id` (guarded against the `/dealers` list).
   const isDealerDetail = !!matchPath('/dealers/:id', location.pathname);
@@ -114,7 +125,7 @@ export function AppShell() {
           <BrandMark />
         </div>
         <nav className="flex-1 overflow-y-auto px-2 py-3">
-          <NavList items={navItems} unreadCount={unreadCount} />
+          <NavList items={navItems} badges={navBadges} />
         </nav>
         <div className="border-t border-border p-3 text-xs text-text-subtle">v0.1.0</div>
       </aside>

@@ -1,5 +1,6 @@
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { describeCreditDodFailure } from '@/lib/creditDodFailure';
 import type { ServiceRunWithSteps } from '@/types/serviceRun';
 
@@ -9,18 +10,27 @@ interface Props {
 }
 
 /**
- * Prominent, non-technical failure summary for a FAILED
- * `credit-dod-monitoring` run: what went wrong, what to do, where it failed,
- * and the diagnostic screenshot captured at the point of failure.
+ * Failure summary for a FAILED `credit-dod-monitoring` run.
+ *
+ * Every viewer gets the plain-language "what went wrong / what to do" pair. The
+ * diagnostics that sit under it — the step it failed at, the raw error message
+ * and the `fail_*.png` capture — are super-admin only, and their labels are
+ * gated with them so a plain admin never sees an empty "Technical details"
+ * stub.
  */
 export function CreditDodFailurePanel({ run, buildArtifactUrl }: Props) {
+  const isSuperAdmin = useIsSuperAdmin();
   const { phase, copy, message } = describeCreditDodFailure(run);
 
-  const shot = (run.artifacts ?? []).find(
-    (a) =>
-      a.filename.startsWith('fail_') &&
-      a.filename.toLowerCase().endsWith('.png'),
-  );
+  const hint = isSuperAdmin ? copy.hint : copy.adminHint ?? copy.hint;
+
+  const shot = isSuperAdmin
+    ? (run.artifacts ?? []).find(
+        (a) =>
+          a.filename.startsWith('fail_') &&
+          a.filename.toLowerCase().endsWith('.png'),
+      )
+    : undefined;
 
   return (
     <div className="rounded-md border border-danger bg-danger-soft p-4">
@@ -34,16 +44,16 @@ export function CreditDodFailurePanel({ run, buildArtifactUrl }: Props) {
         />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-danger">{copy.title}</p>
-          <p className="mt-1 text-sm text-text">{copy.hint}</p>
+          <p className="mt-1 text-sm text-text">{hint}</p>
 
-          {phase ? (
+          {isSuperAdmin && phase ? (
             <p className="mt-2 text-xs text-text-muted">
               Failed at step:{' '}
               <span className="font-semibold text-text">{phase}</span>
             </p>
           ) : null}
 
-          {message ? (
+          {isSuperAdmin && message ? (
             <details className="mt-2 text-xs">
               <summary className="cursor-pointer select-none text-text-muted hover:text-text">
                 Technical details

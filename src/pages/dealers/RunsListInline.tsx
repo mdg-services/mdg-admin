@@ -1,9 +1,11 @@
-import { Download } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download } from 'lucide-react';
 import * as React from 'react';
 
 import {
   EmptyState,
+  MobileCardList,
   Skeleton,
+  Spinner,
   StatusChip,
   Table,
   TBody,
@@ -16,7 +18,10 @@ import {
 } from '@/components/ui';
 import { useRunDetail } from '@/hooks/api/useRunDetail';
 import { useRunsQuery } from '@/hooks/api/useRuns';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { cn } from '@/lib/cn';
 import { formatDateTime, formatDuration } from '@/lib/format';
+import { serviceLabel } from '@/lib/serviceLabel';
 import type {
   CreditDodRunOutput,
   ServiceRunWithSteps,
@@ -40,6 +45,7 @@ interface Props {
 }
 
 export function RunsListInline({ dealerId, serviceId }: Props) {
+  const isSuperAdmin = useIsSuperAdmin();
   const { data, isLoading } = useRunsQuery({
     dealerId,
     serviceId,
@@ -67,34 +73,59 @@ export function RunsListInline({ dealerId, serviceId }: Props) {
     ? data.items.find((r) => r.id === openRunId) ?? null
     : null;
 
+  const runName = (id: string) => (isSuperAdmin ? id : serviceLabel(id));
+
   return (
     <>
-      <Table>
-        <THead>
-          <TRow>
-            <TH>Service</TH>
-            <TH>Status</TH>
-            <TH>Started</TH>
-            <TH>Duration</TH>
-          </TRow>
-        </THead>
-        <TBody>
-          {data.items.map((r) => (
-            <TRow key={r.id} clickable onClick={() => setOpenRunId(r.id)}>
-              <TD className="font-medium">{r.serviceId}</TD>
-              <TD>
-                <StatusChip kind="run" value={r.status} />
-              </TD>
-              <TD className="text-text-muted">
-                {formatDateTime(r.startedAt)}
-              </TD>
-              <TD className="text-text-muted">
-                {formatDuration(r.durationMs)}
-              </TD>
+      {/* Desktop table (≥ md) */}
+      <div className="hidden md:block">
+        <Table>
+          <THead>
+            <TRow>
+              <TH>Service</TH>
+              <TH>Status</TH>
+              <TH>Started</TH>
+              <TH>Duration</TH>
             </TRow>
-          ))}
-        </TBody>
-      </Table>
+          </THead>
+          <TBody>
+            {data.items.map((r) => (
+              <TRow key={r.id} clickable onClick={() => setOpenRunId(r.id)}>
+                <TD className="font-medium">{runName(r.serviceId)}</TD>
+                <TD>
+                  <StatusChip kind="run" value={r.status} />
+                </TD>
+                <TD className="text-text-muted">
+                  {formatDateTime(r.startedAt)}
+                </TD>
+                <TD className="text-text-muted">
+                  {formatDuration(r.durationMs)}
+                </TD>
+              </TRow>
+            ))}
+          </TBody>
+        </Table>
+      </div>
+
+      {/* Mobile card-stack (< md) */}
+      <MobileCardList
+        className="p-3"
+        cards={data.items.map((r) => ({
+          key: r.id,
+          onClick: () => setOpenRunId(r.id),
+          primary: (
+            <span className="block truncate font-medium text-text">
+              {runName(r.serviceId)}
+            </span>
+          ),
+          primaryRight: <StatusChip kind="run" value={r.status} />,
+          meta: (
+            <span>
+              {formatDateTime(r.startedAt)} · {formatDuration(r.durationMs)}
+            </span>
+          ),
+        }))}
+      />
 
       <Dialog
         open={!!openRunId}
@@ -115,6 +146,12 @@ export function RunsListInline({ dealerId, serviceId }: Props) {
   );
 }
 
+/**
+ * Run detail. A plain admin sees the OUTCOME only — the report card, or a calm
+ * "in progress" / "didn't finish" / "completed" notice. Everything that
+ * describes HOW the run went (steps, raw error + stack, raw output JSON, the
+ * plugin slug, the dealer's ObjectId, diagnostic artifacts) is super-admin only.
+ */
 function RunDetail({
   runId,
   fallback,
@@ -122,6 +159,7 @@ function RunDetail({
   runId: string;
   fallback: ServiceRun | null;
 }) {
+  const isSuperAdmin = useIsSuperAdmin();
   const { data, isLoading } = useRunDetail(runId, { pollWhileRunning: true });
   const run: ServiceRunWithSteps | null =
     (data as ServiceRunWithSteps | undefined) ??
@@ -156,13 +194,26 @@ function RunDetail({
     : undefined;
 
   const isCreditDod = run.serviceId === CREDIT_DOD_SERVICE_ID;
+  // PENDING/RUNNING is not a failure — a credit-dod run legitimately has no
+  // output until it finishes, so "no output" only means failure once it's done.
+  const isInProgress = run.status === 'PENDING' || run.status === 'RUNNING';
   const isCreditDodFailure =
-    isCreditDod && (run.status === 'FAILED' || !run.output);
+    isCreditDod && !isInProgress && (run.status === 'FAILED' || !run.output);
+
+  // Deliverables carry a `reportCode`. Everything else in the bucket is
+  // internal: raw HTML captures, `fail_*` diagnostics, and the card PNG that is
+  // already rendered inline by the report card above.
+  const visibleArtifacts = isSuperAdmin
+    ? artifacts
+    : artifacts.filter((a) => !!a.reportCode);
 
   return (
     <div className="grid gap-3 text-sm">
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Service" value={run.serviceId} />
+        <Field
+          label="Service"
+          value={isSuperAdmin ? run.serviceId : serviceLabel(run.serviceId)}
+        />
         <Field
           label="Status"
           value={<StatusChip kind="run" value={run.status} />}
@@ -170,23 +221,21 @@ function RunDetail({
         <Field label="Started" value={formatDateTime(run.startedAt)} />
         <Field label="Finished" value={formatDateTime(run.finishedAt)} />
         <Field label="Duration" value={formatDuration(run.durationMs)} />
-        <Field label="Dealer" value={run.dealerId} />
+        {isSuperAdmin ? (
+          <Field label="Dealer" value={run.dealerId} />
+        ) : null}
       </div>
 
-      {steps.length > 0 ? (
+      {isSuperAdmin && steps.length > 0 ? (
         <section>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-            Steps
-          </p>
+          <SectionLabel>Steps</SectionLabel>
           <RunStepTimeline steps={steps} />
         </section>
       ) : null}
 
-      {run.error && !isCreditDodFailure ? (
+      {isSuperAdmin && run.error && !isCreditDodFailure ? (
         <section>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
-            Error
-          </p>
+          <SectionLabel>Error</SectionLabel>
           <pre className="overflow-auto rounded-md bg-surface-2 p-3 text-xs">
             {run.error.message}
             {run.error.stack ? `\n${run.error.stack}` : ''}
@@ -194,42 +243,72 @@ function RunDetail({
         </section>
       ) : null}
 
-      {isCreditDodFailure ? (
+      {isInProgress ? (
+        <RunStatusNotice
+          tone="info"
+          icon={<Spinner size={18} />}
+          title={isCreditDod ? 'Collecting from SDMS…' : 'Running…'}
+          hint={
+            isCreditDod
+              ? 'This usually takes about a minute. The report appears here as soon as it is ready.'
+              : 'The result appears here as soon as the run finishes.'
+          }
+        />
+      ) : isCreditDodFailure ? (
         <section>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-            Failure
-          </p>
+          {isSuperAdmin ? <SectionLabel>Failure</SectionLabel> : null}
           <CreditDodFailurePanel
             run={run}
             buildArtifactUrl={resolveArtifactUrl}
           />
         </section>
-      ) : (
+      ) : isCreditDod && run.output ? (
         <section>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
-            Output
-          </p>
-          {isCreditDod && run.output ? (
-            <CreditDodReportCard
-              output={run.output as unknown as CreditDodRunOutput}
-              runId={run.id}
-              cardImageUrl={cardImageUrl}
-            />
-          ) : (
-            <pre className="max-h-72 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
-              {JSON.stringify(run.output ?? null, null, 2)}
-            </pre>
-          )}
+          <SectionLabel>Report</SectionLabel>
+          <CreditDodReportCard
+            output={run.output as unknown as CreditDodRunOutput}
+            runId={run.id}
+            cardImageUrl={cardImageUrl}
+          />
         </section>
+      ) : run.status === 'FAILED' ? (
+        // Super-admins already have the raw error above; everyone else gets the
+        // plain-language version.
+        isSuperAdmin && run.error ? null : (
+          <RunStatusNotice
+            tone="danger"
+            icon={
+              <AlertTriangle width={18} height={18} strokeWidth={1.75} />
+            }
+            title="This run didn't finish."
+            hint="Please retry. If it keeps happening, contact the MDG team."
+          />
+        )
+      ) : isSuperAdmin ? (
+        <section>
+          <SectionLabel>Output</SectionLabel>
+          <pre className="max-h-72 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
+            {JSON.stringify(run.output ?? null, null, 2)}
+          </pre>
+        </section>
+      ) : (
+        <RunStatusNotice
+          tone="success"
+          icon={<CheckCircle2 width={18} height={18} strokeWidth={1.75} />}
+          title="Completed successfully."
+          hint={
+            visibleArtifacts.length > 0
+              ? 'The files produced by this run are listed below.'
+              : 'Nothing needs your attention for this run.'
+          }
+        />
       )}
 
-      {artifacts.length > 0 ? (
+      {visibleArtifacts.length > 0 ? (
         <section>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-            Artifacts
-          </p>
+          <SectionLabel>{isSuperAdmin ? 'Artifacts' : 'Downloads'}</SectionLabel>
           <ul className="grid gap-2">
-            {artifacts.map((a) => (
+            {visibleArtifacts.map((a) => (
               <li
                 key={a.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface-2 px-3 py-2"
@@ -257,6 +336,67 @@ function RunDetail({
           </ul>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+      {children}
+    </p>
+  );
+}
+
+/**
+ * A calm one-line status for admins: what happened and what (if anything) to do
+ * about it. Replaces the step timeline / raw error dump outside the super-admin
+ * view.
+ */
+function RunStatusNotice({
+  tone,
+  icon,
+  title,
+  hint,
+}: {
+  tone: 'info' | 'success' | 'danger';
+  icon: React.ReactNode;
+  title: string;
+  hint: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-3 rounded-md border p-4',
+        tone === 'danger'
+          ? 'border-danger bg-danger-soft'
+          : 'border-border bg-surface-2',
+      )}
+    >
+      <span
+        className={cn(
+          'mt-0.5 shrink-0',
+          tone === 'danger'
+            ? 'text-danger'
+            : tone === 'success'
+              ? 'text-success'
+              : 'text-info',
+        )}
+        aria-hidden
+      >
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p
+          className={cn(
+            'text-sm font-semibold',
+            tone === 'danger' ? 'text-danger' : 'text-text',
+          )}
+        >
+          {title}
+        </p>
+        <p className="mt-1 text-sm text-text-muted">{hint}</p>
+      </div>
     </div>
   );
 }

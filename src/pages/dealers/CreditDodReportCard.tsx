@@ -100,6 +100,12 @@ export function CreditDodReportCard({ output, runId, cardImageUrl }: Props) {
 
       {/* Muted metadata block. */}
       <div className="grid gap-1.5 text-xs text-text-muted">
+        {snapshot?.backdated ? (
+          <MetaRow
+            label="As of (back-dated)"
+            value={snapshot.asOf ? formatDate(snapshot.asOf) : '-'}
+          />
+        ) : null}
         <MetaRow label="Risk category" value={output.riskCategory ?? '-'} />
         <MetaRow
           label="Window"
