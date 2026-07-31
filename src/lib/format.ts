@@ -22,6 +22,28 @@ export function formatDate(iso?: string | null): string {
   });
 }
 
+/**
+ * Format a `dd-mm-yyyy` date — the format the SDMS portal and every Credit & DOD
+ * figure use. `formatDate` can't: `new Date('16-07-2026')` is Invalid Date, so it
+ * silently falls through and prints the raw string while the rest of the UI shows
+ * "Jul 16, 2026".
+ */
+export function formatDmy(dmy?: string | null): string {
+  if (!dmy) return '-';
+  const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(dmy.trim());
+  if (!m) return dmy;
+  // Build in UTC and read back in UTC so a negative local offset can't shift the
+  // calendar date by a day.
+  const d = new Date(Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1])));
+  if (Number.isNaN(d.getTime())) return dmy;
+  return d.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    timeZone: 'UTC',
+  });
+}
+
 export function formatRelativeFuture(iso?: string | null): string {
   if (!iso) return '-';
   const d = new Date(iso);

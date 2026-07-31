@@ -23,6 +23,12 @@ export interface ServiceRunArtifact {
   filename: string;
   size?: number;
   contentType?: string;
+  /**
+   * `output` = a deliverable meant to be opened; `diagnostic` = raw capture,
+   * only ever served to super-admins. Always present from the API — older rows
+   * are classified by filename server-side.
+   */
+  kind?: 'output' | 'diagnostic';
   createdAt: string;
 }
 
@@ -46,8 +52,16 @@ export interface ServiceRunWithSteps extends ServiceRun {
    * as `<img src>` / `<a href download>` WITHOUT a bearer token. Absent on
    * older runs, in which case callers fall back to the token-gated
    * `/runs/:id/artifacts/:id/download` route.
+   *
+   * These carry `Content-Disposition: attachment`, so they always SAVE. Use
+   * `artifactViewUrls` for anything that must render in place.
    */
   artifactUrls?: Record<string, string>;
+  /**
+   * Map of `artifactId` -> signed URL with an `inline` disposition, for images
+   * rendered with `<img src>`. Only images get one.
+   */
+  artifactViewUrls?: Record<string, string>;
 }
 
 export interface IrasCredentialsStatus {
@@ -80,6 +94,8 @@ export interface CreditDodRunOutput {
     availableLimit: number;
     formOfLimit: 'DOD' | 'CREDIT' | 'CASH & CARRY';
     preparedAt: string;
+    /** dd-mm-yyyy the figures describe — the anchor the card's countdown uses. */
+    preparedOn?: string;
   };
   riskCategory: string | null;
   state: 'due' | 'advance' | 'clear';
@@ -88,7 +104,19 @@ export interface CreditDodRunOutput {
   window: { fromDate: string; toDate: string };
   loginAttempts: number;
   cardKey: string;
-  rawArtifacts: { padStatementKey?: string; creditMonitoringKey?: string };
+  rawArtifacts: {
+    /** The readable, rendered PAD statement. */
+    padStatementKey?: string;
+    /** The untouched RetriveData fragment (super-admin only). */
+    padStatementRawKey?: string;
+    creditMonitoringKey?: string;
+  };
+  /** True when this run was a stateless back-dated reconstruction. */
+  backdated?: boolean;
+  /** dd-mm-yyyy the report was generated "as of" on a back-dated run. */
+  asOf?: string | null;
+  /** Ledger rows the parser had to skip — a parser-drift signal. */
+  droppedRows?: number;
   /** Number of maintained PAD transactions this run accounts for. */
   transactionCount?: number;
   /** Transactions newly appended by this run. */

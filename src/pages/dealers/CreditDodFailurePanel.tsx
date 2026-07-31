@@ -6,7 +6,15 @@ import type { ServiceRunWithSteps } from '@/types/serviceRun';
 
 interface Props {
   run: ServiceRunWithSteps;
+  /** `attachment`-flavoured URL — saves the file. */
   buildArtifactUrl: (artifactId: string) => string;
+  /**
+   * `inline`-flavoured URL, for the screenshot we RENDER and the "open full
+   * size" link. Signed download URLs now carry `Content-Disposition:
+   * attachment`, so opening one in a new tab downloads it instead of showing it.
+   * Falls back to `buildArtifactUrl` when the caller has no inline twin.
+   */
+  buildArtifactViewUrl?: (artifactId: string) => string;
 }
 
 /**
@@ -18,8 +26,13 @@ interface Props {
  * gated with them so a plain admin never sees an empty "Technical details"
  * stub.
  */
-export function CreditDodFailurePanel({ run, buildArtifactUrl }: Props) {
+export function CreditDodFailurePanel({
+  run,
+  buildArtifactUrl,
+  buildArtifactViewUrl,
+}: Props) {
   const isSuperAdmin = useIsSuperAdmin();
+  const viewUrl = buildArtifactViewUrl ?? buildArtifactUrl;
   const { phase, copy, message } = describeCreditDodFailure(run);
 
   const hint = isSuperAdmin ? copy.hint : copy.adminHint ?? copy.hint;
@@ -72,20 +85,20 @@ export function CreditDodFailurePanel({ run, buildArtifactUrl }: Props) {
             Screenshot at failure
           </p>
           <a
-            href={buildArtifactUrl(shot.id)}
+            href={viewUrl(shot.id)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-block"
           >
             <img
-              src={buildArtifactUrl(shot.id)}
+              src={viewUrl(shot.id)}
               alt="SDMS page at the point of failure"
               className="w-full rounded-md border border-border bg-surface"
               style={{ maxWidth: 480 }}
             />
           </a>
           <a
-            href={buildArtifactUrl(shot.id)}
+            href={viewUrl(shot.id)}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-info hover:underline"

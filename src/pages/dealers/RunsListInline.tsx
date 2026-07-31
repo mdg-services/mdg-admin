@@ -16,6 +16,7 @@ import {
   Dialog,
   Button,
 } from '@/components/ui';
+import { useCreditDodSnapshot } from '@/hooks/api/useCreditDod';
 import { useRunDetail } from '@/hooks/api/useRunDetail';
 import { useRunsQuery } from '@/hooks/api/useRuns';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -29,7 +30,10 @@ import type {
 import type { ServiceRun } from '@dk/shared';
 
 import { CreditDodFailurePanel } from './CreditDodFailurePanel';
-import { CreditDodReportCard } from './CreditDodReportCard';
+import {
+  CreditDodReportCard,
+  snapshotFromRunOutput,
+} from './CreditDodReportCard';
 import { RunStepTimeline } from './RunStepTimeline';
 
 const CREDIT_DOD_SERVICE_ID = 'credit-dod-monitoring';
@@ -182,15 +186,22 @@ function RunDetail({
     `${API_BASE_URL.replace(/\/$/, '')}/runs/${run.id}/artifacts/${artifactId}/download`;
 
   // Prefer the short-lived signed URL (no auth header needed); fall back to the
-  // token-gated route only when the run predates `artifactUrls`.
+  // token-gated route only when the run predates `artifactUrls`. This one carries
+  // `Content-Disposition: attachment`, so an <a download> to the bucket origin
+  // actually saves instead of navigating — the `download` attribute alone is
+  // ignored cross-origin.
   const resolveArtifactUrl = (artifactId: string) =>
     run.artifactUrls?.[artifactId] ?? buildArtifactUrl(artifactId);
+
+  // The `inline` twin, for artifacts we render in place rather than hand over.
+  const resolveArtifactViewUrl = (artifactId: string) =>
+    run.artifactViewUrls?.[artifactId] ?? resolveArtifactUrl(artifactId);
 
   const cardArtifact = artifacts.find(
     (a) => a.filename === CARD_IMAGE_FILENAME,
   );
   const cardImageUrl = cardArtifact
-    ? resolveArtifactUrl(cardArtifact.id)
+    ? resolveArtifactViewUrl(cardArtifact.id)
     : undefined;
 
   const isCreditDod = run.serviceId === CREDIT_DOD_SERVICE_ID;
@@ -200,12 +211,20 @@ function RunDetail({
   const isCreditDodFailure =
     isCreditDod && !isInProgress && (run.status === 'FAILED' || !run.output);
 
-  // Deliverables carry a `reportCode`. Everything else in the bucket is
-  // internal: raw HTML captures, `fail_*` diagnostics, and the card PNG that is
-  // already rendered inline by the report card above.
+  // A plain admin sees the run's DELIVERABLES (the API already withheld
+  // everything diagnostic). Files the report card above already offers are
+  // dropped so the same download isn't listed twice — but only when that card is
+  // actually showing them, i.e. on a credit-dod run with output. A super-admin
+  // keeps the full list: they use this dialog as the raw view of what the run
+  // wrote, and the card's own links depend on a snapshot that may not resolve.
+  const alreadyInReportCard = new Set(
+    isCreditDod && run.output ? [CARD_IMAGE_FILENAME, 'pad_statement.html'] : [],
+  );
   const visibleArtifacts = isSuperAdmin
     ? artifacts
-    : artifacts.filter((a) => !!a.reportCode);
+    : artifacts
+        .filter((a) => a.kind !== 'diagnostic')
+        .filter((a) => !alreadyInReportCard.has(a.filename));
 
   return (
     <div className="grid gap-3 text-sm">
@@ -260,14 +279,16 @@ function RunDetail({
           <CreditDodFailurePanel
             run={run}
             buildArtifactUrl={resolveArtifactUrl}
+            buildArtifactViewUrl={resolveArtifactViewUrl}
           />
         </section>
       ) : isCreditDod && run.output ? (
         <section>
           <SectionLabel>Report</SectionLabel>
-          <CreditDodReportCard
+          <CreditDodRunReport
             output={run.output as unknown as CreditDodRunOutput}
             runId={run.id}
+            dealerId={run.dealerId}
             cardImageUrl={cardImageUrl}
           />
         </section>
@@ -337,6 +358,40 @@ function RunDetail({
         </section>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The report as seen from a RUN. The card itself is snapshot-driven so it looks
+ * and behaves identically to the one in Report history; this just resolves the
+ * run's `output.snapshotId` to that snapshot, falling back to the run output
+ * while the fetch is in flight (or if the snapshot was deleted).
+ */
+function CreditDodRunReport({
+  output,
+  runId,
+  dealerId,
+  cardImageUrl,
+}: {
+  output: CreditDodRunOutput;
+  runId: string;
+  dealerId: string;
+  cardImageUrl?: string;
+}) {
+  const { data: snapshot, isPending } = useCreditDodSnapshot(output.snapshotId);
+  const resolved = snapshot ?? snapshotFromRunOutput(output, { dealerId });
+  return (
+    <CreditDodReportCard
+      snapshot={resolved}
+      runId={runId}
+      cardImageUrl={cardImageUrl}
+      // The reconstruction can't know whether this report was already shared, so
+      // suppress the action rather than risk offering "Share with dealer" on one
+      // that already went out. `isPending` distinguishes "still loading" (which
+      // resolves on its own) from "unavailable" (which does not), so the copy can
+      // tell the admin the right thing.
+      shareDisabled={snapshot ? undefined : isPending ? 'loading' : 'unavailable'}
+    />
   );
 }
 
