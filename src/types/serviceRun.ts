@@ -100,6 +100,12 @@ export interface CreditDodRunOutput {
   riskCategory: string | null;
   state: 'due' | 'advance' | 'clear';
   reconciles: boolean;
+  /** False when no cross-check figure was available, so `reconciles` proves nothing. */
+  reconcileChecked?: boolean;
+  /** The portal's own closing balance, the figure `reconciles` compared against. */
+  closingBalanceReported?: number | null;
+  /** The second cross-check: FIFO availed against SDMS's Current Total Receivable. */
+  receivableReconciles?: boolean | null;
   totalReceivableReported: number | null;
   window: { fromDate: string; toDate: string };
   loginAttempts: number;
@@ -121,6 +127,23 @@ export interface CreditDodRunOutput {
   transactionCount?: number;
   /** Transactions newly appended by this run. */
   newRows?: number;
+  /**
+   * Of those, the ones dated before what the previous report could see — the
+   * portal published them late.
+   */
+  backdatedRows?: number;
+  /** Value dates of those late transactions, `dd-mm-yyyy`, oldest first. */
+  backdatedDates?: string[];
+  /** Stored rows the portal has since withdrawn or amended. */
+  restatedRows?: number;
+  /** Rows previously retired that the portal has listed again. */
+  restoredRows?: number;
+  /** False when an unreadable or empty fetch made a row's absence unprovable. */
+  removalApplied?: boolean;
+  /** ISO time of a report already shared with the dealer that is now out of date. */
+  supersededSharedAt?: string | null;
+  /** Times the capture had to widen its window before the ledger verified. */
+  verifyWidenings?: number;
   /** Whether this run appended to an existing ledger rather than rebuilding it. */
   incremental?: boolean;
   /**

@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Download,
   FileText,
+  HelpCircle,
   Share2,
 } from 'lucide-react';
 import * as React from 'react';
@@ -62,6 +63,16 @@ export function CreditDodReportCard({
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const alreadyShared = !!snapshot.shared;
   const imageUrl = cardImageUrl ?? snapshot.artifacts.cardUrl;
+
+  // The API refuses both of these for a plain admin (400), so the dialog has to
+  // say so before the click rather than let it come back as a failed toast.
+  const shareRefusal =
+    snapshot.reconciles === false
+      ? 'The figures on this card don’t match IndianOil’s own receivable, so the due amount can’t be trusted.'
+      : snapshot.droppedRows > 0
+        ? 'Part of the portal ledger couldn’t be read for this report, so the figures may be incomplete.'
+        : null;
+  const shareBlocked = shareRefusal !== null && !isSuperAdmin;
 
   async function onConfirmShare() {
     try {
@@ -150,6 +161,8 @@ export function CreditDodReportCard({
         </Notice>
       ) : null}
 
+      <LatePostingNotices snapshot={snapshot} />
+
       {snapshot.openLots.length > 0 ? (
         <OpenLots snapshot={snapshot} />
       ) : null}
@@ -183,6 +196,7 @@ export function CreditDodReportCard({
           />
         ) : null}
         <ReconcileIndicator
+          checked={snapshot.reconcileChecked}
           reconciles={snapshot.reconciles}
           receivable={snapshot.totalReceivableReported}
         />
@@ -235,17 +249,23 @@ export function CreditDodReportCard({
             >
               Cancel
             </Button>
-            <Button onClick={onConfirmShare} loading={shareMutation.isPending}>
+            <Button
+              onClick={onConfirmShare}
+              loading={shareMutation.isPending}
+              disabled={shareBlocked}
+            >
               Share
             </Button>
           </>
         }
       >
-        {snapshot.reconciles === false ? (
+        {shareRefusal ? (
           <div className="mb-3">
-            <Notice tone="warning">
-              This card did not reconcile with SDMS&apos;s own receivable —
-              review before sharing.
+            <Notice tone="danger">
+              {shareRefusal}{' '}
+              {isSuperAdmin
+                ? 'Only a super-admin can send this. Check the source files against the figures before you do.'
+                : 'Sharing is switched off for this report. Generate it again — a fresh run usually clears it — and tell the MDG team if it keeps happening.'}
             </Notice>
           </div>
         ) : null}
@@ -316,6 +336,79 @@ function OpenLots({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
         </ul>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Read the dates out in a sentence, capped at three. A portal that posts a week
+ * late hands us a long list, and a notice too long to read is a notice an admin
+ * skips.
+ */
+function listDates(dates: string[]): string {
+  const shown = dates.slice(0, 3).map(formatDmy);
+  const rest = dates.length - shown.length;
+  if (rest > 0) shown.push(`${rest} more day${rest === 1 ? '' : 's'}`);
+  const last = shown.pop() ?? '';
+  return shown.length === 0 ? last : `${shown.join(', ')} and ${last}`;
+}
+
+/**
+ * What the portal changed under us since the last report: transactions it
+ * published after their own date, rows it has withdrawn, and — the one that
+ * needs an admin to act — a report already sent to the dealer that those late
+ * transactions have made wrong.
+ */
+function LatePostingNotices({
+  snapshot,
+}: {
+  snapshot: CreditDodSnapshotRecord;
+}) {
+  const late = snapshot.backdatedRows;
+  const restated = snapshot.restatedRows;
+  if (late === 0 && restated === 0 && !snapshot.supersededSharedAt) return null;
+
+  return (
+    <>
+      {late > 0 ? (
+        <Notice tone="warning">
+          {late === 1 ? 'A transaction' : `${late} transactions`} dated{' '}
+          {listDates(snapshot.backdatedDates)} reached the portal only now. Any
+          report made earlier for{' '}
+          {snapshot.backdatedDates.length === 1 ? 'that day' : 'those days'} was
+          worked out without {late === 1 ? 'it' : 'them'} — this one includes{' '}
+          {late === 1 ? 'it' : 'them'}.
+        </Notice>
+      ) : null}
+
+      {snapshot.supersededSharedAt ? (
+        <Notice tone="danger">
+          A report was already shared with this dealer on{' '}
+          {formatDateTime(snapshot.supersededSharedAt)}, and its due amount is
+          now out of date. A chat message can&apos;t be edited or taken back, so
+          share this newer report to correct it.
+        </Notice>
+      ) : null}
+
+      {restated > 0 ? (
+        <Notice tone="warning">
+          {restated === 1
+            ? 'A transaction recorded earlier has'
+            : `${restated} transactions recorded earlier have`}{' '}
+          since been changed or withdrawn by the portal, so{' '}
+          {restated === 1 ? 'it is' : 'they are'} no longer counted in the
+          figures above.
+        </Notice>
+      ) : null}
+
+      {snapshot.removalApplied === false ? (
+        <Notice tone="warning">
+          The portal&apos;s reply for this period was incomplete, so no
+          transaction was removed from the records — only new ones were added.
+          Nothing is lost, but generate the report again to be sure the figures
+          are current.
+        </Notice>
+      ) : null}
+    </>
   );
 }
 
@@ -402,13 +495,15 @@ function Notice({
   tone,
   children,
 }: {
-  tone: 'warning' | 'info';
+  tone: 'warning' | 'info' | 'danger';
   children: React.ReactNode;
 }) {
   const cls =
-    tone === 'warning'
-      ? 'border-warning bg-warning-soft text-warning'
-      : 'border-info bg-info-soft text-info';
+    tone === 'danger'
+      ? 'border-danger bg-danger-soft text-danger'
+      : tone === 'warning'
+        ? 'border-warning bg-warning-soft text-warning'
+        : 'border-info bg-info-soft text-info';
   return (
     <div
       className={`flex items-start gap-2 rounded-md border p-2.5 text-xs font-medium ${cls}`}
@@ -452,14 +547,26 @@ function MetaRow({
 }
 
 function ReconcileIndicator({
+  checked,
   reconciles,
   receivable,
 }: {
+  checked: boolean;
   reconciles: boolean;
   receivable: number | null;
 }) {
   const receivableText =
     receivable === null ? 'not reported' : inrFormat(receivable);
+  // Nothing to compare against is not the same as agreement — saying
+  // "Reconciles" here would promise a check that never happened.
+  if (!checked) {
+    return (
+      <p className="mt-0.5 flex items-center gap-1.5 font-medium text-warning">
+        <HelpCircle width={14} height={14} strokeWidth={1.75} />
+        Not cross-checked (SDMS gave no figure to compare against)
+      </p>
+    );
+  }
   return (
     <p
       className={
@@ -511,9 +618,20 @@ export function snapshotFromRunOutput(
     state: output.state,
     formOfLimit: output.card.formOfLimit,
     reconciles: output.reconciles,
+    // Runs from before the flag existed WERE checked, so defaulting to true
+    // keeps their badge honest instead of marking every old report unverified.
+    reconcileChecked: output.reconcileChecked ?? true,
+    closingBalanceReported: output.closingBalanceReported ?? null,
     openingCarriedForward: output.openingCarriedForward === true,
     transactionCount: output.transactionCount ?? null,
     droppedRows: output.droppedRows ?? 0,
+    backdatedRows: output.backdatedRows ?? 0,
+    backdatedDates: output.backdatedDates ?? [],
+    restatedRows: output.restatedRows ?? 0,
+    restoredRows: output.restoredRows ?? 0,
+    // Runs from before the flag existed always applied removal.
+    removalApplied: output.removalApplied ?? true,
+    supersededSharedAt: output.supersededSharedAt ?? null,
     preparedAt: output.card.preparedAt,
     openLots: [],
     artifacts: {},

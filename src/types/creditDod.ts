@@ -80,6 +80,13 @@ export interface CreditDodSnapshotRecord {
   formOfLimit: string;
   reconciles: boolean;
   /**
+   * False when neither cross-check figure was available, so `reconciles` was
+   * never actually verified — it must not be shown as agreement.
+   */
+  reconcileChecked: boolean;
+  /** The portal's own closing balance, the figure `reconciles` compared against. */
+  closingBalanceReported: number | null;
+  /**
    * True when the look-back never reached a balance reset, so the DUE DATE is a
    * latest-possible estimate rather than a fact.
    */
@@ -88,6 +95,28 @@ export interface CreditDodSnapshotRecord {
   transactionCount: number | null;
   /** Ledger rows the parser had to skip — a parser-drift signal. */
   droppedRows: number;
+  /**
+   * Transactions this run found that the portal published after their own value
+   * date — i.e. after an earlier report for those days had been worked out.
+   */
+  backdatedRows: number;
+  /** Value dates of those late transactions, `dd-mm-yyyy`, oldest first. */
+  backdatedDates: string[];
+  /** Rows the portal has since withdrawn or amended, retired by this run. */
+  restatedRows: number;
+  /** Rows previously retired that the portal has listed again — a self-repair. */
+  restoredRows: number;
+  /**
+   * False when the portal's response was too incomplete to prove a transaction
+   * had been withdrawn, so this run deliberately changed nothing. Distinguishes
+   * "nothing changed" from "we did not trust the response enough to act".
+   */
+  removalApplied: boolean;
+  /**
+   * When set, a report already sent to the dealer at this time was worked out
+   * without the late transactions above, so the dealer is holding stale figures.
+   */
+  supersededSharedAt: string | null;
   preparedAt: string;
   openLots: CreditDodOpenLot[];
   artifacts: CreditDodSnapshotArtifacts;

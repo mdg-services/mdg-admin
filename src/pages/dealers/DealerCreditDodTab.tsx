@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  HelpCircle,
   History,
   ReceiptText,
   RefreshCw,
@@ -38,7 +39,7 @@ import { useDealerServicesQuery, useRunNow } from '@/hooks/api/useDealerServices
 import { api, ApiError } from '@/lib/api';
 import { formatDateTime, formatDmy, inrFormat } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
-import type { CreditDodQuota } from '@/types/creditDod';
+import type { CreditDodQuota, CreditDodSnapshotRecord } from '@/types/creditDod';
 import type { Dealer, ServiceRun } from '@dk/shared';
 
 import { CreditDodHelpCta } from './CreditDodHelpCta';
@@ -463,6 +464,40 @@ function LedgerCard({ dealerId }: { dealerId: string }) {
 }
 
 /**
+ * Marks a report whose sums the portal changed after the fact: transactions it
+ * published late, or — worse — a report already sent to the dealer that those
+ * transactions have made wrong. Scanning history should show which reports were
+ * revised without opening every one.
+ */
+function LateEntriesBadge({
+  snapshot,
+  className,
+}: {
+  snapshot: CreditDodSnapshotRecord;
+  className?: string;
+}) {
+  const { backdatedRows, supersededSharedAt } = snapshot;
+  if (!supersededSharedAt && backdatedRows === 0) return null;
+  return (
+    <Badge
+      className={className}
+      intent={supersededSharedAt ? 'warning' : 'neutral'}
+      title={
+        supersededSharedAt
+          ? `The report shared on ${formatDateTime(
+              supersededSharedAt,
+            )} was worked out without transactions the portal published later.`
+          : `Includes ${backdatedRows} transaction${
+              backdatedRows === 1 ? '' : 's'
+            } the portal published after their own date.`
+      }
+    >
+      Late entries
+    </Badge>
+  );
+}
+
+/**
  * The sheet. Expanding a row shows the full report — card image, figures, source
  * files and the Share action — so an admin never has to hunt through Run history
  * to send a dealer their card.
@@ -570,6 +605,7 @@ function SnapshotHistoryCard({ dealerId }: { dealerId: string }) {
                                   As of {s.asOf ? formatDmy(s.asOf) : '—'}
                                 </Badge>
                               ) : null}
+                              <LateEntriesBadge snapshot={s} />
                             </div>
                           </TD>
                           <TD className="whitespace-nowrap text-right font-medium tabular-nums">
@@ -584,7 +620,18 @@ function SnapshotHistoryCard({ dealerId }: { dealerId: string }) {
                             </Badge>
                           </TD>
                           <TD>
-                            {s.reconciles ? (
+                            {!s.reconcileChecked ? (
+                              // Same rule as the report card: with nothing to
+                              // compare against, a green tick would claim a
+                              // check that never ran.
+                              <HelpCircle
+                                width={16}
+                                height={16}
+                                strokeWidth={1.75}
+                                className="text-warning"
+                                aria-label="Not cross-checked"
+                              />
+                            ) : s.reconciles ? (
                               <CheckCircle2
                                 width={16}
                                 height={16}
@@ -658,6 +705,7 @@ function SnapshotHistoryCard({ dealerId }: { dealerId: string }) {
                             ? ` · as of ${formatDmy(s.asOf)}`
                             : ''}
                         </span>
+                        <LateEntriesBadge snapshot={s} className="mt-1.5" />
                       </span>
                       <span className="flex shrink-0 items-center gap-1.5">
                         {s.shared ? (
