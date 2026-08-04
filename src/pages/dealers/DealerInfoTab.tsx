@@ -163,9 +163,17 @@ export function DealerInfoTab({ dealer }: Props) {
         </Card>
       </div>
 
-      <PortalCredentialsSection dealerId={dealer.id} />
+      {/* Hidden for an archived dealer: the status endpoints 404, so these would
+          render as an empty "no credentials set" form offering a write the
+          backend will refuse. The stored credentials are untouched and come back
+          on restore. */}
+      {dealer.archivedAt ? null : (
+        <>
+          <PortalCredentialsSection dealerId={dealer.id} />
 
-      <SdmsCredentialsSection dealerId={dealer.id} />
+          <SdmsCredentialsSection dealerId={dealer.id} />
+        </>
+      )}
 
       {isSuperAdmin ? <DealerDangerZone dealer={dealer} /> : null}
 

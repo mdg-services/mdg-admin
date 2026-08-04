@@ -154,7 +154,7 @@ export function DealersPage() {
             <label className="flex shrink-0 items-center gap-2 text-sm text-text-muted">
               <input
                 type="checkbox"
-                className="h-4 w-4 accent-[--color-primary]"
+                className="h-4 w-4 rounded border-border-strong accent-brand"
                 checked={showArchived}
                 onChange={(e) => setShowArchived(e.target.checked)}
               />

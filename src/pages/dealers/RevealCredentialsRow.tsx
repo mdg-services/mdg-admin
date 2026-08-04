@@ -10,27 +10,49 @@ interface Props {
   portalLabel: string;
   /** Fires the audited, rate-limited reveal. Resolves with the plaintext. */
   onReveal: () => Promise<RevealedPortalCredentials>;
+  /**
+   * Clears the underlying mutation's cached result. Required, not optional:
+   * TanStack Query keeps `mutation.data` after the call settles, so without this
+   * the plaintext would outlive Hide inside the MutationCache even though the
+   * component's own state is gone.
+   */
+  onForget: () => void;
   pending?: boolean;
 }
 
 /**
  * Super-admin control that reveals a dealer's stored portal ID and password.
  *
- * The plaintext lives in local component state only — never in the query cache —
- * and is cleared on hide and on unmount, so navigating away or switching tabs
- * does not leave it sitting in memory behind a collapsed panel.
+ * The plaintext is held in local component state, and BOTH copies are dropped on
+ * Hide and on unmount: the component's own state, and the mutation's cached
+ * result via `onForget`. Local state dies with the component on its own, but the
+ * MutationCache outlives it — so navigating away without the reset would leave
+ * the password sitting in memory behind a closed page.
  *
  * Every reveal is a fresh round-trip rather than a cached value, because each one
  * writes an audit row server-side. Re-showing after hiding therefore re-fetches
  * and re-audits, which is the intended behaviour.
  */
-export function RevealCredentialsRow({ portalLabel, onReveal, pending }: Props) {
+export function RevealCredentialsRow({
+  portalLabel,
+  onReveal,
+  onForget,
+  pending,
+}: Props) {
   const toast = useToast();
   const [creds, setCreds] = React.useState<RevealedPortalCredentials | null>(null);
   const [busy, setBusy] = React.useState(false);
 
-  // Belt-and-braces: drop the plaintext if this section unmounts while shown.
-  React.useEffect(() => () => setCreds(null), []);
+  // Keep the latest reset in a ref so the unmount cleanup does not re-run (and
+  // wipe a live reveal) every time the parent re-renders with a new closure.
+  const forgetRef = React.useRef(onForget);
+  forgetRef.current = onForget;
+  React.useEffect(() => () => forgetRef.current(), []);
+
+  function hide() {
+    setCreds(null);
+    onForget();
+  }
 
   async function show() {
     setBusy(true);
@@ -88,7 +110,7 @@ export function RevealCredentialsRow({ portalLabel, onReveal, pending }: Props) 
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setCreds(null)}
+          onClick={hide}
           leftIcon={<EyeOff width={14} height={14} strokeWidth={1.75} />}
         >
           Hide

@@ -232,6 +232,7 @@ export function SdmsCredentialsSection({ dealerId }: Props) {
                     portalLabel="SDMS"
                     pending={revealMutation.isPending}
                     onReveal={() => revealMutation.mutateAsync()}
+                    onForget={() => revealMutation.reset()}
                   />
                 </div>
               ) : null}

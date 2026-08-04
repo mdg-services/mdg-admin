@@ -1,9 +1,17 @@
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Archive } from 'lucide-react';
 import * as React from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Badge, EmptyState, Skeleton, StatusChip, Tabs } from '@/components/ui';
+import {
+  Badge,
+  Card,
+  CardContent,
+  EmptyState,
+  Skeleton,
+  StatusChip,
+  Tabs,
+} from '@/components/ui';
 import { useDealerQuery } from '@/hooks/api/useDealers';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 
@@ -89,8 +97,15 @@ export function DealerDetailPage() {
   if (dealer.phone) subtitleParts.push(dealer.phone);
   if (dealer.pumpLocation?.address) subtitleParts.push(dealer.pumpLocation.address);
 
-  const activeTab = tab ?? 'onboarding';
-  const visibleTabs = TABS.filter((t) => !t.superAdminOnly || isSuperAdmin);
+  // An archived dealer is read-only: every mutating endpoint 409s or 404s, and its
+  // credential/onboarding sub-resources 404 outright, which would render the other
+  // tabs as dead or, worse, as empty "not set up yet" states. Collapse to Info,
+  // which is where Restore lives.
+  const isArchived = !!dealer.archivedAt;
+  const activeTab = isArchived ? 'info' : (tab ?? 'onboarding');
+  const visibleTabs = isArchived
+    ? TABS.filter((t) => t.id === 'info')
+    : TABS.filter((t) => !t.superAdminOnly || isSuperAdmin);
 
   return (
     <div>
@@ -111,6 +126,25 @@ export function DealerDetailPage() {
       {/* Sticky (mobile) so the tab strip stays reachable while a long tab body
           scrolls; static at ≥ md (desktop unchanged). The right-edge fade hints
           that the strip scrolls to more tabs. */}
+      {isArchived ? (
+        <Card className="mb-4 border-danger/40 bg-danger-soft/40">
+          <CardContent className="flex items-start gap-3">
+            <Archive
+              width={18}
+              height={18}
+              strokeWidth={1.75}
+              className="mt-0.5 shrink-0 text-danger"
+            />
+            <div>
+              <p className="text-sm font-semibold text-text">This dealer is deleted</p>
+              <p className="text-sm text-text-muted">
+                Its services are paused and its team cannot sign in. Nothing was
+                destroyed — restore it below to make changes again.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
       <div className="sticky top-0 z-10 -mx-4 mb-4 bg-bg px-4 md:static md:z-auto md:mx-0 md:bg-transparent md:px-0">
         <div className="relative">
           <Tabs items={visibleTabs} value={activeTab} onChange={setTab} />

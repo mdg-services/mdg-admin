@@ -188,6 +188,7 @@ export function PortalCredentialsSection({ dealerId }: Props) {
                     portalLabel="IRAS"
                     pending={revealMutation.isPending}
                     onReveal={() => revealMutation.mutateAsync()}
+                    onForget={() => revealMutation.reset()}
                   />
                 </div>
               ) : null}
