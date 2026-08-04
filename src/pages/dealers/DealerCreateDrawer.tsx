@@ -35,7 +35,7 @@ export function DealerCreateDrawer({ open, onClose, loading, onSubmit }: Props) 
         reset();
       }}
       title="Add dealer"
-      description="Start onboarding by capturing the dealer's phone number. The rest of the journey is tracked step by step."
+      description="Open the dealer record now and fill in the details as the onboarding journey progresses. The phone number can be added later."
       footer={
         <>
           <Button
@@ -55,14 +55,16 @@ export function DealerCreateDrawer({ open, onClose, loading, onSubmit }: Props) 
     >
       <form onSubmit={submit} noValidate className="grid gap-4">
         <div>
-          <Label htmlFor="phone" required>
-            Phone number
-          </Label>
+          <Label htmlFor="phone">Phone number (optional)</Label>
           <Input
             id="phone"
             placeholder="+91 90000 00000"
             invalid={!!errors.phone}
-            {...register('phone')}
+            // An untouched input posts ''. The shared schema already coerces a
+            // blank to undefined; this keeps the payload clean at the source too.
+            {...register('phone', {
+              setValueAs: (v) => (typeof v === 'string' ? v.trim() || undefined : v),
+            })}
           />
           <FieldError message={errors.phone?.message} />
         </div>

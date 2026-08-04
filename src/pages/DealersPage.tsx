@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
+  Badge,
   Button,
   Card,
   CardContent,
@@ -23,7 +24,9 @@ import {
   useToast,
 } from '@/components/ui';
 import { useCreateDealer, useDealersQuery } from '@/hooks/api/useDealers';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { ApiError } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import { formatDate } from '@/lib/format';
 import type { DealerStatus } from '@dk/shared';
 
@@ -46,9 +49,13 @@ export function DealersPage() {
   const [search, setSearch] = useSearchParams();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
 
+  const isSuperAdmin = useIsSuperAdmin();
   const searchTerm = search.get('q') ?? '';
   const status = (search.get('status') as DealerStatus | null) ?? undefined;
   const page = Number(search.get('page') ?? '1');
+  // Held in the URL rather than component state because the list is
+  // server-paginated: the flag has to reach the query, not filter the page.
+  const showArchived = isSuperAdmin && search.get('archived') === '1';
 
   const [searchInput, setSearchInput] = React.useState(searchTerm);
 
@@ -72,6 +79,7 @@ export function DealersPage() {
     page,
     pageSize: PAGE_SIZE,
     sort: 'createdAt:desc',
+    includeArchived: showArchived,
   });
 
   const createDealer = useCreateDealer();
@@ -80,6 +88,14 @@ export function DealersPage() {
     const params = new URLSearchParams(search);
     if (next) params.set('status', next);
     else params.delete('status');
+    params.delete('page');
+    setSearch(params, { replace: true });
+  }
+
+  function setShowArchived(next: boolean) {
+    const params = new URLSearchParams(search);
+    if (next) params.set('archived', '1');
+    else params.delete('archived');
     params.delete('page');
     setSearch(params, { replace: true });
   }
@@ -134,6 +150,17 @@ export function DealersPage() {
               ))}
             </Select>
           </div>
+          {isSuperAdmin ? (
+            <label className="flex shrink-0 items-center gap-2 text-sm text-text-muted">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[--color-primary]"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+              Show deleted
+            </label>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -182,12 +209,20 @@ export function DealersPage() {
                         key={d.id}
                         clickable
                         onClick={() => navigate(`/dealers/${d.id}`)}
+                        className={d.archivedAt ? 'opacity-60' : undefined}
                       >
-                        <TD className="font-medium">{d.name ?? '—'}</TD>
+                        <TD className="font-medium">
+                          {d.name ?? '—'}
+                          {d.archivedAt ? (
+                            <Badge intent="danger" className="ml-2">
+                              Deleted
+                            </Badge>
+                          ) : null}
+                        </TD>
                         <TD className="font-mono text-text-muted">
                           {d.code ?? '—'}
                         </TD>
-                        <TD className="text-text-muted">{d.phone}</TD>
+                        <TD className="text-text-muted">{d.phone ?? '—'}</TD>
                         <TD>
                           <StatusChip kind="dealer" value={d.status} />
                         </TD>
@@ -210,16 +245,25 @@ export function DealersPage() {
                   key: d.id,
                   onClick: () => navigate(`/dealers/${d.id}`),
                   primary: (
-                    <span className="block truncate font-medium text-text">
+                    <span
+                      className={cn(
+                        'block truncate font-medium text-text',
+                        d.archivedAt && 'opacity-60',
+                      )}
+                    >
                       {d.name ?? '—'}
                     </span>
                   ),
-                  primaryRight: <StatusChip kind="dealer" value={d.status} />,
+                  primaryRight: d.archivedAt ? (
+                    <Badge intent="danger">Deleted</Badge>
+                  ) : (
+                    <StatusChip kind="dealer" value={d.status} />
+                  ),
                   secondary: (
                     <span className="truncate">
                       <span className="font-mono">{d.code ?? '—'}</span>
                       {' · '}
-                      {d.phone}
+                      {d.phone ?? '—'}
                     </span>
                   ),
                   meta: (

@@ -11,9 +11,11 @@ import {
   StatusChip,
 } from '@/components/ui';
 import { useDealerAuditQuery } from '@/hooks/api/useDealerAudit';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { formatDate, formatDateTime } from '@/lib/format';
 import type { Dealer } from '@dk/shared';
 
+import { DealerDangerZone } from './DealerDangerZone';
 import { PortalCredentialsSection } from './PortalCredentialsSection';
 import { SdmsCredentialsSection } from './SdmsCredentialsSection';
 
@@ -22,9 +24,10 @@ interface Props {
 }
 
 export function DealerInfoTab({ dealer }: Props) {
+  const isSuperAdmin = useIsSuperAdmin();
   return (
     <div className="grid gap-4">
-      {dealer.status === 'ONBOARDING' ? (
+      {dealer.status === 'ONBOARDING' && !dealer.archivedAt ? (
         <Card>
           <CardContent className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -68,7 +71,7 @@ export function DealerInfoTab({ dealer }: Props) {
                   )
                 }
               />
-              <Row label="Phone" value={dealer.phone} />
+              <Row label="Phone" value={dealer.phone ?? 'Not collected yet'} />
               <Row
                 label="Status"
                 value={<StatusChip kind="dealer" value={dealer.status} />}
@@ -163,6 +166,8 @@ export function DealerInfoTab({ dealer }: Props) {
       <PortalCredentialsSection dealerId={dealer.id} />
 
       <SdmsCredentialsSection dealerId={dealer.id} />
+
+      {isSuperAdmin ? <DealerDangerZone dealer={dealer} /> : null}
 
       <AuditAccordion dealerId={dealer.id} />
     </div>

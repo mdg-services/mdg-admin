@@ -983,7 +983,7 @@ export function InboxPage() {
                           </div>
                           <div>
                             <p className="text-xs text-text-subtle">Phone</p>
-                            <p className="text-text">{dealerQ.data.phone}</p>
+                            <p className="text-text">{dealerQ.data.phone ?? '-'}</p>
                           </div>
                           <div>
                             <p className="text-xs text-text-subtle">Status</p>

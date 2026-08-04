@@ -260,8 +260,7 @@ function StepForm({
 }) {
   switch (stepId) {
     case 'collect-phone':
-      // Created with the dealer; this step is never the current step after creation.
-      return null;
+      return <CollectPhoneForm dealerId={dealerId} dealer={dealer} />;
     case 'send-welcome':
     case 'send-terms-link':
     case 'send-pdf':
@@ -445,6 +444,87 @@ function PaymentAndGstForm({ dealerId }: { dealerId: string }) {
       <div className="md:col-span-2 flex justify-end">
         <Button type="submit" loading={mutate.isPending}>
           Mark done
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ----- Collect phone ---------------------------------------------------------
+
+/**
+ * Captures the dealer's phone number.
+ *
+ * Reachable whenever the dealer was created WITHOUT a phone: creation only
+ * auto-completes this step when a number was supplied, so otherwise it stays the
+ * current step and is completed here. (It is also reachable after a reopen.)
+ */
+function CollectPhoneForm({
+  dealerId,
+  dealer,
+}: {
+  dealerId: string;
+  dealer: Dealer;
+}) {
+  const toast = useToast();
+  const mutate = useStepCompleteMutation(dealerId);
+  const schema = STEP_PAYLOAD_SCHEMAS['collect-phone'];
+  type Form = { phone: string; name?: string; note?: string };
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+  } = useForm<Form>({
+    resolver: zodResolver(schema),
+    defaultValues: { phone: dealer.phone ?? '', name: dealer.name ?? '', note: '' },
+  });
+
+  const submit = handleSubmit(async (values) => {
+    try {
+      await mutate.mutateAsync({ stepId: 'collect-phone', payload: values });
+      toast.success('Phone number saved.');
+      reset({ phone: values.phone, name: values.name, note: '' });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  });
+
+  return (
+    <form onSubmit={submit} className="grid gap-3">
+      <div>
+        <Label htmlFor="collect-phone" required>
+          Phone number
+        </Label>
+        <Input
+          id="collect-phone"
+          placeholder="+91 90000 00000"
+          invalid={!!errors.phone}
+          {...register('phone')}
+        />
+        <FieldError message={errors.phone?.message} />
+        <p className="mt-1 text-xs text-text-subtle">
+          This is how the dealer is reached for the rest of the journey. It must
+          not already belong to another dealer.
+        </p>
+      </div>
+      <div>
+        <Label htmlFor="collect-phone-name">Working name (optional)</Label>
+        <Input
+          id="collect-phone-name"
+          placeholder="e.g. Sunrise Petroleum"
+          invalid={!!errors.name}
+          {...register('name')}
+        />
+        <FieldError message={errors.name?.message} />
+      </div>
+      <div>
+        <Label htmlFor="collect-phone-note">Internal note (optional)</Label>
+        <Textarea id="collect-phone-note" rows={2} {...register('note')} />
+      </div>
+      <div className="flex justify-end">
+        <Button type="submit" loading={mutate.isPending}>
+          Save phone number
         </Button>
       </div>
     </form>

@@ -11,6 +11,12 @@ export interface DealerListParams {
   page?: number;
   pageSize?: number;
   sort?: string;
+  /**
+   * Surface archived (soft-deleted) dealers too. Server-side, not a client
+   * filter — this list is paginated, so hiding rows locally would leave holes in
+   * the page and a wrong total. The backend honours it for super-admins only.
+   */
+  includeArchived?: boolean;
 }
 
 export function useDealersQuery(params: DealerListParams) {
@@ -23,6 +29,7 @@ export function useDealersQuery(params: DealerListParams) {
         page: params.page,
         pageSize: params.pageSize,
         sort: params.sort,
+        includeArchived: params.includeArchived ? true : undefined,
       }),
     placeholderData: (prev) => prev,
   });
@@ -66,13 +73,44 @@ export function useUpdateDealer() {
   });
 }
 
-export function useDeleteDealer() {
+/**
+ * Archiving or restoring a dealer moves it in and out of the roster, changes the
+ * overview tiles, pauses its service attachments and gates its members' logins —
+ * so refresh everything keyed on it rather than just the list.
+ */
+function invalidateAfterDealerLifecycle(
+  qc: ReturnType<typeof useQueryClient>,
+  dealer: Dealer,
+) {
+  qc.setQueryData(['dealer', dealer.id], dealer);
+  qc.invalidateQueries({ queryKey: ['dealers'] });
+  qc.invalidateQueries({ queryKey: ['dealerAudit', dealer.id] });
+  qc.invalidateQueries({ queryKey: ['dealerServices', dealer.id] });
+  qc.invalidateQueries({ queryKey: ['overview'] });
+  qc.invalidateQueries({ queryKey: ['super-admin', 'users'] });
+}
+
+/**
+ * Archive (soft-delete) a dealer: super-admin only, reversible, and it returns
+ * the updated dealer rather than just an id so the detail page can re-render
+ * from the response.
+ */
+export function useArchiveDealer() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.del<{ id: string }>(`/dealers/${id}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['dealers'] });
-      qc.invalidateQueries({ queryKey: ['overview'] });
-    },
+    mutationFn: (id: string) => api.del<Dealer>(`/dealers/${id}`),
+    onSuccess: (data) => invalidateAfterDealerLifecycle(qc, data),
+  });
+}
+
+/**
+ * Restore an archived dealer. Status stays SUSPENDED and its services stay
+ * PAUSED — restoring never silently resumes automation.
+ */
+export function useRestoreDealer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<Dealer>(`/dealers/${id}/restore`),
+    onSuccess: (data) => invalidateAfterDealerLifecycle(qc, data),
   });
 }

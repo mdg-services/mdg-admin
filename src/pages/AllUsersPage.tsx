@@ -222,7 +222,14 @@ function GroupCard({
             <p className="font-mono text-xs text-text-subtle">{group.dealer!.code}</p>
           ) : null}
         </div>
-        {isAdmins ? null : <DealerStatusBadge status={group.dealer!.status} />}
+        {/* An archived dealer's members stay listed and actionable — the group is
+            labelled instead, so it is not confused with the 'Unknown dealer'
+            orphan case (which means the dealer record itself is gone). */}
+        {isAdmins ? null : group.dealer!.archivedAt ? (
+          <Badge intent="danger">Dealer deleted</Badge>
+        ) : (
+          <DealerStatusBadge status={group.dealer!.status} />
+        )}
         <Badge intent="neutral" className="ml-1">
           {liveCount}
         </Badge>

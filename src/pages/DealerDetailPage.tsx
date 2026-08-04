@@ -3,7 +3,7 @@ import * as React from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
-import { EmptyState, Skeleton, StatusChip, Tabs } from '@/components/ui';
+import { Badge, EmptyState, Skeleton, StatusChip, Tabs } from '@/components/ui';
 import { useDealerQuery } from '@/hooks/api/useDealers';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 
@@ -84,7 +84,9 @@ export function DealerDetailPage() {
 
   const subtitleParts: string[] = [];
   if (dealer.code) subtitleParts.push(dealer.code);
-  subtitleParts.push(dealer.phone);
+  // Phone is optional now; pushing it unconditionally rendered a dangling
+  // "E01 · " when it was absent.
+  if (dealer.phone) subtitleParts.push(dealer.phone);
   if (dealer.pumpLocation?.address) subtitleParts.push(dealer.pumpLocation.address);
 
   const activeTab = tab ?? 'onboarding';
@@ -95,11 +97,16 @@ export function DealerDetailPage() {
       <PageHeader
         breadcrumbs={[
           { label: 'Dealers', to: '/dealers' },
-          { label: dealer.name ?? dealer.phone },
+          { label: dealer.name ?? dealer.phone ?? dealer.code ?? 'Dealer' },
         ]}
         title={dealer.name ?? 'Unnamed dealer'}
         subtitle={subtitleParts.join(' · ')}
-        actions={<StatusChip kind="dealer" value={dealer.status} />}
+        actions={
+          <div className="flex items-center gap-2">
+            {dealer.archivedAt ? <Badge intent="danger">Deleted</Badge> : null}
+            <StatusChip kind="dealer" value={dealer.status} />
+          </div>
+        }
       />
       {/* Sticky (mobile) so the tab strip stays reachable while a long tab body
           scrolls; static at ≥ md (desktop unchanged). The right-edge fade hints
