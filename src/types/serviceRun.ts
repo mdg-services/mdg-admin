@@ -80,6 +80,18 @@ export interface SdmsCredentialsStatus {
 }
 
 /**
+ * Response of the super-admin-only credential reveal. Carries the decrypted
+ * password, so never persist it in the query cache — the reveal hooks are
+ * mutations for exactly that reason.
+ */
+export interface RevealedPortalCredentials {
+  username: string;
+  password: string;
+  dealerType?: SdmsDealerType;
+  setAt?: string;
+}
+
+/**
  * Shape of `run.output` for the `credit-dod-monitoring` service. Mirrors the
  * backend contract; cast `run.output` to this in the run-detail view.
  */

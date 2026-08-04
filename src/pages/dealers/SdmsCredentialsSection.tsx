@@ -20,12 +20,16 @@ import {
 } from '@/components/ui';
 import {
   useClearSdmsCredentials,
+  useRevealSdmsCredentials,
   useSdmsCredentialsStatus,
   useSetSdmsCredentials,
 } from '@/hooks/api/useSdmsCredentials';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import type { SdmsDealerType } from '@/types/serviceRun';
+
+import { RevealCredentialsRow } from './RevealCredentialsRow';
 
 interface Props {
   dealerId: string;
@@ -56,6 +60,8 @@ export function SdmsCredentialsSection({ dealerId }: Props) {
   const { data: status, isLoading } = useSdmsCredentialsStatus(dealerId);
   const setMutation = useSetSdmsCredentials(dealerId);
   const clearMutation = useClearSdmsCredentials(dealerId);
+  const revealMutation = useRevealSdmsCredentials(dealerId);
+  const isSuperAdmin = useIsSuperAdmin();
 
   const [editing, setEditing] = React.useState(false);
 
@@ -108,8 +114,8 @@ export function SdmsCredentialsSection({ dealerId }: Props) {
           <CardTitle>IndianOil SDMS (Credit &amp; DOD)</CardTitle>
           <CardSubtitle>
             Used by the Credit &amp; DOD monitoring service to sign into the
-            dealer&apos;s IndianOil SDMS portal. Stored encrypted; never returned
-            to the UI.
+            dealer&apos;s IndianOil SDMS portal. Stored encrypted. Super-admins can
+            reveal the ID and password below; every reveal is logged.
           </CardSubtitle>
         </div>
         <KeyRound
@@ -220,6 +226,15 @@ export function SdmsCredentialsSection({ dealerId }: Props) {
                   <dd className="text-text">{formatDateTime(status?.setAt)}</dd>
                 </div>
               </dl>
+              {isSuperAdmin ? (
+                <div className="mt-3">
+                  <RevealCredentialsRow
+                    portalLabel="SDMS"
+                    pending={revealMutation.isPending}
+                    onReveal={() => revealMutation.mutateAsync()}
+                  />
+                </div>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               <Button

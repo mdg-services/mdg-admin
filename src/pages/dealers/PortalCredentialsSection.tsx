@@ -20,10 +20,14 @@ import {
 import {
   useClearIrasCredentials,
   useIrasCredentialsStatus,
+  useRevealIrasCredentials,
   useSetIrasCredentials,
 } from '@/hooks/api/useIrasCredentials';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
+
+import { RevealCredentialsRow } from './RevealCredentialsRow';
 
 interface Props {
   dealerId: string;
@@ -41,6 +45,8 @@ export function PortalCredentialsSection({ dealerId }: Props) {
   const { data: status, isLoading } = useIrasCredentialsStatus(dealerId);
   const setMutation = useSetIrasCredentials(dealerId);
   const clearMutation = useClearIrasCredentials(dealerId);
+  const revealMutation = useRevealIrasCredentials(dealerId);
+  const isSuperAdmin = useIsSuperAdmin();
 
   const [editing, setEditing] = React.useState(false);
 
@@ -89,7 +95,8 @@ export function PortalCredentialsSection({ dealerId }: Props) {
           <CardTitle>IRAS portal credentials</CardTitle>
           <CardSubtitle>
             Used by the browser-automation service to sign into the dealer&apos;s
-            IRAS portal. Stored encrypted; never returned to the UI.
+            IRAS portal. Stored encrypted. Super-admins can reveal the ID and
+            password below; every reveal is logged.
           </CardSubtitle>
         </div>
         <KeyRound
@@ -175,6 +182,15 @@ export function PortalCredentialsSection({ dealerId }: Props) {
                   <dd className="text-text">{formatDateTime(status?.setAt)}</dd>
                 </div>
               </dl>
+              {isSuperAdmin ? (
+                <div className="mt-3">
+                  <RevealCredentialsRow
+                    portalLabel="IRAS"
+                    pending={revealMutation.isPending}
+                    onReveal={() => revealMutation.mutateAsync()}
+                  />
+                </div>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               <Button

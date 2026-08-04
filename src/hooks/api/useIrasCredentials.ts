@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { IrasCredentialsStatus } from '@/types/serviceRun';
+import type {
+  IrasCredentialsStatus,
+  RevealedPortalCredentials,
+} from '@/types/serviceRun';
 
 export interface SetIrasCredentialsInput {
   username: string;
@@ -41,5 +44,19 @@ export function useClearIrasCredentials(dealerId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['irasCredentials', dealerId] });
     },
+  });
+}
+
+/**
+ * Reveal the stored IRAS password in plaintext (super-admin only). A mutation
+ * rather than a query so the plaintext is never cached or refetched — see
+ * `useRevealSdmsCredentials`.
+ */
+export function useRevealIrasCredentials(dealerId: string) {
+  return useMutation({
+    mutationFn: () =>
+      api.post<RevealedPortalCredentials>(
+        `/dealers/${dealerId}/iras-credentials/reveal`,
+      ),
   });
 }

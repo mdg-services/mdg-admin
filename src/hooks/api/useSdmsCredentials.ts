@@ -1,7 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { SdmsCredentialsStatus, SdmsDealerType } from '@/types/serviceRun';
+import type {
+  RevealedPortalCredentials,
+  SdmsCredentialsStatus,
+  SdmsDealerType,
+} from '@/types/serviceRun';
 
 export interface SetSdmsCredentialsInput {
   username: string;
@@ -42,5 +46,21 @@ export function useClearSdmsCredentials(dealerId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sdmsCredentials', dealerId] });
     },
+  });
+}
+
+/**
+ * Reveal the stored SDMS password in plaintext (super-admin only).
+ *
+ * A mutation, not a query, on purpose: the plaintext must never be cached by
+ * TanStack Query, refetched in the background, or persisted. Each reveal is an
+ * explicit, audited, rate-limited action.
+ */
+export function useRevealSdmsCredentials(dealerId: string) {
+  return useMutation({
+    mutationFn: () =>
+      api.post<RevealedPortalCredentials>(
+        `/dealers/${dealerId}/sdms-credentials/reveal`,
+      ),
   });
 }
