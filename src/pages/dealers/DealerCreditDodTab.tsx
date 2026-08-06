@@ -498,6 +498,44 @@ function LateEntriesBadge({
 }
 
 /**
+ * A deadline that has already gone by. Replaces the `state` badge rather than
+ * sitting beside it: `state` reads "due" whether the deadline is next week or
+ * was three weeks ago, and in a scannable list that is the one distinction that
+ * matters. Amber while the miss is still inside IndianOil's publishing lag —
+ * the dealer may have paid on time — and red once it is a real breach.
+ */
+function OverdueBadge({
+  snapshot,
+  className,
+}: {
+  snapshot: CreditDodSnapshotRecord;
+  className?: string;
+}) {
+  const od = snapshot.overdue;
+  if (!od) return null;
+  const dayCount = `${od.days} day${od.days === 1 ? '' : 's'}`;
+  return (
+    <Badge
+      className={className}
+      intent={od.withinPortalLag ? 'warning' : 'danger'}
+      title={
+        od.withinPortalLag
+          ? `${inrFormat(od.amount)} was due on ${formatDmy(
+              od.since,
+            )}, ${dayCount} ago. A deposit made on time may not be published yet.`
+          : `${inrFormat(od.amount)} has been past its deadline since ${formatDmy(
+              od.since,
+            )} — ${od.estimatedFrom ? 'at least ' : ''}${dayCount}, across ${
+              od.deadlines
+            } deadline${od.deadlines === 1 ? '' : 's'}.`
+      }
+    >
+      {od.withinPortalLag ? `Past deadline · ${dayCount}` : `Overdue ${dayCount}`}
+    </Badge>
+  );
+}
+
+/**
  * The sheet. Expanding a row shows the full report — card image, figures, source
  * files and the Share action — so an admin never has to hunt through Run history
  * to send a dealer their card.
@@ -609,15 +647,38 @@ function SnapshotHistoryCard({ dealerId }: { dealerId: string }) {
                             </div>
                           </TD>
                           <TD className="whitespace-nowrap text-right font-medium tabular-nums">
-                            {inrFormat(s.dueAmount)}
+                            {/* Once a deadline lapses the amount that clears it
+                                is the overdue total, not the oldest lot. Listing
+                                the smaller one beside a red badge reads as a
+                                contradiction the admin must open the row to
+                                resolve. */}
+                            {s.overdue ? (
+                              <span className="text-danger">
+                                {inrFormat(s.overdue.amount)}
+                              </span>
+                            ) : (
+                              inrFormat(s.dueAmount)
+                            )}
                           </TD>
                           <TD className="whitespace-nowrap text-text-muted">
-                            {s.dueDate ? formatDmy(s.dueDate) : '-'}
+                            {s.overdue ? (
+                              <span className="text-danger">
+                                was {formatDmy(s.overdue.since)}
+                              </span>
+                            ) : s.dueDate ? (
+                              formatDmy(s.dueDate)
+                            ) : (
+                              '-'
+                            )}
                           </TD>
                           <TD>
-                            <Badge intent={STATE_INTENT[s.state] ?? 'neutral'}>
-                              {s.state}
-                            </Badge>
+                            {s.overdue ? (
+                              <OverdueBadge snapshot={s} />
+                            ) : (
+                              <Badge intent={STATE_INTENT[s.state] ?? 'neutral'}>
+                                {s.state}
+                              </Badge>
+                            )}
                           </TD>
                           <TD>
                             {!s.reconcileChecked ? (
@@ -696,8 +757,17 @@ function SnapshotHistoryCard({ dealerId }: { dealerId: string }) {
                     >
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium text-text">
-                          {inrFormat(s.dueAmount)}
-                          {s.dueDate ? ` · by ${formatDmy(s.dueDate)}` : ''}
+                          {s.overdue ? (
+                            <span className="text-danger">
+                              {inrFormat(s.overdue.amount)} · was due{' '}
+                              {formatDmy(s.overdue.since)}
+                            </span>
+                          ) : (
+                            <>
+                              {inrFormat(s.dueAmount)}
+                              {s.dueDate ? ` · by ${formatDmy(s.dueDate)}` : ''}
+                            </>
+                          )}
                         </span>
                         <span className="mt-0.5 block text-xs text-text-subtle">
                           {formatDateTime(s.capturedAt)}
@@ -705,7 +775,10 @@ function SnapshotHistoryCard({ dealerId }: { dealerId: string }) {
                             ? ` · as of ${formatDmy(s.asOf)}`
                             : ''}
                         </span>
-                        <LateEntriesBadge snapshot={s} className="mt-1.5" />
+                        <span className="mt-1.5 flex flex-wrap items-center gap-1.5 empty:hidden">
+                          <OverdueBadge snapshot={s} />
+                          <LateEntriesBadge snapshot={s} />
+                        </span>
                       </span>
                       <span className="flex shrink-0 items-center gap-1.5">
                         {s.shared ? (

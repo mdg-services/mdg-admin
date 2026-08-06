@@ -91,6 +91,10 @@ export function CreditDodReportCard({
 
   return (
     <div className="grid gap-4">
+      {/* Above the card image deliberately: a missed deadline changes what the
+          admin should do with this report, so it cannot sit below the fold. */}
+      <OverdueNotice snapshot={snapshot} />
+
       {/* Card image on top, full width (capped), never overlapping. */}
       {imageUrl ? (
         // Only linkable when there is an `attachment` URL to link TO: `download`
@@ -131,6 +135,16 @@ export function CreditDodReportCard({
       {/* Values as a single-column, wrap-safe definition list (label left,
           value right). Avoids the 2-up grid that overlapped in the modal. */}
       <dl className="rounded-md border border-border">
+        {snapshot.overdue ? (
+          <DefRow
+            label="Overdue amount"
+            value={
+              <span className="text-danger">
+                {inrFormat(snapshot.overdue.amount)}
+              </span>
+            }
+          />
+        ) : null}
         <DefRow label="Due amount" value={inrFormat(snapshot.dueAmount)} />
         <DefRow
           label="Due date"
@@ -350,6 +364,52 @@ function listDates(dates: string[]): string {
   if (rest > 0) shown.push(`${rest} more day${rest === 1 ? '' : 's'}`);
   const last = shown.pop() ?? '';
   return shown.length === 0 ? last : `${shown.join(', ')} and ${last}`;
+}
+
+/**
+ * A deposit deadline that has already gone by unpaid.
+ *
+ * Split into two verdicts on purpose. Within a day or two of the deadline the
+ * dealer may have paid on time and IndianOil simply not published it yet, and
+ * an admin who chases that as a default burns the relationship over the
+ * portal's own lag. Past that window it is a real breach and the admin needs
+ * the number that actually clears it — which is not the DUE AMOUNT once more
+ * than one deadline has slipped.
+ */
+function OverdueNotice({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
+  const od = snapshot.overdue;
+  if (!od) return null;
+
+  const dayCount = `${od.days} day${od.days === 1 ? '' : 's'}`;
+  const since = formatDmy(od.since);
+
+  if (od.withinPortalLag) {
+    return (
+      <Notice tone="warning">
+        The deadline of {since} has passed with {inrFormat(od.amount)} still
+        showing unpaid — {dayCount} ago. IndianOil takes a day or two to publish
+        a deposit, so this may already have been paid. Check with the dealer
+        before treating it as a default.
+      </Notice>
+    );
+  }
+
+  return (
+    <Notice tone="danger">
+      Deadline missed. {inrFormat(od.amount)} has been past its deposit deadline
+      since {since} — {od.estimatedFrom ? 'at least ' : ''}
+      {dayCount}
+      {od.deadlines > 1 ? <>, across {od.deadlines} separate deadlines</> : null}.
+      {od.amount > snapshot.dueAmount ? (
+        <>
+          {' '}
+          The due amount below ({inrFormat(snapshot.dueAmount)}) is only the
+          nearest deadline&apos;s share, so paying that alone would not clear
+          the default.
+        </>
+      ) : null}
+    </Notice>
+  );
 }
 
 /**
@@ -616,6 +676,7 @@ export function snapshotFromRunOutput(
     dueAmount: output.card.dueAmount,
     dueDate: output.card.dueDate,
     state: output.state,
+    overdue: output.overdue ?? null,
     formOfLimit: output.card.formOfLimit,
     reconciles: output.reconciles,
     // Runs from before the flag existed WERE checked, so defaulting to true

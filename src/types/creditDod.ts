@@ -24,6 +24,42 @@ export interface CreditDodLedgerResponse {
   rows: CreditDodLedgerRow[];
 }
 
+/**
+ * The dealer's position on deposit deadlines that have already passed, judged
+ * against the date the report's figures describe. Null when nothing is late.
+ */
+export interface CreditDodOverdue {
+  /**
+   * EVERY past-deadline lot summed. Deliberately not the same as `dueAmount`,
+   * which is only the oldest deadline's lot: once several deadlines have gone
+   * by, paying `dueAmount` leaves the dealer still in default, so this is the
+   * figure that clears it.
+   */
+  amount: number;
+  /** The earliest missed deadline, `dd-mm-yyyy` — when the breach started. */
+  since: string;
+  /** Whole days from `since` to the date the figures describe. Always >= 1. */
+  days: number;
+  /**
+   * How many DISTINCT deadlines have been missed — not how many lots. Two
+   * invoices lifted on one day, or a Thursday and a Friday purchase, share a
+   * single deadline.
+   */
+  deadlines: number;
+  /**
+   * True while the miss is still within the day or two IndianOil takes to
+   * publish a deposit — the dealer may well have paid on time. Show it as
+   * unconfirmed, not as a default.
+   */
+  withinPortalLag: boolean;
+  /**
+   * True when the breach rests on the opening carry-forward lot, whose real
+   * availment date is older than the readable window, so `days` is a lower
+   * bound rather than an exact count.
+   */
+  estimatedFrom: boolean;
+}
+
 /** One unpaid FIFO lot behind the DUE AMOUNT — oldest first. */
 export interface CreditDodOpenLot {
   /** dd-mm-yyyy the credit was availed. */
@@ -77,6 +113,13 @@ export interface CreditDodSnapshotRecord {
   dueAmount: number;
   dueDate: string | null;
   state: 'due' | 'advance' | 'clear';
+  /**
+   * Set when a deposit deadline had already passed unpaid on the date these
+   * figures describe. Orthogonal to `state`, which reports the ledger position
+   * ('due' covers both a deadline still ahead and one long gone) — so an
+   * overdue report is always `state: 'due'` with this populated.
+   */
+  overdue: CreditDodOverdue | null;
   formOfLimit: string;
   reconciles: boolean;
   /**

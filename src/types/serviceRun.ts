@@ -111,6 +111,20 @@ export interface CreditDodRunOutput {
   };
   riskCategory: string | null;
   state: 'due' | 'advance' | 'clear';
+  /**
+   * Set when a deposit deadline had already passed unpaid. Optional because a
+   * run from before the overdue engine existed has no such field, and absent is
+   * indistinguishable from "nothing was late" — which is the safe reading.
+   */
+  overdue?: {
+    amount: number;
+    since: string;
+    days: number;
+    /** DISTINCT missed deadlines, not lots. */
+    deadlines: number;
+    withinPortalLag: boolean;
+    estimatedFrom: boolean;
+  } | null;
   reconciles: boolean;
   /** False when no cross-check figure was available, so `reconciles` proves nothing. */
   reconcileChecked?: boolean;
