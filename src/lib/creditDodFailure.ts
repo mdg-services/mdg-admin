@@ -68,10 +68,36 @@ export const CODE_COPY: Record<string, CreditDodFailureCopy> = {
     hint: 'Retry — this usually happens when the captcha took many attempts.',
     adminHint: 'Please retry — this usually clears on the next attempt.',
   },
+  ELEDGER_HANDOFF_FAILED: {
+    title: "SDMS wouldn't open the eledger page for this login.",
+    hint:
+      "A known IndianOil-side flake: the eledger app is load-balanced across several servers and the handoff " +
+      "occasionally lands on one that doesn't hold our session, which answers with its (missing) error page. " +
+      'The run already retried with a freshly-issued link and still got it. Retry; if it persists for hours, ' +
+      'SDMS itself is degraded.',
+    adminHint:
+      "SDMS didn't open the report page for us this time — that's on their side, not ours. Please retry in a few minutes.",
+  },
+  SDMS_CREDENTIALS_MISSING: {
+    title: "This dealer has no SDMS login saved.",
+    hint: "Add the dealer's IndianOil SDMS username and password in the SDMS section, then run again. Until then every scheduled run will fail the same way.",
+    adminHint:
+      "We don't have this dealer's IndianOil login on file yet. Please add it in the dealer's SDMS section, or contact the MDG team.",
+  },
+  ACCOUNT_COOLDOWN: {
+    title: "Paused: SDMS keeps rejecting this dealer's login.",
+    hint:
+      "The account breaker tripped after consecutive rejected logins, so we've stopped trying in order to protect " +
+      "the dealer's IndianOil account from being locked out. Check the SDMS username/password for this dealer; " +
+      'runs resume automatically once the cooldown expires.',
+    adminHint:
+      "We've paused this dealer's reports for a short while because SDMS kept rejecting the login — this protects " +
+      'the account from being locked. Please check the SDMS username and password, then contact the MDG team if they look right.',
+  },
   CREDIT_MONITORING_FAILED: {
     title: "Couldn't read the Credit Monitoring page.",
-    hint: 'Portal was slow or changed. Retry; if it persists, needs a scraper update.',
-    adminHint: `SDMS was slow to respond. ${CONTACT_MDG}`,
+    hint: 'The page loaded but did not contain the expected figures — this usually means SDMS changed its layout and the parser needs an update.',
+    adminHint: `SDMS returned something we didn't recognise. ${CONTACT_MDG}`,
   },
   PAD_NAV_FAILED: {
     title: "Couldn't open the PAD Statement page.",
