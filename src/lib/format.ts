@@ -77,6 +77,23 @@ export function inrFormat(n?: number | null): string {
   })}`;
 }
 
+/**
+ * Litres with Indian digit grouping, e.g. `1234.5` → `"1,234.5 L"`. Pass
+ * `{ sign: true }` to prefix a `+` on positive values — used where the sign is
+ * the point (a stock variation that is short vs over).
+ */
+export function formatLitres(
+  n?: number | null,
+  opts?: { sign?: boolean },
+): string {
+  if (n === undefined || n === null || !Number.isFinite(n)) return '-';
+  const body = Math.abs(n).toLocaleString('en-IN', {
+    maximumFractionDigits: 2,
+  });
+  const sign = n < 0 ? '-' : opts?.sign && n > 0 ? '+' : '';
+  return `${sign}${body} L`;
+}
+
 export function groupByDay<T extends { startedAt: string }>(
   items: T[],
 ): Array<{ day: string; items: T[] }> {

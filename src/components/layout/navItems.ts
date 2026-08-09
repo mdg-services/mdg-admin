@@ -3,6 +3,7 @@ import {
   Building2,
   CalendarDays,
   Database,
+  FileBarChart2,
   LayoutDashboard,
   ListChecks,
   MessageSquare,
@@ -41,6 +42,9 @@ export const NAV_ITEMS: NavItem[] = [
   // Every dealer's collected IRAS shift data in one place — an everyday admin
   // surface, so deliberately NOT `superAdminOnly`.
   { to: '/data-vault', label: 'Data Vault', icon: Database },
+  // The generated day-book each dealer receives — an everyday admin outcome
+  // surface, so deliberately NOT `superAdminOnly`.
+  { to: '/dsr', label: 'Daily Sales Report', icon: FileBarChart2 },
   { to: '/services', label: 'Service Catalog', icon: Plug, superAdminOnly: true },
   { to: '/runs', label: 'Run History', icon: Activity, superAdminOnly: true },
   { to: '/users', label: 'All Users', icon: Users, superAdminOnly: true },

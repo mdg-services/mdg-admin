@@ -18,6 +18,7 @@ import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { CustomRequestTab } from './dealers/CustomRequestTab';
 import { DealerCreditDodTab } from './dealers/DealerCreditDodTab';
 import { DealerDataVaultTab } from './dealers/DealerDataVaultTab';
+import { DealerDsrTab } from './dealers/DealerDsrTab';
 import { DealerInfoTab } from './dealers/DealerInfoTab';
 import { DealerKavachTab } from './dealers/DealerKavachTab';
 import { DealerMembersTab } from './dealers/DealerMembersTab';
@@ -45,6 +46,7 @@ const TABS: TabDef[] = [
   { id: 'work-list', label: 'Work list' },
   { id: 'provided', label: 'Services provided' },
   { id: 'credit-dod', label: 'Credit & DOD' },
+  { id: 'dsr', label: 'Daily Sales Report' },
   { id: 'data-vault', label: 'Data Vault' },
   { id: 'runs', label: 'Run history' },
   { id: 'custom', label: 'Custom requests', superAdminOnly: true },
@@ -162,6 +164,7 @@ export function DealerDetailPage() {
       {activeTab === 'credit-dod' ? (
         <DealerCreditDodTab dealer={dealer} />
       ) : null}
+      {activeTab === 'dsr' ? <DealerDsrTab dealer={dealer} /> : null}
       {activeTab === 'data-vault' ? (
         <DealerDataVaultTab dealer={dealer} />
       ) : null}

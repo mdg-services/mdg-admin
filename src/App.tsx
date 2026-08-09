@@ -11,6 +11,8 @@ import { BankHolidaysPage } from '@/pages/BankHolidaysPage';
 import { DataVaultPage } from '@/pages/DataVaultPage';
 import { DealerDetailPage } from '@/pages/DealerDetailPage';
 import { DealersPage } from '@/pages/DealersPage';
+import { DsrReportView } from '@/pages/dsr/DsrReportView';
+import { DsrVaultPage } from '@/pages/DsrVaultPage';
 import { InboxPage } from '@/pages/InboxPage';
 import { KavachDashboardPage } from '@/pages/KavachDashboardPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -41,6 +43,10 @@ export default function App() {
           {/* Plain admins are the audience here — the Vault is where they read
               every dealer's collected IRAS data, so it is NOT super-admin only. */}
           <Route path="data-vault" element={<DataVaultPage />} />
+          {/* Daily Sales Report — a dealer-facing outcome surface, so like the
+              Data Vault it is NOT super-admin only. */}
+          <Route path="dsr" element={<DsrVaultPage />} />
+          <Route path="dsr/dealers/:dealerId" element={<DsrReportView />} />
           {/* The plugin catalog and the raw run log are engineer surfaces —
               plain admins get outcomes on the dealer screens instead. Keep
               these in step with `superAdminOnly` in navItems.ts. */}
