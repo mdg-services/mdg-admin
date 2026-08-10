@@ -248,7 +248,7 @@ function RunDetail({
       {isSuperAdmin && steps.length > 0 ? (
         <section>
           <SectionLabel>Steps</SectionLabel>
-          <RunStepTimeline steps={steps} />
+          <RunStepTimeline steps={steps} runStatus={run.status} />
         </section>
       ) : null}
 

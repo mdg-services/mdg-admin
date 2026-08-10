@@ -9,13 +9,30 @@ import type { ServiceRunStep } from '@/types/serviceRun';
 
 interface Props {
   steps: ServiceRunStep[];
+  /**
+   * The run's own status. A run that has finished cannot still be doing
+   * something, so nothing in it may render as "running" — see {@link isInFlight}.
+   */
+  runStatus?: string;
 }
+
+/** A run in one of these states is over; nothing inside it is still happening. */
+const TERMINAL_RUN_STATUSES = new Set(['SUCCESS', 'FAILED', 'CANCELLED', 'TIMEOUT']);
 
 /**
  * Whether a 'start' step is the latest entry that has no matching 'ok'/'error'
  * for the same step name later in the list. We render a spinner for it.
+ *
+ * `runOver` is the outer sanity check, and it is not redundant. A step is two
+ * rows, and a plugin that throws between them leaves the first one behind — so
+ * "no closing row" means "still running" only while the run itself is. On a
+ * finished run it means the record is incomplete, and drawing a spinner there
+ * tells an admin their failed report is still being worked on. Production has
+ * eight runs in exactly that state; they are already written, so no amount of
+ * fixing the writer repairs them. The reader has to refuse the contradiction.
  */
-function isInFlight(steps: ServiceRunStep[], index: number): boolean {
+function isInFlight(steps: ServiceRunStep[], index: number, runOver: boolean): boolean {
+  if (runOver) return false;
   const step = steps[index];
   if (!step || step.status !== 'start') return false;
   for (let i = index + 1; i < steps.length; i += 1) {
@@ -38,15 +55,17 @@ function isInFlight(steps: ServiceRunStep[], index: number): boolean {
  * super-admin. Callers should gate their section heading on the same flag so no
  * empty "Steps" header is left behind.
  */
-export function RunStepTimeline({ steps }: Props) {
+export function RunStepTimeline({ steps, runStatus }: Props) {
   const isSuperAdmin = useIsSuperAdmin();
   if (!isSuperAdmin) return null;
   if (steps.length === 0) return null;
 
+  const runOver = !!runStatus && TERMINAL_RUN_STATUSES.has(runStatus);
+
   return (
     <ol className="relative ml-2 border-l border-border pl-4">
       {steps.map((step, idx) => {
-        const inFlight = isInFlight(steps, idx);
+        const inFlight = isInFlight(steps, idx, runOver);
         return (
           <li
             key={`${step.name}-${idx}-${step.status}`}
@@ -72,6 +91,18 @@ export function RunStepTimeline({ steps }: Props) {
               ) : null}
               {inFlight ? (
                 <span className="text-xs text-info">running</span>
+              ) : step.status === 'start' ? (
+                // Opened and never closed on a run that is already over. Say so,
+                // rather than leaving a bare dot the reader has to interpret —
+                // "no result" is a real diagnostic signal about where the run
+                // stopped, and it is the honest replacement for the spinner
+                // that used to sit here claiming the step was still going.
+                <span
+                  className="text-xs text-text-subtle"
+                  title="This step started but never reported a result before the run ended."
+                >
+                  no result
+                </span>
               ) : null}
             </div>
 
