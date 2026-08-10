@@ -2,7 +2,10 @@ import type { CreditDodShareState } from './serviceRun';
 
 /**
  * One row of the maintained PAD ledger, as returned by
- * `GET /credit-dod/dealers/:dealerId/ledger`. Rows are newest-first.
+ * `GET /credit-dod/dealers/:dealerId/ledger`. Rows come back in the order the
+ * portal PUBLISHED them (descending `seq`), which is not value-date order — SDMS
+ * posts a transaction a day or two after its value date, so a back-dated row
+ * leads the list while belonging in the middle of the ledger.
  */
 export interface CreditDodLedgerRow {
   seq: number;
@@ -22,6 +25,53 @@ export interface CreditDodLedgerRow {
 export interface CreditDodLedgerResponse {
   total: number;
   rows: CreditDodLedgerRow[];
+}
+
+/**
+ * One dealer's line in the Data Vault's PAD ledger dataset, from
+ * `GET /credit-dod/vault`. A digest only — the transactions themselves are a
+ * drill-in, because a cross-dealer list must never carry every dealer's ledger.
+ *
+ * Listed from the SERVICE ATTACHMENTS, so a dealer configured for Credit & DOD
+ * who has produced nothing yet appears with `rowCount: 0` rather than going
+ * missing. Same rule as the IRAS dataset: absence has to be visible.
+ */
+export interface CreditDodVaultDealerRow {
+  dealerId: string;
+  dealerName: string | null;
+  dealerCode: string | null;
+  /** False when the Credit & DOD attachment is PAUSED — the ledger has stopped growing. */
+  enabled: boolean;
+  /** Live (non-superseded) transactions held for this dealer. */
+  rowCount: number;
+  /** Oldest transaction date, `dd-mm-yyyy`. Null when there is no ledger yet. */
+  earliestDate: string | null;
+  /** Newest transaction date, `dd-mm-yyyy`. Null when there is no ledger yet. */
+  latestDate: string | null;
+  /**
+   * Running balance of the ledger's last row by VALUE DATE — the last of
+   * (date, portalOrder, seq), which is `latestDate`'s final row and not
+   * necessarily the most recently published one. Negative = advance (dealer in
+   * credit), positive = owed — same sign convention as `CreditDodLedgerRow`.
+   */
+  closingBalance: number | null;
+  /** ISO time the ledger was last reconciled against the portal. */
+  lastSyncedAt: string | null;
+}
+
+/** The counters above the PAD ledger dealer list. */
+export interface CreditDodVaultOverview {
+  dealersConfigured: number;
+  dealersWithLedger: number;
+  /** Live transactions across every listed dealer. */
+  transactions: number;
+  lastSyncedAt: string | null;
+}
+
+/** `GET /credit-dod/vault` — the cross-dealer PAD ledger landing payload. */
+export interface CreditDodVaultResponse {
+  overview: CreditDodVaultOverview;
+  dealers: CreditDodVaultDealerRow[];
 }
 
 /**

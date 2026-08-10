@@ -1,7 +1,6 @@
 import { Download, Search, SearchX } from 'lucide-react';
 import * as React from 'react';
 
-import type { IrasDataset } from '@dk/shared';
 
 import {
   Button,
@@ -14,6 +13,7 @@ import {
   TRow,
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
+import type { IrasDataset } from '@dk/shared';
 
 /** Rows rendered before the "Show all" escape hatch kicks in. */
 const INITIAL_ROWS = 50;

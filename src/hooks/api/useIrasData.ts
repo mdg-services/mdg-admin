@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { api } from '@/lib/api';
+import { isYmd } from '@/lib/format';
 import type {
   IrasDataSnapshot,
   IrasDataSnapshotSummary,
@@ -8,7 +10,6 @@ import type {
   IrasSnapshotStatus,
 } from '@dk/shared';
 
-import { api } from '@/lib/api';
 
 /* ─────────────────────────────── Wire shapes ────────────────────────────── */
 
@@ -76,12 +77,17 @@ export const irasDataKeys = {
  * Every configured dealer's collection state for one business date, plus the
  * roll-up counters above the list. Kept fresh for 30s so stepping back and
  * forth across dates does not re-hit the API on every click.
+ *
+ * A date that is not a real calendar day never leaves the browser: this hook's
+ * argument comes from a date field the admin is still typing in, and the native
+ * control reports every complete-looking date on the way to the intended one.
  */
 export function useIrasVaultQuery(businessDate: string) {
   return useQuery({
     queryKey: irasDataKeys.vault(businessDate),
     queryFn: () =>
       api.get<IrasVaultResponse>('/iras-data/vault', { businessDate }),
+    enabled: isYmd(businessDate),
     staleTime: 30_000,
   });
 }

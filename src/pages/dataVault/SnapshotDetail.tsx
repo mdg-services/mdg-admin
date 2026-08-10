@@ -8,6 +8,14 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
+import {
+  Badge,
+  Card,
+  CardContent,
+  StatusChip,
+} from '@/components/ui';
+import { cn } from '@/lib/cn';
+import { formatDateTime, formatYmd } from '@/lib/format';
 import { IRAS_REPORT_CODES } from '@dk/shared';
 import type {
   IrasDataSnapshot,
@@ -18,14 +26,6 @@ import type {
 
 import { DatasetTable } from './DatasetTable';
 
-import {
-  Badge,
-  Card,
-  CardContent,
-  StatusChip,
-} from '@/components/ui';
-import { cn } from '@/lib/cn';
-import { formatDateTime } from '@/lib/format';
 
 export interface SnapshotDetailProps {
   snapshot: IrasDataSnapshot;
@@ -58,18 +58,6 @@ function timeOf(iso: string | null | undefined): string {
   });
 }
 
-/** `YYYY-MM-DD` → `23 Jul 2026`, without dragging the value through a timezone. */
-function businessDateLabel(businessDate: string): string {
-  const d = new Date(`${businessDate}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return businessDate;
-  return d.toLocaleDateString(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-}
-
 /**
  * One dealer's collected IRAS data, digest first.
  *
@@ -91,7 +79,7 @@ export function SnapshotDetail({
           <div className="flex flex-wrap items-center gap-2">
             {hideDealerName ? (
               <h3 className="text-base font-semibold text-text">
-                {businessDateLabel(snapshot.businessDate)}
+                {formatYmd(snapshot.businessDate)}
               </h3>
             ) : (
               <h3 className="truncate text-base font-semibold text-text">
@@ -106,7 +94,7 @@ export function SnapshotDetail({
                 <span className="font-mono">{snapshot.dealerCode}</span>
               ) : null}
               {snapshot.roCode ? <span>· RO {snapshot.roCode}</span> : null}
-              <span>· {businessDateLabel(snapshot.businessDate)}</span>
+              <span>· {formatYmd(snapshot.businessDate)}</span>
             </p>
           )}
           <p className="mt-0.5 text-xs text-text-subtle">

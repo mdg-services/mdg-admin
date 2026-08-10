@@ -10,8 +10,22 @@ import type {
   CreditDodLedgerResponse,
   CreditDodQuota,
   CreditDodSnapshotRecord,
+  CreditDodVaultResponse,
 } from '@/types/creditDod';
 import type { CreditDodShareResult } from '@/types/serviceRun';
+
+/**
+ * Every dealer's PAD ledger digest — the Data Vault's PAD ledger dataset list.
+ * Kept fresh for 30s, matching the IRAS vault query, so moving between datasets
+ * and back does not re-hit the API on every click.
+ */
+export function useCreditDodVault() {
+  return useQuery({
+    queryKey: ['creditDodVault'],
+    queryFn: () => api.get<CreditDodVaultResponse>('/credit-dod/vault'),
+    staleTime: 30_000,
+  });
+}
 
 export function useCreditDodSnapshot(snapshotId: string | undefined) {
   return useQuery({
@@ -47,8 +61,14 @@ export function useShareCreditDodSnapshot(
 }
 
 /**
- * Paginated maintained PAD ledger for a dealer. Rows are newest-first; older
- * rows are fetched by passing the smallest loaded `seq` as `beforeSeq`.
+ * Paginated maintained PAD ledger for a dealer.
+ *
+ * Rows come back in PUBLICATION order — descending `seq`, the order SDMS listed
+ * them to us — which is not value-date order and must not be presented as such:
+ * a transaction the portal posts after its value date arrives with the highest
+ * `seq` while belonging in the middle of the ledger. Older rows are fetched by
+ * passing the smallest loaded `seq` as `beforeSeq`, which is only a stable
+ * cursor because `seq` is unique per dealer and never rewritten.
  */
 export function useCreditDodLedger(
   dealerId: string | undefined,
@@ -65,7 +85,8 @@ export function useCreditDodLedger(
       ),
     getNextPageParam: (lastPage) => {
       if (!lastPage || lastPage.rows.length < limit) return undefined;
-      // Page older rows by the smallest loaded seq (rows are newest-first).
+      // Page older rows by the smallest loaded seq (rows are newest-PUBLISHED
+      // first, so the smallest seq is the oldest row we have listed).
       return Math.min(...lastPage.rows.map((r) => r.seq));
     },
   });

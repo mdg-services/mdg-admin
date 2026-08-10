@@ -6,13 +6,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
-import type {
-  Dealer,
-  IrasDataSnapshotSummary,
-  IrasReportCode,
-} from '@dk/shared';
 
-import { SnapshotDetail } from '../dataVault/SnapshotDetail';
 
 import {
   Button,
@@ -39,6 +33,13 @@ import {
 } from '@/hooks/api/useIrasData';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
+import type {
+  Dealer,
+  IrasDataSnapshotSummary,
+  IrasReportCode,
+} from '@dk/shared';
+
+import { SnapshotDetail } from '../dataVault/SnapshotDetail';
 
 interface Props {
   dealer: Dealer;
