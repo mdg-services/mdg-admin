@@ -7,6 +7,7 @@ export * from './Card';
 export * from './Badge';
 export * from './StatusChip';
 export * from './Dialog';
+export * from './Menu';
 export * from './Drawer';
 export * from './Sheet';
 export * from './Table';

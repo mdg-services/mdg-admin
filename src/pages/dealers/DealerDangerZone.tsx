@@ -20,26 +20,33 @@ interface Props {
   dealer: Dealer;
 }
 
+export type DealerArchiveAction = 'archive' | 'restore';
+
+export interface DealerArchiveDialogsProps {
+  dealer: Dealer;
+  /** Which confirmation to show, or null for none. */
+  action: DealerArchiveAction | null;
+  onClose: () => void;
+}
+
 /**
- * Super-admin archive / restore for a dealer.
+ * The archive / restore confirmations and the mutations behind them.
  *
- * Rendered only for super-admins, but that is presentation: the backend's
- * `requireSuperAdmin` is the real gate, and `useIsSuperAdmin` can briefly read
- * false while `/auth/me` is in flight.
- *
- * Lives at the bottom of the Info tab, directly above the audit accordion, so
- * the action and its record sit together.
+ * Split out of the card below because the dealer page's overflow menu offers the
+ * same action from the tab strip: two entry points, one implementation. Whoever
+ * renders this owns the open state, so each mount drives exactly one dialog and
+ * there is no ambient "which one is open" to get out of sync.
  */
-export function DealerDangerZone({ dealer }: Props) {
+export function DealerArchiveDialogs({
+  dealer,
+  action,
+  onClose,
+}: DealerArchiveDialogsProps) {
   const toast = useToast();
   const archive = useArchiveDealer();
   const restore = useRestoreDealer();
-  const [confirming, setConfirming] = React.useState<null | 'archive' | 'restore'>(null);
 
-  const busy = archive.isPending || restore.isPending;
-  const isArchived = !!dealer.archivedAt;
-
-  async function run(kind: 'archive' | 'restore') {
+  async function run(kind: DealerArchiveAction) {
     try {
       if (kind === 'archive') {
         await archive.mutateAsync(dealer.id);
@@ -48,8 +55,10 @@ export function DealerDangerZone({ dealer }: Props) {
         await restore.mutateAsync(dealer.id);
         toast.success('Dealer restored');
       }
-      setConfirming(null);
+      onClose();
     } catch (err) {
+      // Leave the dialog open on failure — the message says what went wrong and
+      // the confirm button is still there to retry.
       const msg =
         err instanceof ApiError
           ? err.message
@@ -57,6 +66,86 @@ export function DealerDangerZone({ dealer }: Props) {
       toast.error(msg);
     }
   }
+
+  return (
+    <>
+      <Dialog
+        open={action === 'archive'}
+        onClose={onClose}
+        title="Delete this dealer?"
+        description={dealer.name ?? dealer.phone ?? dealer.code ?? 'This dealer'}
+        footer={
+          <>
+            <Button variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => run('archive')}
+              loading={archive.isPending}
+            >
+              Delete dealer
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-3 text-sm text-text-muted">
+          <p>This will:</p>
+          <ul className="list-disc pl-5">
+            <li>Remove the dealer from the dealer list and the dashboard counts</li>
+            <li>Pause every service, so no more automatic reports run for them</li>
+            <li>Stop the owner and their team from signing in</li>
+          </ul>
+          <p className="font-medium text-text">
+            Nothing is deleted. You can restore this dealer at any time.
+          </p>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={action === 'restore'}
+        onClose={onClose}
+        title="Restore this dealer?"
+        description={dealer.name ?? dealer.phone ?? dealer.code ?? 'This dealer'}
+        footer={
+          <>
+            <Button variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button onClick={() => run('restore')} loading={restore.isPending}>
+              Restore dealer
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-text-muted">
+          The dealer comes back into the list and its team can sign in again.
+          Services stay paused and the status stays Suspended, so nothing starts
+          running on its own — turn those back on when you are ready.
+        </p>
+      </Dialog>
+    </>
+  );
+}
+
+/**
+ * Super-admin archive / restore for a dealer.
+ *
+ * Rendered only for super-admins, but that is presentation: the backend's
+ * `requireSuperAdmin` is the real gate, and `useIsSuperAdmin` can briefly read
+ * false while `/auth/me` is in flight.
+ *
+ * Lives at the bottom of the Info tab, directly above the audit accordion, so
+ * the action and its record sit together. The buttons only open a confirmation,
+ * so they carry no busy state of their own — the dialog's confirm button is
+ * where the mutation is visible.
+ */
+export function DealerDangerZone({ dealer }: Props) {
+  const [confirming, setConfirming] = React.useState<DealerArchiveAction | null>(
+    null,
+  );
+
+  const isArchived = !!dealer.archivedAt;
 
   return (
     <Card>
@@ -88,7 +177,6 @@ export function DealerDangerZone({ dealer }: Props) {
             <Button
               variant="secondary"
               onClick={() => setConfirming('restore')}
-              loading={busy}
               leftIcon={<RotateCcw width={16} height={16} strokeWidth={1.75} />}
             >
               Restore dealer
@@ -104,7 +192,6 @@ export function DealerDangerZone({ dealer }: Props) {
             <Button
               variant="danger"
               onClick={() => setConfirming('archive')}
-              loading={busy}
               leftIcon={<Archive width={16} height={16} strokeWidth={1.75} />}
             >
               Delete dealer
@@ -113,61 +200,11 @@ export function DealerDangerZone({ dealer }: Props) {
         )}
       </CardContent>
 
-      <Dialog
-        open={confirming === 'archive'}
+      <DealerArchiveDialogs
+        dealer={dealer}
+        action={confirming}
         onClose={() => setConfirming(null)}
-        title="Delete this dealer?"
-        description={dealer.name ?? dealer.phone ?? dealer.code ?? 'This dealer'}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setConfirming(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => run('archive')}
-              loading={archive.isPending}
-            >
-              Delete dealer
-            </Button>
-          </>
-        }
-      >
-        <div className="grid gap-3 text-sm text-text-muted">
-          <p>This will:</p>
-          <ul className="list-disc pl-5">
-            <li>Remove the dealer from the dealer list and the dashboard counts</li>
-            <li>Pause every service, so no more automatic reports run for them</li>
-            <li>Stop the owner and their team from signing in</li>
-          </ul>
-          <p className="font-medium text-text">
-            Nothing is deleted. You can restore this dealer at any time.
-          </p>
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={confirming === 'restore'}
-        onClose={() => setConfirming(null)}
-        title="Restore this dealer?"
-        description={dealer.name ?? dealer.phone ?? dealer.code ?? 'This dealer'}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setConfirming(null)}>
-              Cancel
-            </Button>
-            <Button onClick={() => run('restore')} loading={restore.isPending}>
-              Restore dealer
-            </Button>
-          </>
-        }
-      >
-        <p className="text-sm text-text-muted">
-          The dealer comes back into the list and its team can sign in again.
-          Services stay paused and the status stays Suspended, so nothing starts
-          running on its own — turn those back on when you are ready.
-        </p>
-      </Dialog>
+      />
     </Card>
   );
 }
