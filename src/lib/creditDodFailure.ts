@@ -62,6 +62,12 @@ export const CODE_COPY: Record<string, CreditDodFailureCopy> = {
       'replaced its image captcha with a math question once already; this is the code that says it has changed again.)',
     adminHint: 'This one needs a fix at our end — please contact the MDG team.',
   },
+  LOGIN_CHALLENGE_UNAVAILABLE: {
+    title: "SDMS didn't show its security question this time.",
+    hint: "The login page loaded but the security-verification block never rendered — a portal-side blip, not a changed form. Nothing was submitted, and the run is retried automatically in about 20 minutes.",
+    adminHint:
+      'SDMS was having a moment and did not show us its security question. Nothing to do — we retry automatically shortly.',
+  },
   OCR_SIDECAR_UNAVAILABLE: {
     title: "The captcha reader isn't available on the server.",
     hint: 'This needs engineering — the OCR sidecar (Python venv) is missing or broken. See mdg-backend/ocr/README.md.',
