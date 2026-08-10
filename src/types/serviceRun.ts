@@ -108,8 +108,21 @@ export interface CreditDodRunOutput {
     preparedAt: string;
     /** dd-mm-yyyy the figures describe — the anchor the card's countdown uses. */
     preparedOn?: string;
+    /**
+     * The credit-limit review. Once `lapsed`, the limit above cannot be drawn
+     * on: the account is locked and the dealer buys cash and carry until their
+     * sales officer reopens it. Optional and nullable because a run from before
+     * this existed has no such field, and because the verdict is deliberately
+     * withheld on a back-dated run and on an unreadable date — none of which is
+     * evidence that the limit is live.
+     */
+    creditReview?: { on: string; daysUntil: number; lapsed: boolean } | null;
   };
   riskCategory: string | null;
+  /** The portal's "Next Review Date" exactly as it wrote it, e.g. `31-Mar-2027`. */
+  nextReviewDate?: string | null;
+  /** The verdict on it — the same object the card carries. */
+  creditReview?: { on: string; daysUntil: number; lapsed: boolean } | null;
   state: 'due' | 'advance' | 'clear';
   /**
    * Set when a deposit deadline had already passed unpaid. Optional because a

@@ -94,6 +94,10 @@ export function CreditDodReportCard({
       {/* Above the card image deliberately: a missed deadline changes what the
           admin should do with this report, so it cannot sit below the fold. */}
       <OverdueNotice snapshot={snapshot} />
+      {/* Same reasoning, different action. An overdue deposit is chased with the
+          dealer; a locked account can only be reopened by IndianOil, so this is
+          the one notice on the report that sends an admin outside the app. */}
+      <CreditLockNotice snapshot={snapshot} />
 
       {/* Card image on top, full width (capped), never overlapping. */}
       {imageUrl ? (
@@ -156,7 +160,30 @@ export function CreditDodReportCard({
           label="Available limit"
           value={inrFormat(snapshot.availableLimit)}
         />
-        <DefRow label="Form of limit" value={snapshot.formOfLimit || '-'} />
+        <DefRow
+          label="Form of limit"
+          value={
+            <>
+              {snapshot.formOfLimit || '-'}
+              {snapshot.creditReview?.lapsed ? (
+                // The portal's own answer, with the fact that it cannot
+                // currently be used attached to it. Shown here rather than
+                // substituted for it: IndianOil never said CASH & CARRY, and a
+                // report that claimed it did would not match the risk category
+                // two rows below.
+                <span className="ml-1.5 font-normal text-danger">
+                  (locked)
+                </span>
+              ) : null}
+            </>
+          }
+        />
+        {snapshot.creditReview || snapshot.nextReviewDate ? (
+          <DefRow
+            label="Next review date"
+            value={<NextReviewValue snapshot={snapshot} />}
+          />
+        ) : null}
       </dl>
 
       {snapshot.openingCarriedForward ? (
@@ -408,6 +435,75 @@ function OverdueNotice({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
           the default.
         </>
       ) : null}
+    </Notice>
+  );
+}
+
+/**
+ * The "Next review date" value, which has three genuinely different readings —
+ * and telling them apart matters, because one of them is a bug report.
+ *
+ * A verdict is missing for two unrelated reasons, and its absence alone cannot
+ * distinguish them: the portal published something we could not read (a layout
+ * change, worth escalating), or the report is back-dated and no verdict was ever
+ * attempted (routine, and correct). Reading the first as the second would send
+ * an admin chasing a portal change that never happened on every back-dated
+ * report — and then train them to ignore the one that is real. `backdated` is
+ * what separates them, exactly as it does in the capture's own drift warning.
+ */
+function NextReviewValue({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
+  if (snapshot.creditReview) {
+    return (
+      <span className={snapshot.creditReview.lapsed ? 'text-danger' : undefined}>
+        {formatDmy(snapshot.creditReview.on)}
+      </span>
+    );
+  }
+  if (snapshot.backdated) {
+    return (
+      <span title="This is the review date the portal shows today. A back-dated report cannot say whether the limit was live on its own date, so no verdict was reached.">
+        {snapshot.nextReviewDate ?? '-'}{' '}
+        <span className="text-text-muted">(not judged — back-dated)</span>
+      </span>
+    );
+  }
+  // A date the portal published that we could not read. Showing it verbatim is
+  // the only honest option — it is the evidence an admin needs in order to
+  // report a portal change, and inventing a verdict from it is exactly what the
+  // capture refused to do.
+  return (
+    <span title="The portal published this in a format we could not read — tell the MDG team.">
+      {snapshot.nextReviewDate} <span className="text-text-muted">(unreadable)</span>
+    </span>
+  );
+}
+
+/**
+ * The dealer's credit line has been locked because its review date went by.
+ *
+ * Deliberately not worded as a payment problem. No deposit lifts this, and an
+ * admin who treats it as one leaves the dealer buying cash and carry for weeks
+ * while everyone waits for a transfer to fix it. The only route out runs through
+ * IndianOil's own sales officer, so that is what the notice says.
+ *
+ * Absent when the review is still ahead, when the portal published nothing we
+ * could read, and on a back-dated report — none of which is evidence of a live
+ * limit, so this stays silent rather than reassuring.
+ */
+function CreditLockNotice({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
+  const review = snapshot.creditReview;
+  if (!review?.lapsed) return null;
+  // `daysUntil` is negative once lapsed; floor at 1 so the morning after reads
+  // "1 day ago" rather than "0 days ago".
+  const days = Math.max(1, -review.daysUntil);
+
+  return (
+    <Notice tone="danger">
+      Credit locked. The review date of {formatDmy(review.on)} passed {days} day
+      {days === 1 ? '' : 's'} before the date these figures describe, so IndianOil
+      has stopped the credit line — the dealer must pay upfront (cash and carry)
+      until their sales officer has the limit reviewed and the account reopened.
+      The limit figures below still show what was granted, not what can be used.
     </Notice>
   );
 }
@@ -678,6 +774,11 @@ export function snapshotFromRunOutput(
     state: output.state,
     overdue: output.overdue ?? null,
     formOfLimit: output.card.formOfLimit,
+    nextReviewDate: output.nextReviewDate ?? null,
+    // Taken from the CARD, not the run root: the card is what was rendered and
+    // what the dealer receives, so this panel cannot claim a lock the image
+    // beside it does not show.
+    creditReview: output.card.creditReview ?? null,
     reconciles: output.reconciles,
     // Runs from before the flag existed WERE checked, so defaulting to true
     // keeps their badge honest instead of marking every old report unverified.

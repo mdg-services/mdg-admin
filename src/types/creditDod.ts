@@ -60,6 +60,32 @@ export interface CreditDodOverdue {
   estimatedFrom: boolean;
 }
 
+/**
+ * The dealer's credit-limit review, from the portal's "Next Review Date".
+ *
+ * Once `lapsed`, IndianOil has locked the account: the limit still prints on the
+ * report but cannot be drawn on, the dealer buys cash and carry, and only their
+ * sales officer can have it reviewed and reopened. Nothing the dealer or an
+ * admin does clears it, which is what makes it a different problem from an
+ * overdue deposit rather than a worse one.
+ *
+ * Null on a report captured before this was recorded, on one where the portal
+ * published no date we could read, and on every back-dated report — that page
+ * only ever states the position today. Null therefore means "no verdict", never
+ * "the review is fine", and must not be rendered as reassurance.
+ */
+export interface CreditDodReview {
+  /** The portal's Next Review Date, normalised to `dd-mm-yyyy`. */
+  on: string;
+  /**
+   * Whole days from the date the figures describe to `on`: positive while the
+   * review is still ahead, 0 on the day itself, negative once it has gone by.
+   */
+  daysUntil: number;
+  /** True once `on` is strictly behind the date the figures describe. */
+  lapsed: boolean;
+}
+
 /** One unpaid FIFO lot behind the DUE AMOUNT — oldest first. */
 export interface CreditDodOpenLot {
   /** dd-mm-yyyy the credit was availed. */
@@ -120,7 +146,12 @@ export interface CreditDodSnapshotRecord {
    * overdue report is always `state: 'due'` with this populated.
    */
   overdue: CreditDodOverdue | null;
+  /** What kind of limit the portal says the dealer holds — never a lock verdict. */
   formOfLimit: string;
+  /** The portal's "Next Review Date" exactly as it wrote it, e.g. `31-Mar-2027`. */
+  nextReviewDate: string | null;
+  /** See {@link CreditDodReview}. Null means no verdict, not a passing one. */
+  creditReview: CreditDodReview | null;
   reconciles: boolean;
   /**
    * False when neither cross-check figure was available, so `reconciles` was

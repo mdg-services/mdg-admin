@@ -536,6 +536,37 @@ function OverdueBadge({
 }
 
 /**
+ * The credit line was locked because its review date lapsed.
+ *
+ * Sits BESIDE the state badge rather than replacing it, unlike `OverdueBadge`.
+ * The two are independent: a locked dealer may be squarely up to date on
+ * deposits, and a dealer three deadlines behind may hold a perfectly live limit.
+ * Collapsing them into one badge would hide whichever arrived second.
+ */
+function CreditLockBadge({
+  snapshot,
+  className,
+}: {
+  snapshot: CreditDodSnapshotRecord;
+  className?: string;
+}) {
+  const review = snapshot.creditReview;
+  if (!review?.lapsed) return null;
+  const days = Math.max(1, -review.daysUntil);
+  return (
+    <Badge
+      className={className}
+      intent="danger"
+      title={`The credit review date of ${formatDmy(review.on)} passed ${days} day${
+        days === 1 ? '' : 's'
+      } before the date these figures describe. IndianOil has stopped the credit line — the dealer buys cash and carry until their sales officer reopens the account.`}
+    >
+      Credit locked
+    </Badge>
+  );
+}
+
+/**
  * The sheet. Expanding a row shows the full report — card image, figures, source
  * files and the Share action — so an admin never has to hunt through Run history
  * to send a dealer their card.
@@ -672,13 +703,16 @@ function SnapshotHistoryCard({ dealerId }: { dealerId: string }) {
                             )}
                           </TD>
                           <TD>
-                            {s.overdue ? (
-                              <OverdueBadge snapshot={s} />
-                            ) : (
-                              <Badge intent={STATE_INTENT[s.state] ?? 'neutral'}>
-                                {s.state}
-                              </Badge>
-                            )}
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {s.overdue ? (
+                                <OverdueBadge snapshot={s} />
+                              ) : (
+                                <Badge intent={STATE_INTENT[s.state] ?? 'neutral'}>
+                                  {s.state}
+                                </Badge>
+                              )}
+                              <CreditLockBadge snapshot={s} />
+                            </div>
                           </TD>
                           <TD>
                             {!s.reconcileChecked ? (
@@ -777,6 +811,7 @@ function SnapshotHistoryCard({ dealerId }: { dealerId: string }) {
                         </span>
                         <span className="mt-1.5 flex flex-wrap items-center gap-1.5 empty:hidden">
                           <OverdueBadge snapshot={s} />
+                          <CreditLockBadge snapshot={s} />
                           <LateEntriesBadge snapshot={s} />
                         </span>
                       </span>
