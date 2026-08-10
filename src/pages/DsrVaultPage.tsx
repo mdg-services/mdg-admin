@@ -7,8 +7,6 @@ import {
 import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-import { GenerateDsrButton } from './dsr/GenerateDsrButton';
-import { dsrDateLabel } from './dsr/DsrReportPanel';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -36,6 +34,9 @@ import {
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatLitres } from '@/lib/format';
+
+import { dsrDateLabel } from './dsr/DsrReportPanel';
+import { GenerateDsrButton } from './dsr/GenerateDsrButton';
 
 /** The one facet that matters on this screen: who needs a human look. */
 type StatusFilter = 'all' | 'attention' | 'missing';
@@ -85,7 +86,9 @@ export function DsrVaultPage() {
     setSearch(next, { replace: true });
   }
 
-  const dealers = data?.dealers ?? [];
+  // Memoised so the `?? []` fallback doesn't hand `visible` a fresh array
+  // identity on every render while the query is still in flight.
+  const dealers = React.useMemo(() => data?.dealers ?? [], [data]);
   const needle = query.trim().toLowerCase();
 
   const visible = React.useMemo(() => {

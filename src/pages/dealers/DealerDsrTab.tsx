@@ -2,14 +2,14 @@ import { AlertCircle, Download, ExternalLink, FileBarChart2 } from 'lucide-react
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { Button, Card, CardContent, EmptyState, Skeleton } from '@/components/ui';
+import { useDsrLatest } from '@/hooks/api/useDsr';
+import { ApiError } from '@/lib/api';
 import type { Dealer } from '@dk/shared';
 
 import { DsrReportPanel } from '../dsr/DsrReportPanel';
 import { GenerateDsrButton } from '../dsr/GenerateDsrButton';
 
-import { Button, Card, CardContent, EmptyState, Skeleton } from '@/components/ui';
-import { useDsrLatest } from '@/hooks/api/useDsr';
-import { ApiError } from '@/lib/api';
 
 interface Props {
   dealer: Dealer;

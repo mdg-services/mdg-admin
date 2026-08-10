@@ -8,14 +8,13 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
-import type { DsrAdvisoryKind, DsrVariationSummary } from '@dk/shared';
-
-import type { DsrReportView } from '@/hooks/api/useDsr';
 
 import { Badge, Card, CardContent } from '@/components/ui';
+import type { DsrReportView } from '@/hooks/api/useDsr';
 import { cn } from '@/lib/cn';
 import { formatLitres } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
+import type { DsrAdvisoryKind, DsrVariationSummary } from '@dk/shared';
 
 /** `YYYY-MM-DD` → `Thu, 23 Jul 2026`, read as a calendar date, not an instant. */
 export function dsrDateLabel(iso: string): string {

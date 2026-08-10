@@ -172,6 +172,12 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
     if (st === 'SUCCESS') {
       void qc.invalidateQueries({ queryKey: ['creditDodSnapshots', dealerId] });
       void qc.invalidateQueries({ queryKey: ['creditDodLedger', dealerId] });
+      // The Data Vault's PAD digest is cross-dealer, so it has no dealer in its
+      // key and would not be caught by the two above. A run moves the row count,
+      // the balance and "Last synced" — and "when was this last reconciled" is
+      // the entire point of that screen, so an admin who walks back to it must
+      // not be shown figures from before the run they just watched succeed.
+      void qc.invalidateQueries({ queryKey: ['creditDodVault'] });
       toast.success('Report ready — it is at the top of Report history below.');
     } else {
       // Name the dealer's own tab, not the global /runs page — that one is

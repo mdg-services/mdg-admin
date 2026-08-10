@@ -291,7 +291,12 @@ export function InboxPage() {
   }
 
   const conversationsQ = useConversations(filter);
-  const conversations = conversationsQ.data ?? [];
+  // Memoised so the `?? []` fallback doesn't re-fire the auto-select effect
+  // below with a fresh array identity on every render.
+  const conversations = React.useMemo(
+    () => conversationsQ.data ?? [],
+    [conversationsQ.data],
+  );
 
   const selectedQ = useConversation(selectedId);
   const conversation = selectedQ.data ?? null;

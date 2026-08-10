@@ -2,11 +2,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import * as React from 'react';
 
-import type { ServiceRun } from '@dk/shared';
 
 import { Button, useToast } from '@/components/ui';
 import { dsrKeys, useGenerateDsr } from '@/hooks/api/useDsr';
 import { api, ApiError } from '@/lib/api';
+import type { ServiceRun } from '@dk/shared';
 
 interface Props {
   dealerId: string;

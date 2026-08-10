@@ -512,7 +512,7 @@ function ManageUserDialog({
                 {user.archivedAt
                   ? ` on ${new Date(user.archivedAt).toLocaleDateString()}`
                   : ''}
-                . Login is disabled and they're hidden from the roster. Restore them
+                . Login is disabled and they&apos;re hidden from the roster. Restore them
                 below to manage access again.
               </span>
             </div>

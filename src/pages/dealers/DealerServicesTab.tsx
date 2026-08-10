@@ -1,4 +1,13 @@
-import { AlertCircle, Pause, Play, Plug, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import {
+  AlertCircle,
+  Pause,
+  Pencil,
+  Play,
+  Plug,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
 import * as React from 'react';
 
 import {
@@ -29,8 +38,11 @@ import {
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import type { Dealer, DealerService } from '@dk/shared';
+import type { UpdateDealerServiceInput } from '@dk/shared/schemas';
 
 import { AttachServiceDialog } from './AttachServiceDialog';
+import { EditServiceDialog } from './EditServiceDialog';
+import { describeSchedule } from './serviceSchedule';
 
 interface Props {
   dealer: Dealer;
@@ -43,6 +55,7 @@ const ICON_BTN =
 export function DealerServicesTab({ dealer }: Props) {
   const toast = useToast();
   const [attachOpen, setAttachOpen] = React.useState(false);
+  const [editTarget, setEditTarget] = React.useState<DealerService | null>(null);
   const [detachTarget, setDetachTarget] = React.useState<DealerService | null>(
     null,
   );
@@ -81,6 +94,31 @@ export function DealerServicesTab({ dealer }: Props) {
         patch: { status: nextStatus },
       });
       toast.success(`Service ${nextStatus.toLowerCase()}`);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Update failed';
+      toast.error(msg);
+    }
+  }
+
+  async function onSaveEdit(patch: UpdateDealerServiceInput) {
+    if (!editTarget) return;
+    try {
+      const updated = await update.mutateAsync({ dsId: editTarget.id, patch });
+      const schedule = describeSchedule(updated);
+      if (schedule.intent === 'warning') {
+        // Sticky (duration 0) on purpose: the save SUCCEEDED but left an active
+        // service with nothing to fire on, which is the one outcome an admin
+        // must not scroll past.
+        toast.toast({
+          intent: 'warning',
+          title: 'Service updated',
+          description: schedule.text,
+          duration: 0,
+        });
+      } else {
+        toast.success('Service updated', { description: schedule.text });
+      }
+      setEditTarget(null);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Update failed';
       toast.error(msg);
@@ -196,6 +234,14 @@ export function DealerServicesTab({ dealer }: Props) {
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => setEditTarget(ds)}
+                        aria-label="Edit schedule and config"
+                      >
+                        <Pencil width={14} height={14} strokeWidth={1.75} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => onToggle(ds)}
                         aria-label={
                           ds.status === 'ACTIVE' ? 'Pause' : 'Resume'
@@ -269,6 +315,14 @@ export function DealerServicesTab({ dealer }: Props) {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setEditTarget(ds)}
+                    aria-label="Edit schedule and config"
+                    className={ICON_BTN}
+                  >
+                    <Pencil width={18} height={18} strokeWidth={1.75} />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => onToggle(ds)}
                     aria-label={ds.status === 'ACTIVE' ? 'Pause' : 'Resume'}
                     className={ICON_BTN}
@@ -330,6 +384,13 @@ export function DealerServicesTab({ dealer }: Props) {
             toast.error(msg);
           }
         }}
+      />
+
+      <EditServiceDialog
+        open={!!editTarget}
+        service={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSubmit={onSaveEdit}
       />
 
       <Dialog

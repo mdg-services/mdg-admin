@@ -2,8 +2,6 @@ import { AlertCircle, Download, FileBarChart2 } from 'lucide-react';
 import * as React from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 
-import { DsrReportPanel, dsrDateLabel } from './DsrReportPanel';
-import { GenerateDsrButton } from './GenerateDsrButton';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -22,6 +20,9 @@ import {
 } from '@/hooks/api/useDsr';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
+
+import { DsrReportPanel, dsrDateLabel } from './DsrReportPanel';
+import { GenerateDsrButton } from './GenerateDsrButton';
 
 /** A 404 from the report endpoints just means "nothing generated yet". */
 function isNotFound(err: unknown): boolean {

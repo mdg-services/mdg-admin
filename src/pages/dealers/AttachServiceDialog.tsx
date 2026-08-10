@@ -1,28 +1,17 @@
-import Form from '@rjsf/core';
-import type { RJSFSchema } from '@rjsf/utils';
-import validator from '@rjsf/validator-ajv8';
 import * as React from 'react';
 
-import {
-  Badge,
-  Button,
-  Dialog,
-  Label,
-  Select,
-} from '@/components/ui';
+import { Badge, Button, Dialog } from '@/components/ui';
 import { useServicesQuery } from '@/hooks/api/useServices';
 import { statusIntent } from '@/lib/statusIntent';
-import type { Cadence, ServicePluginCatalogEntry } from '@dk/shared';
+import type { ServicePluginCatalogEntry } from '@dk/shared';
 import type { AttachServiceInput } from '@dk/shared/schemas';
 
-const CADENCE_OPTIONS: Array<{ value: '' | Cadence; label: string }> = [
-  { value: '', label: 'Plugin default' },
-  { value: 'DAILY', label: 'Daily' },
-  { value: 'WEEKLY', label: 'Weekly' },
-  { value: 'MONTHLY', label: 'Monthly' },
-  { value: 'YEARLY', label: 'Yearly' },
-  { value: 'ON_DEMAND', label: 'On demand' },
-];
+import {
+  ATTACH_CADENCE_OPTIONS,
+  customCronError,
+  ServiceConfigFields,
+  type CadenceChoice,
+} from './ServiceConfigFields';
 
 interface Props {
   open: boolean;
@@ -42,7 +31,7 @@ export function AttachServiceDialog({
   const { data: services, isLoading } = useServicesQuery();
   const [selectedId, setSelectedId] = React.useState<string>('');
   const [formData, setFormData] = React.useState<Record<string, unknown>>({});
-  const [cadence, setCadence] = React.useState<'' | Cadence>('');
+  const [cadence, setCadence] = React.useState<CadenceChoice>('');
   const [customCron, setCustomCron] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -60,8 +49,10 @@ export function AttachServiceDialog({
     (s) => !attachedServiceIds.includes(s.id),
   );
 
+  const cronError = customCronError(customCron);
+
   async function handleSubmit() {
-    if (!selected) return;
+    if (!selected || cronError) return;
     setSubmitting(true);
     try {
       const payload: AttachServiceInput = {
@@ -91,7 +82,7 @@ export function AttachServiceDialog({
           <Button
             onClick={handleSubmit}
             loading={submitting || loading}
-            disabled={!selected}
+            disabled={!selected || !!cronError}
           >
             Attach
           </Button>
@@ -130,55 +121,18 @@ export function AttachServiceDialog({
             </Button>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <Label htmlFor="cadence">Cadence</Label>
-              <Select
-                id="cadence"
-                value={cadence}
-                onChange={(e) =>
-                  setCadence(e.target.value as '' | Cadence)
-                }
-              >
-                {CADENCE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="customCron" hint="(optional)">
-                Custom cron
-              </Label>
-              <input
-                id="customCron"
-                className="h-11 w-full rounded-sm border border-border-strong bg-surface px-3 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:h-9"
-                placeholder="0 9 * * 1"
-                value={customCron}
-                onChange={(e) => setCustomCron(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="rounded-md border border-border bg-surface p-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-              Config
-            </p>
-            <RJSFContainer>
-              <Form
-                schema={selected.defaultConfigSchema as RJSFSchema}
-                validator={validator}
-                formData={formData}
-                onChange={(e) =>
-                  setFormData((e.formData ?? {}) as Record<string, unknown>)
-                }
-                liveValidate
-                showErrorList={false}
-                uiSchema={{ 'ui:submitButtonOptions': { norender: true } }}
-              />
-            </RJSFContainer>
-          </div>
+          <ServiceConfigFields
+            idPrefix="attach-service"
+            schema={selected.defaultConfigSchema}
+            config={formData}
+            onConfigChange={setFormData}
+            cadence={cadence}
+            cadenceOptions={ATTACH_CADENCE_OPTIONS}
+            onCadenceChange={setCadence}
+            customCron={customCron}
+            onCustomCronChange={setCustomCron}
+            cronError={cronError}
+          />
         </div>
       )}
     </Dialog>
@@ -219,17 +173,5 @@ function PluginPicker({
         </li>
       ))}
     </ul>
-  );
-}
-
-/**
- * Light-touch styling for RJSF. We rely on default markup, but make labels
- * and inputs visually consistent with the rest of the app.
- */
-function RJSFContainer({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rjsf [&_label]:text-sm [&_label]:font-medium [&_label]:text-text [&_input]:h-11 md:[&_input]:h-9 [&_input]:w-full [&_input]:rounded-sm [&_input]:border [&_input]:border-border-strong [&_input]:bg-surface [&_input]:px-3 [&_input]:text-sm [&_textarea]:w-full [&_textarea]:rounded-sm [&_textarea]:border [&_textarea]:border-border-strong [&_textarea]:bg-surface [&_textarea]:px-3 [&_textarea]:py-2 [&_textarea]:text-sm [&_select]:h-11 md:[&_select]:h-9 [&_select]:w-full [&_select]:rounded-sm [&_select]:border [&_select]:border-border-strong [&_select]:bg-surface [&_select]:px-2 [&_select]:text-sm [&_.field]:mb-3 [&_.field-description]:text-xs [&_.field-description]:text-text-subtle [&_.error-detail]:text-xs [&_.error-detail]:text-danger">
-      {children}
-    </div>
   );
 }

@@ -46,6 +46,22 @@ export const CODE_COPY: Record<string, CreditDodFailureCopy> = {
     hint: 'Usually temporary — retry the run. If it keeps happening, the captcha style may have changed.',
     adminHint: `Usually temporary. ${CONTACT_MDG}`,
   },
+  LOGIN_CHALLENGE_EXHAUSTED: {
+    title: "SDMS kept refusing the login's security verification.",
+    hint:
+      "SDMS now asks an arithmetic question ('3 x 2 = ?') instead of a picture captcha. We read it and answered it " +
+      'correctly every time and the portal still refused, which is usually a portal-side wobble. Retry; if it ' +
+      "persists, check the run's attempt diagnostics — the question and the answer we sent are recorded there.",
+    adminHint: `SDMS didn't accept our sign-in checks this time. ${CONTACT_MDG}`,
+  },
+  LOGIN_CHALLENGE_NOT_FOUND: {
+    title: 'SDMS changed its login page — the security verification is gone.',
+    hint:
+      'This needs a scraper update, not a retry: the login page showed no question we could answer and no captcha ' +
+      "image, or nowhere to type the answer. The failure diagnostics carry what the page WAS showing. (SDMS " +
+      'replaced its image captcha with a math question once already; this is the code that says it has changed again.)',
+    adminHint: 'This one needs a fix at our end — please contact the MDG team.',
+  },
   OCR_SIDECAR_UNAVAILABLE: {
     title: "The captcha reader isn't available on the server.",
     hint: 'This needs engineering — the OCR sidecar (Python venv) is missing or broken. See mdg-backend/ocr/README.md.',
