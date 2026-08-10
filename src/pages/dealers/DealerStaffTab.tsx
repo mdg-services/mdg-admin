@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  AlertTriangle,
   Award,
   ClipboardCheck,
   Clock,
@@ -21,6 +22,7 @@ import {
   CardHeader,
   CardSubtitle,
   CardTitle,
+  DateRangeFilter,
   Dialog,
   EmptyState,
   MobileCardList,
@@ -31,7 +33,10 @@ import {
   TH,
   THead,
   TRow,
+  dateRangeForPreset,
+  isValidDateRange,
   useToast,
+  type DateRangeValue,
 } from '@/components/ui';
 import {
   useAdminUndoAward,
@@ -55,35 +60,19 @@ interface Props {
 
 /* ─────────────────────────────── Date window ────────────────────────────── */
 
-type Preset = 'today' | 'last7' | 'month';
-
-const PRESETS: Array<{ id: Preset; label: string }> = [
-  { id: 'today', label: 'Today' },
-  { id: 'last7', label: 'Last 7 days' },
-  { id: 'month', label: 'This month' },
-];
-
-/** Local YYYY-MM-DD. Server treats windows as IST calendar days; the admin lens
- *  accepts a plain local day (see task note). */
-function toYmd(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-function windowFor(preset: Preset): { from: string; to: string } {
-  const now = new Date();
-  const to = toYmd(now);
-  if (preset === 'today') return { from: to, to };
-  if (preset === 'last7') {
-    const from = new Date(now);
-    from.setDate(from.getDate() - 6); // inclusive 7-day window
-    return { from: toYmd(from), to };
-  }
-  const from = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { from: toYmd(from), to };
-}
+/**
+ * GET /staff/awards caps its result set at 1000 ledger rows server-side (see
+ * `queryLedger` in routes/v1/staff.ts) — it is a row cap, not a date cap, so a
+ * long custom range does not 400, it silently truncates. Hitting it has to be
+ * said out loud, otherwise the audit trail looks complete when it is not.
+ *
+ * What we cannot say is that anything was actually dropped: the response is a
+ * bare array with no total, so a window holding exactly 1000 awards looks
+ * identical to one holding 5000. Hence the hedged wording below — telling an
+ * admin their trail is incomplete when it is not sends them off narrowing a
+ * range that never needed it, and it is the same misreading in reverse.
+ */
+const LEDGER_ROW_CAP = 1000;
 
 /* ─────────────────────────────── Small bits ─────────────────────────────── */
 
@@ -99,19 +88,24 @@ function EmployeeStatusChip({ status }: { status: EmployeeStatus }) {
 
 export function DealerStaffTab({ dealer }: Props) {
   const toast = useToast();
-  const [preset, setPreset] = React.useState<Preset>('today');
+  const [range, setRange] = React.useState<DateRangeValue>(() =>
+    dateRangeForPreset('today'),
+  );
   const [includeInactive, setIncludeInactive] = React.useState(false);
 
-  const win = React.useMemo(() => windowFor(preset), [preset]);
+  // Belt and braces: the picker only ever emits a complete, in-order window, so
+  // this can't fail in practice — but a windowed dealer id is the only lever
+  // these hooks expose for `enabled`, and a nonsense window must never be sent.
+  const windowedDealerId = isValidDateRange(range) ? dealer.id : undefined;
 
-  const overviewQ = useStaffOverviewQuery(dealer.id, {
-    from: win.from,
-    to: win.to,
+  const overviewQ = useStaffOverviewQuery(windowedDealerId, {
+    from: range.from,
+    to: range.to,
     includeInactive,
   });
-  const awardsQ = useStaffAwardsQuery(dealer.id, {
-    from: win.from,
-    to: win.to,
+  const awardsQ = useStaffAwardsQuery(windowedDealerId, {
+    from: range.from,
+    to: range.to,
   });
   const draftQ = useDealerDraftQuery(dealer.id);
   const batchesQ = useDealerBatchesQuery(dealer.id);
@@ -120,7 +114,9 @@ export function DealerStaffTab({ dealer }: Props) {
   const undoAward = useAdminUndoAward(dealer.id);
 
   const overview = overviewQ.data;
-  const roster = overview?.roster ?? [];
+  // Memoised for the identity, not the cost: `?? []` hands out a fresh array on
+  // every render, which silently defeats the `nameById` memo below.
+  const roster = React.useMemo(() => overview?.roster ?? [], [overview]);
   const summary = overview?.summary;
   const awards = awardsQ.data ?? [];
 
@@ -140,10 +136,6 @@ export function DealerStaffTab({ dealer }: Props) {
   }, [roster, summary]);
 
   const targetPoints = summary?.targetPoints;
-  const windowLabel =
-    win.from === win.to
-      ? formatDate(win.from)
-      : `${formatDate(win.from)} – ${formatDate(win.to)}`;
 
   function openAddWorker() {
     setEditingWorker(null);
@@ -185,29 +177,14 @@ export function DealerStaffTab({ dealer }: Props) {
     <div className="grid gap-4">
       {/* Date-window control + award CTA */}
       <Card>
-        <CardContent className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <div className="inline-flex rounded-md border border-border-strong p-0.5">
-            {PRESETS.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setPreset(p.id)}
-                aria-pressed={preset === p.id}
-                className={
-                  preset === p.id
-                    ? 'rounded-[5px] bg-brand px-3 py-1.5 text-sm font-semibold text-text-inverse'
-                    : 'rounded-[5px] px-3 py-1.5 text-sm font-medium text-text-muted hover:text-text'
-                }
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="text-sm text-text-muted">
-              Showing{' '}
-              <span className="font-medium text-text">{windowLabel}</span>
-              {typeof targetPoints === 'number' ? (
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <DateRangeFilter
+            label="Points date range"
+            value={range}
+            onChange={setRange}
+            className="min-w-0"
+            summarySuffix={
+              typeof targetPoints === 'number' ? (
                 <>
                   {' '}· target{' '}
                   <span className="font-medium text-text">
@@ -215,17 +192,17 @@ export function DealerStaffTab({ dealer }: Props) {
                   </span>{' '}
                   pts / worker
                 </>
-              ) : null}
-            </div>
-            <Button
-              size="sm"
-              className="shrink-0"
-              onClick={() => setAwardOpen(true)}
-              leftIcon={<Award width={14} height={14} strokeWidth={1.75} />}
-            >
-              Award points
-            </Button>
-          </div>
+              ) : null
+            }
+          />
+          <Button
+            size="sm"
+            className="w-full shrink-0 sm:w-auto"
+            onClick={() => setAwardOpen(true)}
+            leftIcon={<Award width={14} height={14} strokeWidth={1.75} />}
+          >
+            Award points
+          </Button>
         </CardContent>
       </Card>
 
@@ -845,6 +822,22 @@ export function DealerStaffTab({ dealer }: Props) {
             />
           ) : (
             <>
+              {awards.length >= LEDGER_ROW_CAP ? (
+                <p className="flex items-start gap-1.5 border-b border-border px-4 py-2.5 text-xs text-warning">
+                  <AlertTriangle
+                    width={14}
+                    height={14}
+                    strokeWidth={1.75}
+                    className="mt-px shrink-0"
+                  />
+                  <span>
+                    This window filled the {LEDGER_ROW_CAP}-entry maximum for a
+                    single request, so it may hold older entries that are not
+                    listed here. Narrow the date range to check.
+                  </span>
+                </p>
+              ) : null}
+
               {/* Desktop table (≥ md) */}
               <div className="hidden md:block">
                 <Table>

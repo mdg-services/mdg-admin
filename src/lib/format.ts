@@ -23,6 +23,68 @@ export function formatDate(iso?: string | null): string {
 }
 
 /**
+ * A `Date` as a local `YYYY-MM-DD` calendar day.
+ *
+ * The one conversion — date pickers, `?date=` links and the staff-points window
+ * all speak this format, and `toISOString().slice(0, 10)` is the trap they used
+ * to fall into: that reads the date back in UTC, so anyone east of Greenwich
+ * gets yesterday for most of the evening.
+ */
+export function toYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * A real calendar day in `YYYY-MM-DD` form — `2026-02-31` is rejected, which a
+ * bare regex would wave through. Accepts null/undefined so it can guard a value
+ * straight out of a query string or an input event.
+ *
+ * This answers one question only — does this day exist — not "is it a day this
+ * product cares about". A floor (nothing before 2000) belongs to the caller.
+ */
+export function isYmd(v?: string | null): v is string {
+  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const y = Number(v.slice(0, 4));
+  const m = Number(v.slice(5, 7));
+  const d = Number(v.slice(8, 10));
+  if (m < 1 || m > 12 || d < 1) return false;
+  // Counted out by hand rather than round-tripped through `Date`: `Date.UTC(y, …)`
+  // still honours the two-digit-year legacy and maps 0-99 to 1900-1999, so the
+  // round-trip could never agree with itself for a year below 100 — which is
+  // exactly the shape a date input emits while a year is being typed
+  // (`0002-07-12`), and those were being rejected as "not a real day" instead of
+  // as "too far in the past".
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const short = m === 4 || m === 6 || m === 9 || m === 11; // Apr, Jun, Sep, Nov
+  const lastDay = m === 2 ? (leap ? 29 : 28) : short ? 30 : 31;
+  return d <= lastDay;
+}
+
+/**
+ * A `YYYY-MM-DD` calendar day for a human — `2026-07-23` → `23 Jul 2026`, or
+ * `Thu, 23 Jul 2026` with `{ weekday: true }`.
+ *
+ * Built and read back in UTC so the day is never dragged across a timezone: a
+ * business date is a label, not an instant, and `new Date('2026-07-23')` parsed
+ * as UTC midnight prints as the 22nd anywhere west of Greenwich.
+ */
+export function formatYmd(ymd?: string | null, opts?: { weekday?: boolean }): string {
+  if (!ymd) return '-';
+  const d = new Date(`${ymd}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return ymd;
+  return d.toLocaleDateString(undefined, {
+    ...(opts?.weekday ? { weekday: 'short' as const } : {}),
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/**
  * Format a `dd-mm-yyyy` date — the format the SDMS portal and every Credit & DOD
  * figure use. `formatDate` can't: `new Date('16-07-2026')` is Invalid Date, so it
  * silently falls through and prints the raw string while the rest of the UI shows

@@ -18,3 +18,4 @@ export * from './Skeleton';
 export * from './Spinner';
 export * from './EmptyState';
 export * from './Pagination';
+export * from './DateRangeFilter';

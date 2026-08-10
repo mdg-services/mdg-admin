@@ -11,6 +11,7 @@ import type {
   StaffWorkUnit,
 } from '@dk/shared';
 
+import { toYmd } from './format';
 import type { Intent } from './statusIntent';
 
 export const DOMAIN_ORDER: StaffWorkDomain[] = [
@@ -97,11 +98,7 @@ export function fmtPoints(n: number): string {
 
 /** Local YYYY-MM-DD (used as the default workDate for awards). */
 export function todayYmd(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return toYmd(new Date());
 }
 
 /** A short, non-cryptographic id for keying local-only list rows. */
