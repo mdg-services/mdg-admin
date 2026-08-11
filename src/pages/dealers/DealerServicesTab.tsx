@@ -100,24 +100,36 @@ export function DealerServicesTab({ dealer }: Props) {
     }
   }
 
+  /**
+   * Report a save by what it actually left behind, not by the fact it returned
+   * 200. An ACTIVE row with no `nextRunAt` has gone quiet forever — no error, no
+   * failed run, nothing to alert on — so it is the one outcome that gets a
+   * sticky toast (`duration: 0`) rather than one an admin can scroll past.
+   *
+   * Shared by attach and edit deliberately: they write the same fields through
+   * the same validation, and the earlier split — where only edit reported the
+   * schedule — meant an attachment could go quiet on day one and say "Service
+   * attached".
+   */
+  function toastSchedule(title: string, ds: DealerService) {
+    const schedule = describeSchedule(ds);
+    if (schedule.intent === 'warning') {
+      toast.toast({
+        intent: 'warning',
+        title,
+        description: schedule.text,
+        duration: 0,
+      });
+    } else {
+      toast.success(title, { description: schedule.text });
+    }
+  }
+
   async function onSaveEdit(patch: UpdateDealerServiceInput) {
     if (!editTarget) return;
     try {
       const updated = await update.mutateAsync({ dsId: editTarget.id, patch });
-      const schedule = describeSchedule(updated);
-      if (schedule.intent === 'warning') {
-        // Sticky (duration 0) on purpose: the save SUCCEEDED but left an active
-        // service with nothing to fire on, which is the one outcome an admin
-        // must not scroll past.
-        toast.toast({
-          intent: 'warning',
-          title: 'Service updated',
-          description: schedule.text,
-          duration: 0,
-        });
-      } else {
-        toast.success('Service updated', { description: schedule.text });
-      }
+      toastSchedule('Service updated', updated);
       setEditTarget(null);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Update failed';
@@ -375,8 +387,7 @@ export function DealerServicesTab({ dealer }: Props) {
         attachedServiceIds={attachedIds}
         onSubmit={async (values) => {
           try {
-            await attach.mutateAsync(values);
-            toast.success('Service attached');
+            toastSchedule('Service attached', await attach.mutateAsync(values));
             setAttachOpen(false);
           } catch (err) {
             const msg =
