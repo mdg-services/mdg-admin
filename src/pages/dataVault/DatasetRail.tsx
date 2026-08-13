@@ -1,12 +1,24 @@
+import type { LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { cn } from '@/lib/cn';
 
-import type { VaultDataset } from './types';
+/**
+ * The minimum a rail needs to render one entry. Both the cross-dealer Vault
+ * (`VaultDataset`) and the per-dealer Vault (`DealerVaultDataset`) are supersets
+ * of this, so the rail is shared by structural typing without either importing
+ * the other's pane shape.
+ */
+export interface DatasetRailItem {
+  id: string;
+  label: string;
+  description: string;
+  Icon: LucideIcon;
+}
 
 export interface DatasetRailProps {
-  datasets: readonly VaultDataset[];
-  /** The `?dataset=` currently resolved — already defaulted, never null. */
+  datasets: readonly DatasetRailItem[];
+  /** The dataset currently resolved — already defaulted, never null. */
   activeId: string;
   /** The search string that opens a dataset. The page owns what survives a switch. */
   hrefFor: (id: string) => string;

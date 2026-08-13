@@ -2,10 +2,8 @@ import {
   AlertCircle,
   Archive,
   ClipboardList,
-  FileBarChart2,
   History,
   ListChecks,
-  ReceiptText,
   RotateCcw,
   Send,
   Trash2,
@@ -33,13 +31,10 @@ import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import type { Dealer } from '@dk/shared';
 
 import { CustomRequestTab } from './dealers/CustomRequestTab';
-import { DealerCreditDodTab } from './dealers/DealerCreditDodTab';
 import {
   DealerArchiveDialogs,
   type DealerArchiveAction,
 } from './dealers/DealerDangerZone';
-import { DealerDataVaultTab } from './dealers/DealerDataVaultTab';
-import { DealerDsrTab } from './dealers/DealerDsrTab';
 import { DealerInfoTab } from './dealers/DealerInfoTab';
 import { DealerKavachTab } from './dealers/DealerKavachTab';
 import { DealerMembersTab } from './dealers/DealerMembersTab';
@@ -49,6 +44,7 @@ import { DealerWorkListTab } from './dealers/DealerWorkListTab';
 import { OnboardingTab } from './dealers/OnboardingTab';
 import { RunsListInline } from './dealers/RunsListInline';
 import { ServicesProvidedTab } from './dealers/ServicesProvidedTab';
+import { DealerVaultView } from './dealers/vault/DealerVaultView';
 
 /** Where an entry ends up once every rule below has been applied. */
 type TabPlacement = 'strip' | 'menu' | 'hidden';
@@ -141,26 +137,14 @@ const TABS: TabDef[] = [
     body: (dealer) => <DealerWorkListTab dealer={dealer} />,
   },
   {
-    id: 'credit-dod',
-    label: 'Credit & DOD',
-    placement: 'strip',
-    requiresService: 'credit-dod-monitoring',
-    icon: <ReceiptText {...ICON} />,
-    body: (dealer) => <DealerCreditDodTab dealer={dealer} />,
-  },
-  {
-    id: 'dsr',
-    label: 'Daily Sales Report',
-    placement: 'strip',
-    requiresService: 'dsr-report',
-    icon: <FileBarChart2 {...ICON} />,
-    body: (dealer) => <DealerDsrTab dealer={dealer} />,
-  },
-  {
     id: 'data-vault',
     label: 'Data Vault',
     placement: 'strip',
-    body: (dealer) => <DealerDataVaultTab dealer={dealer} />,
+    // A sidebar of datasets scoped to this dealer — the per-dealer mirror of the
+    // cross-dealer Vault. Credit & DOD and the Daily Sales Report live INSIDE this
+    // rail now (as gated datasets) rather than as their own tabs, alongside IRAS
+    // shift data, the PAD ledger and Inspection Reports.
+    body: (dealer) => <DealerVaultView dealer={dealer} />,
   },
   {
     id: 'members',
@@ -209,7 +193,7 @@ function tabById(id: string): TabDef | undefined {
 
 export function DealerDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isSuperAdmin = useIsSuperAdmin();
   const { data: dealer, isLoading, isError, error } = useDealerQuery(id);
   // Drives the service gating below. Shares its query key with the Services tab,
@@ -222,12 +206,28 @@ export function DealerDetailPage() {
   React.useEffect(() => {
     if (!dealer || tab) return;
     const requested = searchParams.get('tab');
+    // Credit & DOD and the Daily Sales Report moved from their own tabs into the
+    // Data Vault rail. Keep old `?tab=credit-dod` / `?tab=dsr` links working by
+    // landing on the Data Vault tab with that dataset selected.
+    if (requested === 'credit-dod' || requested === 'dsr') {
+      setTab('data-vault');
+      setSearchParams(
+        (cur) => {
+          const next = new URLSearchParams(cur);
+          next.set('tab', 'data-vault');
+          next.set('vault', requested);
+          return next;
+        },
+        { replace: true },
+      );
+      return;
+    }
     if (requested && TAB_IDS.includes(requested)) {
       setTab(requested);
       return;
     }
     setTab(dealer.status === 'ACTIVE' ? 'info' : 'onboarding');
-  }, [dealer, tab, searchParams]);
+  }, [dealer, tab, searchParams, setSearchParams]);
 
   if (isLoading) {
     return (
