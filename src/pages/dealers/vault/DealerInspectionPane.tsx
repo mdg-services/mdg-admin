@@ -2,6 +2,7 @@ import {
   AlertCircle,
   ClipboardCheck,
   DownloadCloud,
+  FileText,
   Files,
   Layers,
 } from 'lucide-react';
@@ -12,6 +13,7 @@ import {
   Button,
   Card,
   CardContent,
+  Drawer,
   EmptyState,
   MobileCardList,
   Skeleton,
@@ -33,7 +35,9 @@ import { StatTile, StatTileRow, StatTileSkeletons } from '@/pages/dataVault/Stat
 import {
   INSPECTION_REPORT_KIND_LABELS,
   type InspectionColumn,
+  type InspectionReportDetail,
   type InspectionReportItem,
+  type InspectionReportSection,
   type InspectionReportSummary,
 } from '@dk/shared';
 
@@ -70,6 +74,12 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
   const toast = useToast();
   const summaryQ = useInspectionSummary(dealer.id);
   const collect = useCollectInspection(dealer.id);
+  // The full report opened from a row (declared up here — hooks run before the
+  // loading/empty early-returns below).
+  const [openReport, setOpenReport] = React.useState<{
+    heading: string;
+    detail: InspectionReportDetail;
+  } | null>(null);
 
   function runCapture() {
     collect.mutate(undefined, {
@@ -127,6 +137,29 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
   const summary = summaryQ.data!;
   const kindLabel = INSPECTION_REPORT_KIND_LABELS[summary.kind] ?? 'Inspection';
   const columns = effectiveColumns(summary);
+  // The portal's own "VIEW REPORT" column held a dead "VIEW" label; we render a
+  // real action instead, so drop it from the data columns.
+  const dataColumns = columns.filter(
+    (c) => !/view/i.test(c.headerName) && !/view/i.test(c.field),
+  );
+
+  /** The "View report" control for a row, or a dash when no report was captured. */
+  function reportAction(item: InspectionReportItem, i: number): React.ReactNode {
+    const detail = item.report;
+    if (!detail || detail.sections.length === 0) {
+      return <span className="text-text-subtle">—</span>;
+    }
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        leftIcon={<FileText width={14} height={14} strokeWidth={1.75} />}
+        onClick={() => setOpenReport({ heading: itemHeading(item, i), detail })}
+      >
+        View report
+      </Button>
+    );
+  }
   const neverCaptured = !summary.capturedAt;
   const failed = summary.status === 'FAILED' || !!summary.failureReason;
 
@@ -239,51 +272,70 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
                     <Table>
                       <THead>
                         <TRow>
-                          {columns.map((c) => (
+                          {dataColumns.map((c) => (
                             <TH key={c.field}>{c.headerName}</TH>
                           ))}
+                          <TH className="text-right">Report</TH>
                         </TRow>
                       </THead>
                       <TBody>
                         {summary.latest.map((item, i) => (
                           <TRow key={item.ref ?? i}>
-                            {columns.map((c) => (
+                            {dataColumns.map((c) => (
                               <TD key={c.field} className="whitespace-nowrap">
                                 {item.cells[c.field] || '—'}
                               </TD>
                             ))}
+                            <TD className="whitespace-nowrap text-right">
+                              {reportAction(item, i)}
+                            </TD>
                           </TRow>
                         ))}
                       </TBody>
                     </Table>
                   </div>
 
-                  {/* Mobile card-stack (< md). */}
+                  {/* Mobile card-stack (< md). Tapping a card opens its report. */}
                   <MobileCardList
                     className="p-3"
-                    cards={summary.latest.map((item, i) => ({
-                      key: item.ref ?? String(i),
-                      primary: (
-                        <span className="block truncate font-medium text-text">
-                          {itemHeading(item, i)}
-                        </span>
-                      ),
-                      secondary: item.ref ? (
-                        <span className="font-mono text-xs">{item.ref}</span>
-                      ) : undefined,
-                      meta: (
-                        <span className="flex flex-col gap-0.5">
-                          {columns.map((c) =>
-                            item.cells[c.field] ? (
-                              <span key={c.field}>
-                                <span className="text-text-subtle">{c.headerName}: </span>
-                                {item.cells[c.field]}
-                              </span>
-                            ) : null,
-                          )}
-                        </span>
-                      ),
-                    }))}
+                    cards={summary.latest.map((item, i) => {
+                      const detail =
+                        item.report && item.report.sections.length > 0
+                          ? item.report
+                          : null;
+                      return {
+                        key: item.ref ?? String(i),
+                        onClick: detail
+                          ? () =>
+                              setOpenReport({ heading: itemHeading(item, i), detail })
+                          : undefined,
+                        primary: (
+                          <span className="block truncate font-medium text-text">
+                            {itemHeading(item, i)}
+                          </span>
+                        ),
+                        primaryRight: detail ? (
+                          <span className="whitespace-nowrap text-xs font-medium text-brand">
+                            View report ›
+                          </span>
+                        ) : undefined,
+                        secondary: item.ref ? (
+                          <span className="font-mono text-xs">{item.ref}</span>
+                        ) : undefined,
+                        meta: (
+                          <span className="flex flex-col gap-0.5">
+                            {dataColumns.map((c) =>
+                              item.cells[c.field] ? (
+                                <span key={c.field}>
+                                  <span className="text-text-subtle">{c.headerName}: </span>
+                                  {item.cells[c.field]}
+                                </span>
+                              ) : null,
+                            )}
+                          </span>
+                        ),
+                      };
+                    })}
                   />
                 </>
               )}
@@ -309,6 +361,68 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
           </Card>
         </>
       )}
+
+      <Drawer
+        open={!!openReport}
+        onClose={() => setOpenReport(null)}
+        width="lg"
+        title="Retail Outlet Inspection & Analysis Report"
+        description={openReport ? `Inspection ${openReport.heading}` : undefined}
+        footer={
+          <Button variant="ghost" onClick={() => setOpenReport(null)}>
+            Close
+          </Button>
+        }
+      >
+        {openReport ? <ReportView detail={openReport.detail} /> : null}
+      </Drawer>
+    </div>
+  );
+}
+
+/** Renders a captured report's parsed sections as stacked tables (Form SL.5(R)). */
+function ReportView({ detail }: { detail: InspectionReportDetail }) {
+  if (detail.sections.length === 0) {
+    return (
+      <p className="text-sm text-text-muted">
+        This report was captured but could not be parsed into sections.
+      </p>
+    );
+  }
+  return (
+    <div className="grid gap-4">
+      {detail.sections.map((section, i) => (
+        <ReportSection key={i} section={section} />
+      ))}
+    </div>
+  );
+}
+
+/** One report section — a generic bordered table of the portal's own cells. */
+function ReportSection({ section }: { section: InspectionReportSection }) {
+  if (section.rows.length === 0) return null;
+  return (
+    <div className="overflow-x-auto rounded-md border border-border">
+      <table className="w-full border-collapse text-sm">
+        <tbody>
+          {section.rows.map((row, ri) => (
+            <tr key={ri}>
+              {row.map((cell, ci) => (
+                <td
+                  key={ci}
+                  className={`border border-border px-2.5 py-1.5 align-top ${
+                    row.length === 1
+                      ? 'bg-surface-2 font-semibold text-text'
+                      : 'text-text'
+                  }`}
+                >
+                  {cell || '—'}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
