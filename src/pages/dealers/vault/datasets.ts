@@ -33,6 +33,7 @@ const REGISTRY = [
     label: 'IRAS shift data',
     description: "This dealer's shift-anchored IRAS captures — latest and history.",
     Icon: Database,
+    requiresService: 'iras-shift-data',
     Pane: DealerDataVaultTab,
   },
   {
@@ -40,6 +41,9 @@ const REGISTRY = [
     label: 'PAD ledger',
     description: "This dealer's accumulated PAD transactions from Credit & DOD monitoring.",
     Icon: ReceiptText,
+    // The PAD ledger IS the Credit & DOD scrape's output, so it lives or dies
+    // with that service being attached.
+    requiresService: 'credit-dod-monitoring',
     Pane: DealerPadLedgerPane,
   },
   {
@@ -63,6 +67,7 @@ const REGISTRY = [
     label: 'Inspection Reports',
     description: "The latest inspection reports on this dealer's outlet, and how many more the portal holds.",
     Icon: ClipboardCheck,
+    requiresService: 'inspection-reports',
     Pane: DealerInspectionPane,
   },
 ] as const satisfies readonly DealerVaultDataset[];

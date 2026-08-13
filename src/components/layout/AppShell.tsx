@@ -119,8 +119,9 @@ export function AppShell() {
     // safe-area-inset-top padding is not double-counted and the bar stays on
     // screen; safe-top = 0 on desktop, so this matches the old desktop height.
     <div className="flex h-full w-full">
-      {/* Desktop sidebar (≥ md) — unchanged. */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface md:flex">
+      {/* Desktop sidebar (≥ md). Kept narrow (w-52) so data-heavy pages — the
+          per-dealer Data Vault's wide ledgers especially — keep their width. */}
+      <aside className="hidden w-52 shrink-0 flex-col border-r border-border bg-surface md:flex">
         <div className="flex h-14 items-center gap-2 border-b border-border px-4">
           <BrandMark />
         </div>
