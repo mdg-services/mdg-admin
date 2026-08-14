@@ -53,6 +53,27 @@ export const UNIT_LABELS: Record<StaffWorkUnit, string> = {
   photo: 'per photo',
 };
 
+/**
+ * The same units read as a COUNT of things done — for the output totals on a
+ * worker's detail view. `UNIT_LABELS` above is the RATE a work pays at ("per
+ * vehicle"), which reads wrong as a heading over the number 42.
+ *
+ * `rupee-1000` is `Exclude`d rather than left optional, on purpose twice over:
+ * money is totalled in rupees (with `inrFormat`) and never in thousand-rupee
+ * blocks, AND a total record means adding a unit to `StaffWorkUnit` is a
+ * compile error here — the same guarantee its sibling maps above give. A
+ * `Partial` would compile clean and silently print "Units 1,240" for litres.
+ */
+export const UNIT_COUNT_LABELS: Record<Exclude<StaffWorkUnit, 'rupee-1000'>, string> = {
+  vehicle: 'Vehicles',
+  guest: 'Guests served',
+  customer: 'Customers',
+  transaction: 'Transactions',
+  item: 'Items',
+  tank: 'Tanks',
+  photo: 'Photos',
+};
+
 export const DISTRIBUTION_LABELS: Record<StaffPointDistribution, string> = {
   FLAT: 'Flat (each worker)',
   SPLIT: 'Split among workers',

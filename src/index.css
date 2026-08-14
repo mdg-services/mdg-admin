@@ -126,6 +126,22 @@
   .safe-top {
     padding-top: max(env(safe-area-inset-top), 0.5rem);
   }
+  /* The charts' second encoding channel. A hatched grey mark says "a different
+     KIND of day" (the worker was on leave) while bar height still says "how
+     much" — so the distinction survives greyscale, colour-blindness and
+     forced-colors, which a second hue would not. 45° only: horizontal or
+     vertical arms read as gridlines, or as bars of their own. Written here
+     rather than as a Tailwind arbitrary value because
+     `bg-[repeating-linear-gradient(…)]` leans on Tailwind's type inference to
+     land on background-image, and the same fill is needed by the chart marks
+     and by their legend swatches. */
+  .chart-hatch {
+    background-image: repeating-linear-gradient(
+      45deg,
+      var(--color-border-strong) 0 2px,
+      transparent 2px 5px
+    );
+  }
 }
 
 /* Bottom-sheet entrance for mobile Dialog/Drawer (§6.3). Desktop uses

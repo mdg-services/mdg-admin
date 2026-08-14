@@ -42,7 +42,7 @@ import { Input } from './Input';
 /* ─────────────────────────────── Types ──────────────────────────────────── */
 
 /** The presets with a window we can compute ourselves. */
-export type DateRangeQuickPreset = 'today' | 'last7' | 'month';
+export type DateRangeQuickPreset = 'today' | 'last7' | 'month' | 'lastMonth';
 
 export type DateRangePreset = DateRangeQuickPreset | 'custom';
 
@@ -95,6 +95,7 @@ export const DATE_RANGE_PRESETS: ReadonlyArray<{ id: DateRangePreset; label: str
   { id: 'today', label: 'Today' },
   { id: 'last7', label: 'Last 7 days' },
   { id: 'month', label: 'This month' },
+  { id: 'lastMonth', label: 'Last month' },
   { id: 'custom', label: 'Custom' },
 ];
 
@@ -128,6 +129,16 @@ export function dateRangeForPreset(preset: DateRangeQuickPreset): DateRangeValue
     const from = new Date(now);
     from.setDate(from.getDate() - 6); // inclusive 7-day window
     return { preset, from: toYmd(from), to };
+  }
+  if (preset === 'lastMonth') {
+    // Day 0 of this month IS the last day of the previous one, so the month
+    // length (28/29/30/31) and the January→December year rollover both fall
+    // out of the constructor rather than being counted by hand. Unlike every
+    // other preset this window ENDS in the past — a settled month is the whole
+    // point of it — which is also why it needs no clamping against today.
+    const end = new Date(now.getFullYear(), now.getMonth(), 0);
+    const start = new Date(end.getFullYear(), end.getMonth(), 1);
+    return { preset, from: toYmd(start), to: toYmd(end) };
   }
   const from = new Date(now.getFullYear(), now.getMonth(), 1);
   return { preset, from: toYmd(from), to };
@@ -466,7 +477,12 @@ export function DateRangeFilter({
       <div
         role="group"
         aria-label={label}
-        className="inline-flex flex-wrap gap-0.5 self-start rounded-md border border-border-strong p-0.5"
+        // `w-fit`, not `self-start`: in a grid, `align-self` does nothing to the
+        // inline axis, so the chip group's border used to stretch to whatever
+        // the widest row below it made the column — which is the summary line,
+        // and that grows with the window. `fit-content` shrinks to the chips
+        // while still capping at the available width, so it wraps on a phone.
+        className="inline-flex w-fit flex-wrap gap-0.5 self-start rounded-md border border-border-strong p-0.5"
       >
         {presets.map((p) => {
           const active = value.preset === p.id;

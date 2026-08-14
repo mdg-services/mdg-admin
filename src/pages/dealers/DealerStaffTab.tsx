@@ -2,6 +2,8 @@ import {
   AlertCircle,
   AlertTriangle,
   Award,
+  BarChart3,
+  ChevronRight,
   ClipboardCheck,
   Clock,
   Image as ImageIcon,
@@ -33,6 +35,7 @@ import {
   TH,
   THead,
   TRow,
+  dateRangeDays,
   dateRangeForPreset,
   isValidDateRange,
   useToast,
@@ -47,11 +50,12 @@ import {
   useStaffOverviewQuery,
 } from '@/hooks/api/useStaff';
 import { ApiError } from '@/lib/api';
-import { formatDate, formatDateTime } from '@/lib/format';
+import { formatDateTime, formatYmd } from '@/lib/format';
 import { fmtPoints } from '@/lib/staffWork';
 import type { Dealer, EmployeeStatus, EmployeeWithPoints, StaffPointAward } from '@dk/shared';
 
 import { AwardPointsDialog } from './AwardPointsDialog';
+import { WarriorDetailDrawer } from './WarriorDetailDrawer';
 import { WorkerFormDialog } from './WorkerFormDialog';
 
 interface Props {
@@ -73,6 +77,21 @@ interface Props {
  * range that never needed it, and it is the same misreading in reverse.
  */
 const LEDGER_ROW_CAP = 1000;
+
+/**
+ * Longest window this tab will query, in inclusive days.
+ *
+ * Nothing server-side rejects a long range — `staffPointsQuerySchema` takes a
+ * bare from/to and `queryLedger` caps ROWS, not days — so before this the picker
+ * would happily commit "1 Jan 2000 → today". That is not merely slow: it is a
+ * window the panel cannot describe honestly. The row cap returns only the newest
+ * 1000 awards, the leaderboard's per-day target gets multiplied by 9,722, and
+ * the warrior panel's day series runs into `MAX_ENUMERATED_DAYS`. A year is well
+ * past any real reporting period (every quick preset is ≤ 31 days) and keeps
+ * every figure on this tab meaning what it says. `DateRangeFilter` explains the
+ * refusal in its own message line and hides any preset that would exceed it.
+ */
+const MAX_WINDOW_DAYS = 366;
 
 /* ─────────────────────────────── Small bits ─────────────────────────────── */
 
@@ -118,7 +137,11 @@ export function DealerStaffTab({ dealer }: Props) {
   // every render, which silently defeats the `nameById` memo below.
   const roster = React.useMemo(() => overview?.roster ?? [], [overview]);
   const summary = overview?.summary;
-  const awards = awardsQ.data ?? [];
+  // Same reason as `roster` above, with more at stake: the award history renders
+  // up to the endpoint's 1000-row cap as BOTH a desktop table and a mobile card
+  // stack, and this array feeds the memo that keeps opening the warrior panel
+  // from re-reconciling all of it.
+  const awards = React.useMemo(() => awardsQ.data ?? [], [awardsQ.data]);
 
   // Dialog + action state.
   const [awardOpen, setAwardOpen] = React.useState(false);
@@ -126,6 +149,8 @@ export function DealerStaffTab({ dealer }: Props) {
   const [editingWorker, setEditingWorker] = React.useState<EmployeeWithPoints | null>(null);
   const [undoTarget, setUndoTarget] = React.useState<StaffPointAward | null>(null);
   const [photoUrl, setPhotoUrl] = React.useState<string | null>(null);
+  /** The warrior whose detail panel is open, or `null`. */
+  const [detailId, setDetailId] = React.useState<string | null>(null);
 
   // employeeId → display name, resolved from roster then summary rows.
   const nameById = React.useMemo(() => {
@@ -135,7 +160,129 @@ export function DealerStaffTab({ dealer }: Props) {
     return map;
   }, [roster, summary]);
 
+  /**
+   * `targetPoints` is the sheet's baseline for ONE worker on ONE day, so a
+   * whole-window total cannot be read against it directly — a month of work
+   * against a single day's target prints "1,324.92 / 100", which says nothing.
+   *
+   * Scaled PER WORKER, by the days they were actually at the pump. Counting
+   * leave as missed days would flag a warrior who beat the target on all 26 days
+   * they worked as short of a 31-day target, and their own detail panel — which
+   * discounts leave — would say the opposite about the same worker in the same
+   * window. `roster` carries `leaveDaysInWindow` per worker, keyed by the same
+   * id as `summary.rows[].employeeId`, so nothing here needs guessing.
+   *
+   * A worker on leave for the entire window has no target to meet; those rows
+   * print no target rather than "0 / 0".
+   */
   const targetPoints = summary?.targetPoints;
+  const windowDays = isValidDateRange(range) ? dateRangeDays(range.from, range.to) : 1;
+  const leaveDaysById = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const emp of roster) map.set(emp.id, emp.leaveDaysInWindow);
+    return map;
+  }, [roster]);
+  /**
+   * The award history's two renderings, memoised on the data they read.
+   *
+   * This card can hold the endpoint's full 1000 rows, as a desktop table AND a
+   * mobile card stack (both are in the DOM at every breakpoint; `md:hidden`
+   * only hides one). Before this, opening the warrior panel — a `setDetailId`
+   * on THIS component — rebuilt every one of those elements before the panel
+   * could paint, and closing it paid the cost again. Stable element identities
+   * let React skip the whole subtree instead, so the drawer opens against a
+   * 1000-row history as fast as against an empty one.
+   */
+  const historyRows = React.useMemo(
+    () =>
+      awards.map((a) => (
+        <TRow key={a.id}>
+          <TD className="whitespace-nowrap text-text-muted">{formatYmd(a.workDate)}</TD>
+          <TD className="font-medium">
+            {/* Only a link when we can name them. A worker who is not in the
+                roster or on the leaderboard for this window — one deactivated
+                mid-window, with "Include inactive" off — has no name to put in
+                the panel's title, so it would open as the generic "Warrior".
+                Tick "Include inactive" and the row becomes a link. */}
+            {nameById.has(a.employeeId) ? (
+              <button
+                type="button"
+                onClick={() => setDetailId(a.employeeId)}
+                className="rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+              >
+                {nameById.get(a.employeeId)}
+              </button>
+            ) : (
+              <span className="text-text-muted">Unknown worker</span>
+            )}
+          </TD>
+          <TD>
+            <div>{a.workLabelEn}</div>
+            {a.note ? <div className="text-xs text-text-muted">{a.note}</div> : null}
+          </TD>
+          <TD className="text-right tabular-nums font-semibold">{fmtPoints(a.points)}</TD>
+          <TD className="text-text-muted">{a.awardedByName ?? '—'}</TD>
+          <TD className="text-right">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setUndoTarget(a)}
+              leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
+            >
+              Undo
+            </Button>
+          </TD>
+        </TRow>
+      )),
+    [awards, nameById],
+  );
+
+  const historyCards = React.useMemo(
+    () =>
+      awards.map((a) => ({
+        key: a.id,
+        primary: (
+          <span className="block truncate font-medium text-text">
+            {nameById.get(a.employeeId) ?? 'Unknown worker'}
+          </span>
+        ),
+        primaryRight: (
+          <span className="tabular-nums font-semibold">{fmtPoints(a.points)}</span>
+        ),
+        secondary: (
+          <span>
+            {a.workLabelEn}
+            {a.note ? <span className="block text-xs text-text-muted">{a.note}</span> : null}
+          </span>
+        ),
+        meta: (
+          <span>
+            {formatYmd(a.workDate)} · {a.awardedByName ?? '—'}
+          </span>
+        ),
+        actions: (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="w-full"
+            onClick={() => setUndoTarget(a)}
+            leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
+          >
+            Undo
+          </Button>
+        ),
+      })),
+    [awards, nameById],
+  );
+
+  const targetFor = React.useCallback(
+    (employeeId: string): number | undefined => {
+      if (typeof targetPoints !== 'number') return undefined;
+      const workingDays = windowDays - (leaveDaysById.get(employeeId) ?? 0);
+      return workingDays > 0 ? targetPoints * workingDays : undefined;
+    },
+    [targetPoints, windowDays, leaveDaysById],
+  );
 
   function openAddWorker() {
     setEditingWorker(null);
@@ -182,6 +329,7 @@ export function DealerStaffTab({ dealer }: Props) {
             label="Points date range"
             value={range}
             onChange={setRange}
+            maxRangeDays={MAX_WINDOW_DAYS}
             className="min-w-0"
             summarySuffix={
               typeof targetPoints === 'number' ? (
@@ -190,7 +338,16 @@ export function DealerStaffTab({ dealer }: Props) {
                   <span className="font-medium text-text">
                     {fmtPoints(targetPoints)}
                   </span>{' '}
-                  pts / worker
+                  pts / worker / day
+                  {windowDays > 1 ? (
+                    <>
+                      {' '}· up to{' '}
+                      <span className="font-medium text-text">
+                        {fmtPoints(targetPoints * windowDays)}
+                      </span>{' '}
+                      over these {windowDays} days, less each worker&apos;s leave
+                    </>
+                  ) : null}
                 </>
               ) : null
             }
@@ -215,8 +372,9 @@ export function DealerStaffTab({ dealer }: Props) {
               Leaderboard
             </CardTitle>
             <CardSubtitle>
-              Points earned in the selected window, ranked. The target line is the
-              sheet baseline every worker should reach.
+              Points earned in the selected window, ranked, against the sheet
+              baseline scaled to that window. Pick a warrior for their day-by-day
+              breakdown.
             </CardSubtitle>
           </div>
         </CardHeader>
@@ -250,17 +408,39 @@ export function DealerStaffTab({ dealer }: Props) {
                       <TH>Status</TH>
                       <TH className="text-right">Awards</TH>
                       <TH className="text-right">Points</TH>
+                      <TH className="w-8">
+                        <span className="sr-only">Details</span>
+                      </TH>
                     </TRow>
                   </THead>
                   <TBody>
                     {summary.rows.map((row, i) => {
+                      const rowTarget = targetFor(row.employeeId);
                       const hitTarget =
-                        typeof targetPoints === 'number' &&
-                        row.totalPoints >= targetPoints;
+                        rowTarget !== undefined && row.totalPoints >= rowTarget;
                       return (
-                        <TRow key={row.employeeId}>
+                        <TRow
+                          key={row.employeeId}
+                          clickable
+                          onClick={() => setDetailId(row.employeeId)}
+                        >
                           <TD className="text-text-muted tabular-nums">{i + 1}</TD>
-                          <TD className="font-medium">{row.employeeName}</TD>
+                          <TD className="font-medium">
+                            {/* The row is clickable for the mouse; the name is a
+                                real button so the panel is reachable by keyboard
+                                too. Both do the same thing, so the second click a
+                                button-inside-a-row fires is harmless. */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDetailId(row.employeeId);
+                              }}
+                              className="rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+                            >
+                              {row.employeeName}
+                            </button>
+                          </TD>
                           <TD>
                             <EmployeeStatusChip status={row.status} />
                           </TD>
@@ -271,7 +451,7 @@ export function DealerStaffTab({ dealer }: Props) {
                             <span className="tabular-nums font-semibold">
                               {fmtPoints(row.totalPoints)}
                             </span>
-                            {typeof targetPoints === 'number' ? (
+                            {rowTarget !== undefined ? (
                               <span
                                 className={
                                   hitTarget
@@ -279,9 +459,17 @@ export function DealerStaffTab({ dealer }: Props) {
                                     : 'ml-1 text-xs text-text-subtle'
                                 }
                               >
-                                / {fmtPoints(targetPoints)}
+                                / {fmtPoints(rowTarget)}
                               </span>
                             ) : null}
+                          </TD>
+                          <TD className="text-right text-text-subtle">
+                            <ChevronRight
+                              width={16}
+                              height={16}
+                              strokeWidth={1.75}
+                              aria-hidden
+                            />
                           </TD>
                         </TRow>
                       );
@@ -294,11 +482,12 @@ export function DealerStaffTab({ dealer }: Props) {
               <MobileCardList
                 className="p-3"
                 cards={summary.rows.map((row, i) => {
+                  const rowTarget = targetFor(row.employeeId);
                   const hitTarget =
-                    typeof targetPoints === 'number' &&
-                    row.totalPoints >= targetPoints;
+                    rowTarget !== undefined && row.totalPoints >= rowTarget;
                   return {
                     key: row.employeeId,
+                    onClick: () => setDetailId(row.employeeId),
                     primary: (
                       <span className="block truncate font-medium text-text">
                         <span className="text-text-muted tabular-nums">
@@ -312,7 +501,7 @@ export function DealerStaffTab({ dealer }: Props) {
                         <span className="tabular-nums font-semibold">
                           {fmtPoints(row.totalPoints)}
                         </span>
-                        {typeof targetPoints === 'number' ? (
+                        {rowTarget !== undefined ? (
                           <span
                             className={
                               hitTarget
@@ -320,7 +509,7 @@ export function DealerStaffTab({ dealer }: Props) {
                                 : 'ml-1 text-xs text-text-subtle'
                             }
                           >
-                            / {fmtPoints(targetPoints)}
+                            / {fmtPoints(rowTarget)}
                           </span>
                         ) : null}
                       </span>
@@ -424,7 +613,13 @@ export function DealerStaffTab({ dealer }: Props) {
                       return (
                         <TRow key={emp.id}>
                           <TD>
-                            <div className="font-medium">{emp.name}</div>
+                            <button
+                              type="button"
+                              onClick={() => setDetailId(emp.id)}
+                              className="rounded-sm text-left font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+                            >
+                              {emp.name}
+                            </button>
                             {emp.phone ? (
                               <div className="text-xs text-text-muted">{emp.phone}</div>
                             ) : null}
@@ -441,6 +636,20 @@ export function DealerStaffTab({ dealer }: Props) {
                           </TD>
                           <TD className="text-right">
                             <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setDetailId(emp.id)}
+                                leftIcon={
+                                  <BarChart3
+                                    width={14}
+                                    height={14}
+                                    strokeWidth={1.75}
+                                  />
+                                }
+                              >
+                                Details
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -504,25 +713,41 @@ export function DealerStaffTab({ dealer }: Props) {
                       </span>
                     ),
                     actions: (
-                      <div className="grid grid-cols-2 gap-2">
+                      // Details gets its own full-width row rather than a third
+                      // column: three buttons across a phone leaves each one too
+                      // narrow to read, and this is the one an admin reaches for
+                      // most.
+                      <div className="grid gap-2">
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => openEditWorker(emp)}
+                          onClick={() => setDetailId(emp.id)}
                           leftIcon={
-                            <Pencil width={14} height={14} strokeWidth={1.75} />
+                            <BarChart3 width={14} height={14} strokeWidth={1.75} />
                           }
                         >
-                          Edit
+                          View details
                         </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          loading={busy}
-                          onClick={() => toggleWorkerStatus(emp)}
-                        >
-                          {emp.status === 'ACTIVE' ? 'Remove' : 'Reactivate'}
-                        </Button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => openEditWorker(emp)}
+                            leftIcon={
+                              <Pencil width={14} height={14} strokeWidth={1.75} />
+                            }
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            loading={busy}
+                            onClick={() => toggleWorkerStatus(emp)}
+                          >
+                            {emp.status === 'ACTIVE' ? 'Remove' : 'Reactivate'}
+                          </Button>
+                        </div>
                       </div>
                     ),
                   };
@@ -569,7 +794,7 @@ export function DealerStaffTab({ dealer }: Props) {
                   <span className="font-semibold text-text">
                     {fmtPoints(draft.totalPoints)}
                   </span>{' '}
-                  pts · work date {formatDate(draft.workDate)}
+                  pts · work date {formatYmd(draft.workDate)}
                 </span>
                 {draft.updatedAt ? (
                   <span className="text-text-subtle">
@@ -697,7 +922,7 @@ export function DealerStaffTab({ dealer }: Props) {
                   <TBody>
                     {batches.map((b) => (
                       <TRow key={b.id}>
-                        <TD className="whitespace-nowrap">{formatDate(b.workDate)}</TD>
+                        <TD className="whitespace-nowrap">{formatYmd(b.workDate)}</TD>
                         <TD className="text-right tabular-nums">{b.employeeCount}</TD>
                         <TD className="text-right tabular-nums text-text-muted">
                           {b.entryCount}
@@ -745,7 +970,7 @@ export function DealerStaffTab({ dealer }: Props) {
                   key: b.id,
                   primary: (
                     <span className="block font-medium text-text">
-                      {formatDate(b.workDate)}
+                      {formatYmd(b.workDate)}
                     </span>
                   ),
                   primaryRight: (
@@ -851,86 +1076,37 @@ export function DealerStaffTab({ dealer }: Props) {
                       <TH className="text-right">Actions</TH>
                     </TRow>
                   </THead>
-                  <TBody>
-                    {awards.map((a) => (
-                      <TRow key={a.id}>
-                        <TD className="whitespace-nowrap text-text-muted">
-                          {formatDate(a.workDate)}
-                        </TD>
-                        <TD className="font-medium">
-                          {nameById.get(a.employeeId) ?? 'Unknown worker'}
-                        </TD>
-                        <TD>
-                          <div>{a.workLabelEn}</div>
-                          {a.note ? (
-                            <div className="text-xs text-text-muted">{a.note}</div>
-                          ) : null}
-                        </TD>
-                        <TD className="text-right tabular-nums font-semibold">
-                          {fmtPoints(a.points)}
-                        </TD>
-                        <TD className="text-text-muted">{a.awardedByName ?? '—'}</TD>
-                        <TD className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setUndoTarget(a)}
-                            leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
-                          >
-                            Undo
-                          </Button>
-                        </TD>
-                      </TRow>
-                    ))}
-                  </TBody>
+                  <TBody>{historyRows}</TBody>
                 </Table>
               </div>
 
               {/* Mobile card-stack (< md) */}
-              <MobileCardList
-                className="p-3"
-                cards={awards.map((a) => ({
-                  key: a.id,
-                  primary: (
-                    <span className="block truncate font-medium text-text">
-                      {nameById.get(a.employeeId) ?? 'Unknown worker'}
-                    </span>
-                  ),
-                  primaryRight: (
-                    <span className="tabular-nums font-semibold">
-                      {fmtPoints(a.points)}
-                    </span>
-                  ),
-                  secondary: (
-                    <span>
-                      {a.workLabelEn}
-                      {a.note ? (
-                        <span className="block text-xs text-text-muted">{a.note}</span>
-                      ) : null}
-                    </span>
-                  ),
-                  meta: (
-                    <span>
-                      {formatDate(a.workDate)} · {a.awardedByName ?? '—'}
-                    </span>
-                  ),
-                  actions: (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => setUndoTarget(a)}
-                      leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
-                    >
-                      Undo
-                    </Button>
-                  ),
-                }))}
-              />
+              <MobileCardList className="p-3" cards={historyCards} />
             </>
           )}
         </CardContent>
       </Card>
+
+      {/* Per-warrior detail. Reads the same window as this tab, and hands its
+          Undo back to the confirmation dialog below so there is only one of those. */}
+      <WarriorDetailDrawer
+        dealerId={dealer.id}
+        employeeId={detailId}
+        roster={roster}
+        summary={summary}
+        range={range}
+        onClose={() => {
+          // Both `Drawer` and `Dialog` bind their own Escape handler to
+          // `document`, so one keypress reaches both and the undo confirmation
+          // would take the panel underneath it down as well — dropping the
+          // admin back on the tab, having to re-open the warrior and re-find
+          // their place in a 136-row ledger, and only when they backed out with
+          // Esc rather than with Cancel. The confirmation is stacked ON this
+          // panel, so while it is up, Escape is its key, not ours.
+          if (!undoTarget) setDetailId(null);
+        }}
+        onUndoAward={setUndoTarget}
+      />
 
       {/* Dialogs */}
       <AwardPointsDialog

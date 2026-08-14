@@ -5,6 +5,7 @@ export * from './Label';
 export * from './Select';
 export * from './Card';
 export * from './Badge';
+export * from './Callout';
 export * from './StatusChip';
 export * from './Dialog';
 export * from './Menu';

@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import type {
   AwardStaffPointsResult,
   Employee,
+  EmployeeLeave,
   EmployeeWithPoints,
   StaffPointAward,
   StaffPointBatch,
@@ -36,6 +37,11 @@ interface AwardsParams {
   employeeId?: string;
 }
 
+interface LeaveParams {
+  from?: string;
+  to?: string;
+}
+
 /** Award action response — the ledger rows written plus the batch total. */
 export interface AwardStaffPointsResponse extends AwardStaffPointsResult {
   totalPoints: number;
@@ -52,6 +58,8 @@ export const staffKeys = {
     ['staff', 'drafts', dealerId] as const,
   batches: (dealerId: string | undefined) =>
     ['staff', 'batches', dealerId] as const,
+  leave: (dealerId: string | undefined, params: LeaveParams) =>
+    ['staff', 'leave', dealerId, params] as const,
 };
 
 /** Invalidate the roster/leaderboard + award ledger for a dealer (prefix match). */
@@ -102,6 +110,35 @@ export function useStaffAwardsQuery(
         from: params.from,
         to: params.to,
         employeeId: params.employeeId,
+      }),
+    enabled: !!dealerId,
+    staleTime: 15_000,
+  });
+}
+
+/**
+ * Leave (छुट्टी) days recorded for this dealer's workers within a window — one
+ * row per (worker, day).
+ *
+ * Dealer-wide rather than per-worker because the endpoint has no `employeeId`
+ * filter; callers narrow it themselves. That is the cheaper shape anyway: a
+ * window's leave is a handful of rows, and one cached response serves whichever
+ * worker the admin opens next.
+ *
+ * Worth having because leave is what makes a 0-point day readable. Without it,
+ * "earned nothing on Tuesday" and "was not at the pump on Tuesday" are the same
+ * empty bar — and the second one is not a performance signal.
+ */
+export function useDealerLeaveQuery(
+  dealerId: string | undefined,
+  params: LeaveParams = {},
+) {
+  return useQuery({
+    queryKey: staffKeys.leave(dealerId, params),
+    queryFn: () =>
+      api.get<EmployeeLeave[]>(`/dealers/${dealerId}/staff/employees/leave`, {
+        from: params.from,
+        to: params.to,
       }),
     enabled: !!dealerId,
     staleTime: 15_000,
