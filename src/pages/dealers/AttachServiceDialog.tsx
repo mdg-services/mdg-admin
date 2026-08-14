@@ -6,6 +6,7 @@ import { statusIntent } from '@/lib/statusIntent';
 import type { ServicePluginCatalogEntry } from '@dk/shared';
 import type { AttachServiceInput } from '@dk/shared/schemas';
 
+import { DSR_SERVICE_ID, dsrIrasScheduleWarning } from './schedulePicker';
 import {
   ATTACH_CADENCE_OPTIONS,
   customCronError,
@@ -18,6 +19,11 @@ interface Props {
   onClose: () => void;
   loading?: boolean;
   attachedServiceIds: string[];
+  /** DSR prerequisites for the schedule advisory: whether IRAS Shift Data and
+   *  Inspection Reports are attached, and IRAS's cron if any. */
+  irasAttached?: boolean;
+  inspectionAttached?: boolean;
+  irasCron?: string | null;
   onSubmit: (values: AttachServiceInput) => void | Promise<void>;
 }
 
@@ -26,6 +32,9 @@ export function AttachServiceDialog({
   onClose,
   loading,
   attachedServiceIds,
+  irasAttached,
+  inspectionAttached,
+  irasCron,
   onSubmit,
 }: Props) {
   const { data: services, isLoading } = useServicesQuery();
@@ -50,6 +59,17 @@ export function AttachServiceDialog({
   );
 
   const cronError = customCronError(customCron);
+  // The DSR is built from IRAS Shift Data, so warn if IRAS isn't attached or the
+  // DSR is scheduled at/before IRAS's collection time.
+  const scheduleWarning =
+    selected?.id === DSR_SERVICE_ID
+      ? dsrIrasScheduleWarning({
+          irasAttached: !!irasAttached,
+          inspectionAttached: !!inspectionAttached,
+          irasCron,
+          dsrCustomCron: customCron,
+        })
+      : null;
 
   async function handleSubmit() {
     if (!selected || cronError) return;
@@ -132,6 +152,7 @@ export function AttachServiceDialog({
             customCron={customCron}
             onCustomCronChange={setCustomCron}
             cronError={cronError}
+            scheduleWarning={scheduleWarning}
           />
         </div>
       )}

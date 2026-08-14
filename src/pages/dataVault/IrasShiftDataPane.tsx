@@ -40,7 +40,7 @@ import {
 } from '@/hooks/api/useIrasData';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { formatDateTime, formatYmd, isYmd, toYmd } from '@/lib/format';
+import { formatDateTime, formatYmd, istTodayYmd, isYmd, toYmd } from '@/lib/format';
 import { IRAS_REPORT_CODES } from '@dk/shared';
 import type {
   IrasDataVaultDealerRow,
@@ -115,9 +115,10 @@ function rowStatus(row: IrasDataVaultDealerRow): StatusFilter {
  * falls back to today.
  */
 function useBusinessDate(params: URLSearchParams): { today: string; businessDate: string } {
-  // Recomputed each render so it advances past IST midnight rather than freezing
-  // on the mount day.
-  const today = toYmd(new Date());
+  // IST today (matching the backend future-date guard), recomputed each render so
+  // it advances past IST midnight and a non-IST browser can't disagree with the
+  // server's ceiling.
+  const today = istTodayYmd();
   const dateParam = params.get('date');
   // A ceiling of `today` matters as much as the floor: a hand-edited or shared
   // link like `?date=2099-01-01` would otherwise scope the pane — and every

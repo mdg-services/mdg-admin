@@ -12,12 +12,13 @@ import {
 } from '@/components/ui';
 import { dsrKeys, useGenerateDsr } from '@/hooks/api/useDsr';
 import { api, ApiError } from '@/lib/api';
-import { isYmd, toYmd } from '@/lib/format';
+import { istTodayYmd, isYmd } from '@/lib/format';
 import type { ServiceRun } from '@dk/shared';
 
 interface Props {
   dealerId: string;
-  /** The day to (re)generate. Omit for today (IST). */
+  /** The day to (re)generate. Omit to generate the latest available business day
+   *  (the most recent day IRAS has collected — often yesterday, not today). */
   businessDate?: string;
   label?: string;
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -166,11 +167,12 @@ export function GenerateDsrForDate({
   onGenerated?: (businessDate: string) => void;
   className?: string;
 }) {
-  // Recomputed each render (not memoised) so `max` and the validity check
-  // advance past IST midnight on a long-open session instead of freezing on the
-  // mount day. A unique id per instance keeps the Label/Input association correct
-  // even when the toolbar and empty-state copies mount together.
-  const today = toYmd(new Date());
+  // Recomputed each render (not memoised) so `max` and the validity check advance
+  // past IST midnight on a long-open session. IST (matching the backend guard), so
+  // a non-IST browser can't offer or reject a day the server disagrees about. A
+  // unique id per instance keeps the Label/Input association correct even when the
+  // toolbar and empty-state copies mount together.
+  const today = istTodayYmd();
   const inputId = React.useId();
   const [date, setDate] = React.useState('');
   const valid = isYmd(date) && date >= MIN_SELECTABLE_YMD && date <= today;

@@ -7,6 +7,7 @@ import { ApiError } from '@/lib/api';
 import type { Cadence, DealerService } from '@dk/shared';
 import type { UpdateDealerServiceInput } from '@dk/shared/schemas';
 
+import { DSR_SERVICE_ID, dsrIrasScheduleWarning } from './schedulePicker';
 import {
   customCronError,
   editCadenceOptions,
@@ -19,6 +20,11 @@ interface Props {
   open: boolean;
   /** The row being edited — a list snapshot; see the seeding effect. */
   service: DealerService | null;
+  /** DSR prerequisites for the schedule advisory: whether IRAS Shift Data and
+   *  Inspection Reports are attached, and IRAS's cron if any. */
+  irasAttached?: boolean;
+  inspectionAttached?: boolean;
+  irasCron?: string | null;
   onClose: () => void;
   /** Receives ONLY the fields that changed. */
   onSubmit: (patch: UpdateDealerServiceInput) => void | Promise<void>;
@@ -33,7 +39,15 @@ interface Props {
  * a due run into the future every time someone opened this dialog and pressed
  * Save.
  */
-export function EditServiceDialog({ open, service, onClose, onSubmit }: Props) {
+export function EditServiceDialog({
+  open,
+  service,
+  irasAttached,
+  inspectionAttached,
+  irasCron,
+  onClose,
+  onSubmit,
+}: Props) {
   const {
     data: services,
     isLoading,
@@ -87,6 +101,17 @@ export function EditServiceDialog({ open, service, onClose, onSubmit }: Props) {
   const trimmedCron = customCron.trim();
   const currentCron = service?.customCron ?? '';
   const cronError = customCronError(customCron);
+  // The DSR is built from IRAS Shift Data — warn if IRAS isn't attached or the
+  // DSR is scheduled at/before IRAS's collection time.
+  const scheduleWarning =
+    service?.serviceId === DSR_SERVICE_ID
+      ? dsrIrasScheduleWarning({
+          irasAttached: !!irasAttached,
+          inspectionAttached: !!inspectionAttached,
+          irasCron,
+          dsrCustomCron: customCron,
+        })
+      : null;
 
   /**
    * The stored config as the RJSF form below will hold it, defaults included.
@@ -216,6 +241,7 @@ export function EditServiceDialog({ open, service, onClose, onSubmit }: Props) {
             customCron={customCron}
             onCustomCronChange={setCustomCron}
             cronError={cronError}
+            scheduleWarning={scheduleWarning}
             noSchemaNote={
               catalogUnavailable
                 ? 'The plugin catalog could not be read, so the config form cannot be generated. The schedule can still be changed.'

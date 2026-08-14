@@ -38,6 +38,18 @@ export function toYmd(d: Date): string {
 }
 
 /**
+ * Today's calendar date in IST (UTC+5:30) as `YYYY-MM-DD`, matching the backend's
+ * `istDateKey` regardless of the browser's own timezone. Use this — not
+ * `toYmd(new Date())` — for date ceilings the server also enforces in IST (the
+ * DSR / IRAS "not in the future" guards), so a browser east or west of IST can't
+ * offer, or reject, a day the backend disagrees about.
+ */
+export function istTodayYmd(): string {
+  // Shift the current instant into IST, then read its UTC Y-M-D.
+  return new Date(Date.now() + 330 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+/**
  * A real calendar day in `YYYY-MM-DD` form — `2026-02-31` is rejected, which a
  * bare regex would wave through. Accepts null/undefined so it can guard a value
  * straight out of a query string or an input event.

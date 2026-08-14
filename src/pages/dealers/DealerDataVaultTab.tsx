@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   Database,
@@ -33,8 +34,9 @@ import {
   useIrasSnapshotQuery,
   useIrasSnapshotsQuery,
 } from '@/hooks/api/useIrasData';
+import { useRunDetail } from '@/hooks/api/useRunDetail';
 import { ApiError } from '@/lib/api';
-import { formatDateTime, isYmd, toYmd } from '@/lib/format';
+import { formatDateTime, istTodayYmd, isYmd } from '@/lib/format';
 import type {
   Dealer,
   IrasDataSnapshotSummary,
@@ -74,6 +76,7 @@ function totalRows(counts: Partial<Record<IrasReportCode, number>>): number {
  */
 export function DealerDataVaultTab({ dealer }: Props) {
   const toast = useToast();
+  const qc = useQueryClient();
   const collect = useCollectIrasData();
   const latestQ = useDealerLatestIrasSnapshot(dealer.id);
   const historyQ = useIrasSnapshotsQuery({
@@ -84,29 +87,54 @@ export function DealerDataVaultTab({ dealer }: Props) {
     null,
   );
 
-  // The collect target: today by default, but an admin can pick a past shift date
-  // to back-fill it (the portal serves back-dated shifts). `today` is recomputed
-  // each render so it advances past IST midnight instead of freezing on the mount
-  // day. Empty means today; a valid non-today date is sent as `businessDate`; an
-  // out-of-range value disables the button so the field and the action agree.
-  const today = toYmd(new Date());
-  const [collectDate, setCollectDate] = React.useState(() => toYmd(new Date()));
+  // The collect POSTs a 202 and the portal run lands ~1 min later, so watch the
+  // returned run to completion (like the DSR generate) and only then refetch +
+  // toast — otherwise the "refreshes when it lands" promise never fires.
+  const [collectRunId, setCollectRunId] = React.useState<string | null>(null);
+  const collectRun = useRunDetail(collectRunId ?? undefined, {
+    pollWhileRunning: true,
+  });
+  React.useEffect(() => {
+    const st = collectRun.data?.status;
+    if (!collectRunId || (st !== 'SUCCESS' && st !== 'FAILED')) return;
+    setCollectRunId(null);
+    void qc.invalidateQueries({ queryKey: ['irasData'] });
+    if (st === 'SUCCESS') {
+      toast.success('Collection landed — this tab is up to date.');
+    } else {
+      toast.error(
+        "The collection didn't complete. Open the dealer's Run history for details.",
+      );
+    }
+  }, [collectRun.data?.status, collectRunId, qc, toast]);
+
+  // The collect target: the latest shift by default, but an admin can pick a past
+  // shift date to back-fill it (the portal serves back-dated shifts). `today` is
+  // an IST ceiling (matching the backend future-date guard) recomputed each render
+  // so it advances past IST midnight. Empty means today; a valid non-today date is
+  // sent as `businessDate`; an out-of-range value disables the button so the field
+  // and the action agree.
+  const today = istTodayYmd();
+  const [collectDate, setCollectDate] = React.useState(istTodayYmd);
   const dateValid =
     collectDate === '' ||
     (isYmd(collectDate) && collectDate >= MIN_SELECTABLE_YMD && collectDate <= today);
   const backDate =
     dateValid && collectDate !== '' && collectDate !== today ? collectDate : undefined;
+  const collecting = collect.isPending || collectRunId !== null;
 
   function runCollection() {
     collect.mutate(
       { dealerId: dealer.id, ...(backDate ? { businessDate: backDate } : {}) },
       {
-        onSuccess: () =>
+        onSuccess: (data) => {
+          setCollectRunId(data.runId);
           toast.success(
             backDate
               ? `Collecting ${backDate} — the portal takes about a minute. This tab refreshes when it lands.`
-              : 'Collection queued — the portal takes about a minute. This tab refreshes when it lands.',
-          ),
+              : 'Collecting the latest shift — the portal takes about a minute. This tab refreshes when it lands.',
+          );
+        },
         onError: (err) =>
           toast.error(
             err instanceof ApiError
@@ -131,7 +159,7 @@ export function DealerDataVaultTab({ dealer }: Props) {
       <Button
         variant="secondary"
         size="sm"
-        loading={collect.isPending}
+        loading={collecting}
         disabled={!dateValid}
         leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
         onClick={runCollection}

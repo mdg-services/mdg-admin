@@ -156,7 +156,7 @@ export function DealerDsrTab({ dealer }: Props) {
                 <FileBarChart2 width={28} height={28} strokeWidth={1.75} />
               }
               title="No Daily Sales Report yet"
-              description="Generate today's day-book, or pick a past date to back-fill one. Make sure the Daily Sales Report service is attached from the Services tab first."
+              description="Generate the latest available day-book, or pick a past date to back-fill one. Make sure the Daily Sales Report service is attached from the Services tab first."
               cta={
                 <div className="grid justify-items-center gap-3">
                   <GenerateDsrButton

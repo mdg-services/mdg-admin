@@ -1,6 +1,7 @@
 import Form from '@rjsf/core';
 import { getDefaultFormState, type RJSFSchema } from '@rjsf/utils';
 import validator from '@rjsf/validator-ajv8';
+import { AlertTriangle } from 'lucide-react';
 import * as React from 'react';
 
 import { FieldError, Input, Label, Select } from '@/components/ui';
@@ -123,6 +124,12 @@ export interface ServiceConfigFieldsProps {
   /** Shown under the picker; the caller blocks its own submit on it. */
   cronError?: string;
   /**
+   * A dependency/timing advisory shown under the picker (warning-styled), e.g.
+   * the DSR needing IRAS attached and scheduled earlier. Advisory only — it does
+   * not block submit. The caller computes it (it is service-specific).
+   */
+  scheduleWarning?: React.ReactNode;
+  /**
    * Shown instead of the generated form when `schema` is null. Defaults to
    * "the plugin isn't in the catalog" — which is only true when the caller
    * actually read the catalog, so a caller whose catalog query failed must
@@ -148,6 +155,7 @@ export function ServiceConfigFields({
   customCron,
   onCustomCronChange,
   cronError,
+  scheduleWarning,
   noSchemaNote,
 }: ServiceConfigFieldsProps) {
   return (
@@ -160,6 +168,7 @@ export function ServiceConfigFields({
         customCron={customCron}
         onCustomCronChange={onCustomCronChange}
         cronError={cronError}
+        scheduleWarning={scheduleWarning}
       />
 
       <div className="rounded-md border border-border bg-surface p-3">
@@ -199,6 +208,7 @@ interface ScheduleFieldsProps {
   customCron: string;
   onCustomCronChange: (next: string) => void;
   cronError?: string;
+  scheduleWarning?: React.ReactNode;
 }
 
 /**
@@ -217,6 +227,7 @@ function ScheduleFields({
   customCron,
   onCustomCronChange,
   cronError,
+  scheduleWarning,
 }: ScheduleFieldsProps) {
   const cadenceId = `${idPrefix}-cadence`;
 
@@ -345,6 +356,24 @@ function ScheduleFields({
         legacyCron={customCron.trim()}
       />
       <FieldError message={cronError} />
+
+      {/* Advisory only (e.g. the DSR needing IRAS attached / scheduled earlier).
+          role=alert so its appearance/changes are announced as the admin edits. */}
+      {scheduleWarning ? (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-warning bg-warning-soft px-3 py-2 text-xs font-medium text-warning"
+        >
+          <AlertTriangle
+            width={14}
+            height={14}
+            strokeWidth={1.75}
+            className="mt-0.5 shrink-0"
+            aria-hidden
+          />
+          <span>{scheduleWarning}</span>
+        </div>
+      ) : null}
     </div>
   );
 }

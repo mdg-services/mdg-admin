@@ -162,6 +162,59 @@ export function parseCron(
   return null;
 }
 
+/** Service ids the DSR schedule advisory keys off. The DSR `dependsOn` BOTH. */
+export const DSR_SERVICE_ID = 'dsr-report';
+export const IRAS_SERVICE_ID = 'iras-shift-data';
+export const INSPECTION_SERVICE_ID = 'inspection-reports';
+
+/** A daily cron is jittered ±10 min, so worst-case the two ends swing 20 min apart. */
+const DAILY_JITTER_SWING_MIN = 20;
+
+/**
+ * Advisory for the DSR schedule picker. The Daily Sales Report is built from its
+ * prerequisites (Inspection Reports AND IRAS Shift Data), so it can only produce
+ * a report if (a) both are attached and (b) it runs AFTER IRAS has collected that
+ * day. Returns the warning to show, or null when the schedule is fine. Takes
+ * booleans/crons (no service ids) so the caller decides WHEN a service is the DSR.
+ */
+export function dsrIrasScheduleWarning(opts: {
+  irasAttached: boolean;
+  inspectionAttached: boolean;
+  irasCron?: string | null;
+  dsrCustomCron?: string | null;
+}): string | null {
+  // Both hard prerequisites (the attach route enforces the full dependsOn set).
+  const missing: string[] = [];
+  if (!opts.inspectionAttached) missing.push('Inspection Reports');
+  if (!opts.irasAttached) missing.push('IRAS Shift Data');
+  if (missing.length > 0) {
+    return `The Daily Sales Report is built from ${missing.join(' and ')} — attach ${
+      missing.length > 1 ? 'them' : 'it'
+    } to this dealer too, or no report can be generated.`;
+  }
+
+  // A time comparison is only meaningful when BOTH pin an explicit time AND run
+  // on the SAME cadence — comparing a daily DSR to a weekly IRAS by time-of-day
+  // alone would give a false "ok" on the days IRAS never collects. If either runs
+  // on its plugin default (no fixed time), there is nothing precise to compare.
+  const dsr = parseCron(opts.dsrCustomCron ?? '');
+  const iras = parseCron(opts.irasCron ?? '');
+  if (dsr && iras && dsr.cadence === iras.cadence) {
+    const dsrMin = dsr.parts.hour * 60 + dsr.parts.minute;
+    const irasMin = iras.parts.hour * 60 + iras.parts.minute;
+    // Daily crons jitter ±10 min, so a gap under ~20 min can invert at runtime.
+    const cushion = dsr.cadence === 'DAILY' ? DAILY_JITTER_SWING_MIN : 0;
+    if (dsrMin <= irasMin + cushion) {
+      const dsrTime = formatTime12h(dsr.parts.hour, dsr.parts.minute);
+      const irasTime = formatTime12h(iras.parts.hour, iras.parts.minute);
+      return dsrMin <= irasMin
+        ? `This DSR runs at ${dsrTime} IST — at or before IRAS Shift Data collects (${irasTime} IST). Set it to run AFTER IRAS, or that day's data won't be ready in time.`
+        : `This DSR runs at ${dsrTime} IST — very close to IRAS Shift Data (${irasTime} IST). Daily runs jitter ±10 min, so leave a wider gap after IRAS or the data may not be ready.`;
+    }
+  }
+  return null;
+}
+
 /** `9` (24h) → `"9:00 AM"`. */
 export function formatTime12h(hour: number, minute: number): string {
   const period = hour < 12 ? 'AM' : 'PM';

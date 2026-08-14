@@ -57,9 +57,11 @@ export interface DsrReportView {
   businessDate: string;
   digest: DsrReportDigest;
   warnings: string[];
-  htmlKey: string;
-  jsonKey: string;
-  runId: string;
+  // The backend emits these as string | null (a report may lack an artifact key
+  // or a run id), so the client type must not overstate them as required.
+  htmlKey?: string | null;
+  jsonKey?: string | null;
+  runId?: string | null;
   generatedAt: string;
   htmlUrl?: string;
   jsonUrl?: string;

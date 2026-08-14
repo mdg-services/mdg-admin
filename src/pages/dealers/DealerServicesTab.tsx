@@ -42,6 +42,7 @@ import type { UpdateDealerServiceInput } from '@dk/shared/schemas';
 
 import { AttachServiceDialog } from './AttachServiceDialog';
 import { EditServiceDialog } from './EditServiceDialog';
+import { INSPECTION_SERVICE_ID, IRAS_SERVICE_ID } from './schedulePicker';
 import { describeSchedule } from './serviceSchedule';
 
 interface Props {
@@ -67,6 +68,15 @@ export function DealerServicesTab({ dealer }: Props) {
   const runNow = useRunNow(dealer.id);
 
   const attachedIds = (data ?? []).map((d) => d.serviceId);
+  // The DSR schedule advisory needs to know whether IRAS Shift Data is attached
+  // (the DSR is built from it) and when it collects, to warn if the DSR would run
+  // without it or before it.
+  const irasService = (data ?? []).find((d) => d.serviceId === IRAS_SERVICE_ID);
+  const irasAttached = !!irasService;
+  const irasCron = irasService?.customCron ?? null;
+  const inspectionAttached = (data ?? []).some(
+    (d) => d.serviceId === INSPECTION_SERVICE_ID,
+  );
 
   function isStale(svc: DealerService): boolean {
     if (svc.cadence !== 'DAILY' && svc.cadence !== 'ON_DEMAND') return false;
@@ -385,6 +395,9 @@ export function DealerServicesTab({ dealer }: Props) {
         onClose={() => setAttachOpen(false)}
         loading={attach.isPending}
         attachedServiceIds={attachedIds}
+        irasAttached={irasAttached}
+        inspectionAttached={inspectionAttached}
+        irasCron={irasCron}
         onSubmit={async (values) => {
           try {
             toastSchedule('Service attached', await attach.mutateAsync(values));
@@ -400,6 +413,9 @@ export function DealerServicesTab({ dealer }: Props) {
       <EditServiceDialog
         open={!!editTarget}
         service={editTarget}
+        irasAttached={irasAttached}
+        inspectionAttached={inspectionAttached}
+        irasCron={irasCron}
         onClose={() => setEditTarget(null)}
         onSubmit={onSaveEdit}
       />

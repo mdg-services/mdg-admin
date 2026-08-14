@@ -201,7 +201,7 @@ export function DsrReportView() {
         <EmptyState
           icon={<FileBarChart2 width={28} height={28} strokeWidth={1.75} />}
           title="No report generated yet"
-          description="Generate today's report, or pick a past date to back-fill one."
+          description="Generate the latest available day, or pick a past date to back-fill one."
           cta={
             dealerId ? (
               <div className="grid justify-items-center gap-3">
