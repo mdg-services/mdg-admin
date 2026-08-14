@@ -1,11 +1,18 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw } from 'lucide-react';
+import { CalendarPlus, RefreshCw } from 'lucide-react';
 import * as React from 'react';
 
 
-import { Button, useToast } from '@/components/ui';
+import {
+  Button,
+  Input,
+  Label,
+  MIN_SELECTABLE_YMD,
+  useToast,
+} from '@/components/ui';
 import { dsrKeys, useGenerateDsr } from '@/hooks/api/useDsr';
 import { api, ApiError } from '@/lib/api';
+import { isYmd, toYmd } from '@/lib/format';
 import type { ServiceRun } from '@dk/shared';
 
 interface Props {
@@ -19,6 +26,8 @@ interface Props {
   /** Fired once the POST is accepted, with the queued run id. */
   onQueued?: (runId: string) => void;
   className?: string;
+  /** Block the button (e.g. no valid date chosen yet). */
+  disabled?: boolean;
 }
 
 /**
@@ -40,6 +49,7 @@ export function GenerateDsrButton({
   icon,
   onQueued,
   className,
+  disabled,
 }: Props) {
   const toast = useToast();
   const qc = useQueryClient();
@@ -98,6 +108,7 @@ export function GenerateDsrButton({
       size={size}
       className={className}
       loading={busy}
+      disabled={disabled}
       leftIcon={
         icon ?? (
           <RefreshCw
@@ -131,5 +142,63 @@ export function GenerateDsrButton({
     >
       {busy ? 'Generating…' : label}
     </Button>
+  );
+}
+
+/**
+ * Generate a DSR for an ARBITRARY past date — including one the dealer has never
+ * had a report for. A date input (floored at 2000-01-01, capped at today) feeds
+ * a Generate that stays disabled until a valid past date is chosen. The backend
+ * collects that date's IRAS shift data inline when it isn't in the Vault yet, so
+ * this originates a brand-new back-dated report, not just a regenerate.
+ */
+export function GenerateDsrForDate({
+  dealerId,
+  onGenerated,
+  className,
+}: {
+  dealerId: string;
+  /**
+   * Fired with the chosen date once its run is queued, so the parent can show
+   * THAT day's report when it lands — a back-date is not the newest report, so
+   * snapping to "latest" would hide the very day the admin just generated.
+   */
+  onGenerated?: (businessDate: string) => void;
+  className?: string;
+}) {
+  // Recomputed each render (not memoised) so `max` and the validity check
+  // advance past IST midnight on a long-open session instead of freezing on the
+  // mount day. A unique id per instance keeps the Label/Input association correct
+  // even when the toolbar and empty-state copies mount together.
+  const today = toYmd(new Date());
+  const inputId = React.useId();
+  const [date, setDate] = React.useState('');
+  const valid = isYmd(date) && date >= MIN_SELECTABLE_YMD && date <= today;
+
+  return (
+    <div className={className}>
+      <Label htmlFor={inputId}>Generate for a date</Label>
+      <div className="flex items-center gap-2">
+        <Input
+          id={inputId}
+          type="date"
+          value={date}
+          min={MIN_SELECTABLE_YMD}
+          max={today}
+          onChange={(e) => setDate(e.target.value)}
+          className="w-40"
+        />
+        <GenerateDsrButton
+          dealerId={dealerId}
+          businessDate={valid ? date : undefined}
+          disabled={!valid}
+          label="Generate"
+          icon={<CalendarPlus width={14} height={14} strokeWidth={1.75} />}
+          onQueued={() => {
+            if (valid) onGenerated?.(date);
+          }}
+        />
+      </div>
+    </div>
   );
 }

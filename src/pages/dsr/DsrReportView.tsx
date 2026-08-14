@@ -22,7 +22,7 @@ import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 
 import { DsrReportPanel, dsrDateLabel } from './DsrReportPanel';
-import { GenerateDsrButton } from './GenerateDsrButton';
+import { GenerateDsrButton, GenerateDsrForDate } from './GenerateDsrButton';
 
 /** A 404 from the report endpoints just means "nothing generated yet". */
 function isNotFound(err: unknown): boolean {
@@ -52,7 +52,10 @@ export function DsrReportView() {
   const reportParam = search.get('report');
 
   const reportsQ = useDsrReports(dealerId);
-  const reports = reportsQ.data?.reports ?? [];
+  const reports = React.useMemo(
+    () => reportsQ.data?.reports ?? [],
+    [reportsQ.data],
+  );
 
   // Exactly one of these is enabled: a specific report by id, or the dealer's
   // latest when no report is pinned in the URL.
@@ -71,6 +74,30 @@ export function DsrReportView() {
     else next.set('report', id);
     setSearch(next, { replace: true });
   }
+
+  // Snap back to "latest" so a freshly generated report is what shows once its
+  // run lands. Correct for "Generate now" (which targets today = the latest).
+  function clearReportPin() {
+    const next = new URLSearchParams(search);
+    next.delete('report');
+    setSearch(next, { replace: true });
+  }
+
+  // A date whose report we want to show as soon as it exists — set when an admin
+  // generates a SPECIFIC day (a back-date or a regenerate). Because a back-date
+  // is not the newest report, snapping to "latest" would hide it; instead we wait
+  // for its row to appear in the refreshed list and select it.
+  const [pendingDate, setPendingDate] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!pendingDate) return;
+    const hit = reports.find((r) => r.businessDate === pendingDate);
+    if (!hit) return;
+    setPendingDate(null);
+    const next = new URLSearchParams(search);
+    if (hit.id === reports[0]?.id) next.delete('report');
+    else next.set('report', hit.id);
+    setSearch(next, { replace: true });
+  }, [pendingDate, reports, search, setSearch]);
 
   const noReportYet =
     (reportQ.isError && isNotFound(reportQ.error)) ||
@@ -101,13 +128,7 @@ export function DsrReportView() {
           dealerId={report.dealerId}
           businessDate={report.businessDate}
           label="Regenerate"
-          onQueued={() => {
-            // Snap back to "latest" so the freshly generated report is what
-            // shows once the run lands.
-            const next = new URLSearchParams(search);
-            next.delete('report');
-            setSearch(next, { replace: true });
-          }}
+          onQueued={() => setPendingDate(report.businessDate)}
         />
       </>
     ) : null;
@@ -132,10 +153,10 @@ export function DsrReportView() {
         }
       />
 
-      {/* Toolbar: pick a business date. */}
+      {/* Toolbar: pick a past business date, or back-fill a new one. */}
       {reports.length > 0 ? (
         <Card className="mb-4">
-          <CardContent className="flex flex-wrap items-end justify-between gap-3 p-3">
+          <CardContent className="flex flex-wrap items-end gap-4 p-3">
             <div>
               <Label htmlFor="dsr-date">Business date</Label>
               <Select
@@ -152,8 +173,14 @@ export function DsrReportView() {
                 ))}
               </Select>
             </div>
+            {dealerId ? (
+              <GenerateDsrForDate
+                dealerId={dealerId}
+                onGenerated={setPendingDate}
+              />
+            ) : null}
             {report ? (
-              <p className="text-xs text-text-subtle">
+              <p className="ml-auto text-xs text-text-subtle">
                 Generated {formatDateTime(report.generatedAt)}
               </p>
             ) : null}
@@ -174,14 +201,21 @@ export function DsrReportView() {
         <EmptyState
           icon={<FileBarChart2 width={28} height={28} strokeWidth={1.75} />}
           title="No report generated yet"
-          description="Generate this dealer's Daily Sales Report and it will render here."
+          description="Generate today's report, or pick a past date to back-fill one."
           cta={
             dealerId ? (
-              <GenerateDsrButton
-                dealerId={dealerId}
-                variant="primary"
-                label="Generate now"
-              />
+              <div className="grid justify-items-center gap-3">
+                <GenerateDsrButton
+                  dealerId={dealerId}
+                  variant="primary"
+                  label="Generate now"
+                  onQueued={clearReportPin}
+                />
+                <GenerateDsrForDate
+                  dealerId={dealerId}
+                  onGenerated={setPendingDate}
+                />
+              </div>
             ) : undefined
           }
         />

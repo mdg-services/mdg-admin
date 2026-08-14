@@ -115,9 +115,18 @@ function rowStatus(row: IrasDataVaultDealerRow): StatusFilter {
  * falls back to today.
  */
 function useBusinessDate(params: URLSearchParams): { today: string; businessDate: string } {
-  const today = React.useMemo(() => toYmd(new Date()), []);
+  // Recomputed each render so it advances past IST midnight rather than freezing
+  // on the mount day.
+  const today = toYmd(new Date());
   const dateParam = params.get('date');
-  const usable = isYmd(dateParam) && dateParam >= MIN_SELECTABLE_YMD ? dateParam : today;
+  // A ceiling of `today` matters as much as the floor: a hand-edited or shared
+  // link like `?date=2099-01-01` would otherwise scope the pane — and every
+  // "Collect now" on it — to a future day that has no shift and that the backend
+  // now rejects with a 400. Anything out of range falls back to today.
+  const usable =
+    isYmd(dateParam) && dateParam >= MIN_SELECTABLE_YMD && dateParam <= today
+      ? dateParam
+      : today;
   return { today, businessDate: usable };
 }
 
@@ -316,7 +325,7 @@ function BusinessDateControl({
           // another `/iras-data/vault` round-trip — not free on 2G. Committing
           // only days this product could hold leaves exactly one.
           const next = e.target.value;
-          if (isYmd(next) && next >= MIN_SELECTABLE_YMD) onChange(next);
+          if (isYmd(next) && next >= MIN_SELECTABLE_YMD && next <= max) onChange(next);
         }}
         className="w-[150px]"
       />

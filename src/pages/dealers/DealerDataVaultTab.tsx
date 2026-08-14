@@ -14,6 +14,8 @@ import {
   CardContent,
   Drawer,
   EmptyState,
+  Input,
+  MIN_SELECTABLE_YMD,
   MobileCardList,
   Skeleton,
   StatusChip,
@@ -32,7 +34,7 @@ import {
   useIrasSnapshotsQuery,
 } from '@/hooks/api/useIrasData';
 import { ApiError } from '@/lib/api';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, isYmd, toYmd } from '@/lib/format';
 import type {
   Dealer,
   IrasDataSnapshotSummary,
@@ -82,14 +84,28 @@ export function DealerDataVaultTab({ dealer }: Props) {
     null,
   );
 
-  // No `businessDate` — the dealer tab always means "collect today's shift".
+  // The collect target: today by default, but an admin can pick a past shift date
+  // to back-fill it (the portal serves back-dated shifts). `today` is recomputed
+  // each render so it advances past IST midnight instead of freezing on the mount
+  // day. Empty means today; a valid non-today date is sent as `businessDate`; an
+  // out-of-range value disables the button so the field and the action agree.
+  const today = toYmd(new Date());
+  const [collectDate, setCollectDate] = React.useState(() => toYmd(new Date()));
+  const dateValid =
+    collectDate === '' ||
+    (isYmd(collectDate) && collectDate >= MIN_SELECTABLE_YMD && collectDate <= today);
+  const backDate =
+    dateValid && collectDate !== '' && collectDate !== today ? collectDate : undefined;
+
   function runCollection() {
     collect.mutate(
-      { dealerId: dealer.id },
+      { dealerId: dealer.id, ...(backDate ? { businessDate: backDate } : {}) },
       {
         onSuccess: () =>
           toast.success(
-            'Collection queued — the portal takes about a minute. This tab refreshes when it lands.',
+            backDate
+              ? `Collecting ${backDate} — the portal takes about a minute. This tab refreshes when it lands.`
+              : 'Collection queued — the portal takes about a minute. This tab refreshes when it lands.',
           ),
         onError: (err) =>
           toast.error(
@@ -102,15 +118,27 @@ export function DealerDataVaultTab({ dealer }: Props) {
   }
 
   const collectButton = (
-    <Button
-      variant="secondary"
-      size="sm"
-      loading={collect.isPending}
-      leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
-      onClick={runCollection}
-    >
-      Collect now
-    </Button>
+    <div className="flex flex-wrap items-center gap-2">
+      <Input
+        type="date"
+        value={collectDate}
+        min={MIN_SELECTABLE_YMD}
+        max={today}
+        onChange={(e) => setCollectDate(e.target.value)}
+        aria-label="Business date to collect"
+        className="w-40"
+      />
+      <Button
+        variant="secondary"
+        size="sm"
+        loading={collect.isPending}
+        disabled={!dateValid}
+        leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
+        onClick={runCollection}
+      >
+        {backDate ? 'Collect' : 'Collect now'}
+      </Button>
+    </div>
   );
 
   return (

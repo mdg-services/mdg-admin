@@ -17,7 +17,7 @@ import { formatDateTime } from '@/lib/format';
 import type { Dealer } from '@dk/shared';
 
 import { DsrReportPanel, dsrDateLabel } from '../dsr/DsrReportPanel';
-import { GenerateDsrButton } from '../dsr/GenerateDsrButton';
+import { GenerateDsrButton, GenerateDsrForDate } from '../dsr/GenerateDsrButton';
 
 
 interface Props {
@@ -51,15 +51,22 @@ export function DealerDsrTab({ dealer }: Props) {
   const navigate = useNavigate();
 
   const reportsQ = useDsrReports(dealer.id);
-  const reports = reportsQ.data?.reports ?? [];
+  const reports = React.useMemo(
+    () => reportsQ.data?.reports ?? [],
+    [reportsQ.data],
+  );
 
   // `null` = follow the latest; an id pins a specific past day. Reset when the
   // tab is reused across dealers so B never shows A's pinned day.
   const [pinnedId, setPinnedId] = React.useState<string | null>(null);
+  // A specific day just generated (back-date or regenerate) whose report we want
+  // to show once its row appears in the refreshed list.
+  const [pendingDate, setPendingDate] = React.useState<string | null>(null);
   const watched = React.useRef(dealer.id);
   if (watched.current !== dealer.id) {
     watched.current = dealer.id;
     if (pinnedId !== null) setPinnedId(null);
+    if (pendingDate !== null) setPendingDate(null);
   }
 
   // Exactly one of these is enabled: a pinned report by id, or the dealer's
@@ -79,6 +86,16 @@ export function DealerDsrTab({ dealer }: Props) {
     setPinnedId(id === reports[0]?.id ? null : id);
   }
 
+  // Show a just-generated SPECIFIC day as soon as its report lands — a back-date
+  // is not the newest report, so following "latest" would hide it.
+  React.useEffect(() => {
+    if (!pendingDate) return;
+    const hit = reports.find((r) => r.businessDate === pendingDate);
+    if (!hit) return;
+    setPendingDate(null);
+    setPinnedId(hit.id === reports[0]?.id ? null : hit.id);
+  }, [pendingDate, reports]);
+
   const openFull = (
     <Button
       variant="ghost"
@@ -92,10 +109,11 @@ export function DealerDsrTab({ dealer }: Props) {
 
   return (
     <div className="grid gap-4">
-      {/* Business-date selector — the way back through previous days. */}
+      {/* Business-date selector — the way back through previous days — plus a
+          date picker to originate a brand-new back-dated report. */}
       {reports.length > 0 ? (
         <Card>
-          <CardContent className="flex flex-wrap items-end justify-between gap-3 p-3">
+          <CardContent className="flex flex-wrap items-end gap-4 p-3">
             <div>
               <Label htmlFor={`dsr-date-${dealer.id}`}>Business date</Label>
               <Select
@@ -112,8 +130,12 @@ export function DealerDsrTab({ dealer }: Props) {
                 ))}
               </Select>
             </div>
+            <GenerateDsrForDate
+              dealerId={dealer.id}
+              onGenerated={setPendingDate}
+            />
             {report ? (
-              <p className="text-xs text-text-subtle">
+              <p className="ml-auto text-xs text-text-subtle">
                 Generated {formatDateTime(report.generatedAt)}
               </p>
             ) : null}
@@ -134,13 +156,20 @@ export function DealerDsrTab({ dealer }: Props) {
                 <FileBarChart2 width={28} height={28} strokeWidth={1.75} />
               }
               title="No Daily Sales Report yet"
-              description="Generate this dealer's day-book and it will render here. Make sure the Daily Sales Report service is attached from the Services tab first."
+              description="Generate today's day-book, or pick a past date to back-fill one. Make sure the Daily Sales Report service is attached from the Services tab first."
               cta={
-                <GenerateDsrButton
-                  dealerId={dealer.id}
-                  variant="primary"
-                  label="Generate now"
-                />
+                <div className="grid justify-items-center gap-3">
+                  <GenerateDsrButton
+                    dealerId={dealer.id}
+                    variant="primary"
+                    label="Generate now"
+                    onQueued={() => setPinnedId(null)}
+                  />
+                  <GenerateDsrForDate
+                    dealerId={dealer.id}
+                    onGenerated={setPendingDate}
+                  />
+                </div>
               }
             />
           </CardContent>
@@ -191,7 +220,7 @@ export function DealerDsrTab({ dealer }: Props) {
                 dealerId={dealer.id}
                 businessDate={report.businessDate}
                 label="Regenerate"
-                onQueued={() => setPinnedId(null)}
+                onQueued={() => setPendingDate(report.businessDate)}
               />
             </>
           }
