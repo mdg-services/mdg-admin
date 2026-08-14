@@ -65,6 +65,23 @@ export interface DsrReportView {
   jsonUrl?: string;
   /** Downloadable Excel (.xlsx) mirroring the dealer's DSR workbook. */
   xlsxUrl?: string;
+  /** Inline signed URLs for the two shareable cards (variation + daily sales). */
+  variationCardUrl?: string;
+  salesCardUrl?: string;
+  /** Set once the report has been shared into the dealer's chat. */
+  shared?: {
+    at: string;
+    by: string;
+    conversationId: string;
+    messageId: string;
+  } | null;
+}
+
+/** `POST /dsr/reports/:id/share` result. */
+export interface DsrShareResult {
+  alreadyShared: boolean;
+  conversationId: string;
+  messageId: string;
 }
 
 /** One report headline in a dealer's history — `GET /dsr/dealers/:id/reports`. */
@@ -197,6 +214,21 @@ export function useGenerateDsr() {
         `/dsr/dealers/${dealerId}/generate`,
         businessDate ? { businessDate } : {},
       ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: dsrKeys.all });
+    },
+  });
+}
+
+/**
+ * Share a generated report's two cards into the dealer's chat. Idempotent
+ * server-side. On success we invalidate the whole `dsr` prefix so the report's
+ * `shared` marker (and the "Shared" state in every view) refreshes.
+ */
+export function useShareDsr(reportId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<DsrShareResult>(`/dsr/reports/${reportId}/share`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: dsrKeys.all });
     },

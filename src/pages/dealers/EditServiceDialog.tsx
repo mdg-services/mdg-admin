@@ -216,17 +216,9 @@ export function EditServiceDialog({ open, service, onClose, onSubmit }: Props) {
             customCron={customCron}
             onCustomCronChange={setCustomCron}
             cronError={cronError}
-            cronNote={
-              !currentCron
-                ? undefined
-                : trimmedCron
-                  ? 'Removing it puts the service back on the cadence above.'
-                  : 'The custom cron will be removed on save, and the service goes back to the cadence above.'
-            }
-            onCronClear={() => setCustomCron('')}
             noSchemaNote={
               catalogUnavailable
-                ? 'The plugin catalog could not be read, so the config form cannot be generated. The cadence and cron can still be changed.'
+                ? 'The plugin catalog could not be read, so the config form cannot be generated. The schedule can still be changed.'
                 : undefined
             }
           />

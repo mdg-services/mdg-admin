@@ -2,17 +2,20 @@ import {
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
+  Check,
   CheckCircle2,
   ExternalLink,
   FileWarning,
+  Share2,
 } from 'lucide-react';
 import * as React from 'react';
 
 
-import { Badge, Card, CardContent } from '@/components/ui';
-import type { DsrReportView } from '@/hooks/api/useDsr';
+import { Badge, Button, Card, CardContent, Dialog, useToast } from '@/components/ui';
+import { useShareDsr, type DsrReportView } from '@/hooks/api/useDsr';
+import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { formatLitres } from '@/lib/format';
+import { formatDateTime, formatLitres } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
 import type { DsrAdvisoryKind, DsrVariationSummary } from '@dk/shared';
 
@@ -154,6 +157,141 @@ export function DsrReportPanel({
           </div>
         </div>
       ) : null}
+
+      {/* The dealer deliverable: the two shareable cards + the share action. */}
+      <DsrShareSection report={report} />
+    </div>
+  );
+}
+
+/**
+ * The two cards the dealer receives (Variation + Daily Sales) with the
+ * admin-approved Share action — the DSR twin of the Credit & DOD share card.
+ * An admin reviews the images, then Share posts them plus a bilingual summary to
+ * the dealer's chat. Idempotent: once shared, the button becomes a disabled
+ * "Shared" with a timestamp.
+ */
+function DsrShareSection({ report }: { report: DsrReportView }) {
+  const toast = useToast();
+  const share = useShareDsr(report.id);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+
+  const alreadyShared = !!report.shared;
+  const cards: { url?: string; label: string; alt: string }[] = [
+    { url: report.variationCardUrl, label: 'Stock variation', alt: 'DSR stock-variation card' },
+    { url: report.salesCardUrl, label: 'Daily sales', alt: 'DSR daily-sales card' },
+  ];
+  const haveImages = cards.some((c) => c.url);
+
+  async function onConfirm() {
+    try {
+      const result = await share.mutateAsync();
+      toast.success(
+        result?.alreadyShared
+          ? 'This report had already been shared with the dealer.'
+          : 'Cards shared with the dealer.',
+      );
+      setConfirmOpen(false);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to share');
+    }
+  }
+
+  return (
+    <div>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+        Share with dealer
+      </p>
+      <Card>
+        <CardContent className="grid gap-4 p-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {cards.map((c) =>
+              c.url ? (
+                <a
+                  key={c.label}
+                  href={c.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`Open the ${c.label.toLowerCase()} card`}
+                  className="block"
+                >
+                  <img
+                    src={c.url}
+                    alt={c.alt}
+                    className="h-auto w-full rounded-md border border-border bg-surface-2"
+                  />
+                </a>
+              ) : (
+                <div
+                  key={c.label}
+                  className="flex h-40 items-center justify-center rounded-md border border-dashed border-border bg-surface-2 px-4 text-center text-xs text-text-muted"
+                >
+                  The {c.label.toLowerCase()} card will be generated when you
+                  share.
+                </div>
+              ),
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {alreadyShared ? (
+              <>
+                <Button
+                  variant="secondary"
+                  disabled
+                  leftIcon={<Check width={14} height={14} strokeWidth={1.75} />}
+                >
+                  Shared
+                </Button>
+                <span className="text-xs text-text-subtle">
+                  {formatDateTime(report.shared?.at)}
+                </span>
+              </>
+            ) : (
+              <>
+                <Button
+                  onClick={() => setConfirmOpen(true)}
+                  leftIcon={<Share2 width={14} height={14} strokeWidth={1.75} />}
+                >
+                  Share with dealer
+                </Button>
+                {!haveImages ? (
+                  <span className="text-xs text-text-subtle">
+                    The cards render when you share.
+                  </span>
+                ) : null}
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title="Share with dealer"
+        description="Post both cards and a bilingual summary to the dealer's chat? This will message the dealer."
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmOpen(false)}
+              disabled={share.isPending}
+            >
+              Cancel
+            </Button>
+            <Button onClick={onConfirm} loading={share.isPending}>
+              Share
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-text-muted">
+          The Variation and Daily Sales cards will be posted to the dealer&apos;s
+          chat, along with a short summary they can read.
+        </p>
+      </Dialog>
     </div>
   );
 }

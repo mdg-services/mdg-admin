@@ -3,9 +3,22 @@ import { getDefaultFormState, type RJSFSchema } from '@rjsf/utils';
 import validator from '@rjsf/validator-ajv8';
 import * as React from 'react';
 
-import { Button, FieldError, Input, Label, Select } from '@/components/ui';
+import { FieldError, Input, Label, Select } from '@/components/ui';
 import { CADENCES, type Cadence } from '@dk/shared';
 import { cronSchema } from '@dk/shared/schemas';
+
+import {
+  buildCron,
+  DEFAULT_PARTS,
+  describePickerSchedule,
+  isTimedCadence,
+  MONTHS,
+  parseCron,
+  partsToTimeValue,
+  timeValueToParts,
+  WEEKDAYS,
+  type ScheduleParts,
+} from './schedulePicker';
 
 /**
  * `''` means "send no cadence at all". Only the attach POST can express that —
@@ -54,22 +67,13 @@ export function editCadenceOptions(pluginDefault?: Cadence): CadenceOption[] {
 }
 
 /**
- * Every character a cron field can legally hold: digits, the wildcard/range
- * punctuation, `?`/`L`/`W`/`#` for the day fields, and letters for the JAN/MON
- * style names.
- */
-const CRON_FIELD = /^[0-9A-Za-z*,\-/?#LW]+$/;
-
-/**
- * Client-side cron check. Returns undefined when the value is usable — an empty
- * string included, since that just means "no custom cron".
- *
- * Worth doing because nothing downstream will complain: the shared `cronSchema`
- * only counts fields, and the backend's `nextRunFor` swallows a cron it cannot
- * parse and returns null. A garbled expression is therefore accepted, stored,
- * and leaves the row with no `nextRunAt` — the service silently never runs
- * again. Catching the obvious typos here (and warning after a save that
- * produced no next run) is the whole defence against that.
+ * Client-side check on the cron the picker builds. Returns undefined when the
+ * value is usable — an empty string included, since that just means "no schedule
+ * override". The picker only ever emits well-formed crons, so this now mostly
+ * guards a legacy stored expression the admin has chosen to keep; it stays
+ * because the backend's `nextRunFor` swallows a cron it cannot parse and leaves
+ * the row with no `nextRunAt`, so a garbled legacy value would otherwise be
+ * accepted and the service would silently never run.
  */
 export function customCronError(raw: string): string | undefined {
   const value = raw.trim();
@@ -77,11 +81,6 @@ export function customCronError(raw: string): string | undefined {
   const parsed = cronSchema.safeParse(value);
   if (!parsed.success) {
     return parsed.error.issues[0]?.message ?? 'Invalid cron expression';
-  }
-  const fields = parsed.data.split(/\s+/);
-  const bad = fields.findIndex((f) => !CRON_FIELD.test(f));
-  if (bad >= 0) {
-    return `Field ${bad + 1} (“${fields[bad]}”) is not a valid cron field.`;
   }
   return undefined;
 }
@@ -118,14 +117,11 @@ export interface ServiceConfigFieldsProps {
   cadence: CadenceChoice;
   cadenceOptions: CadenceOption[];
   onCadenceChange: (next: CadenceChoice) => void;
+  /** The cron the schedule picker builds (or a kept legacy expression). */
   customCron: string;
   onCustomCronChange: (next: string) => void;
-  /** Shown under the cron input; the caller blocks its own submit on it. */
+  /** Shown under the picker; the caller blocks its own submit on it. */
   cronError?: string;
-  /** Extra note under the cron input, e.g. what this flow cannot do. */
-  cronNote?: React.ReactNode;
-  /** When given, a "Remove custom cron" button appears while a cron is set. */
-  onCronClear?: () => void;
   /**
    * Shown instead of the generated form when `schema` is null. Defaults to
    * "the plugin isn't in the catalog" — which is only true when the caller
@@ -136,10 +132,10 @@ export interface ServiceConfigFieldsProps {
 }
 
 /**
- * The cadence / custom cron / plugin-config trio, shared by the attach and the
- * edit dialog so the cadence list and the RJSF styling have one definition. The
- * flows differ only in which cadence options they offer and which notes hang
- * under the cron input, both passed in.
+ * The cadence / schedule / plugin-config trio, shared by the attach and the edit
+ * dialog so the cadence list, the schedule picker and the RJSF styling have one
+ * definition. The flows differ only in which cadence options they offer, passed
+ * in.
  */
 export function ServiceConfigFields({
   idPrefix,
@@ -152,84 +148,19 @@ export function ServiceConfigFields({
   customCron,
   onCustomCronChange,
   cronError,
-  cronNote,
-  onCronClear,
   noSchemaNote,
 }: ServiceConfigFieldsProps) {
-  const cadenceId = `${idPrefix}-cadence`;
-  const cronId = `${idPrefix}-customCron`;
-  const cronNotesId = `${idPrefix}-customCron-notes`;
-  const hasCron = customCron.trim().length > 0;
-  // A custom cron wins over the cadence in `nextRunFor` — the cron branch
-  // returns before the cadence switch is ever reached — so while one is set the
-  // cadence is a label and nothing more. Say so for every cadence, not just the
-  // ON_DEMAND spelling of it: picking MONTHLY over a weekly cron changes the
-  // badge in the list and not one thing about when the service fires.
-  const overrideNote = !hasCron
-    ? null
-    : cadence === 'ON_DEMAND'
-      ? 'A custom cron overrides “on demand” — the scheduler will run this service on it.'
-      : 'A custom cron overrides the cadence — the schedule follows the cron, not the cadence above.';
-  const hasNotes = !!overrideNote || !!cronNote;
-
   return (
     <>
-      <div className="grid gap-3 md:grid-cols-2">
-        <div>
-          <Label htmlFor={cadenceId}>Cadence</Label>
-          <Select
-            id={cadenceId}
-            value={cadence}
-            onChange={(e) => onCadenceChange(e.target.value as CadenceChoice)}
-          >
-            {cadenceOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-          {cadence === 'ON_DEMAND' && !hasCron ? (
-            <p className="mt-1 text-xs text-text-subtle">
-              No timer — it runs only when someone presses Run now.
-            </p>
-          ) : null}
-        </div>
-        <div>
-          <Label htmlFor={cronId} hint="(optional)">
-            Custom cron
-          </Label>
-          <Input
-            id={cronId}
-            className="font-mono"
-            placeholder="0 9 * * 1"
-            value={customCron}
-            invalid={!!cronError}
-            aria-invalid={cronError ? true : undefined}
-            aria-describedby={hasNotes ? cronNotesId : undefined}
-            onChange={(e) => onCustomCronChange(e.target.value)}
-          />
-          <FieldError message={cronError} />
-          {hasNotes ? (
-            <div
-              id={cronNotesId}
-              className="mt-1 grid gap-1 text-xs text-text-subtle"
-            >
-              {overrideNote ? <p>{overrideNote}</p> : null}
-              {cronNote ? <p>{cronNote}</p> : null}
-            </div>
-          ) : null}
-          {onCronClear && hasCron ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="mt-2"
-              onClick={onCronClear}
-            >
-              Remove custom cron
-            </Button>
-          ) : null}
-        </div>
-      </div>
+      <ScheduleFields
+        idPrefix={idPrefix}
+        cadence={cadence}
+        cadenceOptions={cadenceOptions}
+        onCadenceChange={onCadenceChange}
+        customCron={customCron}
+        onCustomCronChange={onCustomCronChange}
+        cronError={cronError}
+      />
 
       <div className="rounded-md border border-border bg-surface p-3">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
@@ -252,12 +183,223 @@ export function ServiceConfigFields({
         ) : (
           <p className="text-sm text-text-muted">
             {noSchemaNote ??
-              'This plugin is not in the catalog, so its config form cannot be generated. The cadence and cron can still be changed.'}
+              'This plugin is not in the catalog, so its config form cannot be generated. The cadence and schedule can still be changed.'}
           </p>
         )}
       </div>
     </>
   );
+}
+
+interface ScheduleFieldsProps {
+  idPrefix: string;
+  cadence: CadenceChoice;
+  cadenceOptions: CadenceOption[];
+  onCadenceChange: (next: CadenceChoice) => void;
+  customCron: string;
+  onCustomCronChange: (next: string) => void;
+  cronError?: string;
+}
+
+/**
+ * Cadence + a friendly IST time / weekday / date picker that stands in for a raw
+ * cron. Everything is derived from `customCron` (parsed each render), so there is
+ * no local state to drift: the picker reads the current cron, and each change
+ * rebuilds and emits a new one. It never emits on mount, so opening the edit
+ * dialog on a row leaves its schedule untouched until the admin actually picks
+ * something — which is what keeps "Save changes only what I touched" honest.
+ */
+function ScheduleFields({
+  idPrefix,
+  cadence,
+  cadenceOptions,
+  onCadenceChange,
+  customCron,
+  onCustomCronChange,
+  cronError,
+}: ScheduleFieldsProps) {
+  const cadenceId = `${idPrefix}-cadence`;
+
+  const parsed = parseCron(customCron);
+  const parts: ScheduleParts = parsed?.parts ?? DEFAULT_PARTS;
+  const hasCron = customCron.trim().length > 0;
+  // A cron is set but is not one of the shapes the picker can display — a legacy
+  // raw expression. Show it read-only so the admin knows what is there; picking
+  // anything below replaces it.
+  const legacy = hasCron && !parsed;
+
+  const timed = isTimedCadence(cadence);
+
+  function emit(next: ScheduleParts) {
+    if (isTimedCadence(cadence)) onCustomCronChange(buildCron(cadence, next));
+  }
+
+  function handleCadence(next: CadenceChoice) {
+    onCadenceChange(next);
+    // Keep the cron in step with the cadence the moment it changes: a timed
+    // cadence gets a matching cron (reusing whatever time is already chosen); a
+    // non-timed one (On demand / Plugin default) drops the cron entirely.
+    if (isTimedCadence(next)) onCustomCronChange(buildCron(next, parts));
+    else onCustomCronChange('');
+  }
+
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <Label htmlFor={cadenceId}>How often</Label>
+          <Select
+            id={cadenceId}
+            value={cadence}
+            onChange={(e) => handleCadence(e.target.value as CadenceChoice)}
+          >
+            {cadenceOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        {timed ? (
+          <div className="grid gap-3">
+            {cadence === 'WEEKLY' ? (
+              <div>
+                <Label htmlFor={`${idPrefix}-weekday`}>On</Label>
+                <Select
+                  id={`${idPrefix}-weekday`}
+                  value={String(parts.weekday)}
+                  onChange={(e) =>
+                    emit({ ...parts, weekday: Number(e.target.value) })
+                  }
+                >
+                  {WEEKDAYS.map((w) => (
+                    <option key={w.value} value={w.value}>
+                      {w.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
+
+            {cadence === 'YEARLY' ? (
+              <div>
+                <Label htmlFor={`${idPrefix}-month`}>Month</Label>
+                <Select
+                  id={`${idPrefix}-month`}
+                  value={String(parts.month)}
+                  onChange={(e) =>
+                    emit({ ...parts, month: Number(e.target.value) })
+                  }
+                >
+                  {MONTHS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
+
+            {cadence === 'MONTHLY' || cadence === 'YEARLY' ? (
+              <div>
+                <Label htmlFor={`${idPrefix}-monthday`}>Day of month</Label>
+                <Select
+                  id={`${idPrefix}-monthday`}
+                  value={String(parts.monthday)}
+                  onChange={(e) =>
+                    emit({ ...parts, monthday: Number(e.target.value) })
+                  }
+                >
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
+
+            <div>
+              <Label htmlFor={`${idPrefix}-time`}>Time (IST)</Label>
+              <Input
+                id={`${idPrefix}-time`}
+                type="time"
+                value={partsToTimeValue(parts)}
+                onChange={(e) => {
+                  const t = timeValueToParts(e.target.value);
+                  if (t) emit({ ...parts, ...t });
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {/* One plain sentence telling the admin exactly when it fires. */}
+      <ScheduleHint
+        cadence={cadence}
+        parts={parts}
+        hasCron={hasCron}
+        legacy={legacy}
+        legacyCron={customCron.trim()}
+      />
+      <FieldError message={cronError} />
+    </div>
+  );
+}
+
+function ScheduleHint({
+  cadence,
+  parts,
+  hasCron,
+  legacy,
+  legacyCron,
+}: {
+  cadence: CadenceChoice;
+  parts: ScheduleParts;
+  hasCron: boolean;
+  legacy: boolean;
+  legacyCron: string;
+}) {
+  if (legacy) {
+    return (
+      <p className="text-xs text-warning">
+        This service runs on a custom schedule (
+        <code className="font-mono">{legacyCron}</code>) that can’t be shown
+        here. Pick an option above to replace it.
+      </p>
+    );
+  }
+  if (cadence === 'ON_DEMAND') {
+    return (
+      <p className="text-xs text-text-subtle">
+        No timer — it runs only when someone presses Run now.
+      </p>
+    );
+  }
+  if (cadence === '') {
+    return (
+      <p className="text-xs text-text-subtle">
+        Uses the plugin’s own cadence and time. Pick a specific option to set
+        exactly when it runs.
+      </p>
+    );
+  }
+  if (isTimedCadence(cadence) && !hasCron) {
+    return (
+      <p className="text-xs text-text-subtle">
+        Currently on the plugin’s default schedule — pick a time to set exactly
+        when it runs.
+      </p>
+    );
+  }
+  if (isTimedCadence(cadence)) {
+    return (
+      <p className="text-xs text-text-muted">{describePickerSchedule(cadence, parts)}</p>
+    );
+  }
+  return null;
 }
 
 /**
