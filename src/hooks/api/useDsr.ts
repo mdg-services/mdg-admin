@@ -63,6 +63,8 @@ export interface DsrReportView {
   generatedAt: string;
   htmlUrl?: string;
   jsonUrl?: string;
+  /** Downloadable Excel (.xlsx) mirroring the dealer's DSR workbook. */
+  xlsxUrl?: string;
 }
 
 /** One report headline in a dealer's history — `GET /dsr/dealers/:id/reports`. */

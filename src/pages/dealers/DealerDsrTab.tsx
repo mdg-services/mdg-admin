@@ -104,6 +104,19 @@ export function DealerDsrTab({ dealer }: Props) {
                 leftIcon={
                   <Download width={14} height={14} strokeWidth={1.75} />
                 }
+                disabled={!report.xlsxUrl}
+                onClick={() =>
+                  report.xlsxUrl && triggerDownload(report.xlsxUrl)
+                }
+              >
+                Download Excel
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={
+                  <Download width={14} height={14} strokeWidth={1.75} />
+                }
                 disabled={!report.jsonUrl}
                 onClick={() =>
                   report.jsonUrl && triggerDownload(report.jsonUrl)
