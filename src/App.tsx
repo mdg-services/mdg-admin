@@ -13,6 +13,7 @@ import { DealerDetailPage } from '@/pages/DealerDetailPage';
 import { DealersPage } from '@/pages/DealersPage';
 import { DsrReportView } from '@/pages/dsr/DsrReportView';
 import { DsrVaultPage } from '@/pages/DsrVaultPage';
+import { FestivalPage } from '@/pages/FestivalPage';
 import { InboxPage } from '@/pages/InboxPage';
 import { KavachDashboardPage } from '@/pages/KavachDashboardPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -95,6 +96,14 @@ export default function App() {
             element={
               <RequireSuperAdmin>
                 <BankHolidaysPage />
+              </RequireSuperAdmin>
+            }
+          />
+          <Route
+            path="festival"
+            element={
+              <RequireSuperAdmin>
+                <FestivalPage />
               </RequireSuperAdmin>
             }
           />

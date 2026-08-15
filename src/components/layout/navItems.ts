@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   ListChecks,
   MessageSquare,
+  PartyPopper,
   Plug,
   ScrollText,
   ShieldCheck,
@@ -50,6 +51,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/users', label: 'All Users', icon: Users, superAdminOnly: true },
   { to: '/work-list', label: 'Work list', icon: ListChecks, superAdminOnly: true },
   { to: '/bank-holidays', label: 'Bank holidays', icon: CalendarDays, superAdminOnly: true },
+  { to: '/festival', label: 'Festival greeting', icon: PartyPopper, superAdminOnly: true },
   { to: '/activity', label: 'Activity', icon: ScrollText, superAdminOnly: true },
   { to: '/settings/team', label: 'Team', icon: UserCog, superAdminOnly: true },
 ];
