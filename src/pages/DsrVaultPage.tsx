@@ -291,6 +291,9 @@ function DealerList({
                               {latest.warningCount === 1 ? '' : 's'}
                             </Badge>
                           ) : null}
+                          {latest.stale ? (
+                            <Badge intent="warning">Needs regenerating</Badge>
+                          ) : null}
                         </div>
                       </div>
                     ) : (
@@ -363,6 +366,9 @@ function DealerList({
                 <span className="font-mono">{row.dealerCode || '—'}</span>
                 {latest ? (
                   <span>· Generated {formatDateTime(latest.generatedAt)}</span>
+                ) : null}
+                {latest?.stale ? (
+                  <Badge intent="warning">Needs regenerating</Badge>
                 ) : null}
               </span>
             ),

@@ -1,4 +1,3 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarPlus, RefreshCw } from 'lucide-react';
 import * as React from 'react';
 
@@ -10,11 +9,11 @@ import {
   MIN_SELECTABLE_YMD,
   useToast,
 } from '@/components/ui';
-import { dsrKeys, useGenerateDsr } from '@/hooks/api/useDsr';
-import { api, ApiError } from '@/lib/api';
+import { useGenerateDsr } from '@/hooks/api/useDsr';
+import { ApiError } from '@/lib/api';
 import { istTodayYmd, isYmd } from '@/lib/format';
-import { describeRunFailure } from '@/lib/runFailure';
-import type { ServiceRun } from '@dk/shared';
+
+import { useDsrRunWatcher } from './useDsrRunWatcher';
 
 interface Props {
   dealerId: string;
@@ -54,63 +53,10 @@ export function GenerateDsrButton({
   disabled,
 }: Props) {
   const toast = useToast();
-  const qc = useQueryClient();
   const generate = useGenerateDsr();
-  const [runId, setRunId] = React.useState<string | null>(null);
+  const run = useDsrRunWatcher(dealerId, 'Report ready — it is showing below.');
 
-  // The dealer tab reuses this component across dealers instead of remounting,
-  // so a run started for dealer A must be dropped when the view switches to B —
-  // otherwise B's caches get invalidated and toasted for A's completion.
-  const watched = React.useRef(dealerId);
-  if (watched.current !== dealerId) {
-    watched.current = dealerId;
-    if (runId !== null) setRunId(null);
-  }
-
-  const poll = useQuery({
-    queryKey: ['run', runId],
-    queryFn: () => api.get<ServiceRun>(`/runs/${runId}`),
-    enabled: !!runId,
-    retry: 2,
-    refetchInterval: (query) => {
-      const st = query.state.data?.status;
-      return st === 'SUCCESS' || st === 'FAILED' ? false : 2500;
-    },
-  });
-
-  React.useEffect(() => {
-    if (!runId || !poll.isError) return;
-    // Lost sight of the run — it is still finishing server-side.
-    setRunId(null);
-    void qc.invalidateQueries({ queryKey: dsrKeys.all });
-    toast.info(
-      'Lost track of that run — it is probably still finishing. Refresh in a moment.',
-    );
-  }, [poll.isError, runId, qc, toast]);
-
-  React.useEffect(() => {
-    const st = poll.data?.status;
-    if (!runId || (st !== 'SUCCESS' && st !== 'FAILED')) return;
-    if (st === 'SUCCESS') {
-      void qc.invalidateQueries({ queryKey: dsrKeys.all });
-      toast.success('Report ready — it is showing below.');
-    } else {
-      // Say WHY at the point of action. The run's failure code and message reach
-      // every role, and the commonest failure by far — the day's IRAS shift data
-      // could not be collected — is one the admin can act on ("Insufficient
-      // Data"), so sending them off to Run history to find that out was a step
-      // too many.
-      const copy = poll.data ? describeRunFailure(poll.data) : null;
-      toast.error(
-        copy?.known
-          ? `${copy.title} — ${copy.hint}`
-          : "The report could not be generated. Open the dealer's Run history for details.",
-      );
-    }
-    setRunId(null);
-  }, [poll.data, poll.data?.status, runId, qc, toast]);
-
-  const busy = generate.isPending || runId !== null;
+  const busy = generate.isPending || run.busy;
 
   return (
     <Button
@@ -134,7 +80,7 @@ export function GenerateDsrButton({
           { dealerId, businessDate },
           {
             onSuccess: (data) => {
-              setRunId(data.runId);
+              run.watch(data.runId);
               onQueued?.(data.runId);
               toast.success(
                 'Generating the report — this updates when it lands.',

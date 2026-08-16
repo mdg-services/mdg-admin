@@ -16,6 +16,7 @@ import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import type { Dealer } from '@dk/shared';
 
+import { DsrReceiptsButton } from '../dsr/DsrReceiptsDialog';
 import { DsrReportPanel, dsrDateLabel } from '../dsr/DsrReportPanel';
 import { GenerateDsrButton, GenerateDsrForDate } from '../dsr/GenerateDsrButton';
 
@@ -134,6 +135,10 @@ export function DealerDsrTab({ dealer }: Props) {
               dealerId={dealer.id}
               onGenerated={setPendingDate}
             />
+            <DsrReceiptsButton
+              dealerId={dealer.id}
+              businessDate={report?.businessDate}
+            />
             {report ? (
               <p className="ml-auto text-xs text-text-subtle">
                 Generated {formatDateTime(report.generatedAt)}
@@ -169,6 +174,7 @@ export function DealerDsrTab({ dealer }: Props) {
                     dealerId={dealer.id}
                     onGenerated={setPendingDate}
                   />
+                  <DsrReceiptsButton dealerId={dealer.id} />
                 </div>
               }
             />

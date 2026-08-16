@@ -21,6 +21,7 @@ import {
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 
+import { DsrReceiptsButton } from './DsrReceiptsDialog';
 import { DsrReportPanel, dsrDateLabel } from './DsrReportPanel';
 import { GenerateDsrButton, GenerateDsrForDate } from './GenerateDsrButton';
 
@@ -179,6 +180,12 @@ export function DsrReportView() {
                 onGenerated={setPendingDate}
               />
             ) : null}
+            {dealerId ? (
+              <DsrReceiptsButton
+                dealerId={dealerId}
+                businessDate={report?.businessDate}
+              />
+            ) : null}
             {report ? (
               <p className="ml-auto text-xs text-text-subtle">
                 Generated {formatDateTime(report.generatedAt)}
@@ -215,6 +222,7 @@ export function DsrReportView() {
                   dealerId={dealerId}
                   onGenerated={setPendingDate}
                 />
+                <DsrReceiptsButton dealerId={dealerId} />
               </div>
             ) : undefined
           }

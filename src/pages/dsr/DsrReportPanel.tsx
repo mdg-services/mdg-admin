@@ -19,6 +19,8 @@ import { formatDateTime, formatLitres } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
 import type { DsrAdvisoryKind, DsrVariationSummary } from '@dk/shared';
 
+import { DsrStaleNotice } from './DsrStaleNotice';
+
 /** `YYYY-MM-DD` → `Thu, 23 Jul 2026`, read as a calendar date, not an instant. */
 export function dsrDateLabel(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -67,6 +69,10 @@ export function DsrReportPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Above the warnings: "these figures no longer match their inputs" is a
+          stronger caveat than "this figure was missing a nozzle". */}
+      <DsrStaleNotice report={report} />
+
       {report.warnings.length > 0 ? (
         <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning">
           <AlertTriangle
