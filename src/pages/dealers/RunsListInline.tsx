@@ -22,6 +22,7 @@ import { useRunsQuery } from '@/hooks/api/useRuns';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatDuration } from '@/lib/format';
+import { describeRunFailure } from '@/lib/runFailure';
 import { serviceLabel } from '@/lib/serviceLabel';
 import type {
   CreditDodRunOutput,
@@ -79,6 +80,21 @@ export function RunsListInline({ dealerId, serviceId }: Props) {
 
   const runName = (id: string) => (isSuperAdmin ? id : serviceLabel(id));
 
+  // A `backfill` is a run one service started on another's behalf — the DSR
+  // collecting the IRAS shift data it needs before it can report on a day.
+  // Unlabelled it reads as an unexplained extra run sitting in the history right
+  // beside the report that caused it. The parent is almost always on this same
+  // page, so naming the service that asked for it costs no extra request; when
+  // it isn't, the badge still says the run was automatic.
+  const serviceOfRun = new Map(data.items.map((r) => [r.id, r.serviceId]));
+  const backfillFor = (r: ServiceRun): string | null => {
+    if (r.trigger !== 'backfill') return null;
+    const parentService = r.parentRunId
+      ? serviceOfRun.get(r.parentRunId)
+      : undefined;
+    return parentService ? `Auto · for ${serviceLabel(parentService)}` : 'Auto';
+  };
+
   return (
     <>
       {/* Desktop table (≥ md) */}
@@ -95,7 +111,10 @@ export function RunsListInline({ dealerId, serviceId }: Props) {
           <TBody>
             {data.items.map((r) => (
               <TRow key={r.id} clickable onClick={() => setOpenRunId(r.id)}>
-                <TD className="font-medium">{runName(r.serviceId)}</TD>
+                <TD className="font-medium">
+                  {runName(r.serviceId)}
+                  <TriggerBadge label={backfillFor(r)} />
+                </TD>
                 <TD>
                   <StatusChip kind="run" value={r.status} />
                 </TD>
@@ -120,6 +139,7 @@ export function RunsListInline({ dealerId, serviceId }: Props) {
           primary: (
             <span className="block truncate font-medium text-text">
               {runName(r.serviceId)}
+              <TriggerBadge label={backfillFor(r)} />
             </span>
           ),
           primaryRight: <StatusChip kind="run" value={r.status} />,
@@ -210,6 +230,7 @@ function RunDetail({
   const isInProgress = run.status === 'PENDING' || run.status === 'RUNNING';
   const isCreditDodFailure =
     isCreditDod && !isInProgress && (run.status === 'FAILED' || !run.output);
+  const failureCopy = describeRunFailure(run);
 
   // A plain admin sees the run's DELIVERABLES (the API already withheld
   // everything diagnostic). Files the report card above already offers are
@@ -240,8 +261,17 @@ function RunDetail({
         <Field label="Started" value={formatDateTime(run.startedAt)} />
         <Field label="Finished" value={formatDateTime(run.finishedAt)} />
         <Field label="Duration" value={formatDuration(run.durationMs)} />
+        {run.trigger === 'backfill' ? (
+          <Field
+            label="Started by"
+            value="Another service, automatically — it needed this data"
+          />
+        ) : null}
         {isSuperAdmin ? (
           <Field label="Dealer" value={run.dealerId} />
+        ) : null}
+        {isSuperAdmin && run.parentRunId ? (
+          <Field label="Parent run" value={run.parentRunId} />
         ) : null}
       </div>
 
@@ -294,15 +324,16 @@ function RunDetail({
         </section>
       ) : run.status === 'FAILED' ? (
         // Super-admins already have the raw error above; everyone else gets the
-        // plain-language version.
+        // plain-language version, keyed on the failure code the API serialises
+        // for every role.
         isSuperAdmin && run.error ? null : (
           <RunStatusNotice
             tone="danger"
             icon={
               <AlertTriangle width={18} height={18} strokeWidth={1.75} />
             }
-            title="This run didn't finish."
-            hint="Please retry. If it keeps happening, contact the MDG team."
+            title={failureCopy.title}
+            hint={failureCopy.hint}
           />
         )
       ) : isSuperAdmin ? (
@@ -392,6 +423,16 @@ function CreditDodRunReport({
       // tell the admin the right thing.
       shareDisabled={snapshot ? undefined : isPending ? 'loading' : 'unavailable'}
     />
+  );
+}
+
+/** Explains a run nobody pressed a button for. Renders nothing otherwise. */
+function TriggerBadge({ label }: { label: string | null }) {
+  if (!label) return null;
+  return (
+    <span className="ml-2 whitespace-nowrap rounded-full border border-border px-2 py-0.5 align-middle text-[11px] font-normal text-text-muted">
+      {label}
+    </span>
   );
 }
 

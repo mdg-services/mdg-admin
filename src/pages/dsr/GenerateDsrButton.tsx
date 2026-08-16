@@ -13,6 +13,7 @@ import {
 import { dsrKeys, useGenerateDsr } from '@/hooks/api/useDsr';
 import { api, ApiError } from '@/lib/api';
 import { istTodayYmd, isYmd } from '@/lib/format';
+import { describeRunFailure } from '@/lib/runFailure';
 import type { ServiceRun } from '@dk/shared';
 
 interface Props {
@@ -94,12 +95,20 @@ export function GenerateDsrButton({
       void qc.invalidateQueries({ queryKey: dsrKeys.all });
       toast.success('Report ready — it is showing below.');
     } else {
+      // Say WHY at the point of action. The run's failure code and message reach
+      // every role, and the commonest failure by far — the day's IRAS shift data
+      // could not be collected — is one the admin can act on ("Insufficient
+      // Data"), so sending them off to Run history to find that out was a step
+      // too many.
+      const copy = poll.data ? describeRunFailure(poll.data) : null;
       toast.error(
-        "The report could not be generated. Open the dealer's Run history for details.",
+        copy?.known
+          ? `${copy.title} — ${copy.hint}`
+          : "The report could not be generated. Open the dealer's Run history for details.",
       );
     }
     setRunId(null);
-  }, [poll.data?.status, runId, qc, toast]);
+  }, [poll.data, poll.data?.status, runId, qc, toast]);
 
   const busy = generate.isPending || runId !== null;
 
