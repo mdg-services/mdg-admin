@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ExternalLink,
   FileWarning,
+  History,
   Share2,
 } from 'lucide-react';
 import * as React from 'react';
@@ -247,6 +248,26 @@ function DsrShareSection({ report }: { report: DsrReportView }) {
               ),
             )}
           </div>
+
+          {/* The dealer already has an EARLIER version of this day, and a
+              regeneration is what took the "Shared" chip away. Saying so here is
+              the difference between the operator remembering to re-share a
+              corrected report and the dealer acting on the old figures. */}
+          {!alreadyShared && report.sharedSuperseded ? (
+            <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning">
+              <History width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium">
+                  The dealer already has an older version of this report
+                </p>
+                <p className="mt-0.5">
+                  Shared {formatDateTime(report.sharedSuperseded.at)}, and rebuilt since
+                  ({formatDateTime(report.sharedSuperseded.supersededAt)}). Share it again so they
+                  are looking at the corrected figures — and tell them what changed.
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-2">
             {alreadyShared ? (

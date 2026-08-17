@@ -16,8 +16,8 @@ import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import type { Dealer } from '@dk/shared';
 
-import { DsrReceiptsButton } from '../dsr/DsrReceiptsDialog';
 import { DsrReportPanel, dsrDateLabel } from '../dsr/DsrReportPanel';
+import { EditShiftDataButton } from '../dsr/EditShiftDataButton';
 import { GenerateDsrButton, GenerateDsrForDate } from '../dsr/GenerateDsrButton';
 
 
@@ -135,7 +135,7 @@ export function DealerDsrTab({ dealer }: Props) {
               dealerId={dealer.id}
               onGenerated={setPendingDate}
             />
-            <DsrReceiptsButton
+            <EditShiftDataButton
               dealerId={dealer.id}
               businessDate={report?.businessDate}
             />
@@ -174,7 +174,7 @@ export function DealerDsrTab({ dealer }: Props) {
                     dealerId={dealer.id}
                     onGenerated={setPendingDate}
                   />
-                  <DsrReceiptsButton dealerId={dealer.id} />
+                  <EditShiftDataButton dealerId={dealer.id} />
                 </div>
               }
             />

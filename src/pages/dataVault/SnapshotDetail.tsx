@@ -4,12 +4,15 @@ import {
   ChevronRight,
   Clock,
   CornerDownRight,
+  PencilRuler,
   Table2,
 } from 'lucide-react';
 import * as React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import {
   Badge,
+  Button,
   Card,
   CardContent,
   StatusChip,
@@ -70,6 +73,7 @@ export function SnapshotDetail({
   hideDealerName = false,
   className,
 }: SnapshotDetailProps) {
+  const navigate = useNavigate();
   const filePrefix = `${snapshot.dealerCode || snapshot.dealerId.slice(-6)}_${snapshot.businessDate}`;
 
   return (
@@ -101,7 +105,25 @@ export function SnapshotDetail({
             Collected at {formatDateTime(snapshot.capturedAt)}
           </p>
         </div>
-        {actions ? <div className="shrink-0">{actions}</div> : null}
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/* The way into the editor from every Vault surface — the cross-dealer
+              drawer, the per-dealer tab and a historic capture all render this
+              panel, so one button here covers all three. */}
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<PencilRuler width={14} height={14} strokeWidth={1.75} />}
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(
+                `/data-vault/dealers/${snapshot.dealerId}/days/${snapshot.businessDate}`,
+              );
+            }}
+          >
+            Correct this day
+          </Button>
+          {actions}
+        </div>
       </div>
 
       {snapshot.failureReason ? (

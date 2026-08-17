@@ -8,6 +8,7 @@ import { ActivityPage } from '@/pages/ActivityPage';
 import { AdminsPage } from '@/pages/AdminsPage';
 import { AllUsersPage } from '@/pages/AllUsersPage';
 import { BankHolidaysPage } from '@/pages/BankHolidaysPage';
+import { ShiftDataEditorPage } from '@/pages/dataVault/dayEditor/ShiftDataEditorPage';
 import { DataVaultPage } from '@/pages/DataVaultPage';
 import { DealerDetailPage } from '@/pages/DealerDetailPage';
 import { DealersPage } from '@/pages/DealersPage';
@@ -44,6 +45,14 @@ export default function App() {
           {/* Plain admins are the audience here — the Vault is where they read
               every dealer's collected IRAS data, so it is NOT super-admin only. */}
           <Route path="data-vault" element={<DataVaultPage />} />
+          {/* Correcting a day's collected figures. A full page, not a drawer:
+              these reports run to 36 columns. Same audience as the Vault it
+              hangs off — the audit trail on every correction is the control
+              here, not a role gate. */}
+          <Route
+            path="data-vault/dealers/:dealerId/days/:businessDate"
+            element={<ShiftDataEditorPage />}
+          />
           {/* Daily Sales Report — a dealer-facing outcome surface, so like the
               Data Vault it is NOT super-admin only. */}
           <Route path="dsr" element={<DsrVaultPage />} />

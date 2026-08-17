@@ -2,8 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, ApiError } from '@/lib/api';
 import type {
-  DsrDayReceipts,
-  DsrManualReceipt,
   DsrReportDigest,
   DsrReportStale,
 } from '@dk/shared';
@@ -70,7 +68,7 @@ export interface DsrReportView {
   jsonKey?: string | null;
   /**
    * Set while an input this report was built from changed after it was
-   * generated (today: a hand-entered receipt). The figures shown are still the
+   * generated — a hand-corrected IRAS figure. The figures shown are still the
    * ones that were shared, so the report stays readable — it just needs
    * regenerating.
    */
@@ -90,6 +88,16 @@ export interface DsrReportView {
     by: string;
     conversationId: string;
     messageId: string;
+  } | null;
+  /**
+   * The share this report had BEFORE it was last regenerated — i.e. the dealer
+   * is holding an OLDER version of these figures and has not been told. Present
+   * alongside `shared: null`, which is what makes re-sharing possible again.
+   */
+  sharedSuperseded?: {
+    at: string;
+    by: string;
+    supersededAt: string;
   } | null;
 }
 
@@ -127,31 +135,6 @@ export interface DsrStaleReport {
 /** `GET /dsr/dealers/:dealerId/stale`. */
 export interface DsrStaleResponse {
   reports: DsrStaleReport[];
-}
-
-/** One product's requested receipt change. `litres: null` reverts it to IRAS. */
-export interface DsrReceiptEntryInput {
-  productKey: string;
-  litres: number | null;
-  tankNo?: number | null;
-  invoiceNo?: string | null;
-  note?: string | null;
-}
-
-/** What a save actually changed, so the UI can say what it invalidated. */
-export interface DsrReceiptChange {
-  productKey: string;
-  before: number | null;
-  after: number | null;
-  action: 'set' | 'cleared';
-}
-
-/** `PUT /dsr/dealers/:dealerId/receipts/:businessDate`. */
-export interface DsrSaveReceiptsResult {
-  day: DsrDayReceipts;
-  changes: DsrReceiptChange[];
-  /** Business dates whose report this invalidated, oldest first. */
-  staleDates: string[];
 }
 
 /** `POST /dsr/dealers/:dealerId/regenerate-stale` — 202 with the queued run. */
@@ -193,10 +176,6 @@ export const dsrKeys = {
     ['dsr', 'reports', dealerId] as const,
   report: (id: string | undefined) => ['dsr', 'report', id] as const,
   stale: (dealerId: string | undefined) => ['dsr', 'stale', dealerId] as const,
-  receipts: (dealerId: string | undefined, businessDate: string | undefined) =>
-    ['dsr', 'receipts', dealerId, businessDate] as const,
-  receiptHistory: (dealerId: string | undefined) =>
-    ['dsr', 'receipts', 'history', dealerId] as const,
 };
 
 /** A missing report (404) is a normal state here, and a client error never
@@ -280,42 +259,6 @@ export function useDsrStaleReports(dealerId: string | undefined, enabled = true)
   });
 }
 
-/**
- * One business date's receipts: what IRAS reports per product, what an admin
- * entered, and which of the two a generation would use.
- */
-export function useDsrDayReceipts(
-  dealerId: string | undefined,
-  businessDate: string | undefined,
-) {
-  return useQuery({
-    queryKey: dsrKeys.receipts(dealerId, businessDate),
-    queryFn: () =>
-      api.get<DsrDayReceipts>(`/dsr/dealers/${dealerId}/receipts`, {
-        businessDate: businessDate ?? '',
-      }),
-    enabled: !!dealerId && !!businessDate,
-    retry: retryUnlessClientError,
-    // Short: the point of opening this is to see the CURRENT position before
-    // overriding it.
-    staleTime: 5_000,
-  });
-}
-
-/** Every receipt this dealer has had entered by hand. */
-export function useDsrReceiptHistory(dealerId: string | undefined, enabled = true) {
-  return useQuery({
-    queryKey: dsrKeys.receiptHistory(dealerId),
-    queryFn: () =>
-      api.get<{ receipts: DsrManualReceipt[] }>(
-        `/dsr/dealers/${dealerId}/receipts/history`,
-        { limit: 50 },
-      ),
-    enabled: !!dealerId && enabled,
-    staleTime: 30_000,
-  });
-}
-
 /* ────────────────────────────── Mutations ───────────────────────────────── */
 
 /**
@@ -331,31 +274,6 @@ export function useGenerateDsr() {
       api.post<DsrGenerateAccepted>(
         `/dsr/dealers/${dealerId}/generate`,
         businessDate ? { businessDate } : {},
-      ),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: dsrKeys.all });
-    },
-  });
-}
-
-/**
- * Record (or clear) a day's receipts. The server does not regenerate anything —
- * it flags the reports the change invalidated and hands back the list — so we
- * invalidate the whole `dsr` prefix to pick up those flags.
- */
-export function useSaveDsrReceipts(dealerId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      businessDate,
-      entries,
-    }: {
-      businessDate: string;
-      entries: DsrReceiptEntryInput[];
-    }) =>
-      api.put<DsrSaveReceiptsResult>(
-        `/dsr/dealers/${dealerId}/receipts/${businessDate}`,
-        { entries },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: dsrKeys.all });

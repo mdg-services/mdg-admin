@@ -21,8 +21,8 @@ import {
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 
-import { DsrReceiptsButton } from './DsrReceiptsDialog';
 import { DsrReportPanel, dsrDateLabel } from './DsrReportPanel';
+import { EditShiftDataButton } from './EditShiftDataButton';
 import { GenerateDsrButton, GenerateDsrForDate } from './GenerateDsrButton';
 
 /** A 404 from the report endpoints just means "nothing generated yet". */
@@ -181,7 +181,7 @@ export function DsrReportView() {
               />
             ) : null}
             {dealerId ? (
-              <DsrReceiptsButton
+              <EditShiftDataButton
                 dealerId={dealerId}
                 businessDate={report?.businessDate}
               />
@@ -222,7 +222,7 @@ export function DsrReportView() {
                   dealerId={dealerId}
                   onGenerated={setPendingDate}
                 />
-                <DsrReceiptsButton dealerId={dealerId} />
+                <EditShiftDataButton dealerId={dealerId} />
               </div>
             ) : undefined
           }
