@@ -41,7 +41,7 @@ import {
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatYmd, istTodayYmd, isYmd, toYmd } from '@/lib/format';
-import { IRAS_REPORT_CODES } from '@dk/shared';
+import { IRAS_REPORT_CODES, compareDealerCodes, dealerCodeLabel } from '@dk/shared';
 import type {
   IrasDataVaultDealerRow,
   IrasDataVaultOverview,
@@ -180,14 +180,14 @@ export function IrasShiftDataPane({ params, patchParams }: VaultDatasetProps) {
       .filter((row) => status === 'all' || rowStatus(row) === status)
       .filter((row) => {
         if (!needle) return true;
-        return [row.dealerName, row.dealerCode, row.roCode]
+        return [row.dealerCode, row.roCode]
           .filter((v): v is string => !!v)
           .some((v) => v.toLowerCase().includes(needle));
       })
       .sort((a, b) => {
         const rank = STATUS_RANK[rowStatus(a)] - STATUS_RANK[rowStatus(b)];
         if (rank !== 0) return rank;
-        return (a.dealerName ?? '').localeCompare(b.dealerName ?? '');
+        return compareDealerCodes(a.dealerCode, b.dealerCode);
       });
   }, [dealers, status, needle]);
 
@@ -535,7 +535,7 @@ function DealerList({
                   <TD>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">
-                        {row.dealerName || 'Unnamed dealer'}
+                        {dealerCodeLabel(row.dealerCode)}
                       </span>
                       {row.enabled ? null : (
                         <Badge intent="neutral">Paused</Badge>
@@ -608,7 +608,7 @@ function DealerList({
             primary: (
               <span className="flex min-w-0 items-center gap-2">
                 <span className="truncate font-medium text-text">
-                  {row.dealerName || 'Unnamed dealer'}
+                  {dealerCodeLabel(row.dealerCode)}
                 </span>
                 {/* Parity with the desktop table: a paused attachment is why a
                     dealer stops producing snapshots, so it cannot be desktop-only. */}
@@ -691,7 +691,7 @@ function SnapshotDrawer({
       open={!!row}
       onClose={onClose}
       width="lg"
-      title={row?.dealerName || 'Dealer data'}
+      title={dealerCodeLabel(row?.dealerCode)}
       description={
         row
           ? [row.dealerCode, row.roCode ? `RO ${row.roCode}` : null]

@@ -34,6 +34,7 @@ import {
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatLitres } from '@/lib/format';
+import { compareDealerCodes, dealerCodeLabel } from '@dk/shared';
 
 import { dsrDateLabel } from './dsr/DsrReportPanel';
 import { GenerateDsrButton } from './dsr/GenerateDsrButton';
@@ -100,14 +101,14 @@ export function DsrVaultPage() {
       })
       .filter((row) => {
         if (!needle) return true;
-        return [row.dealerName, row.dealerCode]
+        return [row.dealerCode]
           .filter((v): v is string => !!v)
           .some((v) => v.toLowerCase().includes(needle));
       })
       .sort((a, b) => {
         const rank = rowRank(a) - rowRank(b);
         if (rank !== 0) return rank;
-        return (a.dealerName ?? '').localeCompare(b.dealerName ?? '');
+        return compareDealerCodes(a.dealerCode, b.dealerCode);
       });
   }, [dealers, status, needle]);
 
@@ -265,7 +266,7 @@ function DealerList({
                   <TD>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">
-                        {row.dealerName || 'Unnamed dealer'}
+                        {dealerCodeLabel(row.dealerCode)}
                       </span>
                       {row.enabled ? null : (
                         <Badge intent="neutral">Paused</Badge>
@@ -349,7 +350,7 @@ function DealerList({
             primary: (
               <span className="flex min-w-0 items-center gap-2">
                 <span className="truncate font-medium text-text">
-                  {row.dealerName || 'Unnamed dealer'}
+                  {dealerCodeLabel(row.dealerCode)}
                 </span>
                 {row.enabled ? null : <Badge intent="neutral">Paused</Badge>}
               </span>

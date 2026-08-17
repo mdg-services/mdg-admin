@@ -3,13 +3,15 @@ import { ShieldCheck } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 
 import { Button, Card, CardContent, FieldError, Input, Label } from '@/components/ui';
+import { dealerCodeLabel } from '@dk/shared';
 import {
   initiateKavachProgrammeSchema,
   type InitiateKavachProgrammeInput,
 } from '@dk/shared/schemas';
 
 interface Props {
-  dealerName?: string;
+  /** Shown so the operator can see which outlet they are initiating. */
+  dealerCode: string;
   loading?: boolean;
   onSubmit: (values: InitiateKavachProgrammeInput) => void | Promise<void>;
 }
@@ -20,7 +22,7 @@ function defaultMonthYear(): string {
   return `${now.getFullYear()}-${month}`;
 }
 
-export function InitiateKavachForm({ dealerName, loading, onSubmit }: Props) {
+export function InitiateKavachForm({ dealerCode, loading, onSubmit }: Props) {
   const {
     register,
     handleSubmit,
@@ -28,11 +30,11 @@ export function InitiateKavachForm({ dealerName, loading, onSubmit }: Props) {
   } = useForm<InitiateKavachProgrammeInput>({
     resolver: zodResolver(initiateKavachProgrammeSchema),
     defaultValues: {
-      outlet: {
-        retailOutletName: dealerName ?? '',
-        roSapCode: '',
-        monthYear: defaultMonthYear(),
-      },
+      // The outlet name and RO SAP code used to be typed here. Both were second
+      // spellings of something already known — the dealer's code identifies the
+      // programme, and the portal reports its own RO code — so the baseline
+      // month is all that is left to ask for.
+      outlet: { monthYear: defaultMonthYear() },
     },
   });
 
@@ -60,31 +62,12 @@ export function InitiateKavachForm({ dealerName, loading, onSubmit }: Props) {
         </div>
 
         <form onSubmit={submit} noValidate className="grid max-w-xl gap-4">
-          <div>
-            <Label htmlFor="retailOutletName" required>
-              Retail outlet name
-            </Label>
-            <Input
-              id="retailOutletName"
-              placeholder="e.g. Veer Shaheed Om Fuel Centre"
-              invalid={!!errors.outlet?.retailOutletName}
-              {...register('outlet.retailOutletName')}
-            />
-            <FieldError message={errors.outlet?.retailOutletName?.message} />
-          </div>
-
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <Label htmlFor="roSapCode" required>
-                RO SAP code
-              </Label>
-              <Input
-                id="roSapCode"
-                placeholder="e.g. 198889"
-                invalid={!!errors.outlet?.roSapCode}
-                {...register('outlet.roSapCode')}
-              />
-              <FieldError message={errors.outlet?.roSapCode?.message} />
+              <Label>Outlet</Label>
+              <p className="mt-1 font-mono text-sm text-text">
+                {dealerCodeLabel(dealerCode)}
+              </p>
             </div>
             <div>
               <Label htmlFor="monthYear" required hint="YYYY-MM">

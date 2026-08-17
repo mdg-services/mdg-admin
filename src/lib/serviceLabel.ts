@@ -8,7 +8,6 @@ const SERVICE_LABELS: Record<string, string> = {
   'custom-request': 'Custom request',
   'dsr-report': 'Daily Sales Report',
   'inspection-reports': 'Inspection Reports',
-  'iras-cms-data': 'IRAS CMS data',
   'iras-shift-data': 'IRAS shift data',
 };
 

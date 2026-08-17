@@ -19,6 +19,7 @@ import {
 import { useKavachDashboardQuery } from '@/hooks/api/useKavach';
 import { formatDateTime } from '@/lib/format';
 import { operationalIntent, priorityIntent } from '@/lib/kavach';
+import { dealerCodeLabel } from '@dk/shared';
 
 const RISK_THRESHOLD = 80;
 
@@ -94,7 +95,7 @@ export function KavachDashboardPage() {
                     clickable
                     onClick={() => navigate(`/dealers/${r.dealerId}?tab=kavach`)}
                   >
-                    <TD className="font-medium">{r.dealerName}</TD>
+                    <TD className="font-medium">{dealerCodeLabel(r.dealerCode)}</TD>
                     <TD className="font-mono text-text-muted">
                       {r.dealerCode || '—'}
                     </TD>
@@ -156,7 +157,7 @@ export function KavachDashboardPage() {
                 onClick: () => navigate(`/dealers/${r.dealerId}?tab=kavach`),
                 primary: (
                   <span className="block truncate font-medium text-text">
-                    {r.dealerName}
+                    {dealerCodeLabel(r.dealerCode)}
                   </span>
                 ),
                 primaryRight: (

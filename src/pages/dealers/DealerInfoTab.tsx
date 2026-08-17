@@ -60,7 +60,6 @@ export function DealerInfoTab({ dealer }: Props) {
           </CardHeader>
           <CardContent>
             <dl className="grid grid-cols-1 gap-2 text-sm">
-              <Row label="Name" value={dealer.name ?? 'Not set'} />
               <Row
                 label="Code"
                 value={

@@ -47,7 +47,7 @@ import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { generatePassword } from '@/lib/password';
 import { selectUser, useAuthStore } from '@/store/auth';
-import type { DealerUserGroup, User } from '@dk/shared';
+import { dealerCodeLabel, type DealerUserGroup, type User } from '@dk/shared';
 import type { SuperAdminUpdateUserInput } from '@dk/shared/schemas';
 
 const ROLE_LABEL: Record<User['role'], string> = {
@@ -91,10 +91,7 @@ export function AllUsersPage() {
       .map((g) => {
         let users = showArchived ? g.users : g.users.filter((u) => !u.archivedAt);
         if (q) {
-          const dealerMatch =
-            !!g.dealer &&
-            (g.dealer.name.toLowerCase().includes(q) ||
-              (g.dealer.code ?? '').toLowerCase().includes(q));
+          const dealerMatch = !!g.dealer && g.dealer.code.toLowerCase().includes(q);
           if (!dealerMatch) {
             users = users.filter(
               (u) =>
@@ -215,12 +212,14 @@ function GroupCard({
           <Building2 width={18} height={18} strokeWidth={1.75} className="text-text-muted" />
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-text">
-            {isAdmins ? 'Platform admins' : group.dealer!.name}
+          <p
+            className={cn(
+              'truncate text-sm font-semibold text-text',
+              !isAdmins && 'font-mono',
+            )}
+          >
+            {isAdmins ? 'Platform admins' : dealerCodeLabel(group.dealer!.code)}
           </p>
-          {!isAdmins && group.dealer!.code ? (
-            <p className="font-mono text-xs text-text-subtle">{group.dealer!.code}</p>
-          ) : null}
         </div>
         {/* An archived dealer's members stay listed and actionable — the group is
             labelled instead, so it is not confused with the 'Unknown dealer'

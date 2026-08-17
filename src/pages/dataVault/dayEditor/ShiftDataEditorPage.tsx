@@ -37,7 +37,7 @@ import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatYmd, isYmd } from '@/lib/format';
 import { useDsrRunWatcher } from '@/pages/dsr/useDsrRunWatcher';
-import { IRAS_REPORT_CODES, IRAS_REPORT_LABELS } from '@dk/shared';
+import { IRAS_REPORT_CODES, IRAS_REPORT_LABELS, dealerCodeLabel } from '@dk/shared';
 import type { IrasDayEditorView, IrasReportCode } from '@dk/shared';
 
 import { reportsAffected } from './describePending';
@@ -391,7 +391,7 @@ function Header({
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <h1 className="truncate text-lg font-semibold text-text">
-            Shift data · {day.dealer.name ?? 'Unnamed dealer'}
+            Shift data · {dealerCodeLabel(day.dealer.code)}
           </h1>
           {day.snapshot ? (
             <StatusChip kind="irasSnapshot" value={day.snapshot.status} />

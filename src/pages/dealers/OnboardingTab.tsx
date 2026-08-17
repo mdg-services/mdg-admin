@@ -8,7 +8,7 @@ import {
   RefreshCw,
   RotateCcw,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import {
@@ -26,7 +26,6 @@ import {
 } from '@/components/ui';
 import {
   useDealerOnboardingQuery,
-  useNextCodeQuery,
   useStepCompleteMutation,
   useStepReopenMutation,
 } from '@/hooks/api/useDealerOnboarding';
@@ -44,8 +43,8 @@ interface Props {
 // receives in the in-app chat for each "send" step. Keep them factual; the
 // admin can tweak inline before marking the step sent.
 const DEFAULT_MESSAGES: Partial<Record<OnboardingStepId, (dealer: Dealer) => string>> = {
-  'send-welcome': (d) =>
-    `Hi${d.name ? ' ' + d.name : ''}, welcome to Dealer Kavach.
+  'send-welcome': () =>
+    `Welcome to Dealer Kavach.
 
 We're glad to have you on board. Over the next few messages we'll guide you through a short onboarding so you can start using our services.
 
@@ -270,7 +269,7 @@ function StepForm({
     case 'receive-payment-and-gst':
       return <PaymentAndGstForm dealerId={dealerId} />;
     case 'assign-code':
-      return <AssignCodeForm dealerId={dealerId} />;
+      return <AssignCodeForm dealerId={dealerId} dealer={dealer} />;
     case 'issue-app-login':
       return <IssueAppLoginForm dealerId={dealerId} dealer={dealer} />;
   }
@@ -469,7 +468,7 @@ function CollectPhoneForm({
   const toast = useToast();
   const mutate = useStepCompleteMutation(dealerId);
   const schema = STEP_PAYLOAD_SCHEMAS['collect-phone'];
-  type Form = { phone: string; name?: string; note?: string };
+  type Form = { phone: string; note?: string };
   const {
     register,
     handleSubmit,
@@ -477,14 +476,14 @@ function CollectPhoneForm({
     reset,
   } = useForm<Form>({
     resolver: zodResolver(schema),
-    defaultValues: { phone: dealer.phone ?? '', name: dealer.name ?? '', note: '' },
+    defaultValues: { phone: dealer.phone ?? '', note: '' },
   });
 
   const submit = handleSubmit(async (values) => {
     try {
       await mutate.mutateAsync({ stepId: 'collect-phone', payload: values });
       toast.success('Phone number saved.');
-      reset({ phone: values.phone, name: values.name, note: '' });
+      reset({ phone: values.phone, note: '' });
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -509,16 +508,6 @@ function CollectPhoneForm({
         </p>
       </div>
       <div>
-        <Label htmlFor="collect-phone-name">Working name (optional)</Label>
-        <Input
-          id="collect-phone-name"
-          placeholder="e.g. Sunrise Petroleum"
-          invalid={!!errors.name}
-          {...register('name')}
-        />
-        <FieldError message={errors.name?.message} />
-      </div>
-      <div>
         <Label htmlFor="collect-phone-note">Internal note (optional)</Label>
         <Textarea id="collect-phone-note" rows={2} {...register('note')} />
       </div>
@@ -531,10 +520,19 @@ function CollectPhoneForm({
   );
 }
 
-function AssignCodeForm({ dealerId }: { dealerId: string }) {
+/**
+ * Step 6 confirms the code rather than choosing it.
+ *
+ * The dealer's code is claimed at creation now — it is the record's identity, so
+ * there is no dealer to assign one to before it exists. The step is kept because
+ * it is where the code lands in the audit trail, and because removing it would
+ * renumber the journey for every dealer part-way through it. Submitting the code
+ * the dealer already has is a no-op server-side; submitting a different one is
+ * rejected, which is why the field is read-only.
+ */
+function AssignCodeForm({ dealerId, dealer }: { dealerId: string; dealer: Dealer }) {
   const toast = useToast();
   const mutate = useStepCompleteMutation(dealerId);
-  const { data: nextCode, isLoading } = useNextCodeQuery(dealerId);
   const schema = STEP_PAYLOAD_SCHEMAS['assign-code'];
   type Form = { code: string; note?: string };
   const {
@@ -542,15 +540,10 @@ function AssignCodeForm({ dealerId }: { dealerId: string }) {
     handleSubmit,
     formState: { errors },
     reset,
-    setValue,
   } = useForm<Form>({
     resolver: zodResolver(schema),
-    defaultValues: { code: '', note: '' },
+    defaultValues: { code: dealer.code, note: '' },
   });
-
-  useEffect(() => {
-    if (nextCode?.suggestion) setValue('code', nextCode.suggestion);
-  }, [nextCode?.suggestion, setValue]);
 
   const submit = handleSubmit(async (values) => {
     try {
@@ -570,14 +563,15 @@ function AssignCodeForm({ dealerId }: { dealerId: string }) {
         </Label>
         <Input
           id="code"
-          placeholder={isLoading ? 'Suggesting…' : 'E01'}
+          readOnly
+          className="font-mono"
           invalid={!!errors.code}
           {...register('code')}
         />
         <FieldError message={errors.code?.message} />
         <p className="mt-1 text-xs text-text-subtle">
-          Suggested next code: <span className="font-mono">{nextCode?.suggestion ?? '—'}</span>.
-          Once committed, the code is append-only.
+          Assigned when the dealer was created. To correct it, edit the dealer
+          record — the code is append-only through this step.
         </p>
       </div>
       <div>
@@ -586,7 +580,7 @@ function AssignCodeForm({ dealerId }: { dealerId: string }) {
       </div>
       <div className="flex justify-end">
         <Button type="submit" loading={mutate.isPending}>
-          Assign code
+          Confirm code
         </Button>
       </div>
     </form>
@@ -715,7 +709,7 @@ function IssueAppLoginForm({
     resolver: zodResolver(schema),
     defaultValues: {
       email: dealer.ownerContact?.email ?? '',
-      name: dealer.name ?? dealer.ownerContact?.name ?? '',
+      name: dealer.ownerContact?.name ?? '',
       password: '',
       phone: dealer.phone ?? '',
       note: '',

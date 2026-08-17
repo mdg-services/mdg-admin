@@ -21,7 +21,7 @@ interface UploadRecordDialogProps {
   open: boolean;
   onClose: () => void;
   dealerId: string;
-  dealerName?: string;
+  dealerCode?: string;
   /** Conversation used for the upload presign scope, if available. */
   conversationId?: string;
 }
@@ -33,7 +33,7 @@ export function UploadRecordDialog({
   open,
   onClose,
   dealerId,
-  dealerName,
+  dealerCode,
   conversationId,
 }: UploadRecordDialogProps) {
   const toast = useToast();
@@ -113,9 +113,7 @@ export function UploadRecordDialog({
         announceInChat,
       });
       toast.success('Report uploaded', {
-        description: dealerName
-          ? `Sent to ${dealerName}`
-          : undefined,
+        description: dealerCode ? `Sent to ${dealerCode}` : undefined,
       });
       reset();
       onClose();
@@ -131,7 +129,7 @@ export function UploadRecordDialog({
       open={open}
       onClose={handleClose}
       title="Upload report"
-      description={dealerName ? `Deliver a record to ${dealerName}` : undefined}
+      description={dealerCode ? `Deliver a record to ${dealerCode}` : undefined}
       footer={
         <>
           <Button

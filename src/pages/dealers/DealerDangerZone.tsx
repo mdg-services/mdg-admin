@@ -14,7 +14,7 @@ import {
 import { useArchiveDealer, useRestoreDealer } from '@/hooks/api/useDealers';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
-import type { Dealer } from '@dk/shared';
+import { dealerCodeLabel, type Dealer } from '@dk/shared';
 
 interface Props {
   dealer: Dealer;
@@ -73,7 +73,7 @@ export function DealerArchiveDialogs({
         open={action === 'archive'}
         onClose={onClose}
         title="Delete this dealer?"
-        description={dealer.name ?? dealer.phone ?? dealer.code ?? 'This dealer'}
+        description={dealerCodeLabel(dealer.code)}
         footer={
           <>
             <Button variant="secondary" onClick={onClose}>
@@ -106,7 +106,7 @@ export function DealerArchiveDialogs({
         open={action === 'restore'}
         onClose={onClose}
         title="Restore this dealer?"
-        description={dealer.name ?? dealer.phone ?? dealer.code ?? 'This dealer'}
+        description={dealerCodeLabel(dealer.code)}
         footer={
           <>
             <Button variant="secondary" onClick={onClose}>

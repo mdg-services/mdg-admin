@@ -14,6 +14,7 @@ import { usePreviewIrasCorrections } from '@/hooks/api/useIrasEdits';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatYmd } from '@/lib/format';
+import { dealerCodeLabel } from '@dk/shared';
 import type { IrasCorrectionPreview, IrasDayEditorView } from '@dk/shared';
 
 import { describePending, reportsAffected } from './describePending';
@@ -85,7 +86,7 @@ export function ReviewApplyDialog({
       onClose={onClose}
       size="lg"
       title={`Apply ${pending.count} change${pending.count === 1 ? '' : 's'}`}
-      description={`${day.dealer.name ?? 'This dealer'} · ${formatYmd(day.businessDate)}`}
+      description={`${dealerCodeLabel(day.dealer.code)} · ${formatYmd(day.businessDate)}`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={applying}>

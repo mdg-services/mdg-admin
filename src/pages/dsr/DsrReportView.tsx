@@ -20,6 +20,7 @@ import {
 } from '@/hooks/api/useDsr';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
+import { dealerCodeLabel } from '@dk/shared';
 
 import { DsrReportPanel, dsrDateLabel } from './DsrReportPanel';
 import { EditShiftDataButton } from './EditShiftDataButton';
@@ -65,8 +66,9 @@ export function DsrReportView() {
   const reportQ = reportParam ? byIdQ : latestQ;
 
   const report = reportQ.data;
-  const dealerName =
-    report?.dealerName ?? reports.find((r) => r.dealerName)?.dealerName ?? null;
+  // The outlet code identifies the dealer; there is no name to fall back to.
+  const outletCode =
+    report?.outletCode ?? reports.find((r) => r.outletCode)?.outletCode ?? null;
 
   function selectReport(id: string) {
     const next = new URLSearchParams(search);
@@ -139,9 +141,9 @@ export function DsrReportView() {
       <PageHeader
         breadcrumbs={[
           { label: 'Daily Sales Report', to: '/dsr' },
-          { label: dealerName ?? 'Dealer' },
+          { label: dealerCodeLabel(outletCode) },
         ]}
-        title={dealerName ?? 'Daily Sales Report'}
+        title={`Daily Sales Report · ${dealerCodeLabel(outletCode)}`}
         subtitle={
           report
             ? [

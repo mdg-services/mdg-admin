@@ -28,7 +28,7 @@ import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate } from '@/lib/format';
-import type { DealerStatus } from '@dk/shared';
+import { dealerCodeLabel, type DealerStatus } from '@dk/shared';
 
 import { DealerCreateDrawer } from './dealers/DealerCreateDrawer';
 
@@ -195,7 +195,6 @@ export function DealersPage() {
                 <Table>
                   <THead>
                     <TRow>
-                      <TH>Name</TH>
                       <TH>Code</TH>
                       <TH>Phone</TH>
                       <TH>Status</TH>
@@ -211,16 +210,13 @@ export function DealersPage() {
                         onClick={() => navigate(`/dealers/${d.id}`)}
                         className={d.archivedAt ? 'opacity-60' : undefined}
                       >
-                        <TD className="font-medium">
-                          {d.name ?? '—'}
+                        <TD className="font-mono font-medium">
+                          {dealerCodeLabel(d.code)}
                           {d.archivedAt ? (
                             <Badge intent="danger" className="ml-2">
                               Deleted
                             </Badge>
                           ) : null}
-                        </TD>
-                        <TD className="font-mono text-text-muted">
-                          {d.code ?? '—'}
                         </TD>
                         <TD className="text-text-muted">{d.phone ?? '—'}</TD>
                         <TD>
@@ -247,11 +243,11 @@ export function DealersPage() {
                   primary: (
                     <span
                       className={cn(
-                        'block truncate font-medium text-text',
+                        'block truncate font-mono font-medium text-text',
                         d.archivedAt && 'opacity-60',
                       )}
                     >
-                      {d.name ?? '—'}
+                      {dealerCodeLabel(d.code)}
                     </span>
                   ),
                   primaryRight: d.archivedAt ? (
@@ -259,13 +255,7 @@ export function DealersPage() {
                   ) : (
                     <StatusChip kind="dealer" value={d.status} />
                   ),
-                  secondary: (
-                    <span className="truncate">
-                      <span className="font-mono">{d.code ?? '—'}</span>
-                      {' · '}
-                      {d.phone ?? '—'}
-                    </span>
-                  ),
+                  secondary: <span className="truncate">{d.phone ?? '—'}</span>,
                   meta: (
                     <span>
                       Progress {d.onboarding.completedStepCount}/{TOTAL_STEPS}

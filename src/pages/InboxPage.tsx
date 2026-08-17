@@ -62,7 +62,7 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { Intent } from '@/lib/statusIntent';
 import { useAuthStore } from '@/store/auth';
-import { TICKET_CATEGORIES, TICKET_PRIORITIES, ticketFlagLevel } from '@dk/shared';
+import { TICKET_CATEGORIES, TICKET_PRIORITIES, dealerCodeLabel, ticketFlagLevel } from '@dk/shared';
 import type {
   Attachment,
   Conversation,
@@ -108,7 +108,7 @@ function memberLabel(c: Conversation): string {
 
 interface DealerGroup {
   dealerId: string;
-  dealerName: string;
+  dealerCode: string;
   items: Conversation[];
 }
 
@@ -125,7 +125,7 @@ function groupByDealer(conversations: Conversation[]): DealerGroup[] {
     if (!group) {
       group = {
         dealerId: key,
-        dealerName: c.dealerName ?? 'Dealer',
+        dealerCode: dealerCodeLabel(c.dealerCode),
         items: [],
       };
       map.set(key, group);
@@ -592,7 +592,7 @@ export function InboxPage() {
             groupByDealer(conversations).map((group) => (
               <li key={group.dealerId}>
                 <div className="sticky top-0 z-[1] bg-surface-2/80 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted backdrop-blur">
-                  {group.dealerName}
+                  <span className="font-mono">{group.dealerCode}</span>
                 </div>
                 <ul>
                   {group.items.map((c) => (
@@ -681,7 +681,7 @@ export function InboxPage() {
                   <TicketFlagBadge conversation={conversation} now={now} />
                 </div>
                 <p className="truncate text-xs text-text-muted">
-                  {conversation.dealerName ?? 'Dealer'}
+                  {dealerCodeLabel(conversation.dealerCode)}
                   {conversation.assignedAdminName
                     ? ` · Assigned to ${conversation.assignedAdminName}`
                     : null}
@@ -975,12 +975,6 @@ export function InboxPage() {
                       ) : (
                         <>
                           <div>
-                            <p className="text-xs text-text-subtle">Name</p>
-                            <p className="text-text">
-                              {dealerQ.data.name ?? '-'}
-                            </p>
-                          </div>
-                          <div>
                             <p className="text-xs text-text-subtle">Code</p>
                             <p className="text-text">
                               {dealerQ.data.code ?? '-'}
@@ -1068,7 +1062,7 @@ export function InboxPage() {
                 open={uploadOpen}
                 onClose={() => setUploadOpen(false)}
                 dealerId={dealerId}
-                dealerName={conversation.dealerName ?? undefined}
+                dealerCode={conversation.dealerCode}
                 conversationId={conversation.id}
               />
             ) : null}

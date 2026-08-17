@@ -34,6 +34,7 @@ import type {
   CreditDodVaultDealerRow,
   CreditDodVaultOverview,
 } from '@/types/creditDod';
+import { compareDealerCodes, dealerCodeLabel } from '@dk/shared';
 
 import { StatTile, StatTileRow, StatTileSkeletons } from './StatTile';
 import type { VaultDatasetProps } from './types';
@@ -221,14 +222,14 @@ function DealerList({
       .filter((row) => matchesStatus(row, status))
       .filter((row) => {
         if (!needle) return true;
-        return [row.dealerName, row.dealerCode]
+        return [row.dealerCode]
           .filter((v): v is string => !!v)
           .some((v) => v.toLowerCase().includes(needle));
       })
       .sort((a, b) => {
         const rank = rowRank(a) - rowRank(b);
         if (rank !== 0) return rank;
-        return (a.dealerName ?? '').localeCompare(b.dealerName ?? '');
+        return compareDealerCodes(a.dealerCode, b.dealerCode);
       });
   }, [dealers, status, needle]);
 
@@ -368,7 +369,7 @@ function DealerList({
                           <TD>
                             <div className="flex items-center gap-2">
                               <span className="font-medium">
-                                {row.dealerName || 'Unnamed dealer'}
+                                {dealerCodeLabel(row.dealerCode)}
                               </span>
                               {row.enabled ? null : (
                                 <Badge intent="neutral">Paused</Badge>
@@ -445,7 +446,7 @@ function DealerList({
                     primary: (
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="truncate font-medium text-text">
-                          {row.dealerName || 'Unnamed dealer'}
+                          {dealerCodeLabel(row.dealerCode)}
                         </span>
                         {row.enabled ? null : <Badge intent="neutral">Paused</Badge>}
                       </span>
@@ -591,7 +592,7 @@ function DealerLedger({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg font-semibold text-text">
-                  {row?.dealerName || 'Dealer ledger'}
+                  {dealerCodeLabel(row?.dealerCode)}
                 </h2>
                 {row && !row.enabled ? (
                   <Badge intent="neutral">Paused</Badge>

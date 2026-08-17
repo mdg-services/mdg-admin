@@ -6,6 +6,7 @@ import { useDealersQuery } from '@/hooks/api/useDealers';
 import { useDealerUsers } from '@/hooks/api/useDealerUsers';
 import { useStartConversation } from '@/hooks/api/useStartConversation';
 import { ApiError } from '@/lib/api';
+import { dealerCodeLabel } from '@dk/shared';
 
 interface Props {
   open: boolean;
@@ -27,7 +28,10 @@ export function NewConversationDialog({ open, onClose, onStarted }: Props) {
   const [dealerId, setDealerId] = React.useState('');
   const [userId, setUserId] = React.useState('');
 
-  const dealersQ = useDealersQuery({ page: 1, pageSize: 100, sort: 'name' });
+  // `sort: 'code asc'` — a bare `sort=code` is parsed as DESCENDING server-side
+  // (anything that is not `asc` is), which had this picker listing dealers in
+  // reverse.
+  const dealersQ = useDealersQuery({ page: 1, pageSize: 100, sort: 'code asc' });
   const dealers = React.useMemo(() => dealersQ.data?.items ?? [], [dealersQ.data]);
 
   const membersQ = useDealerUsers(dealerId || undefined);
@@ -101,7 +105,7 @@ export function NewConversationDialog({ open, onClose, onStarted }: Props) {
               <option value="">Select a dealer…</option>
               {dealers.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.code ? `${d.name} (${d.code})` : d.name}
+                  {dealerCodeLabel(d.code)}
                 </option>
               ))}
             </Select>

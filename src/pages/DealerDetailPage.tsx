@@ -28,7 +28,7 @@ import {
 import { useDealerQuery } from '@/hooks/api/useDealers';
 import { useDealerServicesQuery } from '@/hooks/api/useDealerServices';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
-import type { Dealer } from '@dk/shared';
+import { dealerCodeLabel, type Dealer } from '@dk/shared';
 
 import { CustomRequestTab } from './dealers/CustomRequestTab';
 import {
@@ -247,10 +247,9 @@ export function DealerDetailPage() {
     );
   }
 
+  // The code is the title now, so it is not repeated here.
   const subtitleParts: string[] = [];
-  if (dealer.code) subtitleParts.push(dealer.code);
-  // Phone is optional now; pushing it unconditionally rendered a dangling
-  // "E01 · " when it was absent.
+  // Phone is optional; pushing it unconditionally rendered a dangling " · ".
   if (dealer.phone) subtitleParts.push(dealer.phone);
   if (dealer.pumpLocation?.address) subtitleParts.push(dealer.pumpLocation.address);
 
@@ -338,9 +337,9 @@ export function DealerDetailPage() {
       <PageHeader
         breadcrumbs={[
           { label: 'Dealers', to: '/dealers' },
-          { label: dealer.name ?? dealer.phone ?? dealer.code ?? 'Dealer' },
+          { label: dealerCodeLabel(dealer.code) },
         ]}
-        title={dealer.name ?? 'Unnamed dealer'}
+        title={dealerCodeLabel(dealer.code)}
         subtitle={subtitleParts.join(' · ')}
         actions={
           <div className="flex items-center gap-2">

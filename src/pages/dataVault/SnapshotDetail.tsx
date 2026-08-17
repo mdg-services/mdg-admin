@@ -19,7 +19,7 @@ import {
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatYmd } from '@/lib/format';
-import { IRAS_REPORT_CODES } from '@dk/shared';
+import { IRAS_REPORT_CODES, dealerCodeLabel } from '@dk/shared';
 import type {
   IrasDataSnapshot,
   IrasDataset,
@@ -87,7 +87,7 @@ export function SnapshotDetail({
               </h3>
             ) : (
               <h3 className="truncate text-base font-semibold text-text">
-                {snapshot.dealerName || 'Unnamed dealer'}
+                {dealerCodeLabel(snapshot.dealerCode)}
               </h3>
             )}
             <StatusChip kind="irasSnapshot" value={snapshot.status} />

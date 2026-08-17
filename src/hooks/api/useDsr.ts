@@ -35,7 +35,6 @@ export interface DsrOverviewLatest {
 /** One dealer row on `GET /dsr/overview`. */
 export interface DsrOverviewDealerRow {
   dealerId: string;
-  dealerName: string | null;
   dealerCode: string | null;
   enabled: boolean;
   /** `null` for a dealer configured for DSR but never generated. */
@@ -56,7 +55,6 @@ export interface DsrOverviewResponse {
 export interface DsrReportView {
   id: string;
   dealerId: string;
-  dealerName?: string | null;
   roCode?: string | null;
   outletCode: string;
   businessDate: string;
@@ -112,7 +110,6 @@ export interface DsrShareResult {
 export interface DsrReportSummary {
   id: string;
   dealerId: string;
-  dealerName?: string | null;
   outletCode: string;
   businessDate: string;
   generatedAt: string;

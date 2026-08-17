@@ -39,7 +39,7 @@ import {
   CADENCE_BUCKET_ORDER,
   operationalIntent,
 } from '@/lib/kavach';
-import type { Dealer, KavachCadenceBucket, KavachItem } from '@dk/shared';
+import { dealerCodeLabel, type Dealer, type KavachCadenceBucket, type KavachItem } from '@dk/shared';
 
 import { AddCustomItemDialog } from './kavach/AddCustomItemDialog';
 import { InitiateKavachForm } from './kavach/InitiateKavachForm';
@@ -110,7 +110,7 @@ export function DealerKavachTab({ dealer }: Props) {
   if (!programmeQ.data) {
     return (
       <InitiateKavachForm
-        dealerName={dealer.name ?? undefined}
+        dealerCode={dealer.code}
         loading={initiate.isPending}
         onSubmit={async (values) => {
           try {
@@ -160,8 +160,9 @@ export function DealerKavachTab({ dealer }: Props) {
                   {isPaused ? <Badge intent="warning">Paused</Badge> : null}
                 </div>
                 <p className="text-sm text-text-muted">
-                  {programme.outlet.retailOutletName} · RO SAP{' '}
-                  {programme.outlet.roSapCode} · {programme.outlet.monthYear}
+                  <span className="font-mono">{dealerCodeLabel(dealer.code)}</span>
+                  {' · baseline '}
+                  {programme.outlet.monthYear}
                 </p>
                 <p className="text-xs text-text-subtle">
                   {programme.score.validPoints} / {programme.score.totalPoints}{' '}

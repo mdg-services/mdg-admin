@@ -37,11 +37,7 @@ import {
 import { useRunDetail } from '@/hooks/api/useRunDetail';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, istTodayYmd, isYmd } from '@/lib/format';
-import type {
-  Dealer,
-  IrasDataSnapshotSummary,
-  IrasReportCode,
-} from '@dk/shared';
+import { dealerCodeLabel, type Dealer, type IrasDataSnapshotSummary, type IrasReportCode } from '@dk/shared';
 
 import { SnapshotDetail } from '../dataVault/SnapshotDetail';
 
@@ -218,7 +214,7 @@ export function DealerDataVaultTab({ dealer }: Props) {
         open={!!openSnapshotId}
         onClose={() => setOpenSnapshotId(null)}
         width="lg"
-        title={dealer.name ?? 'Dealer data'}
+        title={dealerCodeLabel(dealer.code)}
         description="Captured IRAS shift data"
         footer={
           <Button variant="ghost" onClick={() => setOpenSnapshotId(null)}>

@@ -35,6 +35,23 @@ export function useDealersQuery(params: DealerListParams) {
   });
 }
 
+/**
+ * The next free dealer code, for the create form to prefill.
+ *
+ * Not dealer-scoped, unlike `useNextCodeQuery` — at creation there is no dealer
+ * to scope to. `staleTime: 0` because another operator adding a dealer moves the
+ * suggestion on, and a stale prefill turns into a 409 on submit.
+ */
+export function useNextDealerCodeQuery(enabled = true) {
+  return useQuery({
+    queryKey: ['dealers', 'next-code'],
+    queryFn: () => api.get<{ suggestion: string }>('/dealers/next-code'),
+    enabled,
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
 export function useDealerQuery(id: string | undefined) {
   return useQuery({
     queryKey: ['dealer', id],

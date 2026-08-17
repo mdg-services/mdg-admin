@@ -38,7 +38,6 @@ export interface CreditDodLedgerResponse {
  */
 export interface CreditDodVaultDealerRow {
   dealerId: string;
-  dealerName: string | null;
   dealerCode: string | null;
   /** False when the Credit & DOD attachment is PAUSED — the ledger has stopped growing. */
   enabled: boolean;
