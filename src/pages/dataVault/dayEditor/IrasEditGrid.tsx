@@ -565,19 +565,23 @@ function RowGutter({
           // into it nests one inside the other. The HTML parser then hoists the
           // inner one out of its container, which is how these ended up laid out
           // over the sidebar. `align="start"` keeps the popover inside the grid.
+          //
+          // Item labels are terse because `MenuItem` truncates inside a fixed
+          // 240px panel — the row identity lives in the menu's own title instead
+          // of being repeated in every label.
           <Menu label={`Actions for ${label}`} align="start" title={label}>
             {canRestore ? (
               <MenuItem onSelect={onRestore} icon={<Undo2 width={14} height={14} />}>
-                Put this row back in the report
+                Put back in report
               </MenuItem>
             ) : (
               <MenuItem onSelect={onExclude} icon={<RotateCcw width={14} height={14} />}>
-                {excluded ? 'Keep this row' : 'Leave this row out of the report'}
+                {excluded ? 'Keep in report' : 'Leave out of report'}
               </MenuItem>
             )}
             {corrections > 0 ? (
               <MenuItem onSelect={onRevertRow} icon={<Undo2 width={14} height={14} />}>
-                Undo every correction on this row
+                Undo {corrections} correction{corrections === 1 ? '' : 's'}
               </MenuItem>
             ) : null}
           </Menu>
