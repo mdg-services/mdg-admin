@@ -38,16 +38,21 @@ export function dsrDateLabel(iso: string): string {
   });
 }
 
+// Both out-of-limit kinds are `danger`: they are only ever reached when the
+// variation is already outside the permissible band, which under guideline
+// 5.1.11 draws samples either way. HIGH used to be `warning`, which read as the
+// milder of the two — exactly backwards, since a positive variation suspends
+// sales and supplies of all products immediately.
 const ADVISORY_INTENT: Record<DsrAdvisoryKind, Intent> = {
   WITHIN_LIMIT: 'success',
   LOW: 'danger',
-  HIGH: 'warning',
+  HIGH: 'danger',
 };
 
 const ADVISORY_LABEL: Record<DsrAdvisoryKind, string> = {
   WITHIN_LIMIT: 'Within limit',
-  LOW: 'Stock short',
-  HIGH: 'Stock over',
+  LOW: 'Short beyond limit',
+  HIGH: 'Over beyond limit',
 };
 
 interface Props {
