@@ -17,7 +17,11 @@ import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatLitres } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
-import type { DsrAdvisoryKind, DsrVariationSummary } from '@dk/shared';
+import {
+  bandParts,
+  type DsrAdvisoryKind,
+  type DsrVariationSummary,
+} from '@dk/shared';
 
 import { DsrStaleNotice } from './DsrStaleNotice';
 
@@ -310,6 +314,25 @@ const INTENT_TEXT: Record<Intent, string> = {
   neutral: 'text-text',
 };
 
+/** A rate like `4%` / `0.25%`, trimmed of trailing zeros. */
+function pct(n: number): string {
+  return `${Number(n.toFixed(2))}%`;
+}
+
+/**
+ * The permissible band spelled out as the allowances guideline 5.1.11 grants.
+ * Shares `bandParts` with the dealer-facing card and the printable report, so
+ * all three quote the same arithmetic.
+ */
+function bandNote(variation: DsrVariationSummary): string {
+  const b = bandParts(variation);
+  // Whole litres, as the dealer's card and the printed sheet both round to.
+  const stock = `${b.stockPct === null ? '4%' : pct(b.stockPct)} of stock (${formatLitres(Math.round(b.stockLitres))})`;
+  if (!b.leakageApplies) return `${stock} — no evaporation allowance on a surplus`;
+  const rate = b.leakagePct === null ? '' : `${pct(b.leakagePct)} `;
+  return `${stock} + ${rate}evaporation (${formatLitres(Math.round(b.leakageLitres))})`;
+}
+
 function VariationCard({ variation }: { variation: DsrVariationSummary }) {
   const kind = variation.advisory.kind;
   const intent = ADVISORY_INTENT[kind];
@@ -354,6 +377,9 @@ function VariationCard({ variation }: { variation: DsrVariationSummary }) {
               ? ''
               : ` · ${formatLitres(variation.variationNotWithinLimit)} outside`}
           </p>
+          {/* The same split the dealer's card shows, so whoever fields the "why
+              is my band 1,145?" call is reading the identical breakdown. */}
+          <p className="mt-0.5 text-xs text-text-subtle">{bandNote(variation)}</p>
         </div>
 
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
