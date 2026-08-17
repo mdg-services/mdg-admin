@@ -1,4 +1,4 @@
-import { AlertTriangle, MoreVertical, Plus, RotateCcw, Undo2 } from 'lucide-react';
+import { AlertTriangle, Plus, RotateCcw, Undo2 } from 'lucide-react';
 import * as React from 'react';
 
 import { Badge, Button, Menu, MenuItem, Table, TBody, TD, TH, THead, TRow } from '@/components/ui';
@@ -126,7 +126,7 @@ export function IrasEditGrid({
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-border px-3 py-4 text-sm text-text-muted">
         <span>The portal returned no rows for this report.</span>
-        {readOnly ? null : <AddRowButton code={code} products={products} pending={pending} />}
+        {readOnly ? null : <AddRowButtons code={code} products={products} pending={pending} />}
       </div>
     );
   }
@@ -138,7 +138,7 @@ export function IrasEditGrid({
         <Table>
           <THead>
             <TRow>
-              <TH className="w-[8.5rem] whitespace-nowrap">Row</TH>
+              <TH className="w-48 whitespace-nowrap">Row</TH>
               {columns.map((col) => {
                 const policy = irasFieldPolicy(code, col.field);
                 return (
@@ -202,7 +202,6 @@ export function IrasEditGrid({
                             ? previousTotReadings[String(row.NOZZLE_NO ?? '').trim()]
                             : undefined
                         }
-                        productLabel={product?.labelEn}
                       />
                     </TD>
                   ))}
@@ -246,7 +245,6 @@ export function IrasEditGrid({
                         committed={undefined}
                         pending={pending}
                         readOnly={readOnly || dropping}
-                        productLabel={productFor(c.row ?? {})?.labelEn}
                       />
                     </TD>
                   ))}
@@ -291,7 +289,7 @@ export function IrasEditGrid({
 
       {readOnly ? null : (
         <div className="flex justify-start">
-          <AddRowButton code={code} products={products} pending={pending} />
+          <AddRowButtons code={code} products={products} pending={pending} />
         </div>
       )}
     </div>
@@ -309,7 +307,6 @@ function Cell({
   pending,
   readOnly,
   previousReading,
-  productLabel,
 }: {
   code: IrasReportCode;
   rowKey: string;
@@ -319,7 +316,6 @@ function Cell({
   pending: PendingApi;
   readOnly: boolean;
   previousReading?: string;
-  productLabel?: string;
 }) {
   const policy = irasFieldPolicy(code, field);
   const pendingCell = pending.pendingCell(code, rowKey, field);
@@ -418,89 +414,73 @@ function Cell({
 
   const shown = inForce === '' ? '—' : inForce;
 
+  // The revert affordances are SIBLINGS of the value button, not children of it.
+  // An interactive element inside a button is invalid — the parser hoists it out
+  // of place, which is exactly what broke the add-row controls — and it forced
+  // every one of them to stopPropagation just to avoid opening the editor.
   return (
-    <button
-      type="button"
-      disabled={readOnly}
-      onClick={open}
-      onFocus={() => undefined}
-      title={
-        isCorrected || isPending
-          ? `The portal says ${portalValue || '—'}${
-              portalMoved ? ' (it changed after this was corrected)' : ''
-            }`
-          : policy.usedByReport
-            ? 'Used by the report.'
-            : 'Stored, but no calculation reads this.'
-      }
-      className={cn(
-        'group relative min-w-[7rem] rounded px-1.5 py-1 text-left text-sm tabular-nums',
-        readOnly ? 'cursor-default' : 'hover:bg-surface-2',
-        isPending && 'bg-info-soft font-semibold text-text',
-        isCorrected && 'font-semibold text-text',
-        !isPending && !isCorrected && (policy.usedByReport ? 'text-text' : 'text-text-subtle italic'),
-        policy.identityWarning && (isPending || isCorrected) && 'ring-1 ring-danger',
-      )}
-    >
-      <span className="flex items-center gap-1">
-        {shown}
-        {isCorrected ? (
-          <span
-            aria-hidden
-            className={cn(
-              'inline-block h-0 w-0 border-l-[5px] border-t-[5px] border-l-transparent',
-              portalMoved ? 'border-t-warning' : 'border-t-brand',
-            )}
-          />
-        ) : null}
-      </span>
-      {(isPending || isCorrected) && portalValue !== inForce ? (
-        <span className="block text-[11px] font-normal text-text-subtle line-through">
-          {portalValue || '—'}
+    <div className="group min-w-[7rem]">
+      <button
+        type="button"
+        disabled={readOnly}
+        onClick={open}
+        title={
+          isCorrected || isPending
+            ? `The portal says ${portalValue || '—'}${
+                portalMoved ? ' (it changed after this was corrected)' : ''
+              }`
+            : policy.usedByReport
+              ? 'Used by the report.'
+              : 'Stored, but no calculation reads this.'
+        }
+        className={cn(
+          'block w-full rounded px-1.5 py-1 text-left text-sm tabular-nums',
+          readOnly ? 'cursor-default' : 'hover:bg-surface-2',
+          isPending && 'bg-info-soft font-semibold text-text',
+          isCorrected && 'font-semibold text-text',
+          !isPending &&
+            !isCorrected &&
+            (policy.usedByReport ? 'text-text' : 'text-text-subtle italic'),
+          policy.identityWarning && (isPending || isCorrected) && 'ring-1 ring-danger',
+        )}
+      >
+        <span className="flex items-center gap-1">
+          {shown}
+          {isCorrected ? (
+            <span
+              aria-hidden
+              className={cn(
+                'inline-block h-0 w-0 border-l-[5px] border-t-[5px] border-l-transparent',
+                portalMoved ? 'border-t-warning' : 'border-t-brand',
+              )}
+            />
+          ) : null}
         </span>
-      ) : null}
+        {(isPending || isCorrected) && portalValue !== inForce ? (
+          <span className="block text-[11px] font-normal text-text-subtle line-through">
+            {portalValue || '—'}
+          </span>
+        ) : null}
+      </button>
       {isCorrected && !readOnly ? (
-        <span
-          role="link"
-          tabIndex={0}
-          className="mt-0.5 block text-[11px] font-semibold text-brand underline opacity-0 transition group-hover:opacity-100 focus:opacity-100"
-          onClick={(e) => {
-            e.stopPropagation();
-            pending.setCell(code, rowKey, field, null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter' && e.key !== ' ') return;
-            e.preventDefault();
-            e.stopPropagation();
-            pending.setCell(code, rowKey, field, null);
-          }}
+        <button
+          type="button"
+          onClick={() => pending.setCell(code, rowKey, field, null)}
+          className="mt-0.5 block px-1.5 text-left text-[11px] font-semibold text-brand underline opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
         >
           Use the portal’s value
-        </span>
+        </button>
       ) : null}
       {isPending ? (
-        <span
-          role="link"
-          tabIndex={0}
-          className="mt-0.5 block text-[11px] font-semibold text-brand underline"
-          onClick={(e) => {
-            e.stopPropagation();
-            pending.clearCell(code, rowKey, field);
-          }}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter' && e.key !== ' ') return;
-            e.preventDefault();
-            e.stopPropagation();
-            pending.clearCell(code, rowKey, field);
-          }}
+        <button
+          type="button"
+          onClick={() => pending.clearCell(code, rowKey, field)}
+          className="mt-0.5 block px-1.5 text-left text-[11px] font-semibold text-brand underline"
         >
           Undo this edit
-        </span>
+        </button>
       ) : null}
-      {productLabel === undefined && policy.usedByReport ? (
-        <span className="mt-0.5 block text-[11px] text-warning">Not read by any product</span>
-      ) : null}
-    </button>
+    </div>
   );
 }
 
@@ -541,13 +521,15 @@ function NewRowCell({
 function ProductTag({ product }: { product: EditGridProduct | undefined }) {
   if (!product) {
     return (
-      <span className="flex items-center gap-1 text-[11px] text-warning">
+      <span className="flex items-center gap-1 whitespace-nowrap text-[11px] text-warning">
         <AlertTriangle width={11} height={11} strokeWidth={2} />
         No product reads this row
       </span>
     );
   }
-  return <span className="text-[11px] text-text-subtle">→ {product.labelEn}</span>;
+  return (
+    <span className="whitespace-nowrap text-[11px] text-text-subtle">→ {product.labelEn}</span>
+  );
 }
 
 function RowGutter({
@@ -573,20 +555,17 @@ function RowGutter({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="flex items-center gap-1 text-xs font-medium text-text">
-        {label}
+      {/* The label and the menu sit side by side rather than inline in one line
+          of text: the trigger is a 36px tap target, so letting it flow inside the
+          label pushed the product line onto a wrap. */}
+      <div className="flex items-center justify-between gap-1">
+        <span className="min-w-0 text-xs font-medium text-text">{label}</span>
         {readOnly ? null : (
-          <Menu
-            trigger={
-              <button
-                type="button"
-                aria-label={`Actions for ${label}`}
-                className="rounded p-0.5 text-text-subtle hover:bg-surface-2 hover:text-text"
-              >
-                <MoreVertical width={13} height={13} strokeWidth={2} />
-              </button>
-            }
-          >
+          // No `trigger` prop: Menu renders its OWN button, and passing a button
+          // into it nests one inside the other. The HTML parser then hoists the
+          // inner one out of its container, which is how these ended up laid out
+          // over the sidebar. `align="start"` keeps the popover inside the grid.
+          <Menu label={`Actions for ${label}`} align="start" title={label}>
             {canRestore ? (
               <MenuItem onSelect={onRestore} icon={<Undo2 width={14} height={14} />}>
                 Put this row back in the report
@@ -603,7 +582,7 @@ function RowGutter({
             ) : null}
           </Menu>
         )}
-      </span>
+      </div>
       <ProductTag product={product} />
       {corrections > 0 ? (
         <span className="text-[11px] text-brand">
@@ -625,8 +604,13 @@ function RowGutter({
  * a menu. The new row is pre-filled with the identity fields the report needs to
  * attribute it to a product, because a row missing those is invisible to the
  * report and the operator has no way to know that.
+ *
+ * One button PER PRODUCT rather than one button opening a product picker. A
+ * dealer has two or three products, so the choice fits on the row, and naming the
+ * product on the button is what makes the pre-filled tank number defensible — the
+ * operator picked HIGH SPEED DIESEL, so tank 2 is not a mystery default.
  */
-function AddRowButton({
+function AddRowButtons({
   code,
   products,
   pending,
@@ -665,22 +649,18 @@ function AddRowButton({
   }
 
   return (
-    <Menu
-      trigger={
+    <div className="flex flex-wrap items-center gap-2">
+      {products.map((p) => (
         <Button
+          key={p.key}
           variant="secondary"
           size="sm"
           leftIcon={<Plus width={14} height={14} strokeWidth={2} />}
+          onClick={() => pending.addRow(code, seed(p))}
         >
-          Add a {label}
+          Add a {label} for {p.labelEn}
         </Button>
-      }
-    >
-      {products.map((p) => (
-        <MenuItem key={p.key} onSelect={() => pending.addRow(code, seed(p))}>
-          For {p.labelEn} ({p.tankLabel})
-        </MenuItem>
       ))}
-    </Menu>
+    </div>
   );
 }
