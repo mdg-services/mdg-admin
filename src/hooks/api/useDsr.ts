@@ -173,6 +173,8 @@ export const dsrKeys = {
     ['dsr', 'reports', dealerId] as const,
   report: (id: string | undefined) => ['dsr', 'report', id] as const,
   stale: (dealerId: string | undefined) => ['dsr', 'stale', dealerId] as const,
+  setupDraft: (dealerId: string | undefined) =>
+    ['dsr', 'setup-draft', dealerId] as const,
 };
 
 /** A missing report (404) is a normal state here, and a client error never
@@ -184,7 +186,59 @@ function retryUnlessClientError(count: number, err: unknown): boolean {
   return count < 1;
 }
 
+/** One tank's contribution to a discovered product. */
+export interface DsrDiscoveredTank {
+  tankNo: number;
+  stock: number | null;
+  dip: number | null;
+  waterDip: number | null;
+  nozzleNos: number[];
+}
+
+/** One product as read off the dealer's own shift data, before confirmation. */
+export interface DsrDiscoveredProduct {
+  key: string;
+  labelEn: string;
+  labelHi: string;
+  tankLabel: string;
+  prodCodes: string[];
+  tankNos: number[];
+  nozzleNos: number[];
+  leakagePct: number | null;
+  permissiblePct: number;
+  provisional: boolean;
+  currentMeterByNozzle: Record<string, number>;
+  currentStock: number | null;
+  tanks: DsrDiscoveredTank[];
+}
+
+export interface DsrSetupDraft {
+  businessDate: string;
+  capturedAt: string;
+  products: DsrDiscoveredProduct[];
+  warnings: string[];
+  existingConfig: Record<string, unknown> | null;
+}
+
 /* ─────────────────────────────── Queries ────────────────────────────────── */
+
+/**
+ * The outlet layout read off the dealer's own IRAS shift data — which grades
+ * they sell, which tanks hold each, which nozzles draw from them.
+ *
+ * Fetched on demand (the setup form asks for it), never on mount: it is a
+ * starting point an operator chooses to pull in, not something that should
+ * silently overwrite a config they are part-way through editing.
+ */
+export function useDsrSetupDraft(dealerId: string | undefined) {
+  return useQuery({
+    queryKey: dsrKeys.setupDraft(dealerId),
+    queryFn: () => api.get<DsrSetupDraft>(`/dsr/dealers/${dealerId}/setup-draft`),
+    enabled: false,
+    retry: retryUnlessClientError,
+    gcTime: 0,
+  });
+}
 
 /**
  * Every DSR-configured dealer with their latest report's headline. Built from

@@ -394,6 +394,7 @@ export function DealerServicesTab({ dealer }: Props) {
         open={attachOpen}
         onClose={() => setAttachOpen(false)}
         loading={attach.isPending}
+        dealerId={dealer.id}
         attachedServiceIds={attachedIds}
         irasAttached={irasAttached}
         inspectionAttached={inspectionAttached}

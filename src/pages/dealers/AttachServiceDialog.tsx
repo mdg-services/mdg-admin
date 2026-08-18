@@ -6,6 +6,7 @@ import { statusIntent } from '@/lib/statusIntent';
 import type { ServicePluginCatalogEntry } from '@dk/shared';
 import type { AttachServiceInput } from '@dk/shared/schemas';
 
+import { DsrLayoutPrefill } from './DsrLayoutPrefill';
 import { DSR_SERVICE_ID, dsrIrasScheduleWarning } from './schedulePicker';
 import {
   ATTACH_CADENCE_OPTIONS,
@@ -18,6 +19,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   loading?: boolean;
+  /** Needed to read the DSR layout off this dealer's own shift data. */
+  dealerId: string;
   attachedServiceIds: string[];
   /** DSR prerequisites for the schedule advisory: whether IRAS Shift Data and
    *  Inspection Reports are attached, and IRAS's cron if any. */
@@ -31,6 +34,7 @@ export function AttachServiceDialog({
   open,
   onClose,
   loading,
+  dealerId,
   attachedServiceIds,
   irasAttached,
   inspectionAttached,
@@ -140,6 +144,14 @@ export function AttachServiceDialog({
               Change
             </Button>
           </div>
+
+          {selected.id === DSR_SERVICE_ID && (
+            <DsrLayoutPrefill
+              dealerId={dealerId}
+              config={formData}
+              onConfigChange={setFormData}
+            />
+          )}
 
           <ServiceConfigFields
             idPrefix="attach-service"
