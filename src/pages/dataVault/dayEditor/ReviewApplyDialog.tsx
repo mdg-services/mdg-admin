@@ -6,6 +6,7 @@ import {
   Button,
   Callout,
   Dialog,
+  FieldError,
   Label,
   Skeleton,
   Textarea,
@@ -53,6 +54,8 @@ export function ReviewApplyDialog({
   onApply,
 }: ReviewApplyDialogProps) {
   const [reason, setReason] = React.useState('');
+  /** Only complain about the reason once they have actually typed in it. */
+  const [touchedReason, setTouchedReason] = React.useState(false);
   const preview = usePreviewIrasCorrections(day.dealer.id, day.businessDate);
 
   const changes = React.useMemo(() => describePending(day, pending.state), [day, pending.state]);
@@ -68,6 +71,7 @@ export function ReviewApplyDialog({
     if (!open) {
       requested.current = false;
       setReason('');
+      setTouchedReason(false);
       return;
     }
     if (requested.current) return;
@@ -92,9 +96,21 @@ export function ReviewApplyDialog({
           <Button variant="secondary" onClick={onClose} disabled={applying}>
             Cancel
           </Button>
-          <Button loading={applying} disabled={!reasonOk} onClick={() => onApply(reason.trim())}>
-            Apply {pending.count} change{pending.count === 1 ? '' : 's'}
-          </Button>
+          {/* The title rides on a wrapper, not the button: a disabled button
+              swallows pointer events in Safari, so its own tooltip never shows —
+              and this tooltip is the only explanation an operator gets once the
+              reason field has scrolled out of the dialog body. */}
+          <span
+            title={
+              reasonOk
+                ? undefined
+                : `Enter a reason of at least ${REASON_MIN} characters to apply these changes.`
+            }
+          >
+            <Button loading={applying} disabled={!reasonOk} onClick={() => onApply(reason.trim())}>
+              Apply {pending.count} change{pending.count === 1 ? '' : 's'}
+            </Button>
+          </span>
         </>
       }
     >
@@ -224,19 +240,36 @@ export function ReviewApplyDialog({
         ) : null}
 
         <div>
-          <Label htmlFor="correction-reason">Why is this being corrected?</Label>
+          <Label htmlFor="correction-reason" required>
+            Why is this being corrected?
+          </Label>
           <Textarea
             id="correction-reason"
             value={reason}
             rows={2}
             maxLength={REASON_MAX}
+            invalid={touchedReason && !reasonOk}
+            aria-describedby="correction-reason-hint"
             placeholder="e.g. Tanker decanted on the 14th, invoice 88231 — never entered at the outlet"
-            onChange={(e) => setReason(e.target.value)}
+            onChange={(e) => {
+              setTouchedReason(true);
+              setReason(e.target.value);
+            }}
           />
-          <p className="mt-1 text-xs text-text-subtle">
-            One line. It is stored with every change here and is what makes this readable in a
-            month.
-          </p>
+          {/* The gate has to name itself. This used to read "One line." while
+              silently requiring three characters, so an operator who typed "ok"
+              got a dead button, no message, and nothing to guess from — and the
+              button sits in the sticky footer, out of sight of this field. Only
+              after they have typed, though: leading with an error on an untouched
+              form scolds someone who has not done anything wrong yet. */}
+          {touchedReason && !reasonOk ? (
+            <FieldError message={`Please write at least ${REASON_MIN} characters.`} />
+          ) : (
+            <p id="correction-reason-hint" className="mt-1 text-xs text-text-subtle">
+              One line, {REASON_MIN} characters or more. It is stored with every change here and is
+              what makes this readable in a month.
+            </p>
+          )}
         </div>
       </div>
     </Dialog>
