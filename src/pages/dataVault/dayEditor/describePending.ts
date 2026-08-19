@@ -13,6 +13,8 @@ export interface PendingDescription {
   to: string;
   /** Whether this change can move a figure on the report. */
   usedByReport: boolean;
+  /** Moves no figure, but changes the notes printed under the report. */
+  affectsReportNotes?: boolean;
   /** Set when the change re-attributes a row to a different tank, nozzle or product. */
   identityWarning?: string;
 }
@@ -86,6 +88,7 @@ export function describePending(
       from: from === '' ? '—' : from,
       to: cell.value === null ? (portalValue === '' ? '—' : portalValue) : cell.value,
       usedByReport: policy.usedByReport,
+      affectsReportNotes: policy.affectsReportNotes,
       identityWarning:
         cell.value !== null && cell.value !== portalValue ? policy.identityWarning : undefined,
     });

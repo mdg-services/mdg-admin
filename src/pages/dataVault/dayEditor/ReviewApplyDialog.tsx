@@ -62,8 +62,12 @@ export function ReviewApplyDialog({
   const affected = React.useMemo(() => reportsAffected(day), [day]);
 
   const identityChanges = changes.filter((c) => c.identityWarning);
+  // A change that only moves the report's layout notes is not "effective" for
+  // the rebuild list, but it is not inert either — it still alters what the
+  // dealer reads, so the blanket "none of these affect any report" must not fire.
   const effective = changes.filter((c) => c.usedByReport);
-  const inertOnly = changes.length > 0 && effective.length === 0;
+  const inertOnly =
+    changes.length > 0 && effective.length === 0 && !changes.some((c) => c.affectsReportNotes);
 
   // Recompute once per opening, against the change set as it stands.
   const requested = React.useRef(false);
@@ -134,7 +138,11 @@ export function ReviewApplyDialog({
                   </span>
                   <span className="font-medium text-text">{c.rowLabel}</span>
                   <span className="text-text-muted">{c.what}</span>
-                  {c.usedByReport ? null : <Badge intent="neutral">changes no figure</Badge>}
+                  {c.usedByReport ? null : (
+                    <Badge intent="neutral">
+                      {c.affectsReportNotes ? 'notes only' : 'changes no figure'}
+                    </Badge>
+                  )}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-sm tabular-nums">
                   <span className="text-text-subtle line-through">{c.from}</span>
@@ -187,9 +195,8 @@ export function ReviewApplyDialog({
 
         {inertOnly ? (
           <Callout intent="warning">
-            None of these changes affect any report — every column you edited is stored but read by
-            no calculation. If you meant to correct a figure the report uses, close this and look
-            for the column with a dot beside its name.
+            None of these changes move a figure the report calculates. If you meant to correct a
+            figure the report uses, close this and look for the column with a dot beside its name.
           </Callout>
         ) : null}
 

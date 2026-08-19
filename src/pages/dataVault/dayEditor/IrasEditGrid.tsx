@@ -151,9 +151,16 @@ export function IrasEditGrid({
                           aria-label="Used by the report"
                           className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
                         />
+                      ) : policy.affectsReportNotes ? (
+                        <span
+                          title="No figure on the report is calculated from this, but it decides the notes printed at the bottom of the report."
+                          className="text-[10px] font-normal uppercase tracking-wide text-text-subtle"
+                        >
+                          notes only
+                        </span>
                       ) : (
                         <span
-                          title="Stored, but no calculation reads this. Editing it will not change any report."
+                          title="No figure on the report is calculated from this."
                           className="text-[10px] font-normal uppercase tracking-wide text-text-subtle"
                         >
                           not used
@@ -431,7 +438,9 @@ function Cell({
               }`
             : policy.usedByReport
               ? 'Used by the report.'
-              : 'Stored, but no calculation reads this.'
+              : policy.affectsReportNotes
+                ? 'No figure is calculated from this, but it decides the report’s layout notes.'
+                : 'No figure on the report is calculated from this.'
         }
         className={cn(
           'block w-full rounded px-1.5 py-1 text-left text-sm tabular-nums',
@@ -512,6 +521,28 @@ function NewRowCell({
         )}
       />
       {problem ? <p className="mt-1 text-[11px] text-danger">{problem}</p> : null}
+      {/*
+        The same guidance the grid gives when editing an existing cell. It was
+        missing here, which is the worst place to omit it: adding a delivery the
+        outlet forgot is exactly when someone needs to be told that the decant
+        date decides which day the litres count on.
+      */}
+      {!problem && value.trim() === '' && policy.dropsRowWhenBlank ? (
+        <p className="mt-1 max-w-[16rem] text-[11px] text-warning">
+          Leaving this empty removes the whole row from the report.
+        </p>
+      ) : null}
+      {!problem && value.trim() === '' && policy.blankReadsAsZero ? (
+        <p className="mt-1 max-w-[16rem] text-[11px] text-warning">
+          An empty value counts as zero — the row stays in the report.
+        </p>
+      ) : null}
+      {policy.hint ? (
+        <p className="mt-1 max-w-[16rem] text-[11px] text-text-subtle">{policy.hint}</p>
+      ) : null}
+      {policy.identityWarning ? (
+        <p className="mt-1 max-w-[18rem] text-[11px] text-danger">{policy.identityWarning}</p>
+      ) : null}
     </div>
   );
 }
