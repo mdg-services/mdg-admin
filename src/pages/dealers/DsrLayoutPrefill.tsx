@@ -7,6 +7,7 @@ import {
   type DsrDiscoveredProduct,
   type DsrSetupDraft,
 } from '@/hooks/api/useDsr';
+import type { DsrMonthOpening } from '@dk/shared';
 
 /**
  * The button that fills the DSR setup form in from the dealer's own portal data.
@@ -41,7 +42,7 @@ interface DsrProductFormValue {
   leakagePct?: number;
   permissiblePct: number;
   meterScale?: Record<string, number>;
-  monthOpening?: { month: string; sales: number };
+  monthOpening?: DsrMonthOpening;
   inspection: {
     openingStock?: number;
     meterByNozzle: Record<string, number | undefined>;
@@ -58,7 +59,7 @@ interface DsrProductFormValue {
  */
 function toFormProduct(
   p: DsrDiscoveredProduct,
-  keep?: { month: string; sales: number },
+  keep?: DsrMonthOpening,
 ): DsrProductFormValue {
   return {
     key: p.key,
@@ -108,7 +109,7 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
     setApplied(data);
     const openings = new Map(
       (Array.isArray(config.products) ? config.products : [])
-        .map((x) => x as { key?: string; monthOpening?: { month: string; sales: number } })
+        .map((x) => x as { key?: string; monthOpening?: DsrMonthOpening })
         .filter((x) => x.key && x.monthOpening)
         .map((x) => [x.key!, x.monthOpening!]),
     );
