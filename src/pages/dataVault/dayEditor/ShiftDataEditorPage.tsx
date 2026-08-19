@@ -37,7 +37,12 @@ import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatYmd, isYmd } from '@/lib/format';
 import { useDsrRunWatcher } from '@/pages/dsr/useDsrRunWatcher';
-import { IRAS_REPORT_CODES, IRAS_REPORT_LABELS, dealerCodeLabel } from '@dk/shared';
+import {
+  IRAS_REPORT_CODES,
+  IRAS_REPORT_LABELS,
+  dealerCodeLabel,
+  recAttributionWindow,
+} from '@dk/shared';
 import type { IrasDayEditorView, IrasReportCode } from '@dk/shared';
 
 import { reportsAffected } from './describePending';
@@ -537,6 +542,7 @@ function Section({
 }) {
   const dataset = day.snapshot?.datasets[code];
   const mine = day.corrections.filter((c) => c.code === code);
+  const attribution = code === 'REC' ? recAttributionWindow(dataset?.window) : null;
   return (
     <Card>
       <CardContent className="p-4">
@@ -550,10 +556,37 @@ function Section({
             {mine.length > 0 ? ` · ${mine.length} corrected` : ''}
           </span>
         </div>
+        {/*
+          Deliveries are the one report whose rows are not all this day's. The
+          portal answers on when a delivery was entered, so it sends several
+          days' worth; the report counts each on the day it was DECANTED. Saying
+          which day that is, here, is what stops someone correcting a row this
+          day's report never reads.
+        */}
+        {code === 'REC' && attribution ? (
+          <p className="mb-2 text-xs text-text-subtle">
+            This day counts deliveries decanted {fmtWindow(attribution)}. Rows outside it are shown
+            so you can see them, and are counted on their own day&rsquo;s report.
+          </p>
+        ) : null}
         {children}
       </CardContent>
     </Card>
   );
+}
+
+/** `16 Aug 06:30 → 17 Aug 06:30`, in IST, as the portal writes its times. */
+function fmtWindow({ from, to }: { from: Date; to: Date }): string {
+  const one = (d: Date): string =>
+    d.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  return `${one(from)} → ${one(to)}`;
 }
 
 /* ─────────────────────── applied → regenerate → verify ─────────────────── */

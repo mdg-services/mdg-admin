@@ -1,5 +1,5 @@
 import type { IrasDayEditorView, IrasReportCode } from '@dk/shared';
-import { irasFieldPolicy, irasRowKeys, irasRowLabel } from '@dk/shared';
+import { irasFieldPolicy, irasRowKeys, irasRowLabel, recRowDayVerdict } from '@dk/shared';
 
 import type { PendingState } from './usePendingChanges';
 
@@ -67,6 +67,13 @@ export function describePending(
     };
   };
 
+  // Hoisted: the row keys are derived from the whole dataset, so recomputing
+  // them per cell would be quadratic on a day with many corrections.
+  const recRows = day.snapshot?.datasets.REC?.rows ?? [];
+  const recWindow = day.snapshot?.datasets.REC?.window;
+  const recKeys = irasRowKeys('REC', recRows).keys;
+  const recRowByKey = (rowKey: string) => recRows[recKeys.indexOf(rowKey)];
+
   const header = (code: IrasReportCode, field: string) =>
     day.snapshot?.datasets[code]?.columns.find((c) => c.field === field)?.headerName ?? field;
 
@@ -81,13 +88,19 @@ export function describePending(
         c.kind === 'FIELD',
     );
     const from = committed?.value ?? portalValue;
+    // A delivery decanted on another day is read by THAT day's report, not this
+    // one — so a correction to it changes nothing here, whatever the column's
+    // policy says. Claiming otherwise is the same fault in miniature: a screen
+    // telling someone a figure matters while the calculation skips it.
+    const readsThisDay =
+      cell.code !== 'REC' || recRowDayVerdict(recRowByKey(cell.rowKey) ?? {}, recWindow) !== 'OTHER_DAY';
     out.push({
       code: cell.code,
       rowLabel: label,
       what: header(cell.code, cell.field),
       from: from === '' ? '—' : from,
       to: cell.value === null ? (portalValue === '' ? '—' : portalValue) : cell.value,
-      usedByReport: policy.usedByReport,
+      usedByReport: policy.usedByReport && readsThisDay,
       affectsReportNotes: policy.affectsReportNotes,
       identityWarning:
         cell.value !== null && cell.value !== portalValue ? policy.identityWarning : undefined,

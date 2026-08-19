@@ -3,18 +3,19 @@ import * as React from 'react';
 
 import { Badge, Button, Menu, MenuItem, Table, TBody, TD, TH, THead, TRow } from '@/components/ui';
 import { cn } from '@/lib/cn';
-import type {
-  IrasDataCorrection,
-  IrasDataset,
-  IrasReportCode,
-  IrasRow,
-} from '@dk/shared';
 import {
   IRAS_ROW_LEVEL_FIELD,
   irasFieldPolicy,
   irasRowKeys,
   irasRowLabel,
+  recAttributionWindow,
+  recRowDayVerdict,
   validateIrasCell,
+  type IrasDataCorrection,
+  type IrasDataset,
+  type IrasReportCode,
+  type IrasRow,
+  type RecRowDayVerdict,
 } from '@dk/shared';
 
 import type { PendingApi } from './usePendingChanges';
@@ -69,6 +70,9 @@ export function IrasEditGrid({
   // Memoised, not just defaulted: `?? []` is a fresh array every render, so every
   // memo below it would recompute on each keystroke in a cell.
   const portalRows = React.useMemo(() => dataset?.rows ?? [], [dataset]);
+  // The day a delivery counts on comes from the same shared rule the engine
+  // uses, so this grid can never say a row matters that the report skips.
+  const window = dataset?.window;
   const { keys } = React.useMemo(() => irasRowKeys(code, portalRows), [code, portalRows]);
 
   const mine = React.useMemo(() => corrections.filter((c) => c.code === code), [corrections, code]);
@@ -126,7 +130,7 @@ export function IrasEditGrid({
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-border px-3 py-4 text-sm text-text-muted">
         <span>The portal returned no rows for this report.</span>
-        {readOnly ? null : <AddRowButtons code={code} products={products} pending={pending} />}
+        {readOnly ? null : <AddRowButtons code={code} products={products} pending={pending} window={window} />}
       </div>
     );
   }
@@ -192,6 +196,7 @@ export function IrasEditGrid({
                       onRestore={() => pending.toggleRestore({ code, rowKey })}
                       onRevertRow={() => pending.revertRow({ code, rowKey })}
                       canRestore={excludedByCommit(rowKey)}
+                      dayVerdict={code === 'REC' ? recRowDayVerdict(row, window) : undefined}
                     />
                   </TD>
                   {columns.map((col) => (
@@ -296,7 +301,7 @@ export function IrasEditGrid({
 
       {readOnly ? null : (
         <div className="flex justify-start">
-          <AddRowButtons code={code} products={products} pending={pending} />
+          <AddRowButtons code={code} products={products} pending={pending} window={window} />
         </div>
       )}
     </div>
@@ -573,10 +578,13 @@ function RowGutter({
   onExclude,
   onRestore,
   onRevertRow,
+  dayVerdict,
 }: {
   label: string;
   product: EditGridProduct | undefined;
   excluded: boolean;
+  /** For a receipt row: whether THIS day's report is the one that counts it. */
+  dayVerdict?: RecRowDayVerdict;
   corrections: number;
   readOnly: boolean;
   canRestore: boolean;
@@ -619,6 +627,19 @@ function RowGutter({
         )}
       </div>
       <ProductTag product={product} />
+      {/*
+        A delivery is counted on the day it was DECANTED, and the portal answers
+        on when it was entered — so a row can sit on this day's screen and be
+        read by another day's report. Saying so here is the point: correcting a
+        row the report will not read is exactly the fault this whole area keeps
+        producing.
+      */}
+      {dayVerdict === 'OTHER_DAY' ? (
+        <Badge intent="warning">Counts on the day it was decanted</Badge>
+      ) : null}
+      {dayVerdict === 'UNDATED' ? (
+        <Badge intent="warning">No decant date — counted on this day</Badge>
+      ) : null}
       {corrections > 0 ? (
         <span className="text-[11px] text-brand">
           {corrections} correction{corrections === 1 ? '' : 's'}
@@ -649,10 +670,13 @@ function AddRowButtons({
   code,
   products,
   pending,
+  window,
 }: {
   code: IrasReportCode;
   products: EditGridProduct[];
   pending: PendingApi;
+  /** The day's collection window, for stamping a hand-added delivery. */
+  window?: { from: string; to: string };
 }) {
   const label = code === 'TOT' ? 'nozzle reading' : code === 'STK' ? 'tank stock row' : 'delivery';
 
@@ -667,7 +691,25 @@ function AddRowButtons({
     if (code === 'STK') {
       return { TANK_NO: String(product?.tankNos[0] ?? ''), NET_QTY: '', PRODUCT_DIP: '' };
     }
-    return { TANK_NO: String(product?.tankNos[0] ?? ''), NET_QTY_DECANTED: '', INVOICE_NUMBER: '' };
+    // Seed the decant stamp INSIDE the day's window. Without it the row carries
+    // no date, and the operator adding the tanker the outlet forgot would be
+    // relying on a fallback rather than stating the day — one hour before the
+    // shift close is unambiguously this day's.
+    const attribution = recAttributionWindow(window);
+    const seedAt = attribution ? new Date(attribution.to.getTime() - 60 * 60_000) : null;
+    const ist = seedAt ? new Date(seedAt.getTime() + 5.5 * 60 * 60_000) : null;
+    const two = (n: number): string => String(n).padStart(2, '0');
+    return {
+      TANK_NO: String(product?.tankNos[0] ?? ''),
+      NET_QTY_DECANTED: '',
+      INVOICE_NUMBER: '',
+      ...(ist
+        ? {
+            DECANT_END_DATE: `${two(ist.getUTCDate())}-${two(ist.getUTCMonth() + 1)}-${ist.getUTCFullYear()}`,
+            DECANT_END_TIME: `${two(ist.getUTCHours())}:${two(ist.getUTCMinutes())}:00`,
+          }
+        : {}),
+    };
   }
 
   if (products.length <= 1) {
