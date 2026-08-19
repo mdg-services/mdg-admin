@@ -210,6 +210,20 @@ export interface DsrDiscoveredProduct {
   currentMeterByNozzle: Record<string, number>;
   currentStock: number | null;
   tanks: DsrDiscoveredTank[];
+  /** Proposed per-nozzle reading correction, when a pump reports off-scale. */
+  meterScale?: Record<string, number>;
+  /** Baselines read from the dealer's inspection report; null if none captured. */
+  inspection: DsrDiscoveredInspection | null;
+}
+
+/** How a product's inspection baselines were recovered from the report. */
+export interface DsrDiscoveredInspection {
+  openingStock: number | null;
+  meterByNozzle: Record<string, number>;
+  assignment: 'BY_LABEL' | 'BY_READING' | 'INCOMPLETE';
+  unassignedReadings: number[];
+  nozzlesWithoutBaseline: number[];
+  notes: string[];
 }
 
 export interface DsrSetupDraft {
@@ -217,6 +231,8 @@ export interface DsrSetupDraft {
   capturedAt: string;
   products: DsrDiscoveredProduct[];
   warnings: string[];
+  /** The inspection the baselines came from — its date becomes `sinceDate`. */
+  inspection: { date: string; ref: string | null } | null;
   existingConfig: Record<string, unknown> | null;
 }
 

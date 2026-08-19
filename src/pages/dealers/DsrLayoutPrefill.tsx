@@ -9,21 +9,24 @@ import {
 } from '@/hooks/api/useDsr';
 
 /**
- * "Read the layout from IRAS data" — the button that takes the DSR setup form
- * from thirteen typed fields per product down to the four numbers only a
- * physical inspection can produce.
+ * The button that fills the DSR setup form in from the dealer's own portal data.
  *
- * The layout is not a decision anyone makes. Which grades an outlet sells, which
- * tank holds each and which nozzles draw from them is a fact the portal states
- * in every shift snapshot, and typing it again was both tedious and the most
- * dangerous part of the form: a mistyped nozzle number does not fail validation,
- * it quietly drops that pump's litres out of the dealer's sales for as long as
- * nobody notices.
+ * Almost nothing on this form is a decision. Which grades an outlet sells, which
+ * tank holds each and which nozzles draw from them is a fact every shift
+ * snapshot states; the date of the last inspection, the stock dipped that day
+ * and each nozzle's totaliser are on the inspection report the portal already
+ * holds. Typing it back in was the slow part of onboarding a dealer and the
+ * dangerous part too — a mistyped nozzle number does not fail validation, it
+ * quietly drops that pump's litres out of the dealer's sales for as long as
+ * nobody notices, and a wrong inspection baseline is invisible for three months.
  *
- * So this fills in everything derivable and leaves the inspection baselines
- * blank — with one box per real nozzle, already labelled, and today's reading
- * shown beside it so a digit dropped or a pump confused is visible before it
- * becomes three months of wrong variation.
+ * What is left for a person is the two figures neither source carries: the
+ * receipts and testing between that inspection and the day the ledger starts.
+ *
+ * It shows its working rather than presenting the result as fact: today's
+ * readings beside the baselines, which nozzles it had to re-derive because the
+ * report's own numbering did not fit, which pumps report off-scale, and which
+ * tank's dip a multi-tank product will print.
  */
 
 /** The shape the plugin's JSON Schema expects for one product. */
@@ -37,6 +40,7 @@ interface DsrProductFormValue {
   nozzleNos: number[];
   leakagePct?: number;
   permissiblePct: number;
+  meterScale?: Record<string, number>;
   inspection: {
     openingStock?: number;
     meterByNozzle: Record<string, number | undefined>;
@@ -58,10 +62,18 @@ function toFormProduct(p: DsrDiscoveredProduct): DsrProductFormValue {
     // rather than as an answer nobody checked.
     ...(p.leakagePct === null ? {} : { leakagePct: p.leakagePct }),
     permissiblePct: p.permissiblePct,
+    ...(p.meterScale && Object.keys(p.meterScale).length > 0
+      ? { meterScale: p.meterScale }
+      : {}),
     inspection: {
-      // One key per real nozzle, so the operator types into labelled boxes
-      // instead of inventing the map.
-      meterByNozzle: Object.fromEntries(p.nozzleNos.map((n) => [String(n), undefined])),
+      ...(p.inspection?.openingStock === null || p.inspection?.openingStock === undefined
+        ? {}
+        : { openingStock: p.inspection.openingStock }),
+      // One key per real nozzle, filled from the inspection report where it had
+      // a figure and left blank where it did not, so a gap reads as a gap.
+      meterByNozzle: Object.fromEntries(
+        p.nozzleNos.map((n) => [String(n), p.inspection?.meterByNozzle?.[String(n)]]),
+      ),
       seedReceipts: 0,
       seedTesting: 0,
     },
@@ -85,6 +97,7 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
     setApplied(data);
     onConfigChange({
       ...config,
+      ...(data.inspection ? { sinceDate: data.inspection.date } : {}),
       products: data.products.map(toFormProduct),
     });
   }
@@ -95,10 +108,11 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
     <div className="grid gap-2 rounded-md border border-border bg-surface-2 p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-text">Read the layout from IRAS data</p>
+          <p className="text-sm font-semibold text-text">Read this outlet&rsquo;s setup from the portal</p>
           <p className="mt-0.5 text-xs text-text-muted">
-            Fills in this outlet&rsquo;s products, tanks, nozzles and allowances from their most
-            recent shift snapshot. You then enter only the last inspection&rsquo;s figures.
+            Products, tanks, nozzles and allowances come from their most recent shift snapshot;
+            the inspection date, tank stock and nozzle readings come from their last inspection
+            report. Check the figures, then add any receipts and testing since that inspection.
           </p>
         </div>
         <Button
@@ -131,7 +145,11 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
       {applied && (
         <div className="grid gap-1.5">
           <p className="text-xs text-text-muted">
-            From the shift of {applied.businessDate}.
+            Layout from the shift of {applied.businessDate}
+            {applied.inspection
+              ? `; baselines from the inspection of ${applied.inspection.date}`
+              : '; no inspection report captured yet, so the baselines are blank'}
+            .
           </p>
           <ul className="grid gap-1">
             {applied.products.map((p) => (
@@ -145,6 +163,27 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
                   <span className="ml-1 text-warning">
                     &mdash; unknown grade &ldquo;{p.prodCodes.join('/')}&rdquo;, check its name and
                     leakage allowance
+                  </span>
+                )}
+                {p.inspection?.assignment === 'BY_READING' && (
+                  <span className="ml-1 text-warning">
+                    &mdash; the report&rsquo;s nozzle numbers did not fit today&rsquo;s readings, so
+                    each was matched to the nozzle it can belong to
+                  </span>
+                )}
+                {p.inspection?.nozzlesWithoutBaseline?.length ? (
+                  <span className="ml-1 text-warning">
+                    &mdash; no inspection reading for nozzle{' '}
+                    {p.inspection.nozzlesWithoutBaseline.join(', ')}
+                  </span>
+                ) : null}
+                {p.meterScale && Object.keys(p.meterScale).length > 0 && (
+                  <span className="ml-1 text-warning">
+                    &mdash; nozzle{' '}
+                    {Object.entries(p.meterScale)
+                      .map(([n, s]) => `${n} (\u00d7${s})`)
+                      .join(', ')}{' '}
+                    report off-scale and are being corrected
                   </span>
                 )}
                 {p.tanks.length > 1 && (
