@@ -41,6 +41,7 @@ interface DsrProductFormValue {
   leakagePct?: number;
   permissiblePct: number;
   meterScale?: Record<string, number>;
+  monthOpening?: { month: string; sales: number };
   inspection: {
     openingStock?: number;
     meterByNozzle: Record<string, number | undefined>;
@@ -49,7 +50,16 @@ interface DsrProductFormValue {
   };
 }
 
-function toFormProduct(p: DsrDiscoveredProduct): DsrProductFormValue {
+/**
+ * @param keep this product's already-configured month opening, if the form has
+ * one. The portal cannot know it — it is what the dealer's own book says they
+ * had sold this month before we started — so re-reading the layout must carry it
+ * across rather than silently blanking a figure a person supplied.
+ */
+function toFormProduct(
+  p: DsrDiscoveredProduct,
+  keep?: { month: string; sales: number },
+): DsrProductFormValue {
   return {
     key: p.key,
     labelEn: p.labelEn,
@@ -65,6 +75,7 @@ function toFormProduct(p: DsrDiscoveredProduct): DsrProductFormValue {
     ...(p.meterScale && Object.keys(p.meterScale).length > 0
       ? { meterScale: p.meterScale }
       : {}),
+    ...(keep ? { monthOpening: keep } : {}),
     inspection: {
       ...(p.inspection?.openingStock === null || p.inspection?.openingStock === undefined
         ? {}
@@ -95,10 +106,16 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
     const data = res.data;
     if (!data) return;
     setApplied(data);
+    const openings = new Map(
+      (Array.isArray(config.products) ? config.products : [])
+        .map((x) => x as { key?: string; monthOpening?: { month: string; sales: number } })
+        .filter((x) => x.key && x.monthOpening)
+        .map((x) => [x.key!, x.monthOpening!]),
+    );
     onConfigChange({
       ...config,
       ...(data.inspection ? { sinceDate: data.inspection.date } : {}),
-      products: data.products.map(toFormProduct),
+      products: data.products.map((p) => toFormProduct(p, openings.get(p.key))),
     });
   }
 
