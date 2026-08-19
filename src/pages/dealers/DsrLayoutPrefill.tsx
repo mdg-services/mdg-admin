@@ -25,8 +25,8 @@ import {
  *
  * It shows its working rather than presenting the result as fact: today's
  * readings beside the baselines, which nozzles it had to re-derive because the
- * report's own numbering did not fit, which pumps report off-scale, and which
- * tank's dip a multi-tank product will print.
+ * report's own numbering did not fit, which pumps report off-scale, and what each
+ * tank of a multi-tank product currently holds.
  */
 
 /** The shape the plugin's JSON Schema expects for one product. */
@@ -188,8 +188,12 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
                 )}
                 {p.tanks.length > 1 && (
                   <span className="ml-1 text-text-muted">
-                    &mdash; stock is the sum of {p.tanks.length} tanks; the report prints tank{' '}
-                    {p.tankNos[0]}&rsquo;s dip, so put the tank you dip first
+                    &mdash; stock is the sum of {p.tanks.length} tanks (
+                    {p.tanks
+                      .map((t) => `T${t.tankNo} ${t.stock === null ? '—' : Math.round(t.stock)} L`)
+                      .join(', ')}
+                    ); the report prints a dip, water dip and stock column for each, in this
+                    order
                   </span>
                 )}
               </li>
