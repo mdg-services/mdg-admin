@@ -60,6 +60,7 @@ interface DsrProductFormValue {
 function toFormProduct(
   p: DsrDiscoveredProduct,
   keep?: DsrMonthOpening,
+  existing?: DsrProductFormValue,
 ): DsrProductFormValue {
   return {
     key: p.key,
@@ -67,7 +68,13 @@ function toFormProduct(
     labelHi: p.labelHi,
     tankLabel: p.tankLabel,
     prodCodes: p.prodCodes,
-    tankNos: p.tankNos,
+    // The CONFIGURED order wins whenever the two lists describe the same tanks.
+    // Discovery can only propose ascending, and that order is not cosmetic: it is
+    // the left-to-right order of the report's per-tank columns, and 1E's diesel
+    // is deliberately 6, 4, 8. Re-reading the layout must not quietly reshuffle
+    // a dealer's sheet. A genuine change — a tank added or removed — falls
+    // through to the portal's list, which is the point of re-reading.
+    tankNos: sameTanks(existing?.tankNos, p.tankNos) ? existing!.tankNos : p.tankNos,
     nozzleNos: p.nozzleNos,
     // Left undefined for an unrecognised grade so the field reads as a question
     // rather than as an answer nobody checked.
@@ -86,10 +93,29 @@ function toFormProduct(
       meterByNozzle: Object.fromEntries(
         p.nozzleNos.map((n) => [String(n), p.inspection?.meterByNozzle?.[String(n)]]),
       ),
-      seedReceipts: 0,
-      seedTesting: 0,
+      // Carried across, NEVER re-zeroed.
+      //
+      // These are the litres delivered and tested between the last inspection
+      // and the day the ledger starts — figures a person worked out from the
+      // dealer's own book, which the portal has no way to know. 1E's diesel
+      // holds 606,000 L here. Zeroing them re-bases the entire stock-versus-sales
+      // sum against a starting point that never happened, and 1E's variation
+      // would go from −1,776 L to a figure in the hundreds of thousands, with
+      // the report telling the dealer to draw fuel back into the tank every
+      // morning. The old behaviour was safe only because nobody had yet pressed
+      // this button on a live dealer.
+      seedReceipts: existing?.inspection?.seedReceipts ?? 0,
+      seedTesting: existing?.inspection?.seedTesting ?? 0,
     },
   };
+}
+
+/** Two tank lists holding the same tanks, whatever order they are written in. */
+function sameTanks(a: number[] | undefined, b: number[]): boolean {
+  if (!a || a.length !== b.length) return false;
+  const left = [...a].sort((x, y) => x - y);
+  const right = [...b].sort((x, y) => x - y);
+  return left.every((t, i) => t === right[i]);
 }
 
 interface Props {
@@ -107,16 +133,21 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
     const data = res.data;
     if (!data) return;
     setApplied(data);
-    const openings = new Map(
+    // Everything already configured for each product, so re-reading the layout
+    // replaces what the portal knows and keeps what only a person can.
+    const existingByKey = new Map(
       (Array.isArray(config.products) ? config.products : [])
-        .map((x) => x as { key?: string; monthOpening?: DsrMonthOpening })
-        .filter((x) => x.key && x.monthOpening)
-        .map((x) => [x.key!, x.monthOpening!]),
+        .map((x) => x as DsrProductFormValue)
+        .filter((x) => x?.key)
+        .map((x) => [x.key, x]),
     );
     onConfigChange({
       ...config,
       ...(data.inspection ? { sinceDate: data.inspection.date } : {}),
-      products: data.products.map((p) => toFormProduct(p, openings.get(p.key))),
+      products: data.products.map((p) => {
+        const existing = existingByKey.get(p.key);
+        return toFormProduct(p, existing?.monthOpening, existing);
+      }),
     });
   }
 

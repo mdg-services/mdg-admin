@@ -317,7 +317,7 @@ function Cell({
   portalValue,
   committed,
   pending,
-  readOnly,
+  readOnly: readOnlyProp,
   previousReading,
 }: {
   code: IrasReportCode;
@@ -330,6 +330,10 @@ function Cell({
   previousReading?: string;
 }) {
   const policy = irasFieldPolicy(code, field);
+  // A locked field is not editable by anyone — see `IrasFieldPolicy.locked`. The
+  // server refuses it too; this only stops an operator typing into a cell that
+  // was going to be rejected, which is a worse way to learn the same thing.
+  const readOnly = readOnlyProp || policy.locked === true;
   const pendingCell = pending.pendingCell(code, rowKey, field);
 
   // What is in force right now: a pending edit, else a committed correction, else
@@ -441,11 +445,13 @@ function Cell({
             ? `The portal says ${portalValue || '—'}${
                 portalMoved ? ' (it changed after this was corrected)' : ''
               }`
-            : policy.usedByReport
-              ? 'Used by the report.'
-              : policy.affectsReportNotes
-                ? 'No figure is calculated from this, but it decides the report’s layout notes.'
-                : 'No figure on the report is calculated from this.'
+            : policy.locked
+              ? 'This cannot be changed. The report adds a product’s tanks together, so moving a stock row onto a tank that already has one would count that tank’s fuel twice. To correct it, exclude this row and add the right one.'
+              : policy.usedByReport
+                ? 'Used by the report.'
+                : policy.affectsReportNotes
+                  ? 'No figure is calculated from this, but it decides the report’s layout notes.'
+                  : 'No figure on the report is calculated from this.'
         }
         className={cn(
           'block w-full rounded px-1.5 py-1 text-left text-sm tabular-nums',
