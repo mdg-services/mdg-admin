@@ -5,6 +5,7 @@ import { Badge, Button, Menu, MenuItem, Table, TBody, TD, TH, THead, TRow } from
 import { cn } from '@/lib/cn';
 import {
   IRAS_ROW_LEVEL_FIELD,
+  irasFieldPolicies,
   irasFieldPolicy,
   irasRowKeys,
   irasRowLabel,
@@ -26,6 +27,8 @@ export interface EditGridProduct {
   tankLabel: string;
   tankNos: number[];
   nozzleNos: number[];
+  /** What IRAS calls this grade, e.g. `HS` — stamped on a hand-added row. */
+  prodCodes: string[];
 }
 
 export interface IrasEditGridProps {
@@ -85,6 +88,10 @@ export function IrasEditGrid({
   /** Columns to show: the portal's own, in its order, filtered by the policy. */
   const columns = React.useMemo(() => {
     const declared = dataset?.columns ?? [];
+    const fromPolicy = irasFieldPolicies(code).map((f) => ({
+      field: f.field,
+      headerName: f.field,
+    }));
     const fromRows = [
       ...new Set([
         ...portalRows.flatMap((r) => Object.keys(r)),
@@ -92,11 +99,34 @@ export function IrasEditGrid({
         ...pendingAdded.flatMap((a) => Object.keys(a.row)),
       ]),
     ].map((field) => ({ field, headerName: field }));
-    // Prefer the portal's headers; fall back to the raw field names for a day
-    // whose dataset was built entirely by hand and has no column metadata.
-    const base = declared.length > 0 ? declared : fromRows;
+    // Prefer the portal's headers. Where there is no dataset at all — a day this
+    // outlet's portal never reported, because it has no portal — fall back to the
+    // POLICY TABLE rather than to the keys the rows happen to carry: on a day
+    // being typed from nothing those keys are only whatever the seed put there,
+    // so water dip, invoice quantity and the product code would have no cell to
+    // type into, and the report cannot tell a tank's grade without the last one.
+    // Where a dataset exists but declared no columns, the row keys are still the
+    // right answer — that is a portal day with sparse metadata.
+    const base = declared.length > 0 ? declared : !dataset ? fromPolicy : fromRows;
     return base.filter((c) => showAllColumns || irasFieldPolicy(code, c.field).usedByReport);
   }, [dataset, portalRows, committedAdded, pendingAdded, showAllColumns, code]);
+
+  /**
+   * The nozzle and tank numbers this day already has a row for — portal rows,
+   * saved hand rows and unsaved ones alike. The "add row" seed steps past them,
+   * so adding five stock rows does not pre-fill the same tank five times.
+   */
+  const taken = React.useMemo(() => {
+    const gather = (field: string): Set<string> =>
+      new Set(
+        [
+          ...portalRows.map((r) => String(r[field] ?? '').trim()),
+          ...committedAdded.map((c) => String(c.row?.[field] ?? '').trim()),
+          ...pendingAdded.map((a) => String(a.row[field] ?? '').trim()),
+        ].filter(Boolean),
+      );
+    return { NOZZLE_NO: gather('NOZZLE_NO'), TANK_NO: gather('TANK_NO') };
+  }, [portalRows, committedAdded, pendingAdded]);
 
   /** Which product, if any, reads this row's figures. */
   const productFor = React.useCallback(
@@ -130,7 +160,15 @@ export function IrasEditGrid({
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-border px-3 py-4 text-sm text-text-muted">
         <span>The portal returned no rows for this report.</span>
-        {readOnly ? null : <AddRowButtons code={code} products={products} pending={pending} window={window} />}
+        {readOnly ? null : (
+          <AddRowButtons
+            code={code}
+            products={products}
+            pending={pending}
+            window={window}
+            taken={taken}
+          />
+        )}
       </div>
     );
   }
@@ -301,7 +339,13 @@ export function IrasEditGrid({
 
       {readOnly ? null : (
         <div className="flex justify-start">
-          <AddRowButtons code={code} products={products} pending={pending} window={window} />
+          <AddRowButtons
+            code={code}
+            products={products}
+            pending={pending}
+            window={window}
+            taken={taken}
+          />
         </div>
       )}
     </div>
@@ -677,25 +721,53 @@ function AddRowButtons({
   products,
   pending,
   window,
+  taken,
 }: {
   code: IrasReportCode;
   products: EditGridProduct[];
   pending: PendingApi;
   /** The day's collection window, for stamping a hand-added delivery. */
   window?: { from: string; to: string };
+  /** Which nozzle / tank numbers this day already has a row for. */
+  taken: { NOZZLE_NO: Set<string>; TANK_NO: Set<string> };
 }) {
   const label = code === 'TOT' ? 'nozzle reading' : code === 'STK' ? 'tank stock row' : 'delivery';
 
+  /**
+   * The next nozzle/tank of this product that no row on the day claims yet.
+   *
+   * Always seeding `[0]` is how a whole day gets typed against one tank: the
+   * operator adds five stock rows and every one arrives pre-filled with the same
+   * tank number. Two rows for one tank double that product's stock, so the seed
+   * has to move on by itself.
+   */
+  function nextUnused(values: number[] | undefined, field: 'NOZZLE_NO' | 'TANK_NO'): string {
+    const used = taken[field];
+    const free = (values ?? []).find((v) => !used.has(String(v)));
+    return String(free ?? values?.[0] ?? '');
+  }
+
   function seed(product: EditGridProduct | undefined): IrasRow {
+    // PRODCODE on every seed: on a day typed from nothing it is the only thing
+    // that tells the report which grade a tank holds, and without it the layout
+    // discovery finds no products at all.
+    const prodCode = product?.prodCodes[0] ?? '';
     if (code === 'TOT') {
       return {
-        NOZZLE_NO: String(product?.nozzleNos[0] ?? ''),
+        NOZZLE_NO: nextUnused(product?.nozzleNos, 'NOZZLE_NO'),
         TOT_READING: '',
         TANK_NO: String(product?.tankNos[0] ?? ''),
+        PRODCODE: prodCode,
       };
     }
     if (code === 'STK') {
-      return { TANK_NO: String(product?.tankNos[0] ?? ''), NET_QTY: '', PRODUCT_DIP: '' };
+      return {
+        TANK_NO: nextUnused(product?.tankNos, 'TANK_NO'),
+        NET_QTY: '',
+        PRODUCT_DIP: '',
+        WATER_DIP: '',
+        PRODCODE: prodCode,
+      };
     }
     // Seed the decant stamp INSIDE the day's window. Without it the row carries
     // no date, and the operator adding the tanker the outlet forgot would be
@@ -708,7 +780,12 @@ function AddRowButtons({
     return {
       TANK_NO: String(product?.tankNos[0] ?? ''),
       NET_QTY_DECANTED: '',
+      // The invoiced quantity is what seven of the eight dealers' reports count,
+      // so it needs a cell of its own rather than only appearing behind "show
+      // all columns".
+      INVOICE_QUANTITY: '',
       INVOICE_NUMBER: '',
+      PRODCODE: prodCode,
       ...(ist
         ? {
             DECANT_END_DATE: `${two(ist.getUTCDate())}-${two(ist.getUTCMonth() + 1)}-${ist.getUTCFullYear()}`,

@@ -142,6 +142,16 @@ export interface PendingApi {
  * is the difference between a correction and a second correction.
  */
 export function usePendingChanges(resetKey: string): PendingApi {
+  /**
+   * A never-reused id for each hand-added row.
+   *
+   * It used to be the array's own length, which is not an identity: add A, add
+   * B, remove A, add C — and C is handed B's id. Both `editAddedRow` and
+   * `dropAddedRow` match on it, so one keystroke would edit two rows and one
+   * Remove would delete two, and React would see duplicate keys. A monotonic
+   * counter (rather than a random uuid) keeps the ids stable and readable.
+   */
+  const nextLocalId = React.useRef(0);
   const [state, setState] = React.useState<PendingState>(EMPTY_PENDING);
   const [history, setHistory] = React.useState<PendingState[]>([]);
 
@@ -189,7 +199,7 @@ export function usePendingChanges(resetKey: string): PendingApi {
             ...prev.addedRows,
             // Index-based rather than random: this id only has to be unique
             // within the pending set, and a stable one keeps React keys steady.
-            { localId: `local-${prev.addedRows.length}-${code}`, code, row },
+            { localId: `local-${nextLocalId.current++}`, code, row },
           ],
         })),
 

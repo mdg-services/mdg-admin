@@ -8,6 +8,7 @@ import {
   DownloadCloud,
   History,
   Monitor,
+  PencilLine,
   RefreshCw,
   Undo2,
 } from 'lucide-react';
@@ -26,7 +27,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { useDsrStaleReports, useRegenerateStaleDsr } from '@/hooks/api/useDsr';
-import { useCollectIrasData } from '@/hooks/api/useIrasData';
+import { useCollectIrasData, useStartManualIrasDay } from '@/hooks/api/useIrasData';
 import {
   useCommitIrasCorrections,
   useIrasDay,
@@ -94,6 +95,11 @@ export function ShiftDataEditorPage() {
 
   const commit = useCommitIrasCorrections(dealerId, businessDate);
   const collect = useCollectIrasData();
+  const startDay = useStartManualIrasDay();
+  // Whether the portal can be asked at all. For an outlet with no IRAS account
+  // the attachment is left paused, and offering "Collect" would send the
+  // operator down a path that cannot finish.
+  const canCollect = day?.dealer.portalCollection === 'ACTIVE';
   const regenerate = useRegenerateStaleDsr(dealerId);
   const run = useDsrRunWatcher(dealerId, 'Reports rebuilt.');
   // Re-read after the rebuild rather than claiming success: the generator repairs
@@ -235,17 +241,37 @@ export function ShiftDataEditorPage() {
           <CardContent className="p-4">
             <EmptyState
               icon={<Database width={28} height={28} strokeWidth={1.75} />}
-              title="Nothing has been collected for this day"
-              description="There are no portal rows to correct yet. Collect the day first — it takes about a minute."
+              title={
+                canCollect
+                  ? 'Nothing has been collected for this day'
+                  : 'This outlet’s figures are entered by hand'
+              }
+              description={
+                canCollect
+                  ? 'There are no portal rows to correct yet. Collect the day first — it takes about a minute.'
+                  : 'This dealer has no portal collection running, so nothing will arrive on its own. Open the day and type the shift in: the meter readings, each tank’s dip and stock, and any tanker that came.'
+              }
               cta={
-                <Button
-                  variant="secondary"
-                  loading={collect.isPending}
-                  leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
-                  onClick={() => runCollect()}
-                >
-                  Collect this day
-                </Button>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  {canCollect ? (
+                    <Button
+                      variant="secondary"
+                      loading={collect.isPending}
+                      leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
+                      onClick={() => runCollect()}
+                    >
+                      Collect this day
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant={canCollect ? 'ghost' : 'secondary'}
+                    loading={startDay.isPending}
+                    leftIcon={<PencilLine width={14} height={14} strokeWidth={1.75} />}
+                    onClick={() => runStartDay()}
+                  >
+                    Start this day by hand
+                  </Button>
+                </div>
               }
             />
           </CardContent>
@@ -355,6 +381,25 @@ export function ShiftDataEditorPage() {
       ) : null}
     </div>
   );
+
+  /**
+   * Open an empty day so the shift can be typed into it.
+   *
+   * Nothing is entered here — the grid appears and every figure goes in as a
+   * hand-added row, exactly as a correction to a portal day does. That is what
+   * keeps the litres marked as a person's rather than the portal's.
+   */
+  function runStartDay() {
+    startDay.mutate(
+      { dealerId, businessDate },
+      {
+        onSuccess: () =>
+          toast.success('Day opened. Add a row for each nozzle, each tank, and any tanker that came.'),
+        onError: (err) =>
+          toast.error(err instanceof ApiError ? err.message : 'Could not open the day'),
+      },
+    );
+  }
 
   function runCollect() {
     collect.mutate(

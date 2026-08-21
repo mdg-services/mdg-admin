@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { irasEditKeys } from '@/hooks/api/useIrasEdits';
 import { api } from '@/lib/api';
 import { isYmd } from '@/lib/format';
 import type {
@@ -151,6 +152,37 @@ export function useCollectIrasData() {
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: irasDataKeys.all });
+    },
+  });
+}
+
+/**
+ * Open a day BY HAND for a dealer whose portal automation does not exist.
+ *
+ * Creates the empty dealer-day the shift-data editor needs to exist before
+ * anything can be typed into it; every figure then goes in through the ordinary
+ * grid as a hand-added row. Returns 201 the first time and 200 if the day is
+ * already open, so a double-click is harmless.
+ */
+export function useStartManualIrasDay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      dealerId,
+      businessDate,
+      shiftTime,
+    }: {
+      dealerId: string;
+      businessDate: string;
+      shiftTime?: string;
+    }) =>
+      api.post(
+        `/iras-data/dealers/${dealerId}/days/${businessDate}`,
+        shiftTime ? { shiftTime } : {},
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: irasDataKeys.all });
+      void qc.invalidateQueries({ queryKey: irasEditKeys.all });
     },
   });
 }
