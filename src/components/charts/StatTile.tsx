@@ -78,6 +78,25 @@ function DeltaLine({ delta }: { delta: StatTileDelta }) {
 }
 
 /**
+ * How full a meter is allowed to look before its colour says something.
+ *
+ * `brand` is the default and stays the rule for every meter that measures
+ * progress: the fill length already says how far along it is, and repainting it
+ * would spend the colour channel restating the length. `warning` / `danger` are
+ * for a meter against a limit that HURTS when it is reached — a spend cap that
+ * takes the feature off the air — where "nearly out" is a different fact from
+ * "further along", and the caller decides which. It is never colour alone: the
+ * caller pairs it with a caption that says the same thing in words.
+ */
+export type MeterTone = 'brand' | 'warning' | 'danger';
+
+const METER_TONES: Record<MeterTone, { track: string; fill: string }> = {
+  brand: { track: 'bg-brand-soft', fill: 'bg-brand' },
+  warning: { track: 'bg-warning-soft', fill: 'bg-warning' },
+  danger: { track: 'bg-danger-soft', fill: 'bg-danger' },
+};
+
+/**
  * A single ratio against a limit. The unfilled track is a lighter step of the
  * fill's own ramp (brand-soft under brand) so the whole bar reads as one scale
  * rather than as a coloured bar sitting on unrelated grey.
@@ -88,6 +107,7 @@ export function Meter({
   label,
   valueLabel,
   caption,
+  tone = 'brand',
   className,
 }: {
   value: number;
@@ -96,9 +116,11 @@ export function Meter({
   /** Printed on the right of the label row; defaults to `value / limit`. */
   valueLabel?: React.ReactNode;
   caption?: React.ReactNode;
+  tone?: MeterTone;
   className?: string;
 }) {
   const pct = limit > 0 ? Math.min(100, Math.max(0, (value / limit) * 100)) : 0;
+  const { track, fill } = METER_TONES[tone];
   return (
     <div className={cn('grid gap-1.5', className)}>
       <div className="flex items-baseline justify-between gap-3">
@@ -108,14 +130,17 @@ export function Meter({
         </span>
       </div>
       <div
-        className="h-2.5 w-full overflow-hidden rounded-r-[4px] bg-brand-soft"
+        className={cn('h-2.5 w-full overflow-hidden rounded-r-[4px]', track)}
         role="meter"
         aria-valuenow={value}
         aria-valuemin={0}
         aria-valuemax={limit}
         aria-label={label}
       >
-        <div className="h-2.5 rounded-r-[4px] bg-brand" style={{ width: `${pct}%` }} />
+        <div
+          className={cn('h-2.5 rounded-r-[4px]', fill)}
+          style={{ width: `${pct}%` }}
+        />
       </div>
       {caption ? <p className="text-xs text-text-subtle">{caption}</p> : null}
     </div>

@@ -7,6 +7,7 @@ import { RequireSuperAdmin } from '@/components/layout/RequireSuperAdmin';
 import { ActivityPage } from '@/pages/ActivityPage';
 import { AdminsPage } from '@/pages/AdminsPage';
 import { AllUsersPage } from '@/pages/AllUsersPage';
+import { AssistPage } from '@/pages/AssistPage';
 import { BankHolidaysPage } from '@/pages/BankHolidaysPage';
 import { ShiftDataEditorPage } from '@/pages/dataVault/dayEditor/ShiftDataEditorPage';
 import { DataVaultPage } from '@/pages/DataVaultPage';
@@ -57,6 +58,18 @@ export default function App() {
               Data Vault it is NOT super-admin only. */}
           <Route path="dsr" element={<DsrVaultPage />} />
           <Route path="dsr/dealers/:dealerId" element={<DsrReportView />} />
+          {/* The landing-page assistant's console (ADR 0009): strangers'
+              transcripts, their phone numbers, and the block list. Keep this in
+              step with `superAdminOnly` in navItems.ts — the flag only hides
+              the link, this is what guards the URL. */}
+          <Route
+            path="assist"
+            element={
+              <RequireSuperAdmin>
+                <AssistPage />
+              </RequireSuperAdmin>
+            }
+          />
           {/* The plugin catalog and the raw run log are engineer surfaces —
               plain admins get outcomes on the dealer screens instead. Keep
               these in step with `superAdminOnly` in navItems.ts. */}

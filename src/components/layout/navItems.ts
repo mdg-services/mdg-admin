@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Database,
   FileBarChart2,
+  Headset,
   LayoutDashboard,
   ListChecks,
   MessageSquare,
@@ -46,6 +47,9 @@ export const NAV_ITEMS: NavItem[] = [
   // The generated day-book each dealer receives — an everyday admin outcome
   // surface, so deliberately NOT `superAdminOnly`.
   { to: '/dsr', label: 'Daily Sales Report', icon: FileBarChart2 },
+  // The landing-page assistant's console (ADR 0009). Super-admin only: these
+  // are strangers' transcripts and, where they left one, their phone number.
+  { to: '/assist', label: 'Assistant', icon: Headset, superAdminOnly: true },
   { to: '/services', label: 'Service Catalog', icon: Plug, superAdminOnly: true },
   { to: '/runs', label: 'Run History', icon: Activity, superAdminOnly: true },
   { to: '/users', label: 'All Users', icon: Users, superAdminOnly: true },
