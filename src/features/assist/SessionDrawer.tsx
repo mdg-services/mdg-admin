@@ -33,6 +33,7 @@ import type {
 
 import {
   channelLabel,
+  costSplitOf,
   docLabel,
   endReasonText,
   flagReasonText,
@@ -197,6 +198,7 @@ function HeaderStrip({
   onBlock: () => void;
 }) {
   const ended = endReasonText(detail.endReason);
+  const split = costSplitOf(detail);
   return (
     <div className="rounded-md border border-border bg-surface-2 p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -228,6 +230,18 @@ function HeaderStrip({
         {ended ? ` · stopped because ${ended}` : null} · cost{' '}
         {formatPaise(detail.estPaise)}
       </p>
+
+      {/* The bill said twice over, because the two halves behave nothing alike:
+          speech is charged per character spoken and is nearly all of it, the
+          model is charged per token and is a rounding error. When the daily cap
+          trips, this is the line that says whether to shorten the answers or to
+          turn speech off. The list only has room for the total. */}
+      {split ? (
+        <p className="mt-1 text-xs text-text-subtle">
+          Voice (ElevenLabs) {formatPaise(split.voicePaise)} · AI (Google){' '}
+          {formatPaise(split.vertexPaise)}
+        </p>
+      ) : null}
 
       {detail.flags.length > 0 ? (
         <ul className="mt-2 grid gap-1">

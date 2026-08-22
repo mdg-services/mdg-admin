@@ -250,6 +250,26 @@ export interface AssistCost {
   estPaise: number;
 }
 
+/**
+ * The bill, split by who sent it.
+ *
+ * Derived from the counters above and the rate table — nothing extra is stored,
+ * so an old session splits correctly too and a corrected rate re-splits the
+ * whole history.
+ *
+ * Worth separating because the two behave nothing alike. Google is charged per
+ * token and is a rounding error; ElevenLabs is charged per character SPOKEN and
+ * is almost the entire bill. When the daily cap trips, this is the number that
+ * says whether to shorten the answers or turn speech off.
+ */
+export interface AssistCostSplit {
+  /** Gemini generation plus embeddings, on Vertex AI. */
+  vertexPaise: number;
+  /** Speech in (transcription) and speech out (the spoken reply). */
+  voicePaise: number;
+  totalPaise: number;
+}
+
 /** The ordered recording of a call: one object per utterance, in sequence. */
 export interface AssistRecordingSegment {
   seq: number;
@@ -284,6 +304,8 @@ export interface AssistSessionSummary {
   opening: string;
   blocked: boolean;
   estPaise: number;
+  /** Same total as `estPaise`, split by vendor. */
+  costSplit: AssistCostSplit;
 }
 
 /** One recording segment with a signed URL attached, for the admin player. */
@@ -338,6 +360,8 @@ export interface AssistUsageDayView {
   llmTokensIn: number;
   llmTokensOut: number;
   estPaise: number;
+  /** Same total as `estPaise`, split by vendor. */
+  costSplit: AssistCostSplit;
 }
 
 /** What the widget is told before anyone types anything. */

@@ -49,12 +49,15 @@ import {
 } from '@/components/ui';
 import {
   channelLabel,
+  costSplitOf,
+  costSplitTitle,
+  flagChipText,
   flagReasonText,
-  flagShortText,
   followupLabel,
   formatPaise,
   langLabel,
   sessionStatusLabel,
+  spendSplitSentence,
 } from '@/features/assist/assistFormat';
 import { SessionDrawer } from '@/features/assist/SessionDrawer';
 import {
@@ -67,6 +70,7 @@ import {
   useUpdateAssistFollowup,
 } from '@/hooks/api/useAssist';
 import { ApiError } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import { formatDateTime, formatDuration, formatYmd, isYmd } from '@/lib/format';
 import {
   ASSIST_CHANNELS,
@@ -510,70 +514,7 @@ function SessionListTab({
       <CardContent className="p-0">
         {/* Desktop table (≥ md) */}
         <div className="hidden md:block">
-          <Table>
-            <THead>
-              <TRow>
-                <TH>How</TH>
-                <TH>When</TH>
-                <TH>Language</TH>
-                <TH className="text-right">Length</TH>
-                <TH className="text-right">Turns</TH>
-                <TH>Opened with</TH>
-                <TH>{tab === 'leads' ? 'Who, and their number' : 'Who'}</TH>
-                <TH>{tab === 'flagged' ? 'Why it was flagged' : 'Flags'}</TH>
-                <TH>Follow-up</TH>
-                <TH className="text-right">Cost</TH>
-              </TRow>
-            </THead>
-            <TBody>
-              {items.map((s) => (
-                <TRow key={s.id} clickable onClick={() => onOpen(s.id)}>
-                  <TD className="whitespace-nowrap">
-                    <Badge intent={s.channel === 'call' ? 'info' : 'neutral'}>
-                      {channelLabel(s.channel)}
-                    </Badge>
-                  </TD>
-                  <TD className="whitespace-nowrap text-text-muted">
-                    {formatDateTime(s.startedAt)}
-                  </TD>
-                  <TD className="whitespace-nowrap text-text-muted">
-                    {langLabel(s.lang)}
-                  </TD>
-                  <TD className="whitespace-nowrap text-right tabular-nums">
-                    {formatDuration(s.durationMs)}
-                  </TD>
-                  <TD className="text-right tabular-nums">{s.turnCount}</TD>
-                  <TD className="max-w-[22rem]">
-                    <span className="block truncate text-text-muted" title={s.opening}>
-                      {s.opening || '—'}
-                    </span>
-                  </TD>
-                  <TD className="max-w-[14rem]">
-                    <LeadCell session={s} showMobile={tab === 'leads'} />
-                  </TD>
-                  <TD className="max-w-[20rem]">
-                    {tab === 'flagged' ? (
-                      <FlagReasons session={s} />
-                    ) : (
-                      <FlagBadges session={s} />
-                    )}
-                  </TD>
-                  <TD onClick={(e) => e.stopPropagation()}>
-                    {tab === 'leads' ? (
-                      <FollowupSelect session={s} />
-                    ) : (
-                      <Badge intent={s.followupStatus === 'new' ? 'warning' : 'neutral'}>
-                        {followupLabel(s.followupStatus)}
-                      </Badge>
-                    )}
-                  </TD>
-                  <TD className="whitespace-nowrap text-right tabular-nums text-text-muted">
-                    {formatPaise(s.estPaise)}
-                  </TD>
-                </TRow>
-              ))}
-            </TBody>
-          </Table>
+          <SessionTable tab={tab} items={items} onOpen={onOpen} />
         </div>
 
         {/* Mobile card-stack (< md). On the Leads tab the card carries its own
@@ -596,7 +537,7 @@ function SessionListTab({
             ),
             secondary: (
               <>
-                <LeadCell session={s} showMobile={false} />
+                <LeadCell session={s} showMobile={false} emptyAs="words" />
                 <span className="mt-1 block text-xs text-text-subtle">
                   {formatDateTime(s.startedAt)} · {formatDuration(s.durationMs)} ·{' '}
                   {s.turnCount} {s.turnCount === 1 ? 'turn' : 'turns'} ·{' '}
@@ -608,8 +549,8 @@ function SessionListTab({
               tab === 'flagged' ? (
                 <FlagReasons session={s} />
               ) : (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <FlagBadges session={s} />
+                <div className="flex flex-wrap items-start gap-1.5">
+                  <FlagChips session={s} />
                   <Badge intent={s.followupStatus === 'new' ? 'warning' : 'neutral'}>
                     {followupLabel(s.followupStatus)}
                   </Badge>
@@ -660,22 +601,165 @@ function SessionListTab({
 }
 
 /**
+ * How wide each column is, per tab.
+ *
+ * The table is `table-fixed`, so these ARE the widths — not a hint the browser
+ * weighs against the content. Auto layout is what broke this table: it hands
+ * width to whoever has the longest unbreakable content, which meant a chip
+ * column and a timestamp elbowed "Opened with" — the one column anybody
+ * actually reads — down to a few characters, while `truncate` on a cell with no
+ * settled width did nothing at all.
+ *
+ * "Opened with" is the only column left unset: in fixed layout it takes
+ * everything the others do not, so it grows with the window. `minW` is the
+ * width at which the wrapper starts scrolling sideways instead, chosen so the
+ * opening line always keeps about 14rem.
+ */
+const SESSION_COLUMNS = {
+  conversations: { who: '9.5rem', flags: '10rem', followup: '8.5rem', minW: 'min-w-[74rem]' },
+  leads: { who: '12rem', flags: '10rem', followup: '10.5rem', minW: 'min-w-[78rem]' },
+  // The Flagged tab prints the reasons in full — that is the entire job of the
+  // tab — so its flag column is paid for out of the table's overall width.
+  flagged: { who: '9.5rem', flags: '17rem', followup: '8.5rem', minW: 'min-w-[80rem]' },
+} as const;
+
+/** One page of conversations, as the desktop table. */
+function SessionTable({
+  tab,
+  items,
+  onOpen,
+}: {
+  tab: 'conversations' | 'leads' | 'flagged';
+  items: AssistSessionSummary[];
+  onOpen: (id: string) => void;
+}) {
+  const cols = SESSION_COLUMNS[tab];
+  return (
+    <Table className={cn('table-fixed', cols.minW)}>
+      <colgroup>
+        <col style={{ width: '6.5rem' }} />
+        <col style={{ width: '11rem' }} />
+        <col style={{ width: '5rem' }} />
+        <col style={{ width: '4.25rem' }} />
+        {/* Opened with — deliberately unset; it takes what is left. */}
+        <col />
+        <col style={{ width: cols.who }} />
+        <col style={{ width: cols.flags }} />
+        <col style={{ width: cols.followup }} />
+        <col style={{ width: '6rem' }} />
+      </colgroup>
+      <THead>
+        <TRow>
+          <TH>How</TH>
+          <TH>When</TH>
+          <TH className="text-right">Length</TH>
+          <TH className="text-right">Turns</TH>
+          <TH>Opened with</TH>
+          <TH>{tab === 'leads' ? 'Who, and their number' : 'Who'}</TH>
+          <TH>{tab === 'flagged' ? 'Why it was flagged' : 'Flags'}</TH>
+          <TH>Follow-up</TH>
+          <TH className="text-right">Cost</TH>
+        </TRow>
+      </THead>
+      <TBody>
+        {items.map((s) => (
+          <TRow key={s.id} clickable onClick={() => onOpen(s.id)}>
+            {/* Channel and language share one column. Nine columns of real data
+                do not fit a laptop, and of the two the language is the one a
+                reader glances at rather than scans down — so it rides under the
+                badge instead of buying 5rem of its own. */}
+            <TD>
+              <Badge
+                className="whitespace-nowrap"
+                intent={s.channel === 'call' ? 'info' : 'neutral'}
+              >
+                {channelLabel(s.channel)}
+              </Badge>
+              <span className="mt-0.5 block truncate text-xs text-text-subtle">
+                {langLabel(s.lang)}
+              </span>
+            </TD>
+            <TD className="truncate text-text-muted">{formatDateTime(s.startedAt)}</TD>
+            <TD className="truncate text-right tabular-nums">
+              {formatDuration(s.durationMs)}
+            </TD>
+            <TD className="text-right tabular-nums">{s.turnCount}</TD>
+            <TD>
+              <span className="block truncate text-text-muted" title={s.opening}>
+                {s.opening || '—'}
+              </span>
+            </TD>
+            <TD>
+              <LeadCell session={s} showMobile={tab === 'leads'} emptyAs="dash" />
+            </TD>
+            <TD>
+              {tab === 'flagged' ? (
+                <FlagReasons session={s} />
+              ) : (
+                <FlagChips session={s} />
+              )}
+            </TD>
+            <TD onClick={(e) => e.stopPropagation()}>
+              {tab === 'leads' ? (
+                <FollowupSelect session={s} />
+              ) : (
+                <Badge
+                  className="max-w-full truncate whitespace-nowrap"
+                  intent={s.followupStatus === 'new' ? 'warning' : 'neutral'}
+                >
+                  {followupLabel(s.followupStatus)}
+                </Badge>
+              )}
+            </TD>
+            {/* Money right, tabular, one line — a column of rupees is only a
+                column if the decimal points line up. The total is all that
+                fits; the vendor split is on the tooltip and in the drawer. */}
+            <TD
+              className="truncate text-right tabular-nums text-text-muted"
+              title={costSplitTitle(s)}
+            >
+              {formatPaise(s.estPaise)}
+            </TD>
+          </TRow>
+        ))}
+      </TBody>
+    </Table>
+  );
+}
+
+/**
  * Name and place, plus the number only where ringing it is the job.
  *
- * `showMobile` is passed explicitly at every call site rather than derived
- * inside, so adding a sixth place that renders a lead is a decision somebody
- * has to make on purpose.
+ * `showMobile` and `emptyAs` are passed explicitly at every call site rather
+ * than derived inside, so adding a sixth place that renders a lead is a
+ * decision somebody has to make on purpose.
  */
 function LeadCell({
   session,
   showMobile,
+  emptyAs,
 }: {
   session: AssistSessionSummary;
   showMobile: boolean;
+  /** What "they told us nothing" looks like where there is no room for words. */
+  emptyAs: 'dash' | 'words';
 }) {
   const { name, place, mobile, mobileConfirmed } = session.lead;
   if (!name && !place && !mobile) {
-    return <span className="text-sm text-text-subtle">Did not say</span>;
+    if (emptyAs === 'words') {
+      return <span className="text-sm text-text-subtle">Did not say</span>;
+    }
+    // In a table column sized for names, those three words broke across three
+    // lines and made every empty row taller than the rows that DID say
+    // something. A placeholder is not data and must not set the row height —
+    // so it is a dash, with the words kept for the tooltip and the screen
+    // reader, which is where a placeholder belongs.
+    return (
+      <span className="text-sm text-text-subtle" title="Did not say">
+        <span aria-hidden>—</span>
+        <span className="sr-only">Did not say</span>
+      </span>
+    );
   }
   return (
     <span className="block min-w-0 text-sm">
@@ -699,18 +783,75 @@ function LeadCell({
   );
 }
 
-function FlagBadges({ session }: { session: AssistSessionSummary }) {
-  if (session.flags.length === 0 && !session.blocked) {
+/** Chips shown on a row before the rest are folded into "+N more". */
+const VISIBLE_FLAG_CHIPS = 2;
+
+/**
+ * The flags on a row, stacked one per line.
+ *
+ * Two separate things made the old version overlap itself, and both are worth
+ * naming so they do not come back:
+ *
+ *  - the chip carried a whole SENTENCE ("Turned up and left again without
+ *    asking anything, more than once"), and `<Badge>` is a pill of fixed height
+ *    (`h-[22px]`). Text that wraps to three lines inside a box that cannot grow
+ *    spills straight out of it — which is why the yellow ran over the rows above
+ *    and below. The fix is the label, not a taller box: a chip gets two words
+ *    (`flagChipText`) and the sentence goes on the tooltip.
+ *  - they were laid out with `flex-wrap`, so a second chip sat BESIDE the first
+ *    in a column too narrow for it, and the two overflows painted across each
+ *    other. Stacked in a grid, each chip has its own line and its own gap.
+ *
+ * Capped at two, because a visit with five flags must not set the height of the
+ * whole table. The rest are counted, named on the tooltip, and listed in full in
+ * the drawer.
+ */
+function FlagChips({ session }: { session: AssistSessionSummary }) {
+  const chips: Array<{ key: string; label: string; title: string; intent: 'danger' | 'warning' }> =
+    [];
+  if (session.blocked) {
+    chips.push({
+      key: 'blocked',
+      label: 'Blocked',
+      title: 'This visitor is blocked — see the Blocked tab',
+      intent: 'danger',
+    });
+  }
+  for (const f of session.flags) {
+    chips.push({
+      key: `${f.kind}-${f.at}`,
+      label: flagChipText(f),
+      title: flagReasonText(f),
+      intent: 'warning',
+    });
+  }
+
+  if (chips.length === 0) {
     return <span className="text-sm text-text-subtle">—</span>;
   }
+
+  const shown = chips.slice(0, VISIBLE_FLAG_CHIPS);
+  const rest = chips.slice(VISIBLE_FLAG_CHIPS);
   return (
-    <span className="flex flex-wrap items-center gap-1.5">
-      {session.blocked ? <Badge intent="danger">Blocked</Badge> : null}
-      {session.flags.map((f) => (
-        <Badge key={`${f.kind}-${f.at}`} intent="warning" title={flagReasonText(f)}>
-          {flagShortText(f)}
+    <span className="grid justify-items-start gap-1 py-1">
+      {shown.map((c) => (
+        <Badge
+          key={c.key}
+          intent={c.intent}
+          title={c.title}
+          className="max-w-full truncate whitespace-nowrap"
+        >
+          {c.label}
         </Badge>
       ))}
+      {rest.length > 0 ? (
+        <span
+          className="text-xs text-text-subtle"
+          title={rest.map((c) => c.title).join(' · ')}
+        >
+          +{rest.length} more
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -746,8 +887,9 @@ function FollowupSelect({ session }: { session: AssistSessionSummary }) {
   const save = useUpdateAssistFollowup();
   return (
     <Select
+      // No minimum width: the select sits in a table column of a settled width
+      // now, and a 10rem floor inside a narrower cell overhangs its neighbour.
       aria-label="Follow-up"
-      className="min-w-[10rem]"
       value={session.followupStatus}
       disabled={save.isPending}
       onClick={(e) => e.stopPropagation()}
@@ -973,6 +1115,12 @@ function UnblockDialog({
 
 /* ─────────────────────────────── Usage ───────────────────────────────────── */
 
+/** A whole-number share, for a label that sits beside the rupee figure. */
+function sharePct(part: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.round((part / total) * 100);
+}
+
 function toneForSpend(todayPaise: number, budgetPaise: number): MeterTone {
   if (budgetPaise <= 0) return 'brand';
   const pct = (todayPaise / budgetPaise) * 100;
@@ -990,27 +1138,53 @@ function UsageTab() {
   const totals = React.useMemo(
     () =>
       days.reduce(
-        (acc, d) => ({
-          sessions: acc.sessions + d.sessions,
-          calls: acc.calls + d.calls,
-          leads: acc.leads + d.leads,
-          escalations: acc.escalations + d.escalations,
-          paise: acc.paise + d.estPaise,
-        }),
-        { sessions: 0, calls: 0, leads: 0, escalations: 0, paise: 0 },
+        (acc, d) => {
+          // A day with no split counts nothing towards the split, rather than
+          // being read as "all of it was the AI" — see `costSplitOf`.
+          const split = costSplitOf(d);
+          return {
+            sessions: acc.sessions + d.sessions,
+            calls: acc.calls + d.calls,
+            leads: acc.leads + d.leads,
+            escalations: acc.escalations + d.escalations,
+            paise: acc.paise + d.estPaise,
+            vertexPaise: acc.vertexPaise + (split?.vertexPaise ?? 0),
+            voicePaise: acc.voicePaise + (split?.voicePaise ?? 0),
+          };
+        },
+        {
+          sessions: 0,
+          calls: 0,
+          leads: 0,
+          escalations: 0,
+          paise: 0,
+          vertexPaise: 0,
+          voicePaise: 0,
+        },
       ),
     [days],
   );
 
-  const chartData: ColumnDatum[] = days.map((d) => ({
-    key: d.date,
-    tick: d.date.slice(8),
-    label: formatYmd(d.date, { weekday: true }),
-    value: d.estPaise,
-    note: `${d.sessions} ${d.sessions === 1 ? 'visit' : 'visits'} · ${d.calls} ${
+  const splitTotal = totals.vertexPaise + totals.voicePaise;
+
+  const chartData: ColumnDatum[] = days.map((d) => {
+    const split = costSplitOf(d);
+    const counts = `${d.sessions} ${d.sessions === 1 ? 'visit' : 'visits'} · ${d.calls} ${
       d.calls === 1 ? 'call' : 'calls'
-    } · ${d.leads} ${d.leads === 1 ? 'lead' : 'leads'}`,
-  }));
+    } · ${d.leads} ${d.leads === 1 ? 'lead' : 'leads'}`;
+    return {
+      key: d.date,
+      tick: d.date.slice(8),
+      label: formatYmd(d.date, { weekday: true }),
+      value: d.estPaise,
+      // The per-day split rides on the readout and the table underneath the
+      // chart. The columns themselves stay one series: a stacked column needs a
+      // second hue, and the chart primitives keep to one on purpose.
+      note: split
+        ? `${counts} · speech ${formatPaise(split.voicePaise)} · AI ${formatPaise(split.vertexPaise)}`
+        : counts,
+    };
+  });
 
   const todayPaise = usageQ.data?.todayPaise ?? 0;
   const budgetPaise = usageQ.data?.budgetPaise ?? 0;
@@ -1106,6 +1280,52 @@ function UsageTab() {
         </CardContent>
       </Card>
 
+      {splitTotal > 0 ? (
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>Where the money goes</CardTitle>
+              <CardSubtitle>
+                {spendSplitSentence(
+                  {
+                    vertexPaise: totals.vertexPaise,
+                    voicePaise: totals.voicePaise,
+                    totalPaise: splitTotal,
+                  },
+                  `the last ${USAGE_DAYS} days`,
+                )}
+              </CardSubtitle>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            {/* Two meters against the same total rather than a stacked column:
+                one bill split two ways is a share, and the chart primitives keep
+                to a single hue by house rule — a real second series needs a
+                validated palette first. Same hue is right here anyway; both bars
+                measure the same thing, rupees. */}
+            <Meter
+              label="Voice (ElevenLabs)"
+              value={totals.voicePaise}
+              limit={splitTotal}
+              valueLabel={`${formatPaise(totals.voicePaise)} · ${sharePct(totals.voicePaise, splitTotal)}%`}
+              caption="Listening to the visitor and speaking the answer back. Charged per character spoken."
+            />
+            <Meter
+              label="AI (Google)"
+              value={totals.vertexPaise}
+              limit={splitTotal}
+              valueLabel={`${formatPaise(totals.vertexPaise)} · ${sharePct(totals.vertexPaise, splitTotal)}%`}
+              caption="Working out the answer, and the search over the guidelines. Charged per token."
+            />
+            <p className="text-xs text-text-subtle">
+              Nothing extra is stored for this — it is the same counters as the
+              total above, priced per vendor. Hover a day in the chart below to
+              see that day&apos;s split.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader>
           <div>
@@ -1125,7 +1345,7 @@ function UsageTab() {
           <ColumnChart
             data={chartData}
             formatValue={formatPaise}
-            idleReadout="Hover or tab through a day to read it."
+            idleReadout="Hover or tab through a day to see what it cost, and what speech and the AI cost within it."
             tableCaption="Show every day as a table"
             tableValueHeader="Spend"
           />

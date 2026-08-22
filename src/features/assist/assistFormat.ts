@@ -1,6 +1,7 @@
 import { inrFormat } from '@/lib/format';
 import type {
   AssistChannel,
+  AssistCostSplit,
   AssistEndReason,
   AssistFlag,
   AssistFollowupStatus,
@@ -29,6 +30,47 @@ import type {
 export function formatPaise(paise?: number | null): string {
   if (paise === undefined || paise === null || !Number.isFinite(paise)) return '—';
   return inrFormat(paise / 100);
+}
+
+/**
+ * The vendor split of a bill, or `null` when the row does not carry one.
+ *
+ * The split is DERIVED — the counters and the rate table were always stored, so
+ * every row the current API answers with has one. The tolerance is for the
+ * browser that was left open across the deploy which added it: a page holding
+ * pre-split rows must fall back to printing the total, not to a blank screen.
+ */
+export function costSplitOf(row: { costSplit?: AssistCostSplit }): AssistCostSplit | null {
+  const split = row.costSplit;
+  if (!split) return null;
+  if (!Number.isFinite(split.vertexPaise) || !Number.isFinite(split.voicePaise)) return null;
+  return split;
+}
+
+/**
+ * `AI ₹0.12 · Voice ₹2.30` — the split as a tooltip, for the places where only
+ * the total fits on screen. `undefined` when there is no split to show, so it
+ * can be handed straight to a `title` attribute without printing "undefined".
+ */
+export function costSplitTitle(row: { costSplit?: AssistCostSplit }): string | undefined {
+  const split = costSplitOf(row);
+  if (!split) return undefined;
+  return `AI ${formatPaise(split.vertexPaise)} · Voice ${formatPaise(split.voicePaise)}`;
+}
+
+/**
+ * The split said in one sentence, with the real percentage in it.
+ *
+ * Written as "speech is N%" in both directions rather than naming whichever
+ * side happens to be bigger: the whole reason this number is on the screen is
+ * that speech is charged per character SPOKEN and is nearly the entire bill, so
+ * the day that stops being true is exactly the day the sentence must show it.
+ */
+export function spendSplitSentence(split: AssistCostSplit, period: string): string {
+  const total = split.vertexPaise + split.voicePaise;
+  if (total <= 0) return `Nothing has been spent over ${period}.`;
+  const voicePct = Math.round((split.voicePaise / total) * 100);
+  return `Speech is ${voicePct}% of the bill over ${period} — the AI itself is the other ${100 - voicePct}%.`;
 }
 
 export function channelLabel(channel: AssistChannel): string {
@@ -131,8 +173,37 @@ export function guardStageText(stage: AssistGuardStage): string {
 }
 
 /**
+ * Two or three words, for a chip in a table column.
+ *
+ * Separate from `flagShortText` because a badge is a fixed-height pill: a whole
+ * sentence inside one wraps to three lines and the coloured box, which does not
+ * grow with it, spills over the rows above and below. Anything printed inside a
+ * `<Badge>` has to fit on one line at a column's width — the sentence goes in
+ * the tooltip beside it, and the whole sentence is in the drawer.
+ */
+export function flagChipText(flag: AssistFlag): string {
+  switch (flag.kind) {
+    case 'repeat-fingerprint':
+      return 'Repeat visitor';
+    case 'drive-by':
+      return 'Drive-by';
+    case 'duplicate-opening':
+      return 'Same opening';
+    case 'abusive':
+      return 'Abusive';
+    case 'bad-mobile':
+      return 'Bad numbers';
+    case 'guard-hits':
+      return 'Off-limits asks';
+    default:
+      return flag.kind;
+  }
+}
+
+/**
  * Why the spam pass flagged this visit, in a sentence. No counts — this is the
- * version that fits on a badge.
+ * version for somewhere a sentence fits: the drawer, and the Flagged tab, where
+ * the reason is the whole point of the row. A chip gets `flagChipText`.
  */
 export function flagShortText(flag: AssistFlag): string {
   switch (flag.kind) {
