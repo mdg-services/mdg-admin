@@ -109,6 +109,12 @@ export const ASSIST_ANSWERABLE_INTENTS = [
   'company_info',
   'contact_request',
   'greeting',
+  // Pricing was refused outright until 2026-08-22. It is answered now: a dealer
+  // asking what it costs is the most qualified visitor on the site, and
+  // stonewalling them was losing the sale. What may be SAID is still bounded —
+  // the output guard permits only the figures MDG actually publishes, so the
+  // assistant can quote the price and cannot invent one.
+  'pricing',
 ] as const satisfies readonly AssistIntent[];
 
 /**
