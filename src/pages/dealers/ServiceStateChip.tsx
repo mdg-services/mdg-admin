@@ -68,6 +68,7 @@ export function serviceStateTitle(
   if (!entry) return `${spec.label}: not known yet`;
   const { label } = present(entry.state, spec);
   const parts = [`${spec.label}: ${label}`];
+  if (entry.covers) parts.push(`window ${entry.covers}`);
   if (entry.at) parts.push(new Date(entry.at).toLocaleString());
   if (entry.note) parts.push(entry.note);
   return parts.join(' · ');
@@ -98,11 +99,20 @@ export function ServiceStateChip({
   }
   const { label, intent } = present(entry.state, spec);
   const when = showWhen && entry.at ? whenLabel(entry.at) : '';
+  // The window a service marked is more use than the day it ran — so when there
+  // is one it takes the line, and the day joins it only when it is not today.
+  const second = entry.covers
+    ? when && when !== 'today'
+      ? `${when} · ${entry.covers}`
+      : entry.covers
+    : when;
   return (
     <span className="inline-flex flex-col items-start gap-0.5">
       <Badge intent={intent}>{label}</Badge>
-      {when ? (
-        <span className="text-xs text-text-subtle">{when}</span>
+      {showWhen && second ? (
+        <span className="whitespace-nowrap text-xs text-text-subtle">
+          {second}
+        </span>
       ) : null}
     </span>
   );

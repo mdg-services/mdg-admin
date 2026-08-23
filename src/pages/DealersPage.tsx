@@ -227,7 +227,6 @@ export function DealersPage() {
                   <THead>
                     <TRow>
                       <TH>Code</TH>
-                      <TH>Phone</TH>
                       {ROSTER_SERVICES.map((spec) => (
                         <TH key={spec.id}>{spec.label}</TH>
                       ))}
@@ -249,7 +248,6 @@ export function DealersPage() {
                             </Badge>
                           ) : null}
                         </TD>
-                        <TD className="text-text-muted">{d.phone ?? '—'}</TD>
                         {ROSTER_SERVICES.map((spec) => {
                           const entry = servicesByDealer
                             .get(d.id)
@@ -292,7 +290,6 @@ export function DealersPage() {
                   primaryRight: d.archivedAt ? (
                     <Badge intent="danger">Deleted</Badge>
                   ) : null,
-                  secondary: <span className="truncate">{d.phone ?? '—'}</span>,
                   meta: (
                     <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       {ROSTER_SERVICES.map((spec) => {
