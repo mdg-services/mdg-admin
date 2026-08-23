@@ -132,6 +132,18 @@ function isFollowup(v: string | null): v is AssistFollowupStatus {
   return !!v && (ASSIST_FOLLOWUP_STATUSES as readonly string[]).includes(v);
 }
 
+/**
+ * The "Length" of a session, for a reader rather than a developer.
+ *
+ * A session nobody sent anything in has no length worth printing:
+ * `formatDuration(0)` says "0ms", which reads like a measurement rather than
+ * like nothing having happened.
+ */
+function sessionLength(s: { durationMs: number; turnCount: number }): string {
+  if (s.turnCount === 0) return '\u2014';
+  return formatDuration(s.durationMs);
+}
+
 export function AssistPage() {
   const [search, setSearch] = useSearchParams();
 
@@ -539,7 +551,7 @@ function SessionListTab({
               <>
                 <LeadCell session={s} showMobile={false} emptyAs="words" />
                 <span className="mt-1 block text-xs text-text-subtle">
-                  {formatDateTime(s.startedAt)} · {formatDuration(s.durationMs)} ·{' '}
+                  {formatDateTime(s.startedAt)} · {sessionLength(s)} ·{' '}
                   {s.turnCount} {s.turnCount === 1 ? 'turn' : 'turns'} ·{' '}
                   {langLabel(s.lang)} · {formatPaise(s.estPaise)}
                 </span>
@@ -680,9 +692,7 @@ function SessionTable({
               </span>
             </TD>
             <TD className="truncate text-text-muted">{formatDateTime(s.startedAt)}</TD>
-            <TD className="truncate text-right tabular-nums">
-              {formatDuration(s.durationMs)}
-            </TD>
+            <TD className="truncate text-right tabular-nums">{sessionLength(s)}</TD>
             <TD className="text-right tabular-nums">{s.turnCount}</TD>
             <TD>
               <span className="block truncate text-text-muted" title={s.opening}>
