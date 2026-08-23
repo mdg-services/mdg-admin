@@ -1,7 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { Dealer, Paginated, DealerStatus } from '@dk/shared';
+import type {
+  Dealer,
+  DealerServiceSummary,
+  DealerStatus,
+  Paginated,
+} from '@dk/shared';
 import type { DealerCreateInput, DealerUpdateInput } from '@dk/shared/schemas';
 
 
@@ -31,6 +36,31 @@ export function useDealersQuery(params: DealerListParams) {
         sort: params.sort,
         includeArchived: params.includeArchived ? true : undefined,
       }),
+    placeholderData: (prev) => prev,
+  });
+}
+
+/**
+ * The service columns for the dealers currently on screen — has each dealer's
+ * DSR, Credit & DOD and the rest been produced, and has it been sent.
+ *
+ * Keyed on the ids rather than on the list's filters so paging back to a page
+ * already seen redraws it from cache. Deliberately a second request instead of
+ * more fields on the dealer: the roster is the only screen that wants this, and
+ * it has to be able to draw its rows before the summary lands.
+ */
+export function useDealerServiceSummaryQuery(dealerIds: string[]) {
+  const ids = dealerIds.join(',');
+  return useQuery({
+    queryKey: ['dealers', 'service-summary', ids],
+    queryFn: () =>
+      api.get<{ items: DealerServiceSummary[] }>('/dealers/service-summary', {
+        ids,
+      }),
+    enabled: dealerIds.length > 0,
+    // A run finishing or a report being sent moves these chips, and nothing on
+    // this screen causes either — so it has to notice on its own.
+    refetchInterval: 60_000,
     placeholderData: (prev) => prev,
   });
 }

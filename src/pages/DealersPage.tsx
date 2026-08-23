@@ -14,7 +14,6 @@ import {
   Pagination,
   Select,
   Skeleton,
-  StatusChip,
   Table,
   TBody,
   TD,
@@ -23,14 +22,26 @@ import {
   TRow,
   useToast,
 } from '@/components/ui';
-import { useCreateDealer, useDealersQuery } from '@/hooks/api/useDealers';
+import {
+  useCreateDealer,
+  useDealerServiceSummaryQuery,
+  useDealersQuery,
+} from '@/hooks/api/useDealers';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { formatDate } from '@/lib/format';
-import { dealerCodeLabel, type DealerStatus } from '@dk/shared';
+import {
+  dealerCodeLabel,
+  ROSTER_SERVICES,
+  type DealerServiceSummaryEntry,
+  type DealerStatus,
+} from '@dk/shared';
 
 import { DealerCreateDrawer } from './dealers/DealerCreateDrawer';
+import {
+  ServiceStateChip,
+  serviceStateTitle,
+} from './dealers/ServiceStateChip';
 
 const STATUS_OPTIONS: Array<{ value: '' | DealerStatus; label: string }> = [
   { value: '', label: 'All statuses' },
@@ -38,8 +49,6 @@ const STATUS_OPTIONS: Array<{ value: '' | DealerStatus; label: string }> = [
   { value: 'ACTIVE', label: 'Active' },
   { value: 'SUSPENDED', label: 'Suspended' },
 ];
-
-const TOTAL_STEPS = 8;
 
 const PAGE_SIZE = 20;
 
@@ -83,6 +92,28 @@ export function DealersPage() {
   });
 
   const createDealer = useCreateDealer();
+
+  // The roster's service columns, fetched for the ids on this page only. Kept
+  // out of the dealer list request so the rows draw immediately and the chips
+  // fill in behind them.
+  const dealerIds = React.useMemo(
+    () => (data?.items ?? []).map((d) => d.id),
+    [data],
+  );
+  const serviceSummary = useDealerServiceSummaryQuery(dealerIds);
+  const servicesByDealer = React.useMemo(() => {
+    const map = new Map<string, Map<string, DealerServiceSummaryEntry>>();
+    for (const row of serviceSummary.data?.items ?? []) {
+      map.set(row.dealerId, new Map(row.services.map((e) => [e.serviceId, e])));
+    }
+    return map;
+  }, [serviceSummary.data]);
+  // "Not known yet" and "not attached" are different answers, and a dealer only
+  // leaves the first for the second once the summary has a row for THEM — not
+  // merely once a summary has arrived. Paging keeps the previous page's data on
+  // screen while the next one loads, so an id-by-id check is what keeps the new
+  // page's rows from claiming, for a second, that nothing is set up.
+  const servicesKnown = (dealerId: string) => servicesByDealer.has(dealerId);
 
   function setStatus(next: DealerStatus | '') {
     const params = new URLSearchParams(search);
@@ -197,9 +228,9 @@ export function DealersPage() {
                     <TRow>
                       <TH>Code</TH>
                       <TH>Phone</TH>
-                      <TH>Status</TH>
-                      <TH>Progress</TH>
-                      <TH>Onboarded</TH>
+                      {ROSTER_SERVICES.map((spec) => (
+                        <TH key={spec.id}>{spec.label}</TH>
+                      ))}
                     </TRow>
                   </THead>
                   <TBody>
@@ -219,15 +250,23 @@ export function DealersPage() {
                           ) : null}
                         </TD>
                         <TD className="text-text-muted">{d.phone ?? '—'}</TD>
-                        <TD>
-                          <StatusChip kind="dealer" value={d.status} />
-                        </TD>
-                        <TD className="text-text-muted">
-                          {d.onboarding.completedStepCount}/{TOTAL_STEPS}
-                        </TD>
-                        <TD className="text-text-muted">
-                          {formatDate(d.onboardingDate)}
-                        </TD>
+                        {ROSTER_SERVICES.map((spec) => {
+                          const entry = servicesByDealer
+                            .get(d.id)
+                            ?.get(spec.id);
+                          return (
+                            <TD
+                              key={spec.id}
+                              title={serviceStateTitle(entry, spec)}
+                            >
+                              <ServiceStateChip
+                                entry={entry}
+                                spec={spec}
+                                loading={!servicesKnown(d.id)}
+                              />
+                            </TD>
+                          );
+                        })}
                       </TRow>
                     ))}
                   </TBody>
@@ -252,15 +291,28 @@ export function DealersPage() {
                   ),
                   primaryRight: d.archivedAt ? (
                     <Badge intent="danger">Deleted</Badge>
-                  ) : (
-                    <StatusChip kind="dealer" value={d.status} />
-                  ),
+                  ) : null,
                   secondary: <span className="truncate">{d.phone ?? '—'}</span>,
                   meta: (
-                    <span>
-                      Progress {d.onboarding.completedStepCount}/{TOTAL_STEPS}
-                      {' · Onboarded '}
-                      {formatDate(d.onboardingDate)}
+                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {ROSTER_SERVICES.map((spec) => {
+                        const entry = servicesByDealer.get(d.id)?.get(spec.id);
+                        return (
+                          <span
+                            key={spec.id}
+                            className="inline-flex items-center gap-1"
+                            title={serviceStateTitle(entry, spec)}
+                          >
+                            {spec.shortLabel}
+                            <ServiceStateChip
+                              entry={entry}
+                              spec={spec}
+                              loading={!servicesKnown(d.id)}
+                              showWhen={false}
+                            />
+                          </span>
+                        );
+                      })}
                     </span>
                   ),
                 }))}
