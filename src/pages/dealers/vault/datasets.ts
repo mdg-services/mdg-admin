@@ -3,6 +3,7 @@ import {
   CreditCard,
   Database,
   FileBarChart2,
+  Gauge,
   ReceiptText,
 } from 'lucide-react';
 
@@ -12,6 +13,7 @@ import { DealerDsrTab } from '../DealerDsrTab';
 
 import { DealerInspectionPane } from './DealerInspectionPane';
 import { DealerPadLedgerPane } from './DealerPadLedgerPane';
+import { DealerTtDensityPane } from './DealerTtDensityPane';
 import type { DealerVaultDataset } from './types';
 
 /**
@@ -69,6 +71,15 @@ const REGISTRY = [
     Icon: ClipboardCheck,
     requiresService: 'inspection-reports',
     Pane: DealerInspectionPane,
+  },
+  {
+    id: 'tt-density',
+    label: 'TT Density',
+    description:
+      "Density@15 from this dealer's tanker invoices, and the daily register photos.",
+    Icon: Gauge,
+    requiresService: 'tt-density',
+    Pane: DealerTtDensityPane,
   },
 ] as const satisfies readonly DealerVaultDataset[];
 

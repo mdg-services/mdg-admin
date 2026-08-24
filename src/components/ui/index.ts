@@ -18,5 +18,6 @@ export * from './Toast';
 export * from './Skeleton';
 export * from './Spinner';
 export * from './EmptyState';
+export * from './ImageLightbox';
 export * from './Pagination';
 export * from './DateRangeFilter';

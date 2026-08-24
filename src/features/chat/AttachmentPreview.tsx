@@ -1,9 +1,8 @@
-import { Download, Pause, Paperclip, Play } from 'lucide-react';
+import { Pause, Paperclip, Play } from 'lucide-react';
 import * as React from 'react';
 
 
-import { Button } from '@/components/ui/Button';
-import { Dialog } from '@/components/ui/Dialog';
+import { ImageLightbox } from '@/components/ui/ImageLightbox';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/cn';
 import { downloadAttachment } from '@/lib/downloadAttachment';
@@ -115,29 +114,15 @@ export function AttachmentPreview({ attachment }: { attachment: Attachment }) {
             className="h-40 w-40 object-cover"
           />
         </button>
-        <Dialog
+        <ImageLightbox
           open={open}
           onClose={() => setOpen(false)}
-          size="lg"
+          src={attachment.url}
+          alt={attachment.filename}
           title={attachment.filename}
-          footer={
-            <Button
-              size="sm"
-              variant="secondary"
-              loading={downloading}
-              onClick={() => void handleDownload()}
-              leftIcon={<Download width={14} height={14} strokeWidth={1.75} />}
-            >
-              Download
-            </Button>
-          }
-        >
-          <img
-            src={attachment.url}
-            alt={attachment.filename}
-            className="mx-auto max-h-[70vh] w-auto"
-          />
-        </Dialog>
+          onDownload={handleDownload}
+          downloading={downloading}
+        />
       </>
     );
   }

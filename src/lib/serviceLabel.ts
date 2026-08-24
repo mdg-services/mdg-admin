@@ -9,6 +9,7 @@ const SERVICE_LABELS: Record<string, string> = {
   'dsr-report': 'Daily Sales Report',
   'inspection-reports': 'Inspection Reports',
   'iras-shift-data': 'IRAS shift data',
+  'tt-density': 'TT Density',
 };
 
 /**

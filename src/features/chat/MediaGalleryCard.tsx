@@ -3,9 +3,9 @@ import * as React from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Dialog } from '@/components/ui/Dialog';
 import { Drawer } from '@/components/ui/Drawer';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ImageLightbox } from '@/components/ui/ImageLightbox';
 import { Spinner } from '@/components/ui/Spinner';
 import { Tabs } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
@@ -85,31 +85,15 @@ function ImagePreviewDialog({
   }
 
   return (
-    <Dialog
-      open={!!attachment}
+    <ImageLightbox
+      open={!!attachment?.url}
       onClose={onClose}
-      size="lg"
+      src={attachment?.url ?? ''}
+      alt={attachment?.filename ?? ''}
       title={attachment?.filename}
-      footer={
-        <Button
-          size="sm"
-          variant="secondary"
-          loading={downloading}
-          onClick={() => void handleDownload()}
-          leftIcon={<Download width={14} height={14} strokeWidth={1.75} />}
-        >
-          Download
-        </Button>
-      }
-    >
-      {attachment?.url ? (
-        <img
-          src={attachment.url}
-          alt={attachment.filename}
-          className="mx-auto max-h-[70vh] w-auto"
-        />
-      ) : null}
-    </Dialog>
+      onDownload={handleDownload}
+      downloading={downloading}
+    />
   );
 }
 

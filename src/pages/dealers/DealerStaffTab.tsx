@@ -27,6 +27,7 @@ import {
   DateRangeFilter,
   Dialog,
   EmptyState,
+  ImageLightbox,
   MobileCardList,
   Skeleton,
   Table,
@@ -1167,20 +1168,13 @@ export function DealerStaffTab({ dealer }: Props) {
         </p>
       </Dialog>
 
-      <Dialog
+      <ImageLightbox
         open={!!photoUrl}
         onClose={() => setPhotoUrl(null)}
-        size="lg"
+        src={photoUrl ?? ''}
+        alt="Hardcopy submission"
         title="Hardcopy photo"
-      >
-        {photoUrl ? (
-          <img
-            src={photoUrl}
-            alt="Hardcopy submission"
-            className="mx-auto max-h-[60vh] w-auto rounded-sm"
-          />
-        ) : null}
-      </Dialog>
+      />
     </div>
   );
 }
