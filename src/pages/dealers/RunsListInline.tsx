@@ -1,8 +1,9 @@
-import { AlertTriangle, CheckCircle2, Download } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, Eye } from 'lucide-react';
 import * as React from 'react';
 
 import {
   EmptyState,
+  ImageLightbox,
   MobileCardList,
   Skeleton,
   Spinner,
@@ -185,6 +186,12 @@ function RunDetail({
 }) {
   const isSuperAdmin = useIsSuperAdmin();
   const { data, isLoading } = useRunDetail(runId, { pollWhileRunning: true });
+  /** The image artifact being looked at full-size, if any. */
+  const [viewing, setViewing] = React.useState<{
+    src: string;
+    name: string;
+    downloadUrl?: string;
+  } | null>(null);
   const run: ServiceRunWithSteps | null =
     (data as ServiceRunWithSteps | undefined) ??
     (fallback as ServiceRunWithSteps | null);
@@ -375,19 +382,72 @@ function RunDetail({
                     {typeof a.size === 'number' ? formatBytes(a.size) : null}
                   </p>
                 </div>
-                <a
-                  href={resolveArtifactUrl(a.id)}
-                  download
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 text-sm font-semibold text-text hover:bg-surface-2"
-                >
-                  <Download width={14} height={14} strokeWidth={1.75} />
-                  Download
-                </a>
+                <div className="flex items-center gap-2">
+                  {/*
+                    A failure screenshot is something you LOOK at. Offering only
+                    a download meant an operator diagnosing a failed run had to
+                    save a PNG and find it in Finder before they could see the
+                    page the run died on — which is why the artifacts on this
+                    dialog read as unopenable even though they downloaded fine.
+                    The backend already signs an `inline` twin for every image.
+                  */}
+                  {a.contentType?.startsWith('image/') && run.artifactViewUrls?.[a.id] ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setViewing({
+                          src: run.artifactViewUrls?.[a.id] ?? '',
+                          name: a.filename,
+                          downloadUrl: run.artifactUrls?.[a.id],
+                        })
+                      }
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 text-sm font-semibold text-text hover:bg-surface-2"
+                    >
+                      <Eye width={14} height={14} strokeWidth={1.75} />
+                      View
+                    </button>
+                  ) : null}
+                  {/*
+                    Only ever render a link that can actually fetch the file. The
+                    signed URL needs no token; the legacy route needs a bearer
+                    header a plain <a> navigation cannot send, so linking to it
+                    produces a 401 and the appearance of a dead button. While the
+                    detail request is still in flight we render the disabled twin
+                    instead of a link that would fail if clicked.
+                  */}
+                  {run.artifactUrls?.[a.id] ? (
+                    <a
+                      href={run.artifactUrls[a.id]}
+                      download
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 text-sm font-semibold text-text hover:bg-surface-2"
+                    >
+                      <Download width={14} height={14} strokeWidth={1.75} />
+                      Download
+                    </a>
+                  ) : (
+                    <span
+                      className="inline-flex h-8 cursor-not-allowed items-center gap-1.5 rounded-md border border-border bg-surface-2 px-3 text-sm font-semibold text-text-muted"
+                      title="Preparing a secure link…"
+                    >
+                      <Download width={14} height={14} strokeWidth={1.75} />
+                      Preparing…
+                    </span>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
         </section>
       ) : null}
+
+      <ImageLightbox
+        open={viewing !== null}
+        onClose={() => setViewing(null)}
+        src={viewing?.src ?? ''}
+        alt={viewing?.name ?? ''}
+        title={viewing?.name}
+        downloadUrl={viewing?.downloadUrl}
+      />
     </div>
   );
 }
