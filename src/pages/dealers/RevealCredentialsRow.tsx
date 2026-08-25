@@ -21,7 +21,7 @@ interface Props {
 }
 
 /**
- * Super-admin control that reveals a dealer's stored portal ID and password.
+ * Admin control that reveals a dealer's stored portal ID and password.
  *
  * The plaintext is held in local component state, and BOTH copies are dropped on
  * Hide and on unmount: the component's own state, and the mutation's cached
@@ -32,6 +32,12 @@ interface Props {
  * Every reveal is a fresh round-trip rather than a cached value, because each one
  * writes an audit row server-side. Re-showing after hiding therefore re-fetches
  * and re-audits, which is the intended behaviour.
+ *
+ * The confirm step is deliberate rather than ceremonial. Revealing used to be a
+ * super-admin's act; it is now open to every admin, often on a phone. One stray
+ * tap should not paint a live third-party password onto a screen in a forecourt
+ * office, and it should not spend one of the actor's hourly reveals or leave an
+ * audit row nobody meant to create.
  */
 export function RevealCredentialsRow({
   portalLabel,
@@ -55,6 +61,13 @@ export function RevealCredentialsRow({
   }
 
   async function show() {
+    if (
+      !window.confirm(
+        `Show the ${portalLabel} ID and password in plain text? This is recorded in the activity log against your account.`,
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     try {
       setCreds(await onReveal());
@@ -105,7 +118,8 @@ export function RevealCredentialsRow({
       />
       <div className="flex items-center justify-between gap-2 pt-1">
         <p className="text-xs text-text-subtle">
-          Visible to super-admins only. Every reveal is recorded in the activity log.
+          Recorded in the activity log against your account. Hide it when you are
+          done — it is never stored in this browser.
         </p>
         <Button
           variant="ghost"

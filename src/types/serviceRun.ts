@@ -80,7 +80,7 @@ export interface SdmsCredentialsStatus {
 }
 
 /**
- * Response of the super-admin-only credential reveal. Carries the decrypted
+ * Response of the admin-only credential reveal. Carries the decrypted
  * password, so never persist it in the query cache — the reveal hooks are
  * mutations for exactly that reason.
  */

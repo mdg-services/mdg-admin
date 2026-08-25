@@ -1,7 +1,8 @@
-import { ChevronDown, MessageSquare } from 'lucide-react';
+import { ChevronDown, KeyRound, MessageSquare } from 'lucide-react';
 import * as React from 'react';
 
 import {
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -15,16 +16,22 @@ import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { formatDate, formatDateTime } from '@/lib/format';
 import type { Dealer } from '@dk/shared';
 
+import { DealerAppLoginCard } from './DealerAppLoginCard';
 import { DealerDangerZone } from './DealerDangerZone';
-import { PortalCredentialsSection } from './PortalCredentialsSection';
-import { SdmsCredentialsSection } from './SdmsCredentialsSection';
 
 interface Props {
   dealer: Dealer;
+  /**
+   * Opens the Password vault tab. Optional so the tab still renders standalone
+   * (and so a deep link into Info never depends on the parent wiring it up) —
+   * without it the pointer below is simply not offered.
+   */
+  onOpenPasswordVault?: () => void;
 }
 
-export function DealerInfoTab({ dealer }: Props) {
+export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
   const isSuperAdmin = useIsSuperAdmin();
+  const isArchived = !!dealer.archivedAt;
   return (
     <div className="grid gap-4">
       {dealer.status === 'ONBOARDING' && !dealer.archivedAt ? (
@@ -117,62 +124,42 @@ export function DealerInfoTab({ dealer }: Props) {
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <div>
-              <CardTitle>App login</CardTitle>
-              <CardSubtitle>Issued at the final onboarding step. Hash is never returned.</CardSubtitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
-              <Row
-                label="Login email"
-                value={
-                  dealer.portalCredentials?.username ? (
-                    <span className="font-mono">
-                      {dealer.portalCredentials.username}
-                    </span>
-                  ) : (
-                    'Not issued'
-                  )
-                }
+        {/* Every login — the dealer's own, and the IRAS/SDMS portal ones — moved
+            to its own tab. An archived dealer cannot reach that tab (the strip
+            collapses to Info, which is where Restore lives), so for those the
+            app login is shown here instead of being made unreachable. */}
+        {isArchived ? (
+          <DealerAppLoginCard dealer={dealer} className="md:col-span-2" />
+        ) : (
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <div>
+                <CardTitle>Logins</CardTitle>
+                <CardSubtitle>
+                  The app sign-in and the IRAS and SDMS portal credentials.
+                </CardSubtitle>
+              </div>
+              <KeyRound
+                width={18}
+                height={18}
+                strokeWidth={1.75}
+                className="text-text-muted"
               />
-              <Row
-                label="Issued"
-                value={
-                  dealer.portalCredentials?.setAt
-                    ? formatDateTime(dealer.portalCredentials.setAt)
-                    : '—'
-                }
-              />
-              <Row label="Password" value={dealer.portalCredentials ? '••••••••' : '—'} />
-              <Row
-                label="Must change on first login"
-                value={
-                  dealer.portalCredentials
-                    ? dealer.portalCredentials.mustChangeOnFirstLogin
-                      ? 'Yes'
-                      : 'No'
-                    : '—'
-                }
-              />
-            </dl>
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-text-muted">
+                They live in the Password vault, where any admin can read a
+                stored portal ID and password back.
+              </p>
+              {onOpenPasswordVault ? (
+                <Button variant="secondary" size="sm" onClick={onOpenPasswordVault}>
+                  Open Password vault
+                </Button>
+              ) : null}
+            </CardContent>
+          </Card>
+        )}
       </div>
-
-      {/* Hidden for an archived dealer: the status endpoints 404, so these would
-          render as an empty "no credentials set" form offering a write the
-          backend will refuse. The stored credentials are untouched and come back
-          on restore. */}
-      {dealer.archivedAt ? null : (
-        <>
-          <PortalCredentialsSection dealerId={dealer.id} />
-
-          <SdmsCredentialsSection dealerId={dealer.id} />
-        </>
-      )}
 
       {isSuperAdmin ? <DealerDangerZone dealer={dealer} /> : null}
 

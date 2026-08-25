@@ -48,7 +48,8 @@ export function useClearIrasCredentials(dealerId: string) {
 }
 
 /**
- * Reveal the stored IRAS password in plaintext (super-admin only). A mutation
+ * Reveal the stored IRAS password in plaintext (any admin; audited and rate
+ * limited server-side, and refused for an archived dealer). A mutation
  * rather than a query so the plaintext is never cached or refetched — see
  * `useRevealSdmsCredentials`.
  */

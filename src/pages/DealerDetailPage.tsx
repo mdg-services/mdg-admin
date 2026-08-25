@@ -3,6 +3,7 @@ import {
   Archive,
   ClipboardList,
   History,
+  KeyRound,
   ListChecks,
   RotateCcw,
   Send,
@@ -38,6 +39,7 @@ import {
 import { DealerInfoTab } from './dealers/DealerInfoTab';
 import { DealerKavachTab } from './dealers/DealerKavachTab';
 import { DealerMembersTab } from './dealers/DealerMembersTab';
+import { DealerPasswordVaultTab } from './dealers/DealerPasswordVaultTab';
 import { DealerServicesTab } from './dealers/DealerServicesTab';
 import { DealerStaffTab } from './dealers/DealerStaffTab';
 import { DealerWorkListTab } from './dealers/DealerWorkListTab';
@@ -48,6 +50,12 @@ import { DealerVaultView } from './dealers/vault/DealerVaultView';
 
 /** Where an entry ends up once every rule below has been applied. */
 type TabPlacement = 'strip' | 'menu' | 'hidden';
+
+/** What a tab body can ask the page to do. */
+interface TabContext {
+  /** Switch to another tab, as if its entry had been clicked. */
+  goToTab: (id: string) => void;
+}
 
 interface TabDef {
   id: string;
@@ -62,17 +70,25 @@ interface TabDef {
   requiresService?: string;
   /** Leading glyph, used when the entry renders in the overflow menu. */
   icon?: React.ReactNode;
-  body: (dealer: Dealer) => React.ReactNode;
+  body: (dealer: Dealer, ctx: TabContext) => React.ReactNode;
 }
 
 const ICON = { width: 15, height: 15, strokeWidth: 1.75 } as const;
+
+/** Referenced from the Info tab's pointer as well as from the entry itself. */
+const PASSWORDS_TAB_ID = 'passwords';
 
 /** The fallback surface: always available, and where an archived dealer lands. */
 const INFO_TAB: TabDef = {
   id: 'info',
   label: 'Info',
   placement: 'strip',
-  body: (dealer) => <DealerInfoTab dealer={dealer} />,
+  body: (dealer, ctx) => (
+    <DealerInfoTab
+      dealer={dealer}
+      onOpenPasswordVault={() => ctx.goToTab(PASSWORDS_TAB_ID)}
+    />
+  ),
 };
 
 /**
@@ -82,23 +98,23 @@ const INFO_TAB: TabDef = {
  * job needs, so the split is by "is this what I opened the dealer to do?":
  *
  * - strip — the daily work: how far onboarding has got, the record itself, the
- *   services it runs, Kavach, its warriors, the work list, the Vault, and the
- *   two report surfaces *when the dealer actually has those services*.
- * - menu — the occasional and the administrative: the team roster, the
- *   services-provided ledger, the run history, the engineer-only custom
- *   requests, and delete/restore. None of it is needed to answer "how is this
- *   dealer doing today?".
+ *   services it runs, Kavach, its warriors, the work list, and the Data Vault.
+ * - menu — the occasional and the administrative: the Password vault, the team
+ *   roster, the services-provided ledger, the run history, the engineer-only
+ *   custom requests, and delete/restore. None of it is needed to answer "how is
+ *   this dealer doing today?".
  *
  * Demotion is the tool of choice here. `superAdminOnly` is the only thing that
  * takes an entry away from a role, and it is set on internal surfaces only —
  * everything else an admin could reach before this split they can still reach.
  *
- * A tab for a service the dealer has not bought is pure noise, so Credit & DOD
- * and the Daily Sales Report are gated on their plugin actually being attached.
- * Gated off they fall back to the menu for super-admins — who are the ones who
- * attach and debug services — instead of vanishing, and a `?tab=` deep link
- * still renders either of them for anyone: `hidden` here means "not offered",
- * never "unreachable".
+ * `requiresService` gates an entry on a service plugin actually being attached:
+ * a tab for a service the dealer has not bought is pure noise. No entry uses it
+ * today — Credit & DOD and the Daily Sales Report moved into the Data Vault
+ * rail, where `vault/datasets.ts` does the same gating per dataset — but the
+ * three-way handling in `placementOf` is what makes it safe, so it stays. Note
+ * what it means: `hidden` is "not offered", never "unreachable" — a `?tab=`
+ * deep link still renders the body, which guards itself.
  */
 const TABS: TabDef[] = [
   {
@@ -145,6 +161,18 @@ const TABS: TabDef[] = [
     // rail now (as gated datasets) rather than as their own tabs, alongside IRAS
     // shift data, the PAD ledger and Inspection Reports.
     body: (dealer) => <DealerVaultView dealer={dealer} />,
+  },
+  {
+    id: PASSWORDS_TAB_ID,
+    label: 'Password vault',
+    placement: 'menu',
+    // Deliberately NOT superAdminOnly. Every login this dealer has lives here —
+    // their app sign-in and the IRAS/SDMS portal credentials — and reading a
+    // stored portal password back is ordinary support work, not an engineer's
+    // errand. The backend gates it to admins, caps it per person per hour and
+    // audits every reveal before releasing the plaintext.
+    icon: <KeyRound {...ICON} />,
+    body: (dealer) => <DealerPasswordVaultTab dealer={dealer} />,
   },
   {
     id: 'members',
@@ -202,6 +230,12 @@ export function DealerDetailPage() {
   const [tab, setTab] = React.useState<string | null>(null);
   const [dangerAction, setDangerAction] =
     React.useState<DealerArchiveAction | null>(null);
+  // Stable, so a tab body that memoises on it does not re-render on every
+  // parent render. `setTab` is itself stable, hence the empty dep list.
+  const tabContext = React.useMemo<TabContext>(
+    () => ({ goToTab: (id) => setTab(id) }),
+    [],
+  );
 
   React.useEffect(() => {
     if (!dealer || tab) return;
@@ -437,7 +471,7 @@ export function DealerDetailPage() {
           }
         />
       </div>
-      {activeDef.body(dealer)}
+      {activeDef.body(dealer, tabContext)}
       {/* Delete/restore straight from the menu. The Info tab's danger-zone card
           drives the same component with its own state, so the archive flow has
           one implementation and the two entry points cannot disagree. */}

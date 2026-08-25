@@ -50,7 +50,8 @@ export function useClearSdmsCredentials(dealerId: string) {
 }
 
 /**
- * Reveal the stored SDMS password in plaintext (super-admin only).
+ * Reveal the stored SDMS password in plaintext (any admin; audited and rate
+ * limited server-side, and refused for an archived dealer).
  *
  * A mutation, not a query, on purpose: the plaintext must never be cached by
  * TanStack Query, refetched in the background, or persisted. Each reveal is an
