@@ -1,10 +1,14 @@
-import { AlertTriangle, CalendarDays } from 'lucide-react';
+import { AlertTriangle, CalendarDays, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
 import { formatDate, isYmd, toYmd } from '@/lib/format';
 
+import { Button } from './Button';
 import { Input } from './Input';
+import { Menu, MenuItem } from './Menu';
+import { Sheet } from './Sheet';
 
 /**
  * A date-window filter: three quick presets plus a custom from/to range.
@@ -86,6 +90,24 @@ export interface DateRangeFilterProps {
   label?: string;
   /** How long to wait after the last keystroke before querying. */
   commitDelayMs?: number;
+  /**
+   * How the presets are offered below md. Default `'menu'`.
+   *
+   * Five chips at a 44px touch height wrap to three rows at 360px — about
+   * 132px of the screen spent before a single figure is on it, above a table
+   * the admin came to read. `'menu'` collapses them to one trigger showing the
+   * window that is currently on, and `Menu` already degrades to a bottom sheet
+   * on a phone. `'chips'` keeps the row for a screen where switching windows
+   * IS the task. At md both render the chip row exactly as before.
+   */
+  mobilePresets?: 'menu' | 'chips';
+  /**
+   * Below md, put the custom From/To fields behind a button that opens a
+   * sheet, instead of inline under the presets. For a filter that sits at the
+   * top of a long list, where two date fields permanently on screen push the
+   * first row of data off it. Default false — today's inline behaviour.
+   */
+  mobileCustomInSheet?: boolean;
   className?: string;
 }
 
@@ -229,10 +251,14 @@ export function DateRangeFilter({
   summarySuffix,
   label = 'Date range',
   commitDelayMs = 350,
+  mobilePresets = 'menu',
+  mobileCustomInSheet = false,
   className,
 }: DateRangeFilterProps) {
   const fieldsId = React.useId();
   const messageId = React.useId();
+  const isMd = useMediaQuery('(min-width: 768px)');
+  const [datesOpen, setDatesOpen] = React.useState(false);
 
   const isCustom = value.preset === 'custom';
   const today = toYmd(new Date());
@@ -472,77 +498,166 @@ export function DateRangeFilter({
      `resolveCustomDateRange`'s swap is for, and swapping and saying so is a far
      better answer than a picker that looks broken. */
 
+  const activePreset = DATE_RANGE_PRESETS.find((p) => p.id === value.preset);
+  const asMenu = !isMd && mobilePresets === 'menu';
+  const customInSheet = !isMd && mobileCustomInSheet;
+
+  const customFields = (
+    <>
+      <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+        From
+        <Input
+          type="date"
+          value={draft.from}
+          min={MIN_SELECTABLE_YMD}
+          max={today}
+          invalid={fromInvalid}
+          aria-invalid={fromInvalid || undefined}
+          aria-describedby={message ? messageId : undefined}
+          onChange={(e) => editDraft({ from: e.target.value })}
+          onBlur={flush}
+          onKeyDown={handleKeyDown}
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+        To
+        <Input
+          type="date"
+          value={draft.to}
+          min={MIN_SELECTABLE_YMD}
+          max={today}
+          invalid={toInvalid}
+          aria-invalid={toInvalid || undefined}
+          aria-describedby={message ? messageId : undefined}
+          onChange={(e) => editDraft({ to: e.target.value })}
+          onBlur={flush}
+          onKeyDown={handleKeyDown}
+        />
+      </label>
+    </>
+  );
+
   return (
     <div className={cn('grid gap-2', className)}>
-      <div
-        role="group"
-        aria-label={label}
-        // `w-fit`, not `self-start`: in a grid, `align-self` does nothing to the
-        // inline axis, so the chip group's border used to stretch to whatever
-        // the widest row below it made the column — which is the summary line,
-        // and that grows with the window. `fit-content` shrinks to the chips
-        // while still capping at the available width, so it wraps on a phone.
-        className="inline-flex w-fit flex-wrap gap-0.5 self-start rounded-md border border-border-strong p-0.5"
-      >
-        {presets.map((p) => {
-          const active = value.preset === p.id;
-          return (
-            <button
+      {/* One shape or the other is rendered, never both. A `md:hidden` pair
+          would mount two copies of the same fields and put `fieldsId` in the
+          document twice, and duplicate ids are what make `aria-controls` point
+          at the wrong element. */}
+      {asMenu ? (
+        <Menu
+          label={label}
+          title={label}
+          align="start"
+          triggerShape="auto"
+          // `justify-between` and `w-full` beat the trigger's own
+          // `justify-center`/`shrink-0` on stylesheet order, which is safe;
+          // the LABEL colour is set on the child span instead, because
+          // `text-text` passed here would lose to the trigger's own
+          // `text-text-muted` for exactly the same reason.
+          triggerClassName="w-full justify-between rounded-md border border-border-strong px-3"
+          trigger={
+            <>
+              <span className="min-w-0 truncate font-medium text-text">
+                {activePreset?.label ?? 'Custom'}
+              </span>
+              <ChevronDown
+                width={16}
+                height={16}
+                strokeWidth={1.75}
+                aria-hidden
+                className="shrink-0"
+              />
+            </>
+          }
+        >
+          {presets.map((p) => (
+            <MenuItem
               key={p.id}
-              type="button"
-              onClick={() => selectPreset(p.id)}
-              aria-pressed={active}
-              aria-expanded={p.id === 'custom' ? isCustom : undefined}
-              aria-controls={p.id === 'custom' && isCustom ? fieldsId : undefined}
-              className={cn(
-                // The 44px floor only applies below md; ≥ md keeps the original
-                // compact chip density, matching Button's SIZES convention.
-                'min-h-11 rounded-[5px] px-3 py-1.5 text-sm md:min-h-0',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
-                active
-                  ? 'bg-brand font-semibold text-text-inverse'
-                  : 'font-medium text-text-muted hover:text-text',
-              )}
+              selected={value.preset === p.id}
+              onSelect={() => selectPreset(p.id)}
             >
               {p.label}
-            </button>
-          );
-        })}
-      </div>
+            </MenuItem>
+          ))}
+        </Menu>
+      ) : (
+        <div
+          role="group"
+          aria-label={label}
+          // `w-fit`, not `self-start`: in a grid, `align-self` does nothing to the
+          // inline axis, so the chip group's border used to stretch to whatever
+          // the widest row below it made the column — which is the summary line,
+          // and that grows with the window. `fit-content` shrinks to the chips
+          // while still capping at the available width, so it wraps on a phone.
+          className="inline-flex w-fit flex-wrap gap-0.5 self-start rounded-md border border-border-strong p-0.5"
+        >
+          {presets.map((p) => {
+            const active = value.preset === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => selectPreset(p.id)}
+                aria-pressed={active}
+                aria-expanded={p.id === 'custom' ? isCustom : undefined}
+                aria-controls={p.id === 'custom' && isCustom ? fieldsId : undefined}
+                className={cn(
+                  // The 44px floor only applies below md; ≥ md keeps the original
+                  // compact chip density, matching Button's SIZES convention.
+                  'min-h-11 rounded-[5px] px-3 py-1.5 text-sm md:min-h-0',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+                  active
+                    ? 'bg-brand font-semibold text-text-inverse'
+                    : 'font-medium text-text-muted hover:text-text',
+                )}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {isCustom ? (
-        <div id={fieldsId} className="grid grid-cols-1 gap-2 sm:max-w-md sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
-            From
-            <Input
-              type="date"
-              value={draft.from}
-              min={MIN_SELECTABLE_YMD}
-              max={today}
-              invalid={fromInvalid}
-              aria-invalid={fromInvalid || undefined}
-              aria-describedby={message ? messageId : undefined}
-              onChange={(e) => editDraft({ from: e.target.value })}
-              onBlur={flush}
-              onKeyDown={handleKeyDown}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
-            To
-            <Input
-              type="date"
-              value={draft.to}
-              min={MIN_SELECTABLE_YMD}
-              max={today}
-              invalid={toInvalid}
-              aria-invalid={toInvalid || undefined}
-              aria-describedby={message ? messageId : undefined}
-              onChange={(e) => editDraft({ to: e.target.value })}
-              onBlur={flush}
-              onKeyDown={handleKeyDown}
-            />
-          </label>
-        </div>
+        customInSheet ? (
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-fit"
+              onClick={() => setDatesOpen(true)}
+              leftIcon={
+                <CalendarDays width={14} height={14} strokeWidth={1.75} />
+              }
+            >
+              Choose the dates
+            </Button>
+            <Sheet
+              open={datesOpen}
+              onClose={() => setDatesOpen(false)}
+              title="Custom range"
+            >
+              {/* One column: the sheet is 360px wide and a `type="date"` field
+                  is 44px tall with a native picker behind it — two of them side
+                  by side is 160px each, which is narrower than the placeholder
+                  text they show before a value is picked. */}
+              <div id={fieldsId} className="grid grid-cols-1 gap-3 px-4 pb-3 pt-1">
+                {customFields}
+              </div>
+            </Sheet>
+          </>
+        ) : (
+          // `md:`, not `sm:`. `sm` is 640px — above every phone width in this
+          // programme's targets — so the two-column form used to appear on a
+          // 640-767px screen that is otherwise still phone-shaped, and never
+          // appeared as a mobile improvement at all.
+          <div
+            id={fieldsId}
+            className="grid grid-cols-1 gap-2 md:max-w-md md:grid-cols-2"
+          >
+            {customFields}
+          </div>
+        )
       ) : null}
 
       <p className="flex items-start gap-1.5 text-sm text-text-muted" aria-live="polite">

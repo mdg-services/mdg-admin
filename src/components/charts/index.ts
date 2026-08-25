@@ -17,3 +17,4 @@
 export * from './ColumnChart';
 export * from './RankedBars';
 export * from './StatTile';
+export * from './StatTileGrid';

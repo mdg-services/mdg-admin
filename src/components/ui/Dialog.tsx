@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { cn } from '@/lib/cn';
 
+import { ActionRow } from './ActionRow';
 import { Portal } from './Portal';
 
 export interface DialogProps {
@@ -111,15 +112,18 @@ export function Dialog({
             {children}
           </div>
           {footer ? (
-            // Stacked full-width below md, the row it has always been at md.
-            // The buttons carry `whitespace-nowrap`, so the old equal-width
-            // split gave "Cancel" and "Apply and regenerate" 164px each and the
-            // longer label ran out of its own box and off the panel.
-            // flex-col-REVERSE keeps the primary action last in the DOM, where
-            // the tab order wants it, and first on screen.
-            <div className="sticky bottom-0 z-10 flex flex-col-reverse items-stretch gap-2 border-t border-border bg-surface px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] md:flex-row md:items-center md:justify-end md:pb-3">
+            // The stacking itself belongs to `ActionRow`, which emits exactly
+            // these classes: full-width buttons in a column below md, the
+            // right-aligned row it has always been at md. Only the footer's own
+            // chrome — the sticky bar, its border, and the safe-area padding
+            // that keeps it out of the gesture strip — is passed in here.
+            <ActionRow
+              below="stack"
+              align="end"
+              className="sticky bottom-0 z-10 border-t border-border bg-surface px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] md:pb-3"
+            >
               {footer}
-            </div>
+            </ActionRow>
           ) : null}
         </div>
       </div>

@@ -36,3 +36,36 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     );
   },
 );
+
+/**
+ * A computed value shown where a field would be.
+ *
+ * Two forms in this app print a derived points total into a hand-written
+ * `flex h-9 items-center` div sitting in a grid beside real `Input`s — and once
+ * the fields grew to `h-11 md:h-9` for the 44px floor, those readouts stayed at
+ * 36px and the row went visibly ragged on every phone. This is the same box the
+ * fields draw, at the same two heights.
+ *
+ * A `<div>`, not a disabled `<input>`: there is nothing here to type into, a
+ * disabled input is skipped by the tab order AND greyed by the UA, and the
+ * 16px focus-zoom floor does not apply to something that cannot take focus —
+ * so `text-sm` is correct at every width.
+ */
+export function ReadonlyField({
+  className,
+  children,
+  ...rest
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn(
+        'flex h-11 w-full items-center rounded-sm border border-border bg-surface-2 px-3',
+        'text-sm font-medium tabular-nums text-text md:h-9',
+        className,
+      )}
+      {...rest}
+    >
+      {children}
+    </div>
+  );
+}

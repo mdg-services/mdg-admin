@@ -39,9 +39,18 @@ export function StatTile({ label, value, unit, delta, caption, className }: Stat
     <div className={cn('min-w-0 rounded-md border border-border bg-surface p-3', className)}>
       <p className="truncate text-xs font-medium text-text-muted">{label}</p>
       {/* Proportional figures, not tabular: at this size `tabular-nums` makes a
-          number like 121 read loose and gappy. Tabular is for columns. */}
-      <p className="mt-1 flex items-baseline gap-1 text-2xl font-semibold leading-none text-text">
-        <span className="min-w-0 truncate">{value}</span>
+          number like 121 read loose and gappy. Tabular is for columns.
+
+          `break-words`, never `truncate`. Two tiles to a row on a 360px screen
+          leaves each one ~150px wide, ~126px inside its `p-3`; `₹12,34,567` at
+          24px semibold wants about 140 and was silently cut to `₹12,34,5…`.
+          Truncating the one number the tile exists to show is worse than any
+          alternative — including a wrap. `text-xl` below md buys back the
+          difference, and md keeps today's 24px exactly.
+          `flex-wrap` so the unit follows the value onto the second line rather
+          than being squeezed out of the row. */}
+      <p className="mt-1 flex flex-wrap items-baseline gap-x-1 text-xl font-semibold leading-tight text-text md:text-2xl md:leading-none">
+        <span className="min-w-0 break-words">{value}</span>
         {unit ? <span className="text-sm font-medium text-text-muted">{unit}</span> : null}
       </p>
       {delta ? <DeltaLine delta={delta} /> : null}

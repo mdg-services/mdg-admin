@@ -4,10 +4,21 @@ import { cn } from '@/lib/cn';
 
 import { Spinner } from './Spinner';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
-type Size = 'sm' | 'md';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonSize = 'sm' | 'md';
 
-const VARIANTS: Record<Variant, string> = {
+type Variant = ButtonVariant;
+type Size = ButtonSize;
+
+/**
+ * The paint for each variant, exported because `IconButton` has to render the
+ * identical surface from its own element. It cannot reach it by wrapping a
+ * `Button` and passing `className`: `cn` is plain clsx, so `h-11 w-11 p-0`
+ * would land *alongside* `h-8 px-3` rather than replacing it, and which one
+ * wins would be decided by stylesheet order. Sharing the string is the only
+ * way the two stay the same colour when one of them is retinted.
+ */
+export const BUTTON_VARIANTS: Record<Variant, string> = {
   primary:
     'bg-brand text-text-inverse hover:bg-brand-hover disabled:bg-brand/60',
   secondary:
@@ -56,7 +67,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           'inline-flex items-center justify-center whitespace-nowrap rounded-md font-semibold',
           'transition-colors disabled:cursor-not-allowed disabled:opacity-70',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
-          VARIANTS[variant],
+          BUTTON_VARIANTS[variant],
           SIZES[size],
           className,
         )}

@@ -110,7 +110,7 @@ function ToastViewport({
         >
           <span
             className={cn(
-              'mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full',
+              'mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full',
               INTENT_CLASSES[t.intent],
             )}
           >
@@ -124,10 +124,12 @@ function ToastViewport({
           </span>
           <div className="min-w-0 flex-1">
             {t.title ? (
-              <p className="text-sm font-medium text-text">{t.title}</p>
+              <p className="break-words text-sm font-medium text-text">
+                {t.title}
+              </p>
             ) : null}
             {t.description ? (
-              <p className="mt-0.5 text-xs text-text-muted">
+              <p className="mt-0.5 break-words text-xs text-text-muted">
                 {t.description}
               </p>
             ) : null}

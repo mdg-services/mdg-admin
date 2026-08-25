@@ -52,10 +52,16 @@ export function Callout({
       <span className="min-w-0">
         {children}
         {onRetry ? (
+          // This is the recovery control when a dependency fails, and it was a
+          // ~34×16px word inside a sentence. It cannot simply grow: at 44px it
+          // would no longer read as part of the sentence it sits in. So
+          // `.tap-target` gives it a 44px halo without repainting it, and the
+          // negative margin below md keeps the taller inline box from pushing
+          // the callout's two lines apart. Both revert at md.
           <button
             type="button"
             onClick={onRetry}
-            className="ml-1 rounded-sm font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+            className="tap-target -my-2 ml-1 inline-flex min-h-11 items-center rounded-sm px-1 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:my-0 md:min-h-0 md:px-0"
           >
             Retry
           </button>

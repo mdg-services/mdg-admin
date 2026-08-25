@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { cn } from '@/lib/cn';
 
+import { ActionRow } from './ActionRow';
 import { Portal } from './Portal';
 
 export interface DrawerProps {
@@ -102,11 +103,16 @@ export function Drawer({
             {children}
           </div>
           {footer ? (
-            // Stacked full-width below md (see `Dialog`), the same right-aligned
-            // row it has always been at md.
-            <div className="sticky bottom-0 z-10 flex flex-col-reverse items-stretch gap-2 border-t border-border bg-surface px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] md:flex-row md:items-center md:justify-end md:pb-3">
+            // The same `ActionRow below="stack"` footer as `Dialog`: stacked
+            // full-width below md, the right-aligned row it has always been at
+            // md. Only the sticky chrome and the safe-area padding are local.
+            <ActionRow
+              below="stack"
+              align="end"
+              className="sticky bottom-0 z-10 border-t border-border bg-surface px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] md:pb-3"
+            >
               {footer}
-            </div>
+            </ActionRow>
           ) : null}
         </div>
       </div>
