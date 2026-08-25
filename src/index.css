@@ -19,6 +19,31 @@
   --color-brand-soft: #dbeafe;
 
   --color-focus-ring: #60a5fa;
+
+  /* ---- Safe areas ---------------------------------------------------------
+     The raw insets, published once so a calc() elsewhere does not have to
+     repeat the env() call. `--tab-bar-h` is the odd one out: it is written by
+     AppShell at runtime (3.5rem on a list screen, 0px on a drill-in and at
+     ≥ md), because the bar is not always there. The 0px default is what a
+     surface rendered outside the shell — login, 404 — reads. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tab-bar-h: 0px;
+
+  /* ---- Stacking order -----------------------------------------------------
+     One published ladder, because six surfaces were each guessing a number and
+     the guesses had started to disagree. Overlays now portal to <body>, so
+     they are siblings and the one opened LAST paints on top by DOM order
+     alone — which is why Dialog, Drawer, Sheet and Menu all share
+     --z-overlay rather than bidding against each other.
+     --z-nested-overlay is for the rare surface that must beat a sibling
+     regardless of who opened first. */
+  --z-sticky: 10; /* sticky headers, tab strips, in-page bars */
+  --z-page-bar: 30; /* a page's own fixed action bar */
+  --z-scrim: 40; /* a dimmer behind an in-page panel */
+  --z-overlay: 50; /* Dialog / Drawer / Sheet / Menu */
+  --z-nested-overlay: 60;
+  --z-toast: 70; /* above everything: it reports on what is below it */
 }
 
 .dark {
@@ -101,9 +126,12 @@
   label {
     touch-action: manipulation;
   }
-  /* Backstop against iOS focus-zoom: no focusable field below 16px. Tailwind
-     text-* classes out-specify this, so the per-field class fixes still win;
-     this only catches anything that slips through. */
+  /* Backstop against iOS focus-zoom: no focusable field below 16px. A Tailwind
+     `.text-sm` out-specifies this element selector and used to win everywhere,
+     which is why every field in the app rendered at 14px; Input, Select and
+     Textarea now carry `text-base md:text-sm` themselves, so the floor holds
+     below md and desktop density is unchanged. This catches anything that
+     slips through — a hand-rolled <input> in a feature. */
   input,
   textarea,
   select {
@@ -125,6 +153,42 @@
   }
   .safe-top {
     padding-top: max(env(safe-area-inset-top), 0.5rem);
+  }
+  /* Grow a control's HIT area without growing the control. Use it where the
+     painted size is load-bearing and cannot go to 44px — a reaction chip on a
+     chat bubble, an inline "Retry" inside a sentence, a "+3 more" badge — and
+     reach for a real 44px control everywhere else. The halo is inset -12px, so
+     keep at least 8px between two .tap-target siblings or they overlap and the
+     wrong one wins. Nothing is painted, and above md the pad disappears so a
+     mouse target stays exactly where it looks. */
+  .tap-target {
+    position: relative;
+  }
+  .tap-target::after {
+    content: '';
+    position: absolute;
+    inset: -12px;
+  }
+  @media (min-width: 768px) {
+    .tap-target::after {
+      display: none;
+    }
+  }
+  /* Hand selection back on a phone. #root above sets `user-select: none` for
+     the native feel, and only inputs are exempted — so a value shown in a
+     <div> cannot be selected, long-pressed or copied at all. Any string the
+     admin might have to read out or transcribe (a one-time password, a dealer
+     code, a run id) needs this, or a real <input readOnly>. */
+  .selectable {
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
+  }
+  /* An inner scroller that should not drag the page — or the sheet it sits in —
+     once it reaches its end. Any <pre>, picker list or long code block inside
+     an overlay needs it. */
+  .scroll-pane {
+    overscroll-behavior: contain;
   }
   /* The charts' second encoding channel. A hatched grey mark says "a different
      KIND of day" (the worker was on leave) while bar height still says "how

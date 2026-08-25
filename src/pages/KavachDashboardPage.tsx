@@ -18,33 +18,66 @@ import {
 } from '@/components/ui';
 import { useKavachDashboardQuery } from '@/hooks/api/useKavach';
 import { formatDateTime } from '@/lib/format';
-import { operationalIntent, priorityIntent } from '@/lib/kavach';
+import { operationalIntent, stalenessIntent } from '@/lib/kavach';
 import { dealerCodeLabel } from '@dk/shared';
 
 const RISK_THRESHOLD = 80;
 
+/**
+ * Days without any verification before a dealer counts as neglected BY US.
+ * Every task bar the yearly ones comes round at least monthly, so a week of
+ * silence across a whole outlet means nobody has opened it — not that there was
+ * nothing to do.
+ */
+const STALE_DAYS = 7;
+
+/** "4 days ago" / "today" / "never" — the last time anyone verified anything here. */
+function staleLabel(days: number | null): string {
+  if (days === null) return 'never';
+  if (days <= 0) return 'today';
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+/**
+ * One row per dealer: where each outlet stands, and — the question this page
+ * exists to answer since ADR 0011 — how long since anybody at MDG looked at it.
+ *
+ * The escalation columns are gone with the escalation machinery. Under a
+ * verified model the failure mode is no longer "this dealer is ignoring us"
+ * (there is nothing left for them to ignore); it is "we have not got round to
+ * this dealer", and that has no other alarm. Verifying happens in the work
+ * queue — this is the overview that tells you which dealer to point it at.
+ */
 export function KavachDashboardPage() {
   const navigate = useNavigate();
   const { data, isLoading, isError, error } = useKavachDashboardQuery();
 
   const rows = data ?? [];
   const atRisk = rows.filter((r) => r.overallPct < RISK_THRESHOLD).length;
+  const stale = rows.filter(
+    (r) => r.daysSinceLastVerified === null || r.daysSinceLastVerified >= STALE_DAYS,
+  ).length;
 
   return (
     <div>
       <PageHeader
         title="Kavach"
-        subtitle="Recurring assessment & compliance health across your book of dealers."
+        subtitle="Where each dealer stands, and how long since we last verified them."
         actions={
           rows.length > 0 ? (
-            <Badge
-              intent={atRisk > 0 ? 'danger' : 'success'}
-              className="h-7 px-3"
-            >
-              {atRisk > 0
-                ? `${atRisk} ${atRisk === 1 ? 'dealer' : 'dealers'} below ${RISK_THRESHOLD}%`
-                : `All dealers at or above ${RISK_THRESHOLD}%`}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge intent={atRisk > 0 ? 'danger' : 'success'} className="h-7 px-3">
+                {atRisk > 0
+                  ? `${atRisk} ${atRisk === 1 ? 'dealer' : 'dealers'} below ${RISK_THRESHOLD}%`
+                  : `All dealers at or above ${RISK_THRESHOLD}%`}
+              </Badge>
+              {/* Ours, not theirs — and stated separately for exactly that reason. */}
+              <Badge intent={stale > 0 ? 'warning' : 'success'} className="h-7 px-3">
+                {stale > 0
+                  ? `${stale} not verified by us in ${STALE_DAYS}+ days`
+                  : 'Every dealer verified recently'}
+              </Badge>
+            </div>
           ) : null
         }
       />
@@ -83,9 +116,10 @@ export function KavachDashboardPage() {
                   <TH>Operational</TH>
                   <TH className="text-right">Expired</TH>
                   <TH className="text-right">Expiring</TH>
-                  <TH className="text-right">Escalated</TH>
-                  <TH>Worst priority</TH>
-                  <TH>Last evaluated</TH>
+                  <TH className="text-right">Never checked</TH>
+                  <TH className="text-right">Needs review</TH>
+                  <TH>Last verified by us</TH>
+                  <TH>Messages</TH>
                 </TRow>
               </THead>
               <TBody>
@@ -123,25 +157,32 @@ export function KavachDashboardPage() {
                       )}
                     </TD>
                     <TD className="text-right">
-                      {r.escalatedCount > 0 ? (
-                        <span className="font-medium text-danger">
-                          {r.escalatedCount}
-                        </span>
+                      {r.notYetVerifiedCount > 0 ? (
+                        <span className="font-medium text-text">{r.notYetVerifiedCount}</span>
+                      ) : (
+                        <span className="text-text-subtle">0</span>
+                      )}
+                    </TD>
+                    <TD className="text-right">
+                      {r.awaitingReviewCount > 0 ? (
+                        <span className="font-medium text-brand">{r.awaitingReviewCount}</span>
                       ) : (
                         <span className="text-text-subtle">0</span>
                       )}
                     </TD>
                     <TD>
-                      {r.worstPriority ? (
-                        <Badge intent={priorityIntent(r.worstPriority)}>
-                          {r.worstPriority}
-                        </Badge>
-                      ) : (
-                        <span className="text-text-subtle">—</span>
-                      )}
+                      <Badge intent={stalenessIntent(r.daysSinceLastVerified, STALE_DAYS)}>
+                        {staleLabel(r.daysSinceLastVerified)}
+                      </Badge>
                     </TD>
-                    <TD className="text-text-muted">
-                      {formatDateTime(r.lastEvaluatedAt)}
+                    <TD>
+                      {r.dealerFacingEnabled ? (
+                        <span className="text-text-muted">On</span>
+                      ) : (
+                        // Not a warning: off is the correct state until somebody
+                        // has actually been verifying this dealer's tasks.
+                        <span className="text-text-subtle">Off</span>
+                      )}
                     </TD>
                   </TRow>
                 ))}
@@ -168,11 +209,12 @@ export function KavachDashboardPage() {
                 secondary: (
                   <span className="flex flex-wrap items-center gap-1.5">
                     <span className="font-mono">{r.dealerCode || '—'}</span>
-                    {r.worstPriority ? (
-                      <Badge intent={priorityIntent(r.worstPriority)}>
-                        {r.worstPriority}
-                      </Badge>
-                    ) : null}
+                    <Badge intent={stalenessIntent(r.daysSinceLastVerified, STALE_DAYS)}>
+                      {staleLabel(r.daysSinceLastVerified)}
+                    </Badge>
+                    {r.dealerFacingEnabled ? null : (
+                      <span className="text-text-subtle">Messages off</span>
+                    )}
                   </span>
                 ),
                 meta: (
@@ -185,10 +227,9 @@ export function KavachDashboardPage() {
                     >
                       · Expiring {r.expiringSoonCount}
                     </span>
-                    <span
-                      className={r.escalatedCount > 0 ? 'text-danger' : undefined}
-                    >
-                      · Escalated {r.escalatedCount}
+                    <span>· Never checked {r.notYetVerifiedCount}</span>
+                    <span className={r.awaitingReviewCount > 0 ? 'text-brand' : undefined}>
+                      · Needs review {r.awaitingReviewCount}
                     </span>
                     <span>· {formatDateTime(r.lastEvaluatedAt)}</span>
                   </span>

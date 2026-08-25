@@ -1,6 +1,10 @@
 import * as React from 'react';
 
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
+
+import { Portal } from './Portal';
 
 export interface SheetProps {
   open: boolean;
@@ -16,6 +20,11 @@ export interface SheetProps {
  * the thread-actions kebab, and the long-press message menu (§6.5). It renders
  * nothing at `≥ md` (`md:hidden`) — those surfaces keep their desktop popovers.
  * Compose it with `SheetItem` rows.
+ *
+ * Portalled to the body and sharing `--z-overlay` with the other three: with
+ * every overlay a sibling of the others, whichever opened last is the one
+ * painted last, which is what the old hand-picked 50/60 pair was trying to
+ * approximate.
  */
 export function Sheet({ open, onClose, title, children, className }: SheetProps) {
   React.useEffect(() => {
@@ -27,32 +36,42 @@ export function Sheet({ open, onClose, title, children, className }: SheetProps)
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
+  // The panel is `md:hidden`, and a landscape phone is already `≥ md`
+  // (852×393). Locking on `open` alone would leave a rotated device frozen
+  // behind a sheet it can no longer see.
+  const isMd = useMediaQuery('(min-width: 768px)');
+  useBodyScrollLock(open && !isMd);
+
   if (!open) return null;
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 md:hidden"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    <Portal>
       <div
-        className={cn(
-          'w-full max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-border bg-surface shadow-lg',
-          'pb-[max(env(safe-area-inset-bottom),0.5rem)] animate-sheet-up',
-          className,
-        )}
+        className="fixed inset-0 z-[var(--z-overlay)] flex items-end justify-center bg-black/40 md:hidden"
+        role="dialog"
+        aria-modal="true"
+        // pointerdown fires on the first touch; mousedown waits for the tap to
+        // resolve into a click.
+        onPointerDown={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
       >
-        <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-border-strong" />
-        {title ? (
-          <div className="px-4 pb-1 pt-3 text-sm font-semibold text-text">
-            {title}
-          </div>
-        ) : null}
-        <div className="py-1">{children}</div>
+        <div
+          className={cn(
+            'w-full max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-border bg-surface shadow-lg',
+            'pb-[max(env(safe-area-inset-bottom),0.5rem)] animate-sheet-up',
+            className,
+          )}
+        >
+          <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-border-strong" />
+          {title ? (
+            <div className="px-4 pb-1 pt-3 text-sm font-semibold text-text">
+              {title}
+            </div>
+          ) : null}
+          <div className="py-1">{children}</div>
+        </div>
       </div>
-    </div>
+    </Portal>
   );
 }
 

@@ -1,39 +1,45 @@
-import {
-  ArrowUpRight,
-  Check,
-  Flag,
-  FlagOff,
-  Pause,
-  Play,
-  Trash2,
-} from 'lucide-react';
+import { Flag, FlagOff, Pause, Play } from 'lucide-react';
 
 import { Badge, Button } from '@/components/ui';
 import { formatDate } from '@/lib/format';
-import { ITEM_STATUS_LABEL, itemStatusIntent, TIER_LABEL, tierIntent } from '@/lib/kavach';
-import type { KavachItem } from '@dk/shared';
+import {
+  cadenceLabel,
+  EVIDENCE_LABEL,
+  ITEM_STATUS_HINT,
+  ITEM_STATUS_LABEL,
+  itemStatusIntent,
+  REQUEST_STATE_LABEL,
+  requestStateIntent,
+  TIER_LABEL,
+  tierIntent,
+  VERIFICATION_LABEL,
+} from '@/lib/kavach';
+import type { KavachActorKind, KavachItem } from '@dk/shared';
 
+/**
+ * One task on the dealer's Kavach panel. Standing state only — certifying a
+ * task happens in the cross-dealer work queue, where an admin closes many in
+ * one pass. The two controls left here are the ones that belong to this dealer's
+ * SETUP: whether a task applies at all, and whether an SOS item is flagged.
+ */
 interface Props {
   item: KavachItem;
   busy?: boolean;
-  onMarkDone: (item: KavachItem) => void;
   onTogglePause: (item: KavachItem) => void;
   onToggleSos: (item: KavachItem) => void;
-  onEscalate: (item: KavachItem) => void;
-  onDelete: (item: KavachItem) => void;
 }
 
-export function KavachItemRow({
-  item,
-  busy,
-  onMarkDone,
-  onTogglePause,
-  onToggleSos,
-  onEscalate,
-  onDelete,
-}: Props) {
+/** The dealer's relationship is with MDG, so no individual admin is ever named. */
+function verifierLabel(kind?: KavachActorKind): string {
+  if (kind === 'automation') return 'automation';
+  if (kind === 'admin') return 'MDG team';
+  return 'MDG';
+}
+
+export function KavachItemRow({ item, busy, onTogglePause, onToggleSos }: Props) {
   const isSos = item.trigger === 'SOS';
   const sosFlagged = item.status === 'SOS_FLAGGED';
+  const requestLive = item.request.state !== 'NONE';
 
   return (
     <div className="flex flex-col gap-2 border-t border-border px-4 py-3 first:border-t-0 md:flex-row md:items-center md:justify-between">
@@ -42,7 +48,12 @@ export function KavachItemRow({
           <span className="text-sm font-medium text-text">{item.labelEn}</span>
           {item.custom ? (
             <Badge intent="info" className="h-5 text-[11px]">
-              custom
+              dealer-only
+            </Badge>
+          ) : null}
+          {item.overridden ? (
+            <Badge intent="info" className="h-5 text-[11px]">
+              overridden
             </Badge>
           ) : null}
           {item.paused ? (
@@ -50,14 +61,20 @@ export function KavachItemRow({
               paused
             </Badge>
           ) : (
-            <Badge intent={itemStatusIntent(item.status)} className="h-5 text-[11px]">
+            <Badge
+              intent={itemStatusIntent(item.status)}
+              className="h-5 text-[11px]"
+              title={ITEM_STATUS_HINT[item.status]}
+            >
               {ITEM_STATUS_LABEL[item.status]}
             </Badge>
           )}
-          {item.escalation.escalated ? (
-            <Badge intent="danger" className="h-5 gap-1 text-[11px]">
-              <ArrowUpRight width={11} height={11} strokeWidth={2} />
-              escalated
+          {requestLive ? (
+            <Badge
+              intent={requestStateIntent(item.request.state)}
+              className="h-5 text-[11px]"
+            >
+              {REQUEST_STATE_LABEL[item.request.state]}
             </Badge>
           ) : null}
         </div>
@@ -67,9 +84,25 @@ export function KavachItemRow({
           <Badge intent={tierIntent(item.tier)} className="h-5 text-[11px]">
             {TIER_LABEL[item.tier]}
           </Badge>
-          {item.cadenceDays != null ? <span>{item.cadenceDays}d cadence</span> : null}
-          {item.lastDoneAt ? <span>last done {formatDate(item.lastDoneAt)}</span> : null}
+          <span>{cadenceLabel(item.cadenceDays)}</span>
+          <span>
+            {VERIFICATION_LABEL[item.verification]}
+            {item.evidence === 'NONE' ? '' : ` · ${EVIDENCE_LABEL[item.evidence]}`}
+          </span>
+          {/* Never verified is an absence, not a blank: say so rather than
+              leaving the line off and letting it read as "fine". */}
+          {item.lastVerifiedAt ? (
+            <span>
+              checked by {verifierLabel(item.lastVerifiedByKind)}{' '}
+              {formatDate(item.lastVerifiedAt)}
+            </span>
+          ) : (
+            <span>never checked</span>
+          )}
           {item.expiresAt ? <span>expires {formatDate(item.expiresAt)}</span> : null}
+          {item.status === 'HELD' && item.holdUntil ? (
+            <span>held until {formatDate(item.holdUntil)}</span>
+          ) : null}
         </div>
       </div>
 
@@ -90,30 +123,6 @@ export function KavachItemRow({
           >
             {sosFlagged ? 'Clear flag' : 'Flag SOS'}
           </Button>
-        ) : (
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={busy || item.paused}
-            onClick={() => onMarkDone(item)}
-            leftIcon={<Check width={14} height={14} strokeWidth={1.75} />}
-          >
-            Mark done
-          </Button>
-        )}
-
-        {!isSos ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="min-w-11 md:min-w-0"
-            disabled={busy || item.paused || item.escalation.escalated}
-            onClick={() => onEscalate(item)}
-            aria-label="Escalate to inbox"
-            title="Escalate to admin inbox"
-          >
-            <ArrowUpRight width={14} height={14} strokeWidth={1.75} />
-          </Button>
         ) : null}
 
         <Button
@@ -123,7 +132,11 @@ export function KavachItemRow({
           disabled={busy}
           onClick={() => onTogglePause(item)}
           aria-label={item.paused ? 'Resume' : 'Pause'}
-          title={item.paused ? 'Resume (count toward score)' : 'Pause (exclude from score)'}
+          title={
+            item.paused
+              ? 'Resume (count toward the score)'
+              : 'Pause (exclude from the score and the work queue)'
+          }
         >
           {item.paused ? (
             <Play width={14} height={14} strokeWidth={1.75} />
@@ -131,20 +144,6 @@ export function KavachItemRow({
             <Pause width={14} height={14} strokeWidth={1.75} />
           )}
         </Button>
-
-        {item.custom ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="min-w-11 md:min-w-0"
-            disabled={busy}
-            onClick={() => onDelete(item)}
-            aria-label="Delete custom item"
-            title="Delete custom item"
-          >
-            <Trash2 width={14} height={14} strokeWidth={1.75} className="text-danger" />
-          </Button>
-        ) : null}
       </div>
     </div>
   );

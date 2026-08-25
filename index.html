@@ -8,7 +8,18 @@
          including tablets & split/floating keyboards where the native window does
          NOT resize (the default `resizes-visual` leaves the layout full-height, so
          a bottom-pinned footer ends up hidden behind the keyboard). viewport-fit=
-         cover is required for env(safe-area-inset-*) to report non-zero. -->
+         cover is required for env(safe-area-inset-*) to report non-zero.
+
+         maximum-scale=1.0 is KEPT, deliberately, and it is the one setting here
+         with a cost: it turns pinch-zoom off app-wide, so there is no universal
+         escape hatch from anything too small to read. It stays because it is
+         part of the shipped native-feel hardening and dropping it changes the
+         feel of every screen. The things that made it load-bearing are being
+         removed one at a time instead — fields now render at 16px so iOS no
+         longer focus-zooms into them, and every photograph gets its own zoom —
+         after which this can be reconsidered on its own, in the emulator.
+         touch-action: manipulation already handles the double-tap delay it was
+         also guarding. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#2563eb" />
     <link rel="icon" type="image/png" href="/favicon.png" />

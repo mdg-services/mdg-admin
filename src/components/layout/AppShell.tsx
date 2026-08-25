@@ -15,14 +15,17 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 
-import { Input } from '@/components/ui';
+import { Input, Menu, MenuItem } from '@/components/ui';
 import { useBankHolidayPendingQuery } from '@/hooks/api/useBankHolidays';
 import { useConversations } from '@/hooks/api/useConversations';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { usePushBridge } from '@/hooks/usePushBridge';
+import { useSafeBack } from '@/hooks/useSafeBack';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/store/auth';
 
+import { ErrorBoundary } from './ErrorBoundary';
 import { MobileTabBar } from './MobileTabBar';
 import { NAV_ITEMS, type NavItem } from './navItems';
 
@@ -108,6 +111,26 @@ export function AppShell() {
   // drill-ins so chat/detail own the whole viewport (native "push hides tabs").
   const showTabBar = !isDealerDetail && !inThread;
 
+  // Publish the bar's height so anything bottom-anchored can clear it without
+  // guessing. It is NOT a constant: 56px on a list screen, zero on a drill-in,
+  // and zero at `≥ md` where the bar is `md:hidden`. The Toast viewport reads
+  // it in a calc(); `useSafeInsets()` reads it in JavaScript.
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+  React.useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty(
+      '--tab-bar-h',
+      showTabBar && !isDesktop ? '3.5rem' : '0px',
+    );
+    return () => {
+      root.style.removeProperty('--tab-bar-h');
+    };
+  }, [showTabBar, isDesktop]);
+
+  // Back must not walk out of the app: a push notification can deep-link
+  // straight to a dealer, making it the first entry in history.
+  const goBack = useSafeBack('/dealers');
+
   function onLogout() {
     logout();
     navigate('/login');
@@ -138,7 +161,7 @@ export function AppShell() {
             <button
               type="button"
               aria-label="Back"
-              onClick={() => navigate(-1)}
+              onClick={goBack}
               className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 md:hidden"
             >
               <ChevronLeft width={22} height={22} strokeWidth={1.75} />
@@ -172,8 +195,30 @@ export function AppShell() {
             />
           </div>
         </header>
-        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-bg p-4 md:p-6">
-          <Outlet />
+        {/* `data-app-scroller` is how `useBodyScrollLock` finds the thing that
+            actually scrolls — it is this element, not the body, so the usual
+            `body { overflow: hidden }` recipe is a no-op here. On a drill-in
+            the tab bar is gone and nothing else carries the bottom safe-area
+            inset, so `main` carries it: without this the last row of a dealer
+            page sits under the gesture strip. */}
+        <main
+          data-app-scroller
+          className={cn(
+            'min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-bg p-4 md:p-6',
+            !showTabBar &&
+              'pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-6',
+          )}
+        >
+          {/* A second boundary, INSIDE the shell. The outer one in App.tsx sits
+              above the shell, so a page that threw took the sidebar, the header,
+              the tab bar and the back chevron with it — leaving a phone with a
+              "Try again" button and no way to go anywhere else. */}
+          <ErrorBoundary
+            homeLabel="Go to Inbox"
+            onGoHome={() => navigate('/inbox')}
+          >
+            <Outlet />
+          </ErrorBoundary>
         </main>
         {showTabBar ? <MobileTabBar className="md:hidden" /> : null}
       </div>
@@ -181,6 +226,14 @@ export function AppShell() {
   );
 }
 
+/**
+ * The account button in the header: who is signed in, and the way out.
+ *
+ * It used to be a hand-rolled popover — no bottom sheet on a phone, no Escape,
+ * no focus management, dismissal on `mousedown` (which a touch does not fire
+ * until the tap resolves), and a ~36px Logout row. `Menu` already does all of
+ * that, so this is now just its trigger and one item.
+ */
 function AdminMenu({
   name,
   email,
@@ -190,18 +243,6 @@ function AdminMenu({
   email: string;
   onLogout: () => void;
 }) {
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    if (!open) return;
-    function onClick(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, [open]);
-
   const initials = name
     .split(' ')
     .map((p) => p[0])
@@ -211,47 +252,40 @@ function AdminMenu({
     .toUpperCase();
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex min-h-11 items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-surface-2 md:min-h-0"
-        aria-haspopup="menu"
-        aria-expanded={open}
+    <Menu
+      label="Account"
+      align="end"
+      triggerShape="auto"
+      trigger={
+        <>
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand">
+            {initials || 'A'}
+          </span>
+          <span className="hidden text-text md:inline">{name}</span>
+          <ChevronDown
+            width={14}
+            height={14}
+            strokeWidth={1.75}
+            className="text-text-muted"
+          />
+        </>
+      }
+    >
+      {/* Identity block, not an action — `break-all` because an email has no
+          break opportunity at `@` or `.` and would otherwise overflow the
+          sheet. */}
+      <div className="border-b border-border px-3 pb-2 pt-1">
+        <p className="text-sm font-medium text-text">{name}</p>
+        {email ? (
+          <p className="break-all text-xs text-text-muted">{email}</p>
+        ) : null}
+      </div>
+      <MenuItem
+        icon={<LogOut width={14} height={14} strokeWidth={1.75} />}
+        onSelect={onLogout}
       >
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand">
-          {initials || 'A'}
-        </span>
-        <span className="hidden text-text md:inline">{name}</span>
-        <ChevronDown
-          width={14}
-          height={14}
-          strokeWidth={1.75}
-          className="text-text-muted"
-        />
-      </button>
-      {open ? (
-        <div
-          role="menu"
-          className="absolute right-0 mt-1 w-56 rounded-md border border-border bg-surface shadow-md"
-        >
-          <div className="border-b border-border px-3 py-2">
-            <p className="text-sm font-medium text-text">{name}</p>
-            {email ? (
-              <p className="truncate text-xs text-text-muted">{email}</p>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={onLogout}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text hover:bg-surface-2"
-          >
-            <LogOut width={14} height={14} strokeWidth={1.75} />
-            Logout
-          </button>
-        </div>
-      ) : null}
-    </div>
+        Logout
+      </MenuItem>
+    </Menu>
   );
 }

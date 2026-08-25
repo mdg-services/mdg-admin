@@ -18,6 +18,8 @@ import { DsrVaultPage } from '@/pages/DsrVaultPage';
 import { FestivalPage } from '@/pages/FestivalPage';
 import { InboxPage } from '@/pages/InboxPage';
 import { KavachDashboardPage } from '@/pages/KavachDashboardPage';
+import { KavachDefaultsPage } from '@/pages/KavachDefaultsPage';
+import { KavachWorkQueuePage } from '@/pages/KavachWorkQueuePage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { OverviewPage } from '@/pages/OverviewPage';
@@ -27,6 +29,10 @@ import { WorkListDefaultsPage } from '@/pages/WorkListDefaultsPage';
 
 export default function App() {
   return (
+    // The outer boundary: it catches a crash in the shell itself, or in a route
+    // that renders outside it (login, 404). Everything under the shell is
+    // covered by a SECOND boundary inside `AppShell`, around `<Outlet />`, so a
+    // page that throws does not take the navigation chrome with it.
     <ErrorBoundary>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
@@ -42,7 +48,21 @@ export default function App() {
           <Route path="overview" element={<OverviewPage />} />
           <Route path="dealers" element={<DealersPage />} />
           <Route path="dealers/:id" element={<DealerDetailPage />} />
-          <Route path="kavach" element={<KavachDashboardPage />} />
+          {/* The queue is what an admin opens: everything outstanding across
+              every dealer, in one list. The old dashboard keeps a route as the
+              per-dealer standing view — including "how long since anyone at MDG
+              verified this outlet", which is the only alarm for OUR backlog. */}
+          <Route path="kavach" element={<KavachWorkQueuePage />} />
+          <Route path="kavach/dashboard" element={<KavachDashboardPage />} />
+          {/* Editing points here moves every dealer without an override. */}
+          <Route
+            path="kavach/defaults"
+            element={
+              <RequireSuperAdmin>
+                <KavachDefaultsPage />
+              </RequireSuperAdmin>
+            }
+          />
           {/* Plain admins are the audience here — the Vault is where they read
               every dealer's collected IRAS data, so it is NOT super-admin only. */}
           <Route path="data-vault" element={<DataVaultPage />} />

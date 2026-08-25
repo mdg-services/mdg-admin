@@ -8,18 +8,22 @@ import type {
   KavachProgramme,
 } from '@dk/shared';
 import type {
-  AddCustomKavachItemInput,
   InitiateKavachProgrammeInput,
   SetKavachItemPausedInput,
   SetKavachSosComplianceInput,
   UpdateKavachProgrammeInput,
 } from '@dk/shared/schemas';
 
-
-/* ─────────────────────────────── Query keys ─────────────────────────────── */
+/**
+ * Query keys for the per-dealer Kavach surfaces. The cross-dealer work queue
+ * keeps its own hooks in `useKavachQueue.ts`; `workQueue` below exists so a
+ * write on THIS side can mark that queue stale without importing it.
+ */
 
 export const kavachKeys = {
   dashboard: ['kavach', 'dashboard'] as const,
+  /** Must match `kavachQueueKeys.all` in useKavachQueue.ts — one cache, one key. */
+  workQueue: ['kavach', 'work-queue'] as const,
   programme: (dealerId: string | undefined) =>
     ['kavach', 'programme', dealerId] as const,
   items: (dealerId: string | undefined) =>
@@ -92,11 +96,12 @@ export function useKavachItemsQuery(
 
 /* ─────────────────────────────── Mutations ──────────────────────────────── */
 
-function useItemInvalidation(dealerId: string) {
+function useItemInvalidation(dealerId: string | undefined) {
   const qc = useQueryClient();
   return () => {
     qc.invalidateQueries({ queryKey: kavachKeys.items(dealerId) });
     qc.invalidateQueries({ queryKey: kavachKeys.programme(dealerId) });
+    qc.invalidateQueries({ queryKey: kavachKeys.workQueue });
     qc.invalidateQueries({ queryKey: kavachKeys.dashboard });
   };
 }
@@ -110,12 +115,16 @@ export function useInitiateKavachProgramme(dealerId: string) {
     onSuccess: (data) => {
       qc.setQueryData(kavachKeys.programme(dealerId), data);
       qc.invalidateQueries({ queryKey: kavachKeys.items(dealerId) });
+      qc.invalidateQueries({ queryKey: kavachKeys.workQueue });
       qc.invalidateQueries({ queryKey: kavachKeys.dashboard });
     },
   });
 }
 
-/** Update programme-level settings (status pause/resume, digest reminder hour). */
+/**
+ * Programme-level settings: pause/resume, digest hour, and the switch that
+ * decides whether this dealer hears from us at all.
+ */
 export function useUpdateKavachProgramme(dealerId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -128,26 +137,6 @@ export function useUpdateKavachProgramme(dealerId: string) {
       qc.setQueryData(kavachKeys.programme(dealerId), data);
       qc.invalidateQueries({ queryKey: kavachKeys.dashboard });
     },
-  });
-}
-
-/** Add a per-dealer custom item. */
-export function useAddCustomKavachItem(dealerId: string) {
-  const invalidate = useItemInvalidation(dealerId);
-  return useMutation({
-    mutationFn: (input: AddCustomKavachItemInput) =>
-      api.post<KavachItem>(`/dealers/${dealerId}/kavach/items`, input),
-    onSuccess: invalidate,
-  });
-}
-
-/** Mark an item done on the dealer's behalf. */
-export function useMarkKavachItemDone(dealerId: string) {
-  const invalidate = useItemInvalidation(dealerId);
-  return useMutation({
-    mutationFn: (itemId: string) =>
-      api.post<KavachItem>(`/kavach/items/${itemId}/mark-done`, {}),
-    onSuccess: invalidate,
   });
 }
 
@@ -178,29 +167,5 @@ export function useSetKavachSosCompliance(dealerId: string) {
       body: SetKavachSosComplianceInput;
     }) => api.patch<KavachItem>(`/kavach/items/${itemId}/sos`, body),
     onSuccess: invalidate,
-  });
-}
-
-/** Delete a custom item (custom items only). */
-export function useDeleteKavachItem(dealerId: string) {
-  const invalidate = useItemInvalidation(dealerId);
-  return useMutation({
-    mutationFn: (itemId: string) =>
-      api.del<{ removed: boolean }>(`/kavach/items/${itemId}`),
-    onSuccess: invalidate,
-  });
-}
-
-/** Manually escalate an item into the admin inbox as an OPEN conversation. */
-export function useEscalateKavachItem(dealerId: string) {
-  const invalidate = useItemInvalidation(dealerId);
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (itemId: string) =>
-      api.post<KavachItem>(`/kavach/items/${itemId}/escalate`, {}),
-    onSuccess: () => {
-      invalidate();
-      qc.invalidateQueries({ queryKey: ['conversations'] });
-    },
   });
 }

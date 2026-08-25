@@ -1,9 +1,10 @@
 import {
   AlertCircle,
-  Inbox,
+  BellOff,
+  BellRing,
+  ClipboardCheck,
   Pause,
   Play,
-  Plus,
   RotateCw,
   ShieldCheck,
 } from 'lucide-react';
@@ -13,6 +14,7 @@ import { Link } from 'react-router-dom';
 import {
   Badge,
   Button,
+  Callout,
   Card,
   CardContent,
   Dialog,
@@ -22,26 +24,28 @@ import {
   useToast,
 } from '@/components/ui';
 import {
-  useAddCustomKavachItem,
-  useDeleteKavachItem,
-  useEscalateKavachItem,
   useInitiateKavachProgramme,
   useKavachItemsQuery,
   useKavachProgrammeQuery,
-  useMarkKavachItemDone,
   useSetKavachItemPaused,
   useSetKavachSosCompliance,
   useUpdateKavachProgramme,
 } from '@/hooks/api/useKavach';
 import { ApiError } from '@/lib/api';
+import { formatDate } from '@/lib/format';
 import {
   CADENCE_BUCKET_LABEL,
   CADENCE_BUCKET_ORDER,
   operationalIntent,
+  scoreDisclosureParts,
 } from '@/lib/kavach';
-import { dealerCodeLabel, type Dealer, type KavachCadenceBucket, type KavachItem } from '@dk/shared';
+import {
+  dealerCodeLabel,
+  type Dealer,
+  type KavachCadenceBucket,
+  type KavachItem,
+} from '@dk/shared';
 
-import { AddCustomItemDialog } from './kavach/AddCustomItemDialog';
 import { InitiateKavachForm } from './kavach/InitiateKavachForm';
 import { KavachItemRow } from './kavach/KavachItemRow';
 
@@ -55,23 +59,26 @@ const REMINDER_HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => ({
   label: `${String(h).padStart(2, '0')}:00 IST`,
 }));
 
+/**
+ * The dealer's Kavach panel: SETUP and STANDING, not a working queue.
+ *
+ * Certifying tasks happens in the cross-dealer work queue, where an admin faces
+ * roughly ten verifications per dealer per day and closes them in one pass.
+ * Doing it here, dealer by dealer, is the shape that does not scale past eight
+ * outlets — so this screen deliberately has no verify control on it.
+ */
 export function DealerKavachTab({ dealer }: Props) {
   const toast = useToast();
-  const [addOpen, setAddOpen] = React.useState(false);
   const [busyId, setBusyId] = React.useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = React.useState<KavachItem | null>(null);
+  const [enableDealerFacingOpen, setEnableDealerFacingOpen] = React.useState(false);
 
   const programmeQ = useKavachProgrammeQuery(dealer.id);
   const itemsQ = useKavachItemsQuery(dealer.id);
 
   const initiate = useInitiateKavachProgramme(dealer.id);
   const updateProgramme = useUpdateKavachProgramme(dealer.id);
-  const addCustom = useAddCustomKavachItem(dealer.id);
-  const markDone = useMarkKavachItemDone(dealer.id);
   const setPaused = useSetKavachItemPaused(dealer.id);
   const setSos = useSetKavachSosCompliance(dealer.id);
-  const remove = useDeleteKavachItem(dealer.id);
-  const escalate = useEscalateKavachItem(dealer.id);
 
   async function withBusy(id: string, fn: () => Promise<unknown>, successMsg: string) {
     setBusyId(id);
@@ -101,7 +108,21 @@ export function DealerKavachTab({ dealer }: Props) {
       <EmptyState
         icon={<AlertCircle width={28} height={28} strokeWidth={1.75} />}
         title="Could not load programme"
-        description={(programmeQ.error as Error).message}
+        description={
+          programmeQ.error instanceof ApiError
+            ? programmeQ.error.message
+            : 'Please try again.'
+        }
+        cta={
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<RotateCw width={16} height={16} strokeWidth={1.75} />}
+            onClick={() => void programmeQ.refetch()}
+          >
+            Retry
+          </Button>
+        }
       />
     );
   }
@@ -117,9 +138,7 @@ export function DealerKavachTab({ dealer }: Props) {
             await initiate.mutateAsync(values);
             toast.success('Kavach programme initiated');
           } catch (err) {
-            toast.error(
-              err instanceof ApiError ? err.message : 'Failed to initiate',
-            );
+            toast.error(err instanceof ApiError ? err.message : 'Failed to initiate');
           }
         }}
       />
@@ -128,9 +147,9 @@ export function DealerKavachTab({ dealer }: Props) {
 
   const programme = programmeQ.data;
   const isPaused = programme.status === 'PAUSED';
+  const dealerFacing = programme.dealerFacingEnabled === true;
   const items = itemsQ.data ?? [];
 
-  // Group items by cadence bucket, preserving the canonical order.
   const grouped = new Map<KavachCadenceBucket, KavachItem[]>();
   for (const item of items) {
     const arr = grouped.get(item.cadenceBucket) ?? [];
@@ -139,7 +158,24 @@ export function DealerKavachTab({ dealer }: Props) {
   }
   const orderedBuckets = CADENCE_BUCKET_ORDER.filter((b) => grouped.has(b));
 
-  const pct = Math.round(programme.score.overallPct);
+  const score = programme.score;
+  const pct = Math.round(score.overallPct);
+  const disclosure = scoreDisclosureParts({
+    overallPct: score.overallPct,
+    notYetVerifiedCount: score.notYetVerifiedCount,
+    heldCount: score.heldCount,
+  });
+
+  async function setDealerFacing(enabled: boolean) {
+    await withBusy(
+      'dealer-facing',
+      () => updateProgramme.mutateAsync({ dealerFacingEnabled: enabled }),
+      enabled
+        ? 'This dealer will now receive their daily Kavach list'
+        : 'Kavach messages to this dealer are off',
+    );
+    setEnableDealerFacingOpen(false);
+  }
 
   return (
     <div className="grid gap-4">
@@ -152,10 +188,17 @@ export function DealerKavachTab({ dealer }: Props) {
                 <ShieldCheck width={24} height={24} strokeWidth={1.75} />
               </span>
               <div>
-                <div className="flex items-baseline gap-2">
+                <div className="flex flex-wrap items-baseline gap-2">
+                  {/* The percentage never travels alone: a bare number hides how
+                      much of this dealer nobody has examined yet. */}
                   <span className="text-3xl font-semibold tracking-tight text-text">
-                    {pct}%
+                    {disclosure[0]}
                   </span>
+                  {disclosure.slice(1).map((part) => (
+                    <span key={part} className="text-sm font-medium text-text-muted">
+                      · {part}
+                    </span>
+                  ))}
                   <Badge intent={operationalIntent(pct)}>operational</Badge>
                   {isPaused ? <Badge intent="warning">Paused</Badge> : null}
                 </div>
@@ -165,17 +208,18 @@ export function DealerKavachTab({ dealer }: Props) {
                   {programme.outlet.monthYear}
                 </p>
                 <p className="text-xs text-text-subtle">
-                  {programme.score.validPoints} / {programme.score.totalPoints}{' '}
-                  points compliant
+                  {score.validPoints} / {score.totalPoints} points compliant
+                  {score.notYetVerifiedCount > 0
+                    ? ` · ${score.notYetVerifiedPoints} points sitting behind ${score.notYetVerifiedCount} task${
+                        score.notYetVerifiedCount === 1 ? '' : 's'
+                      } nobody has checked`
+                    : ''}
                 </p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1.5">
-                <label
-                  htmlFor="kavach-digest-hour"
-                  className="text-xs text-text-muted"
-                >
+                <label htmlFor="kavach-digest-hour" className="text-xs text-text-muted">
                   Digest time
                 </label>
                 <Select
@@ -189,10 +233,7 @@ export function DealerKavachTab({ dealer }: Props) {
                     if (raw === '') return;
                     void withBusy(
                       'programme',
-                      () =>
-                        updateProgramme.mutateAsync({
-                          reminderHour: Number(raw),
-                        }),
+                      () => updateProgramme.mutateAsync({ reminderHour: Number(raw) }),
                       'Digest time updated',
                     );
                   }}
@@ -229,27 +270,26 @@ export function DealerKavachTab({ dealer }: Props) {
               >
                 {isPaused ? 'Resume' : 'Pause programme'}
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={<Plus width={16} height={16} strokeWidth={1.75} />}
-                onClick={() => setAddOpen(true)}
+              {/* A link, not a Button: the queue is a route, and the whole point
+                  of this panel is that certifying happens over there. */}
+              <Link
+                to={`/kavach?dealerId=${dealer.id}`}
+                className="inline-flex h-9 min-h-11 items-center gap-2 rounded-sm bg-brand px-4 text-sm font-medium text-text-inverse hover:bg-brand-hover md:min-h-0"
               >
-                Add custom task
-              </Button>
+                <ClipboardCheck width={16} height={16} strokeWidth={1.75} />
+                Verify in the work queue
+              </Link>
             </div>
           </div>
 
           {/* Per-bucket sub-scores (admin-only) */}
-          {Object.keys(programme.score.byBucket).length > 0 ? (
+          {Object.keys(score.byBucket).length > 0 ? (
             <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
-              {CADENCE_BUCKET_ORDER.filter(
-                (b) => programme.score.byBucket[b] != null,
-              ).map((b) => (
+              {CADENCE_BUCKET_ORDER.filter((b) => score.byBucket[b] != null).map((b) => (
                 <Badge key={b} intent="neutral" className="gap-1">
                   <span className="text-text-muted">{CADENCE_BUCKET_LABEL[b]}</span>
                   <span className="font-semibold">
-                    {Math.round(programme.score.byBucket[b] as number)}%
+                    {Math.round(score.byBucket[b] as number)}%
                   </span>
                 </Badge>
               ))}
@@ -258,192 +298,209 @@ export function DealerKavachTab({ dealer }: Props) {
         </CardContent>
       </Card>
 
-      {/* Escalations note → inbox deep-link */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface-2 px-4 py-3 text-sm text-text-muted">
-        <span>
-          Escalations appear in the{' '}
-          <span className="font-medium text-text">Inbox</span> as open
-          compliance conversations — there is no separate queue.
-        </span>
-        <Link
-          to={`/inbox?dealerId=${dealer.id}`}
-          className="inline-flex items-center gap-1.5 font-medium text-brand hover:underline"
-        >
-          <Inbox width={14} height={14} strokeWidth={1.75} />
-          Open inbox for this dealer
-        </Link>
-      </div>
+      {/* The gate. Nothing reaches this dealer until an admin turns it on. */}
+      <Card>
+        <CardContent>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <span
+                className={
+                  dealerFacing
+                    ? 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-success-soft text-success'
+                    : 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-surface-2 text-text-muted'
+                }
+              >
+                {dealerFacing ? (
+                  <BellRing width={20} height={20} strokeWidth={1.75} />
+                ) : (
+                  <BellOff width={20} height={20} strokeWidth={1.75} />
+                )}
+              </span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-base font-semibold text-text">
+                    Dealer-facing messages
+                  </p>
+                  <Badge intent={dealerFacing ? 'success' : 'neutral'}>
+                    {dealerFacing ? 'On' : 'Off'}
+                  </Badge>
+                </div>
+                <p className="mt-1 max-w-2xl text-sm text-text-muted">
+                  {dealerFacing
+                    ? `This dealer receives their daily Kavach list and can be shown their score card.${
+                        programme.dealerFacingEnabledAt
+                          ? ` Switched on ${formatDate(programme.dealerFacingEnabledAt)}.`
+                          : ''
+                      }`
+                    : 'While this is off the dealer receives nothing at all — no daily message, no score card. Leave it off until MDG has actually verified this outlet, so their first message is not a figure about work nobody has done yet.'}
+                </p>
+              </div>
+            </div>
+            <div className="shrink-0">
+              {dealerFacing ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={busyId === 'dealer-facing'}
+                  loading={busyId === 'dealer-facing'}
+                  leftIcon={<BellOff width={14} height={14} strokeWidth={1.75} />}
+                  onClick={() => void setDealerFacing(false)}
+                >
+                  Turn messages off
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  leftIcon={<BellRing width={14} height={14} strokeWidth={1.75} />}
+                  onClick={() => setEnableDealerFacingOpen(true)}
+                >
+                  Turn messages on
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Callout intent="info">
+        Tasks are added, hidden or re-pointed for this outlet on its{' '}
+        <span className="font-medium">Kavach work list</span> tab. Verifying them
+        happens in the work queue — this panel shows where the dealer stands.
+      </Callout>
 
       {/* Items grouped by bucket */}
       <div
-        className={
-          isPaused
-            ? 'pointer-events-none select-none opacity-60'
-            : undefined
-        }
+        className={isPaused ? 'pointer-events-none select-none opacity-60' : undefined}
         aria-disabled={isPaused || undefined}
       >
-      {itemsQ.isLoading ? (
-        <Card>
-          <CardContent>
-            <Skeleton className="h-32 w-full" />
-          </CardContent>
-        </Card>
-      ) : itemsQ.isError ? (
-        <EmptyState
-          icon={<AlertCircle width={28} height={28} strokeWidth={1.75} />}
-          title="Could not load items"
-          description={
-            itemsQ.error instanceof ApiError
-              ? itemsQ.error.message
-              : 'Something went wrong while loading the tracked items.'
-          }
-          cta={
-            <Button
-              leftIcon={<RotateCw width={16} height={16} strokeWidth={1.75} />}
-              onClick={() => void itemsQ.refetch()}
-            >
-              Retry
-            </Button>
-          }
-        />
-      ) : items.length === 0 ? (
-        <EmptyState
-          icon={<ShieldCheck width={28} height={28} strokeWidth={1.75} />}
-          title="No items yet"
-          description="The programme has no tracked items. Add a custom task to get started."
-          cta={
-            <Button
-              leftIcon={<Plus width={16} height={16} strokeWidth={1.75} />}
-              onClick={() => setAddOpen(true)}
-            >
-              Add custom task
-            </Button>
-          }
-        />
-      ) : (
-        <div className="grid gap-4">
-        {orderedBuckets.map((bucket) => {
-          const bucketItems = grouped.get(bucket) ?? [];
-          return (
-            <Card key={bucket}>
-              <CardContent className="p-0">
-                <div className="flex items-center justify-between px-4 py-3">
-                  <p className="text-sm font-semibold text-text">
-                    {CADENCE_BUCKET_LABEL[bucket]}
-                  </p>
-                  <span className="text-xs text-text-subtle">
-                    {bucketItems.length}{' '}
-                    {bucketItems.length === 1 ? 'item' : 'items'}
-                  </span>
-                </div>
-                <div>
-                  {bucketItems.map((item) => (
-                    <KavachItemRow
-                      key={item.id}
-                      item={item}
-                      busy={busyId === item.id}
-                      onMarkDone={(i) =>
-                        withBusy(
-                          i.id,
-                          () => markDone.mutateAsync(i.id),
-                          'Marked done on behalf of dealer',
-                        )
-                      }
-                      onTogglePause={(i) =>
-                        withBusy(
-                          i.id,
-                          () =>
-                            setPaused.mutateAsync({
-                              itemId: i.id,
-                              body: { paused: !i.paused },
-                            }),
-                          i.paused ? 'Item resumed' : 'Item paused',
-                        )
-                      }
-                      onToggleSos={(i) =>
-                        withBusy(
-                          i.id,
-                          () =>
-                            setSos.mutateAsync({
-                              itemId: i.id,
-                              body: { compliant: i.status === 'SOS_FLAGGED' },
-                            }),
-                          i.status === 'SOS_FLAGGED'
-                            ? 'SOS flag cleared'
-                            : 'SOS flagged',
-                        )
-                      }
-                      onEscalate={(i) =>
-                        withBusy(
-                          i.id,
-                          () => escalate.mutateAsync(i.id),
-                          'Escalated to inbox',
-                        )
-                      }
-                      onDelete={(i) => setDeleteTarget(i)}
-                    />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-        </div>
-      )}
+        {itemsQ.isLoading ? (
+          <Card>
+            <CardContent>
+              <Skeleton className="h-32 w-full" />
+            </CardContent>
+          </Card>
+        ) : itemsQ.isError ? (
+          <EmptyState
+            icon={<AlertCircle width={28} height={28} strokeWidth={1.75} />}
+            title="Could not load tasks"
+            description={
+              itemsQ.error instanceof ApiError
+                ? itemsQ.error.message
+                : 'Something went wrong while loading the tracked tasks.'
+            }
+            cta={
+              <Button
+                leftIcon={<RotateCw width={16} height={16} strokeWidth={1.75} />}
+                onClick={() => void itemsQ.refetch()}
+              >
+                Retry
+              </Button>
+            }
+          />
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={<ShieldCheck width={28} height={28} strokeWidth={1.75} />}
+            title="No tasks yet"
+            description="This programme tracks nothing. Add tasks — or unhide catalog ones — on the Kavach work list tab."
+          />
+        ) : (
+          <div className="grid gap-4">
+            {orderedBuckets.map((bucket) => {
+              const bucketItems = grouped.get(bucket) ?? [];
+              return (
+                <Card key={bucket}>
+                  <CardContent className="p-0">
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <p className="text-sm font-semibold text-text">
+                        {CADENCE_BUCKET_LABEL[bucket]}
+                      </p>
+                      <span className="text-xs text-text-subtle">
+                        {bucketItems.length}{' '}
+                        {bucketItems.length === 1 ? 'task' : 'tasks'}
+                      </span>
+                    </div>
+                    <div>
+                      {bucketItems.map((item) => (
+                        <KavachItemRow
+                          key={item.id}
+                          item={item}
+                          busy={busyId === item.id}
+                          onTogglePause={(i) =>
+                            withBusy(
+                              i.id,
+                              () =>
+                                setPaused.mutateAsync({
+                                  itemId: i.id,
+                                  body: { paused: !i.paused },
+                                }),
+                              i.paused ? 'Task resumed' : 'Task paused',
+                            )
+                          }
+                          onToggleSos={(i) =>
+                            withBusy(
+                              i.id,
+                              () =>
+                                setSos.mutateAsync({
+                                  itemId: i.id,
+                                  body: { compliant: i.status === 'SOS_FLAGGED' },
+                                }),
+                              i.status === 'SOS_FLAGGED'
+                                ? 'SOS flag cleared'
+                                : 'SOS flagged',
+                            )
+                          }
+                        />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      <AddCustomItemDialog
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        loading={addCustom.isPending}
-        onSubmit={async (values) => {
-          try {
-            await addCustom.mutateAsync(values);
-            toast.success('Custom task added');
-            setAddOpen(false);
-          } catch (err) {
-            toast.error(
-              err instanceof ApiError ? err.message : 'Failed to add task',
-            );
-          }
-        }}
-      />
-
       <Dialog
-        open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        title="Delete custom item"
-        description={
-          deleteTarget ? `Delete “${deleteTarget.labelEn}”?` : undefined
-        }
+        open={enableDealerFacingOpen}
+        onClose={() => setEnableDealerFacingOpen(false)}
+        title="Start messaging this dealer"
+        description={dealerCodeLabel(dealer.code)}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
-              Cancel
+            <Button
+              variant="secondary"
+              onClick={() => setEnableDealerFacingOpen(false)}
+            >
+              Not yet
             </Button>
             <Button
-              variant="danger"
-              loading={remove.isPending}
-              onClick={() => {
-                const target = deleteTarget;
-                if (!target) return;
-                void withBusy(
-                  target.id,
-                  () => remove.mutateAsync(target.id),
-                  'Custom item deleted',
-                ).finally(() => setDeleteTarget(null));
-              }}
+              loading={busyId === 'dealer-facing'}
+              onClick={() => void setDealerFacing(true)}
             >
-              Delete
+              Turn messages on
             </Button>
           </>
         }
       >
-        <p className="text-sm text-text-muted">
-          This removes the custom compliance item from this dealer&apos;s
-          programme. This can&apos;t be undone.
-        </p>
+        <div className="grid gap-3 text-sm text-text-muted">
+          <p>
+            From the next digest at{' '}
+            <span className="font-medium text-text">
+              {String(programme.reminderHour ?? 8).padStart(2, '0')}:00 IST
+            </span>{' '}
+            this dealer starts receiving a daily list of what is outstanding, and
+            their score becomes something they can be shown.
+          </p>
+          {score.notYetVerifiedCount > 0 ? (
+            <Callout intent="warning">
+              {score.notYetVerifiedCount} task
+              {score.notYetVerifiedCount === 1 ? ' has' : 's have'} never been
+              checked by anyone at MDG. Turn this on and the first thing this
+              dealer hears about them is that they are outstanding.
+            </Callout>
+          ) : null}
+          <p>You can switch it off again at any time.</p>
+        </div>
       </Dialog>
     </div>
   );

@@ -1,8 +1,11 @@
 import { Check, MoreVertical } from 'lucide-react';
 import * as React from 'react';
 
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
+
+import { Portal } from './Portal';
 
 /** Gap kept between the popover and the edge of the viewport. */
 const VIEWPORT_MARGIN = 8;
@@ -25,8 +28,19 @@ export interface MenuProps {
   align?: 'start' | 'end';
   /** Extra trigger classes — e.g. a tint when the menu holds the current view. */
   triggerClassName?: string;
+  /** 'icon' (default) is a square hit area for a glyph. 'auto' sizes to its
+   *  content — for a labelled trigger such as the account button, which carries
+   *  an avatar, a name and a chevron. `cn` is plain clsx, so a width passed
+   *  through `triggerClassName` would not replace the square one; this is the
+   *  supported way to ask for the other shape. */
+  triggerShape?: 'icon' | 'auto';
   children: React.ReactNode;
 }
+
+const TRIGGER_SHAPES: Record<NonNullable<MenuProps['triggerShape']>, string> = {
+  icon: 'h-11 w-11 md:h-9 md:w-9',
+  auto: 'h-11 gap-2 px-2 text-sm md:h-auto md:py-1',
+};
 
 /**
  * Overflow ("three dots") menu: a trigger plus a list of `MenuItem`s.
@@ -47,6 +61,7 @@ export function Menu({
   title,
   align = 'end',
   triggerClassName,
+  triggerShape = 'icon',
   children,
 }: MenuProps) {
   const isMd = useMediaQuery('(min-width: 768px)');
@@ -178,6 +193,11 @@ export function Menu({
     };
   }, [open, isMd, close]);
 
+  // Mobile only: the sheet covers the page, so the page must not scroll behind
+  // it. The desktop popover is anchored to its trigger and deliberately closes
+  // on any scroll instead — locking there would freeze the page around it.
+  useBodyScrollLock(open && !isMd);
+
   function onPanelKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     switch (e.key) {
       case 'ArrowDown':
@@ -247,54 +267,63 @@ export function Menu({
           }
         }}
         className={cn(
-          'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md',
+          'inline-flex shrink-0 items-center justify-center rounded-md',
           'text-text-muted transition-colors hover:bg-surface-2 hover:text-text',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
-          'md:h-9 md:w-9',
+          TRIGGER_SHAPES[triggerShape],
           triggerClassName,
         )}
       >
         {trigger ?? <MoreVertical width={18} height={18} strokeWidth={1.75} />}
       </button>
 
+      {/* Both branches portal to the body. The sheet needs it for the same
+          reason Dialog does; the popover needs it because it is `position:
+          fixed` and would otherwise be positioned against any transformed
+          ancestor — a menu opened from inside a mobile sheet landed nowhere
+          near its trigger. */}
       {open && !isMd ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
+        <Portal>
+          <div className="fixed inset-0 z-[var(--z-overlay)] flex items-end justify-center bg-black/40">
+            <div
+              ref={panelRef}
+              role="menu"
+              aria-label={label}
+              onKeyDown={onPanelKeyDown}
+              className={cn(
+                'max-h-[80dvh] w-full overflow-y-auto overscroll-contain',
+                'rounded-t-2xl border-t border-border bg-surface shadow-lg',
+                'pb-[max(env(safe-area-inset-bottom),0.5rem)] animate-sheet-up',
+              )}
+            >
+              <div className="mx-auto mb-1 mt-2 h-1 w-9 rounded-full bg-border-strong" />
+              <div className="py-1">{list}</div>
+            </div>
+          </div>
+        </Portal>
+      ) : null}
+
+      {open && isMd ? (
+        <Portal>
           <div
             ref={panelRef}
             role="menu"
             aria-label={label}
             onKeyDown={onPanelKeyDown}
+            style={{
+              position: 'fixed',
+              left: pos?.left ?? 0,
+              top: pos?.top ?? 0,
+              visibility: pos ? 'visible' : 'hidden',
+            }}
             className={cn(
-              'max-h-[80dvh] w-full overflow-y-auto overscroll-contain',
-              'rounded-t-2xl border-t border-border bg-surface shadow-lg',
-              'pb-[max(env(safe-area-inset-bottom),0.5rem)] animate-sheet-up',
+              'z-[var(--z-overlay)] w-60 max-h-[70vh] overflow-y-auto overscroll-contain',
+              'rounded-md border border-border bg-surface py-1 shadow-md',
             )}
           >
-            <div className="mx-auto mb-1 mt-2 h-1 w-9 rounded-full bg-border-strong" />
-            <div className="py-1">{list}</div>
+            {list}
           </div>
-        </div>
-      ) : null}
-
-      {open && isMd ? (
-        <div
-          ref={panelRef}
-          role="menu"
-          aria-label={label}
-          onKeyDown={onPanelKeyDown}
-          style={{
-            position: 'fixed',
-            left: pos?.left ?? 0,
-            top: pos?.top ?? 0,
-            visibility: pos ? 'visible' : 'hidden',
-          }}
-          className={cn(
-            'z-50 w-60 max-h-[70vh] overflow-y-auto overscroll-contain',
-            'rounded-md border border-border bg-surface py-1 shadow-md',
-          )}
-        >
-          {list}
-        </div>
+        </Portal>
       ) : null}
     </>
   );

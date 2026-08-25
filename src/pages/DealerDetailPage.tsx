@@ -38,6 +38,7 @@ import {
 } from './dealers/DealerDangerZone';
 import { DealerInfoTab } from './dealers/DealerInfoTab';
 import { DealerKavachTab } from './dealers/DealerKavachTab';
+import { DealerKavachWorkListTab } from './dealers/DealerKavachWorkListTab';
 import { DealerMembersTab } from './dealers/DealerMembersTab';
 import { DealerPasswordVaultTab } from './dealers/DealerPasswordVaultTab';
 import { DealerServicesTab } from './dealers/DealerServicesTab';
@@ -139,6 +140,16 @@ const TABS: TabDef[] = [
     label: 'Kavach',
     placement: 'strip',
     body: (dealer) => <DealerKavachTab dealer={dealer} />,
+  },
+  {
+    // Which Kavach tasks this outlet actually has: hide the ones that do not
+    // apply, add ones only they have, and depart from the global points where
+    // there is a reason to. Sits beside the Kavach panel, not inside it, so the
+    // standing view stays a standing view.
+    id: 'kavach-work-list',
+    label: 'Kavach tasks',
+    placement: 'strip',
+    body: (dealer) => <DealerKavachWorkListTab dealer={dealer} />,
   },
   {
     id: 'staff',

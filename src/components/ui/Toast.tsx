@@ -23,6 +23,18 @@ interface ToastContextValue {
 
 const ToastContext = React.createContext<ToastContextValue | null>(null);
 
+/**
+ * How long a toast stays before it clears itself. A failure used to be sticky
+ * (`0`), which reads as careful and is the opposite on a phone: the viewport is
+ * `position: fixed` at the bottom of the screen, so an opaque, click-catching
+ * card sat over the tab bar until it was dismissed — and its dismiss button was
+ * 22px. Eight seconds is long enough to read a two-line API error and short
+ * enough that a failed save never takes the navigation with it. A caller that
+ * genuinely needs a sticky toast still passes `duration: 0` itself.
+ */
+const DEFAULT_DURATION_MS = 4000;
+const DANGER_DURATION_MS = 8000;
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = React.useState<Toast[]>([]);
 
@@ -34,7 +46,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     (partial: Omit<Toast, 'id'>): string => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const duration =
-        partial.duration ?? (partial.intent === 'danger' ? 0 : 4000);
+        partial.duration ??
+        (partial.intent === 'danger' ? DANGER_DURATION_MS : DEFAULT_DURATION_MS);
       const next: Toast = { ...partial, id, duration };
       setToasts((curr) => [...curr, next]);
       if (duration > 0) {
@@ -79,7 +92,14 @@ function ToastViewport({
   dismiss: (id: string) => void;
 }) {
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-full max-w-sm flex-col gap-2">
+    // Bottom-anchored on a phone, and it has to clear two things nothing else
+    // does: the tab bar (an in-flow element, so `bottom-4` painted straight
+    // over it) and the gesture strip. `inset-x-3` rather than `right-4 w-full`,
+    // because `w-full` on a fixed element resolves to the whole 360px viewport
+    // — `max-w-sm` is 384px and never clamped it, so the card's left edge sat
+    // at −16px and the intent icon was off-screen. Every desktop value is
+    // restored at md.
+    <div className="pointer-events-none fixed inset-x-3 bottom-[calc(var(--tab-bar-h,0px)+max(env(safe-area-inset-bottom),0.5rem)+0.5rem)] z-[var(--z-toast)] flex flex-col gap-2 md:inset-x-auto md:right-4 md:bottom-4 md:w-full md:max-w-sm">
       {toasts.map((t) => (
         <div
           key={t.id}
@@ -112,11 +132,14 @@ function ToastViewport({
               </p>
             ) : null}
           </div>
+          {/* 44px below md: this is the only way out of a toast, and at 22px
+              it was smaller than the finger trying to hit it. `md:h-auto
+              md:w-auto md:p-1` is today's desktop button exactly. */}
           <button
             type="button"
             aria-label="Dismiss"
             onClick={() => dismiss(t.id)}
-            className="rounded-sm p-1 text-text-muted hover:bg-surface-2"
+            className="-my-1 -mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-sm p-0 text-text-muted hover:bg-surface-2 md:my-0 md:mr-0 md:h-auto md:w-auto md:p-1"
           >
             <X width={14} height={14} strokeWidth={1.75} />
           </button>

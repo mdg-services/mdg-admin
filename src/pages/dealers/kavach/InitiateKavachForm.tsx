@@ -54,9 +54,10 @@ export function InitiateKavachForm({ dealerCode, loading, onSubmit }: Props) {
               Initiate Kavach programme
             </p>
             <p className="text-sm text-text-muted">
-              Snapshot the ~45-item assessment template for this dealer. Items
-              start on a fresh clock with a settling-in grace period — the
-              dealer never opens to a failing score.
+              Starts tracking the global task catalog for this dealer. Every task
+              begins as never checked, and nothing reaches the dealer until an
+              admin switches their messages on — so a new programme is never a
+              failing score handed to somebody before MDG has looked.
             </p>
           </div>
         </div>

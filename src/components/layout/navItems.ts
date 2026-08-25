@@ -12,6 +12,7 @@ import {
   Plug,
   ScrollText,
   ShieldCheck,
+  ShieldPlus,
   UserCog,
   Users,
   type LucideIcon,
@@ -40,6 +41,9 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/inbox', label: 'Inbox', icon: MessageSquare },
   { to: '/overview', label: 'Overview', icon: LayoutDashboard },
   { to: '/dealers', label: 'Dealers', icon: Building2 },
+  // The WORK QUEUE is what "Kavach" means to an admin day to day: what has to be
+  // verified right now, across every dealer. The per-dealer standing view lives
+  // one level down at /kavach/dashboard.
   { to: '/kavach', label: 'Kavach', icon: ShieldCheck },
   // Every dealer's collected IRAS shift data in one place — an everyday admin
   // surface, so deliberately NOT `superAdminOnly`.
@@ -54,6 +58,9 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/runs', label: 'Run History', icon: Activity, superAdminOnly: true },
   { to: '/users', label: 'All Users', icon: Users, superAdminOnly: true },
   { to: '/work-list', label: 'Work list', icon: ListChecks, superAdminOnly: true },
+  // The global Kavach task catalog. Editing points here moves every dealer who
+  // has no override, so it sits with the other super-admin-only defaults.
+  { to: '/kavach/defaults', label: 'Kavach defaults', icon: ShieldPlus, superAdminOnly: true },
   { to: '/bank-holidays', label: 'Bank holidays', icon: CalendarDays, superAdminOnly: true },
   { to: '/festival', label: 'Festival greeting', icon: PartyPopper, superAdminOnly: true },
   { to: '/activity', label: 'Activity', icon: ScrollText, superAdminOnly: true },
