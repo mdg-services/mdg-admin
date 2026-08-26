@@ -331,7 +331,14 @@ export function FestivalPage() {
       {festivalQ.isLoading ? (
         <Skeleton className="h-64 w-full" />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        // `[&>*]:min-w-0` is load-bearing, not tidiness. A grid item's automatic
+        // minimum size is its min-content width, and the Preview card holds a
+        // 1000px stage — so without this the single mobile column sizes itself
+        // to 1000px, every card in it inherits that width, and `main`'s
+        // `overflow-x-hidden` then clips two thirds of the page away with no
+        // gesture that reaches it. The stage has its own `overflow-x-auto`; this
+        // is what stops it recruiting its ancestors into the scroll.
+        <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
           {/* Below md the Status card is ~250px of prose sitting between the
               Preview and the festival picker that drives it, so the admin chose
               a festival with the preview off the top of the screen. `order-last`

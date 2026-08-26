@@ -452,7 +452,11 @@ function Header({
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
-              className="mt-1 text-left text-xs text-text-subtle underline"
+              // `inline-flex` rather than the block button it was: a bare
+              // `text-xs` line is 16px tall, and this is the only route to the
+              // note explaining that a day wrong across several rows at once is
+              // usually a shift problem, not a figures problem.
+              className="mt-1 inline-flex min-h-11 items-center text-left text-xs text-text-subtle underline md:mt-1 md:min-h-0"
             >
               Shift {shift.selectedShiftTime || '—'} · configured{' '}
               {shift.configuredTime.slice(0, 5)}
@@ -811,7 +815,7 @@ function CorrectionHistory({ dealerId }: { dealerId: string }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 text-sm font-medium text-text-muted hover:text-text"
+        className="flex min-h-11 items-center gap-1.5 text-sm font-medium text-text-muted hover:text-text md:min-h-0"
       >
         <Copy width={14} height={14} strokeWidth={1.75} />
         {open ? 'Hide' : 'Show'} every correction on this dealer
