@@ -15,6 +15,22 @@ export interface DialogProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   size?: 'sm' | 'md' | 'lg';
+  /**
+   * Whether the mobile sheet plays its slide-up as it mounts. Defaults to true
+   * and should stay that way everywhere but one place: a Dialog that REPLACES
+   * another Dialog which has already slid up.
+   *
+   * That happens in front of a lazily-loaded dialog, where a Suspense fallback
+   * renders a real sheet so the tap feels immediate and the finished dialog
+   * takes its place once the chunk lands. The two are separate elements, so the
+   * entrance is mount-driven for both and the second one would start at
+   * `translateY(100%)` again — the panel would drop off the bottom of the
+   * screen and climb back up, which reads as a glitch rather than as loading.
+   *
+   * Desktop never sees any of this: the entrance is `md:animate-none`, so both
+   * settings are visually identical at `≥ md`.
+   */
+  animateIn?: boolean;
 }
 
 const SIZE_CLASSES: Record<NonNullable<DialogProps['size']>, string> = {
@@ -45,6 +61,7 @@ export function Dialog({
   children,
   footer,
   size = 'md',
+  animateIn = true,
 }: DialogProps) {
   React.useEffect(() => {
     if (!open) return;
@@ -76,7 +93,7 @@ export function Dialog({
             'w-full border border-border bg-surface shadow-lg',
             'rounded-t-2xl rounded-b-none md:rounded-lg',
             'flex max-h-[92dvh] flex-col md:block md:max-h-none',
-            'animate-sheet-up md:animate-none',
+            animateIn ? 'animate-sheet-up md:animate-none' : 'animate-none',
             SIZE_CLASSES[size],
           )}
         >

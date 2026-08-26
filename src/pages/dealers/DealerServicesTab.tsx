@@ -16,9 +16,11 @@ import {
   Card,
   CardContent,
   ConfirmDialog,
+  Dialog,
   EmptyState,
   MobileCardList,
   Skeleton,
+  Spinner,
   StatusChip,
   Table,
   TBody,
@@ -35,15 +37,45 @@ import {
   useRunNow,
   useUpdateDealerService,
 } from '@/hooks/api/useDealerServices';
+import { useServicesQuery } from '@/hooks/api/useServices';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
+import { retryImport } from '@/lib/retryImport';
 import type { Dealer, DealerService } from '@dk/shared';
 import type { UpdateDealerServiceInput } from '@dk/shared/schemas';
 
-import { AttachServiceDialog } from './AttachServiceDialog';
-import { EditServiceDialog } from './EditServiceDialog';
 import { INSPECTION_SERVICE_ID, IRAS_SERVICE_ID } from './schedulePicker';
 import { describeSchedule } from './serviceSchedule';
+
+/**
+ * Both config dialogs arrive on demand, and only once one is actually opened.
+ *
+ * They are the only things in the app that touch the JSON-schema form stack —
+ * @rjsf/core, @rjsf/utils, @rjsf/validator-ajv8 and, underneath those, ajv,
+ * lodash, json-schema-merge-allof and markdown-to-jsx. Measured, that cluster
+ * is ~300 kB raw / ~84 kB brotli: bigger than the rest of this tab put
+ * together, for two dialogs most admins never open. Importing them statically
+ * put all of it in whatever chunk this tab landed in.
+ *
+ * `ServiceConfigFields` (which pulls @rjsf in) is imported by these two files
+ * and nothing else, so the whole cluster now hangs off these two `import()`s.
+ * That is the trap to watch on any future edit: one static import of
+ * `ServiceConfigFields` — or of its `withSchemaDefaults` helper, which calls
+ * `getDefaultFormState` from @rjsf/utils — from anywhere eager drags ajv and
+ * lodash straight back into the eager graph and this split buys nothing.
+ */
+const AttachServiceDialog = React.lazy(
+  retryImport(() =>
+    import('./AttachServiceDialog').then((m) => ({
+      default: m.AttachServiceDialog,
+    })),
+  ),
+);
+const EditServiceDialog = React.lazy(
+  retryImport(() =>
+    import('./EditServiceDialog').then((m) => ({ default: m.EditServiceDialog })),
+  ),
+);
 
 interface Props {
   dealer: Dealer;
@@ -61,7 +93,34 @@ export function DealerServicesTab({ dealer }: Props) {
     null,
   );
 
+  /**
+   * Whether a fallback sheet has already slid up for the dialog now opening.
+   *
+   * `DialogLoading` sets it as it mounts and the real dialog reads it, so the
+   * finished dialog does not replay the bottom-sheet entrance on top of a sheet
+   * that is already up — see `Dialog`'s `animateIn` for what that looked like.
+   * Cleared once nothing is open, which is also why the common case is
+   * untouched: when the chunk is already in memory `React.lazy` resolves during
+   * render, no fallback is ever committed, this stays false, and the sheet
+   * slides up exactly as it did before the split.
+   */
+  const [sheetShown, setSheetShown] = React.useState(false);
+  const markSheetShown = React.useCallback(() => setSheetShown(true), []);
+  const anyConfigDialogOpen = attachOpen || editTarget !== null;
+  React.useEffect(() => {
+    if (!anyConfigDialogOpen) setSheetShown(false);
+  }, [anyConfigDialogOpen]);
+
   const { data, isLoading } = useDealerServicesQuery(dealer.id);
+  // The plugin catalog, warmed here rather than inside the dialogs.
+  //
+  // Both dialogs read it, and while they were mounted-but-closed their own
+  // `useServicesQuery` fetched it the moment this tab appeared — so by the time
+  // anyone pressed Attach or Edit it was already cached. Now that they only
+  // mount when opened, that fetch would start on the press instead, and land on
+  // top of the dialog's own chunk download. Same query key, so this is the one
+  // request it always was; it just keeps happening at the moment it used to.
+  useServicesQuery();
   const attach = useAttachDealerService(dealer.id);
   const update = useUpdateDealerService(dealer.id);
   const remove = useDeleteDealerService(dealer.id);
@@ -394,36 +453,69 @@ export function DealerServicesTab({ dealer }: Props) {
         )}
       </CardContent>
 
-      <AttachServiceDialog
-        open={attachOpen}
-        onClose={() => setAttachOpen(false)}
-        loading={attach.isPending}
-        dealerId={dealer.id}
-        attachedServiceIds={attachedIds}
-        irasAttached={irasAttached}
-        inspectionAttached={inspectionAttached}
-        irasCron={irasCron}
-        onSubmit={async (values) => {
-          try {
-            toastSchedule('Service attached', await attach.mutateAsync(values));
-            setAttachOpen(false);
-          } catch (err) {
-            const msg =
-              err instanceof ApiError ? err.message : 'Failed to attach';
-            toast.error(msg);
+      {/* Mounted only while open — that is what keeps the form stack off the
+          wire until it is needed. Nothing is lost by unmounting: the attach
+          dialog already cleared its own fields on close, and the edit dialog
+          re-seeds from the row every time it opens. */}
+      {attachOpen ? (
+        <React.Suspense
+          fallback={
+            <DialogLoading
+              title="Attach service"
+              onClose={() => setAttachOpen(false)}
+              onShown={markSheetShown}
+            />
           }
-        }}
-      />
+        >
+          <AttachServiceDialog
+            open
+            animateIn={!sheetShown}
+            onClose={() => setAttachOpen(false)}
+            loading={attach.isPending}
+            dealerId={dealer.id}
+            attachedServiceIds={attachedIds}
+            irasAttached={irasAttached}
+            inspectionAttached={inspectionAttached}
+            irasCron={irasCron}
+            onSubmit={async (values) => {
+              try {
+                toastSchedule(
+                  'Service attached',
+                  await attach.mutateAsync(values),
+                );
+                setAttachOpen(false);
+              } catch (err) {
+                const msg =
+                  err instanceof ApiError ? err.message : 'Failed to attach';
+                toast.error(msg);
+              }
+            }}
+          />
+        </React.Suspense>
+      ) : null}
 
-      <EditServiceDialog
-        open={!!editTarget}
-        service={editTarget}
-        irasAttached={irasAttached}
-        inspectionAttached={inspectionAttached}
-        irasCron={irasCron}
-        onClose={() => setEditTarget(null)}
-        onSubmit={onSaveEdit}
-      />
+      {editTarget ? (
+        <React.Suspense
+          fallback={
+            <DialogLoading
+              title="Edit service"
+              onClose={() => setEditTarget(null)}
+              onShown={markSheetShown}
+            />
+          }
+        >
+          <EditServiceDialog
+            open
+            animateIn={!sheetShown}
+            service={editTarget}
+            irasAttached={irasAttached}
+            inspectionAttached={inspectionAttached}
+            irasCron={irasCron}
+            onClose={() => setEditTarget(null)}
+            onSubmit={onSaveEdit}
+          />
+        </React.Suspense>
+      ) : null}
 
       {/* The shared `ConfirmDialog` rather than a fourth hand-rolled copy of the
           same shape — the four had already drifted on button order and on
@@ -449,5 +541,43 @@ export function DealerServicesTab({ dealer }: Props) {
         }
       />
     </Card>
+  );
+}
+
+/**
+ * What the reader sees while a config dialog's chunk is on the wire.
+ *
+ * Not `null`. The form stack behind these dialogs is ~84 kB brotli, which on a
+ * 2G handover is a visible pause, and a button that does nothing for a second
+ * reads as broken — the exact complaint that started the mobile pass. Rendering
+ * the real `Dialog` shell means the sheet slides up on the tap and the wait
+ * happens inside it, where it looks like loading rather than like failure.
+ *
+ * It closes like any other dialog, and closing costs nothing: `React.lazy`
+ * holds the in-flight import on the component itself, not on the mounted tree,
+ * so a download already under way finishes and is there the next time the
+ * button is pressed.
+ */
+function DialogLoading({
+  title,
+  onClose,
+  onShown,
+}: {
+  title: string;
+  onClose: () => void;
+  /** Told once this sheet is really on screen, so the dialog that replaces it
+   *  knows not to slide up a second time. */
+  onShown: () => void;
+}) {
+  React.useEffect(() => {
+    onShown();
+  }, [onShown]);
+
+  return (
+    <Dialog open onClose={onClose} title={title} size="lg">
+      <div className="flex items-center justify-center py-12">
+        <Spinner size={24} className="text-text-muted" />
+      </div>
+    </Dialog>
   );
 }

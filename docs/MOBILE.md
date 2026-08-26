@@ -486,7 +486,12 @@ siblings in the body, **the one opened last paints on top** — the old hand-pic
 is gone.
 
 - `Dialog` — centred modal at `≥ md`, full-height bottom sheet below. Footer is an
-  `ActionRow below="stack"`.
+  `ActionRow below="stack"`. New prop `animateIn?: boolean` (default `true`) — pass `false`
+  only from a Dialog that is replacing another Dialog already on screen. The bottom-sheet
+  entrance is mount-driven, so a lazily-loaded dialog taking over from its Suspense fallback
+  sheet would otherwise start at `translateY(100%)` again and the panel would drop off the
+  bottom and climb back up. `DealerServicesTab` is the live case. No effect at `≥ md`, where
+  the entrance is `md:animate-none` either way.
 - `Drawer` — right-side panel at `≥ md`, bottom sheet below. Same footer.
 - `Sheet` / `SheetItem` — mobile-only (`md:hidden`) bottom sheet for menu lists. Locks scroll
   only below md, because a landscape phone is already `≥ md` and would otherwise be frozen

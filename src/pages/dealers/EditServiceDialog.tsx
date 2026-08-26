@@ -28,6 +28,8 @@ interface Props {
   onClose: () => void;
   /** Receives ONLY the fields that changed. */
   onSubmit: (patch: UpdateDealerServiceInput) => void | Promise<void>;
+  /** False when a Suspense fallback sheet has already slid up in our place. */
+  animateIn?: boolean;
 }
 
 /**
@@ -47,6 +49,7 @@ export function EditServiceDialog({
   irasCron,
   onClose,
   onSubmit,
+  animateIn,
 }: Props) {
   const {
     data: services,
@@ -156,6 +159,7 @@ export function EditServiceDialog({
     <Dialog
       open={open}
       onClose={onClose}
+      animateIn={animateIn}
       title="Edit service"
       // The rule this states is worth stating, but `Dialog`'s `description`
       // sits in the sticky header and never scrolls, so it costs ~60px of a

@@ -119,14 +119,19 @@ function useInlineImageUrl(attachment: Attachment | undefined) {
  * Put the admin's own proof photo in object storage and return the attachment
  * the verify call carries.
  *
- * The presign scope is `staff` — the same dealer-scoped, dealer-private prefix
- * the Staff Points hardcopy uses. Kavach has no scope of its own yet, and of the
- * four that exist it is the only one that is BOTH access-controlled to this
- * dealer and readable back through `/uploads/download-url`: `tt-density` keys
- * are refused by the download route, so a proof filed there could never be
- * looked at again, and `avatar` keys are readable by any signed-in account at
- * all. The cost is that the egress audit line calls this a staff hardcopy; the
- * alternative was a compliance photograph nobody could reopen.
+ * The presign scope is `kavach`, which files the photo under
+ * `kavach/<dealerId>/proof/` — Kavach's own prefix, alongside the dealer's
+ * daily card. It is dealer-scoped on the way in (the sign route refuses a
+ * dealerId the caller has no access to) and readable back through
+ * `/uploads/download-url`, which re-checks the same dealer before signing, so a
+ * compliance photo can be reopened later by the people entitled to see it and
+ * by nobody else.
+ *
+ * The trap this replaced: the scope list lives in one zod enum in shared, and
+ * the sign route used to re-spell it by hand. A scope that exists in the route
+ * but not in the enum type-checks perfectly and then 400s on the first real
+ * upload, so the scope string here must match `presignUploadSchema`, not the
+ * route's branches.
  */
 async function uploadProof(file: File, dealerId: string): Promise<Attachment> {
   const resolved = resolveFileType(file, { assumeImage: true });

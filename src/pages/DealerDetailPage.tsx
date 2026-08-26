@@ -29,25 +29,118 @@ import {
 import { useDealerQuery } from '@/hooks/api/useDealers';
 import { useDealerServicesQuery } from '@/hooks/api/useDealerServices';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { retryImport } from '@/lib/retryImport';
 import { dealerCodeLabel, type Dealer } from '@dk/shared';
 
-import { CustomRequestTab } from './dealers/CustomRequestTab';
 import {
   DealerArchiveDialogs,
   type DealerArchiveAction,
 } from './dealers/DealerDangerZone';
-import { DealerInfoTab } from './dealers/DealerInfoTab';
-import { DealerKavachTab } from './dealers/DealerKavachTab';
-import { DealerKavachWorkListTab } from './dealers/DealerKavachWorkListTab';
-import { DealerMembersTab } from './dealers/DealerMembersTab';
-import { DealerPasswordVaultTab } from './dealers/DealerPasswordVaultTab';
-import { DealerServicesTab } from './dealers/DealerServicesTab';
-import { DealerStaffTab } from './dealers/DealerStaffTab';
-import { DealerWorkListTab } from './dealers/DealerWorkListTab';
-import { OnboardingTab } from './dealers/OnboardingTab';
-import { RunsListInline } from './dealers/RunsListInline';
-import { ServicesProvidedTab } from './dealers/ServicesProvidedTab';
-import { DealerVaultView } from './dealers/vault/DealerVaultView';
+
+/**
+ * Every tab body is loaded on demand, and only the one on screen.
+ *
+ * Thirteen static imports meant opening ANY dealer downloaded all thirteen
+ * surfaces — the JSON-schema config form stack behind Services included, which
+ * is ~300 kB raw / 84 kB brotli of ajv, lodash and @rjsf on its own. Only one
+ * body ever renders (see `activeDef.body` below), so the other twelve were
+ * bytes nobody asked for, paid for over a mid-range phone's connection.
+ *
+ * Named exports, hence the `.then` unwrap: `React.lazy` wants a module whose
+ * `default` is the component.
+ *
+ * The `lazy()` calls MUST stay at module scope. Creating one inside the render
+ * would hand React a brand-new component type on every render, which remounts
+ * the tab — losing its scroll position, its form state and its in-flight
+ * queries — instead of re-rendering it.
+ */
+const CustomRequestTab = React.lazy(
+  retryImport(() =>
+    import('./dealers/CustomRequestTab').then((m) => ({
+      default: m.CustomRequestTab,
+    })),
+  ),
+);
+const DealerInfoTab = React.lazy(
+  retryImport(() =>
+    import('./dealers/DealerInfoTab').then((m) => ({ default: m.DealerInfoTab })),
+  ),
+);
+const DealerKavachTab = React.lazy(
+  retryImport(() =>
+    import('./dealers/DealerKavachTab').then((m) => ({
+      default: m.DealerKavachTab,
+    })),
+  ),
+);
+const DealerKavachWorkListTab = React.lazy(
+  retryImport(() =>
+    import('./dealers/DealerKavachWorkListTab').then((m) => ({
+      default: m.DealerKavachWorkListTab,
+    })),
+  ),
+);
+const DealerMembersTab = React.lazy(
+  retryImport(() =>
+    import('./dealers/DealerMembersTab').then((m) => ({
+      default: m.DealerMembersTab,
+    })),
+  ),
+);
+const DealerPasswordVaultTab = React.lazy(
+  retryImport(() =>
+    import('./dealers/DealerPasswordVaultTab').then((m) => ({
+      default: m.DealerPasswordVaultTab,
+    })),
+  ),
+);
+const DealerServicesTab = React.lazy(
+  retryImport(() =>
+    import('./dealers/DealerServicesTab').then((m) => ({
+      default: m.DealerServicesTab,
+    })),
+  ),
+);
+const DealerStaffTab = React.lazy(
+  retryImport(() =>
+    import('./dealers/DealerStaffTab').then((m) => ({
+      default: m.DealerStaffTab,
+    })),
+  ),
+);
+const DealerWorkListTab = React.lazy(
+  retryImport(() =>
+    import('./dealers/DealerWorkListTab').then((m) => ({
+      default: m.DealerWorkListTab,
+    })),
+  ),
+);
+const OnboardingTab = React.lazy(
+  retryImport(() =>
+    import('./dealers/OnboardingTab').then((m) => ({ default: m.OnboardingTab })),
+  ),
+);
+const RunsListInline = React.lazy(
+  retryImport(() =>
+    import('./dealers/RunsListInline').then((m) => ({
+      default: m.RunsListInline,
+    })),
+  ),
+);
+const ServicesProvidedTab = React.lazy(
+  retryImport(() =>
+    import('./dealers/ServicesProvidedTab').then((m) => ({
+      default: m.ServicesProvidedTab,
+    })),
+  ),
+);
+const DealerVaultView = React.lazy(
+  retryImport(() =>
+    import('./dealers/vault/DealerVaultView').then((m) => ({
+      default: m.DealerVaultView,
+    })),
+  ),
+);
 
 /** Where an entry ends up once every rule below has been applied. */
 type TabPlacement = 'strip' | 'menu' | 'hidden';
@@ -482,7 +575,16 @@ export function DealerDetailPage() {
           }
         />
       </div>
-      {activeDef.body(dealer, tabContext)}
+      {/* The boundary for the lazily-loaded tab bodies above. `key`ed on the
+          tab: when an already-revealed boundary suspends again, React keeps the
+          previous children mounted and merely hides them, so switching tabs
+          would leave the tab you just left running its queries and effects
+          behind a skeleton. A new key retires it outright. Once a tab's chunk
+          is in memory `React.lazy` resolves synchronously, so a second visit
+          never flashes the skeleton at all. */}
+      <React.Suspense key={activeTab} fallback={<TabBodySkeleton />}>
+        {activeDef.body(dealer, tabContext)}
+      </React.Suspense>
       {/* Delete/restore straight from the menu. The Info tab's danger-zone card
           drives the same component with its own state, so the archive flow has
           one implementation and the two entry points cannot disagree. */}
@@ -493,6 +595,22 @@ export function DealerDetailPage() {
           onClose={() => setDangerAction(null)}
         />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Stands in while a tab body's chunk arrives.
+ *
+ * Shaped like a tab body — a heading bar over a card — rather than a spinner,
+ * so the page keeps its height and the strip above it does not jump as the
+ * chunk lands. Every tab opens onto something roughly this size.
+ */
+function TabBodySkeleton() {
+  return (
+    <div className="grid gap-3">
+      <Skeleton className="h-6 w-40" />
+      <Skeleton className="h-64 w-full" />
     </div>
   );
 }

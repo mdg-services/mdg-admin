@@ -69,21 +69,6 @@ export function RunHistoryPage() {
     Boolean,
   ).length;
 
-  /**
-   * A text filter that commits on blur alone never commits on Android: the
-   * on-screen keyboard's Done key does not reliably blur a WebView input, and
-   * the next control is a native `<select>` that opens its own overlay. So an
-   * admin typed a dealer id and the list simply never filtered. Enter now blurs
-   * (which commits through the existing handler), and `enterKeyHint` makes the
-   * key say what it does.
-   */
-  function commitOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      e.currentTarget.blur();
-    }
-  }
-
   function clearFilters() {
     const next = new URLSearchParams(search);
     for (const key of ['dealerId', 'serviceId', 'status', 'from', 'to', 'page']) {
@@ -109,36 +94,20 @@ export function RunHistoryPage() {
         activeCount={activeFilters}
         onClear={clearFilters}
       >
-        <div>
-          <Label htmlFor="dealerId">Dealer ID</Label>
-          <Input
-            id="dealerId"
-            placeholder="24-char hex"
-            inputMode="text"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            enterKeyHint="search"
-            defaultValue={dealerId ?? ''}
-            onKeyDown={commitOnEnter}
-            onBlur={(e) => update('dealerId', e.target.value || undefined)}
-          />
-        </div>
-        <div>
-          <Label htmlFor="serviceId">Service ID</Label>
-          <Input
-            id="serviceId"
-            placeholder="plugin slug"
-            inputMode="text"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            enterKeyHint="search"
-            defaultValue={serviceId ?? ''}
-            onKeyDown={commitOnEnter}
-            onBlur={(e) => update('serviceId', e.target.value || undefined)}
-          />
-        </div>
+        <TextFilter
+          id="dealerId"
+          label="Dealer ID"
+          placeholder="24-char hex"
+          value={dealerId ?? ''}
+          onCommit={(v) => update('dealerId', v)}
+        />
+        <TextFilter
+          id="serviceId"
+          label="Service ID"
+          placeholder="plugin slug"
+          value={serviceId ?? ''}
+          onCommit={(v) => update('serviceId', v)}
+        />
         <div>
           <Label htmlFor="status">Status</Label>
           <Select
@@ -301,6 +270,115 @@ export function RunHistoryPage() {
       </Dialog>
     </div>
   );
+}
+
+/**
+ * One free-text filter, held in a local draft and pushed to the URL on blur, on
+ * Enter, and on the way out.
+ *
+ * The flush on the way out is the whole reason this is a component rather than
+ * an `<Input defaultValue>`. Below md these fields live inside `FilterBar`'s
+ * sheet, and `Sheet` returns null when it closes, so tapping the dimmed
+ * backdrop — or pressing Escape — tears the focused input out of the DOM. A
+ * removed node fires no blur: the WebView never sends one and React's listener
+ * has already gone with it. The dealer id an admin had just typed was therefore
+ * dropped on the floor — the list stayed unfiltered, the trigger still read
+ * "Filters" (its count comes from the URL), and reopening the sheet showed an
+ * empty box. "Show results" only ever worked by luck, because a `<button>`
+ * takes focus on pointer-down and blurs the field on its way in. This is the
+ * exact trap `FilterBar`'s own docstring names; `SearchBox` in the assist
+ * filters guards it the same way.
+ *
+ * The ref remembers the last value we pushed ourselves, so a value arriving on
+ * the props is adopted only when it came from somewhere else — the back button,
+ * "Clear all", a pasted link — and never as the echo of what is already in the
+ * box.
+ *
+ * At md the fields never unmount between edits, so none of this is reachable
+ * there and desktop behaviour is unchanged.
+ */
+function TextFilter({
+  id,
+  label,
+  placeholder,
+  value,
+  onCommit,
+}: {
+  id: string;
+  label: string;
+  placeholder: string;
+  value: string;
+  onCommit: (value: string | undefined) => void;
+}) {
+  const [draft, setDraft] = React.useState(value);
+  const emittedRef = React.useRef(value);
+
+  React.useEffect(() => {
+    if (value === emittedRef.current) return;
+    emittedRef.current = value;
+    setDraft(value);
+  }, [value]);
+
+  // Reading the pending value and the callback off a ref is what keeps the
+  // flush effect's dependency list empty, so its cleanup runs on unmount and
+  // not on every keystroke.
+  const latestRef = React.useRef({ draft, onCommit });
+  latestRef.current = { draft, onCommit };
+
+  const commit = React.useCallback(() => {
+    const { draft: pending, onCommit: send } = latestRef.current;
+    if (pending === emittedRef.current) return;
+    emittedRef.current = pending;
+    send(pending || undefined);
+  }, []);
+
+  // Only flush while the browser is still on this page. Unmount also happens
+  // when the operator leaves — the Android back button out of an open sheet is
+  // the live case — and committing then would push the run-history URL back
+  // over the page they just moved to. React Router has already updated
+  // `window.location` by the time a cleanup runs, so this comparison sees it.
+  const ownPathRef = React.useRef(window.location.pathname);
+  React.useEffect(
+    () => () => {
+      if (window.location.pathname !== ownPathRef.current) return;
+      commit();
+    },
+    [commit],
+  );
+
+  return (
+    <div>
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        placeholder={placeholder}
+        inputMode="text"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        enterKeyHint="search"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={commitOnEnter}
+        onBlur={commit}
+      />
+    </div>
+  );
+}
+
+/**
+ * A text filter that commits on blur alone never commits on Android: the
+ * on-screen keyboard's Done key does not reliably blur a WebView input, and the
+ * next control is a native `<select>` that opens its own overlay. So an admin
+ * typed a dealer id and the list simply never filtered. Enter now blurs (which
+ * commits through the existing handler), and `enterKeyHint` makes the key say
+ * what it does.
+ */
+function commitOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    e.currentTarget.blur();
+  }
 }
 
 /**

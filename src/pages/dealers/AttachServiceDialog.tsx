@@ -28,6 +28,8 @@ interface Props {
   inspectionAttached?: boolean;
   irasCron?: string | null;
   onSubmit: (values: AttachServiceInput) => void | Promise<void>;
+  /** False when a Suspense fallback sheet has already slid up in our place. */
+  animateIn?: boolean;
 }
 
 export function AttachServiceDialog({
@@ -40,6 +42,7 @@ export function AttachServiceDialog({
   inspectionAttached,
   irasCron,
   onSubmit,
+  animateIn,
 }: Props) {
   const { data: services, isLoading } = useServicesQuery();
   const [selectedId, setSelectedId] = React.useState<string>('');
@@ -95,6 +98,7 @@ export function AttachServiceDialog({
     <Dialog
       open={open}
       onClose={onClose}
+      animateIn={animateIn}
       title="Attach service"
       // Kept to one line: `Dialog` puts `description` in the sticky,
       // non-scrolling header, so every extra sentence is permanent height in a

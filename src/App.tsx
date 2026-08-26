@@ -1,31 +1,176 @@
+import * as React from 'react';
 import { Route, Routes , Navigate } from 'react-router-dom';
 
 import { AppShell } from '@/components/layout/AppShell';
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { RequireSuperAdmin } from '@/components/layout/RequireSuperAdmin';
-import { ActivityPage } from '@/pages/ActivityPage';
-import { AdminsPage } from '@/pages/AdminsPage';
-import { AllUsersPage } from '@/pages/AllUsersPage';
-import { AssistPage } from '@/pages/AssistPage';
-import { BankHolidaysPage } from '@/pages/BankHolidaysPage';
-import { ShiftDataEditorPage } from '@/pages/dataVault/dayEditor/ShiftDataEditorPage';
-import { DataVaultPage } from '@/pages/DataVaultPage';
-import { DealerDetailPage } from '@/pages/DealerDetailPage';
-import { DealersPage } from '@/pages/DealersPage';
-import { DsrReportView } from '@/pages/dsr/DsrReportView';
-import { DsrVaultPage } from '@/pages/DsrVaultPage';
-import { FestivalPage } from '@/pages/FestivalPage';
+import { Skeleton } from '@/components/ui';
+import { retryImport } from '@/lib/retryImport';
 import { InboxPage } from '@/pages/InboxPage';
-import { KavachDashboardPage } from '@/pages/KavachDashboardPage';
-import { KavachDefaultsPage } from '@/pages/KavachDefaultsPage';
-import { KavachWorkQueuePage } from '@/pages/KavachWorkQueuePage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
-import { OverviewPage } from '@/pages/OverviewPage';
-import { RunHistoryPage } from '@/pages/RunHistoryPage';
-import { ServiceCatalogPage } from '@/pages/ServiceCatalogPage';
-import { WorkListDefaultsPage } from '@/pages/WorkListDefaultsPage';
+
+/**
+ * Three pages stay in the entry chunk, and every other one is fetched when it
+ * is first opened.
+ *
+ * The three are the ones you cannot navigate *to*: `LoginPage` is where an
+ * unauthenticated visit lands, `InboxPage` is where `/` redirects, and
+ * `NotFoundPage` catches everything else. Splitting those would only add a
+ * round trip to first paint on the slow connections this app is used on —
+ * which is the one thing this change must not do.
+ *
+ * Everything else is behind a tap: the Assist console, the 36-column IRAS edit
+ * grid, the DSR viewer, the dealer detail page and its JSON-schema form stack.
+ * Previously all of it shipped as one 1.49 MB chunk, so signing in and reading
+ * the Inbox paid for every screen in the product.
+ *
+ * Every factory goes through `retryImport`, which handles a dropped request and
+ * a chunk that a redeploy has renamed out from under a live session — both only
+ * possible once there are chunks at all. See its comment for the trap.
+ */
+const ActivityPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/ActivityPage').then((m) => ({ default: m.ActivityPage })),
+  ),
+);
+const AdminsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/AdminsPage').then((m) => ({ default: m.AdminsPage })),
+  ),
+);
+const AllUsersPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/AllUsersPage').then((m) => ({ default: m.AllUsersPage })),
+  ),
+);
+const AssistPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/AssistPage').then((m) => ({ default: m.AssistPage })),
+  ),
+);
+const BankHolidaysPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/BankHolidaysPage').then((m) => ({
+      default: m.BankHolidaysPage,
+    })),
+  ),
+);
+const DataVaultPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/DataVaultPage').then((m) => ({ default: m.DataVaultPage })),
+  ),
+);
+const DealerDetailPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/DealerDetailPage').then((m) => ({
+      default: m.DealerDetailPage,
+    })),
+  ),
+);
+const DealersPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/DealersPage').then((m) => ({ default: m.DealersPage })),
+  ),
+);
+const DsrReportView = React.lazy(
+  retryImport(() =>
+    import('@/pages/dsr/DsrReportView').then((m) => ({
+      default: m.DsrReportView,
+    })),
+  ),
+);
+const DsrVaultPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/DsrVaultPage').then((m) => ({ default: m.DsrVaultPage })),
+  ),
+);
+const FestivalPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/FestivalPage').then((m) => ({ default: m.FestivalPage })),
+  ),
+);
+const KavachDashboardPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/KavachDashboardPage').then((m) => ({
+      default: m.KavachDashboardPage,
+    })),
+  ),
+);
+const KavachDefaultsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/KavachDefaultsPage').then((m) => ({
+      default: m.KavachDefaultsPage,
+    })),
+  ),
+);
+const KavachWorkQueuePage = React.lazy(
+  retryImport(() =>
+    import('@/pages/KavachWorkQueuePage').then((m) => ({
+      default: m.KavachWorkQueuePage,
+    })),
+  ),
+);
+const OverviewPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/OverviewPage').then((m) => ({ default: m.OverviewPage })),
+  ),
+);
+const RunHistoryPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/RunHistoryPage').then((m) => ({ default: m.RunHistoryPage })),
+  ),
+);
+const ServiceCatalogPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/ServiceCatalogPage').then((m) => ({
+      default: m.ServiceCatalogPage,
+    })),
+  ),
+);
+const ShiftDataEditorPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/dataVault/dayEditor/ShiftDataEditorPage').then((m) => ({
+      default: m.ShiftDataEditorPage,
+    })),
+  ),
+);
+const WorkListDefaultsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/WorkListDefaultsPage').then((m) => ({
+      default: m.WorkListDefaultsPage,
+    })),
+  ),
+);
+
+/**
+ * The boundary a lazily-loaded page waits behind.
+ *
+ * One per route element rather than one around `<Routes>`, and that is the
+ * whole point: a boundary above the router would swap out `AppShell` too, so
+ * every navigation on a slow connection would blink the sidebar, the header and
+ * the mobile tab bar out of existence and back. Wrapped this far in, the
+ * chrome never moves and only the page area shows a placeholder — which is what
+ * a native app does.
+ *
+ * Inside `RequireSuperAdmin` where there is one, so a plain admin's chunk is
+ * never fetched for a page they will be redirected away from.
+ */
+function LazyPage({ children }: { children: React.ReactNode }) {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="grid gap-3">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-72 w-full" />
+        </div>
+      }
+    >
+      {children}
+    </React.Suspense>
+  );
+}
 
 export default function App() {
   return (
@@ -45,39 +190,101 @@ export default function App() {
         >
           <Route index element={<Navigate to="/inbox" replace />} />
           <Route path="inbox" element={<InboxPage />} />
-          <Route path="overview" element={<OverviewPage />} />
-          <Route path="dealers" element={<DealersPage />} />
-          <Route path="dealers/:id" element={<DealerDetailPage />} />
+          <Route
+            path="overview"
+            element={
+              <LazyPage>
+                <OverviewPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="dealers"
+            element={
+              <LazyPage>
+                <DealersPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="dealers/:id"
+            element={
+              <LazyPage>
+                <DealerDetailPage />
+              </LazyPage>
+            }
+          />
           {/* The queue is what an admin opens: everything outstanding across
               every dealer, in one list. The old dashboard keeps a route as the
               per-dealer standing view — including "how long since anyone at MDG
               verified this outlet", which is the only alarm for OUR backlog. */}
-          <Route path="kavach" element={<KavachWorkQueuePage />} />
-          <Route path="kavach/dashboard" element={<KavachDashboardPage />} />
+          <Route
+            path="kavach"
+            element={
+              <LazyPage>
+                <KavachWorkQueuePage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="kavach/dashboard"
+            element={
+              <LazyPage>
+                <KavachDashboardPage />
+              </LazyPage>
+            }
+          />
           {/* Editing points here moves every dealer without an override. */}
           <Route
             path="kavach/defaults"
             element={
               <RequireSuperAdmin>
-                <KavachDefaultsPage />
+                <LazyPage>
+                  <KavachDefaultsPage />
+                </LazyPage>
               </RequireSuperAdmin>
             }
           />
           {/* Plain admins are the audience here — the Vault is where they read
               every dealer's collected IRAS data, so it is NOT super-admin only. */}
-          <Route path="data-vault" element={<DataVaultPage />} />
+          <Route
+            path="data-vault"
+            element={
+              <LazyPage>
+                <DataVaultPage />
+              </LazyPage>
+            }
+          />
           {/* Correcting a day's collected figures. A full page, not a drawer:
               these reports run to 36 columns. Same audience as the Vault it
               hangs off — the audit trail on every correction is the control
               here, not a role gate. */}
           <Route
             path="data-vault/dealers/:dealerId/days/:businessDate"
-            element={<ShiftDataEditorPage />}
+            element={
+              <LazyPage>
+                <ShiftDataEditorPage />
+              </LazyPage>
+            }
           />
           {/* Daily Sales Report — a dealer-facing outcome surface, so like the
               Data Vault it is NOT super-admin only. */}
-          <Route path="dsr" element={<DsrVaultPage />} />
-          <Route path="dsr/dealers/:dealerId" element={<DsrReportView />} />
+          <Route
+            path="dsr"
+            element={
+              <LazyPage>
+                <DsrVaultPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="dsr/dealers/:dealerId"
+            element={
+              <LazyPage>
+                <DsrReportView />
+              </LazyPage>
+            }
+          />
           {/* The landing-page assistant's console (ADR 0009): strangers'
               transcripts, their phone numbers, and the block list. Keep this in
               step with `superAdminOnly` in navItems.ts — the flag only hides
@@ -86,7 +293,9 @@ export default function App() {
             path="assist"
             element={
               <RequireSuperAdmin>
-                <AssistPage />
+                <LazyPage>
+                  <AssistPage />
+                </LazyPage>
               </RequireSuperAdmin>
             }
           />
@@ -97,7 +306,9 @@ export default function App() {
             path="services"
             element={
               <RequireSuperAdmin>
-                <ServiceCatalogPage />
+                <LazyPage>
+                  <ServiceCatalogPage />
+                </LazyPage>
               </RequireSuperAdmin>
             }
           />
@@ -105,7 +316,9 @@ export default function App() {
             path="runs"
             element={
               <RequireSuperAdmin>
-                <RunHistoryPage />
+                <LazyPage>
+                  <RunHistoryPage />
+                </LazyPage>
               </RequireSuperAdmin>
             }
           />
@@ -113,7 +326,9 @@ export default function App() {
             path="activity"
             element={
               <RequireSuperAdmin>
-                <ActivityPage />
+                <LazyPage>
+                  <ActivityPage />
+                </LazyPage>
               </RequireSuperAdmin>
             }
           />
@@ -121,7 +336,9 @@ export default function App() {
             path="users"
             element={
               <RequireSuperAdmin>
-                <AllUsersPage />
+                <LazyPage>
+                  <AllUsersPage />
+                </LazyPage>
               </RequireSuperAdmin>
             }
           />
@@ -129,7 +346,9 @@ export default function App() {
             path="work-list"
             element={
               <RequireSuperAdmin>
-                <WorkListDefaultsPage />
+                <LazyPage>
+                  <WorkListDefaultsPage />
+                </LazyPage>
               </RequireSuperAdmin>
             }
           />
@@ -137,7 +356,9 @@ export default function App() {
             path="bank-holidays"
             element={
               <RequireSuperAdmin>
-                <BankHolidaysPage />
+                <LazyPage>
+                  <BankHolidaysPage />
+                </LazyPage>
               </RequireSuperAdmin>
             }
           />
@@ -145,7 +366,9 @@ export default function App() {
             path="festival"
             element={
               <RequireSuperAdmin>
-                <FestivalPage />
+                <LazyPage>
+                  <FestivalPage />
+                </LazyPage>
               </RequireSuperAdmin>
             }
           />
@@ -153,7 +376,9 @@ export default function App() {
             path="settings/team"
             element={
               <RequireSuperAdmin>
-                <AdminsPage />
+                <LazyPage>
+                  <AdminsPage />
+                </LazyPage>
               </RequireSuperAdmin>
             }
           />
