@@ -149,7 +149,18 @@ export function DealerStaffTab({ dealer }: Props) {
   const [workerDialogOpen, setWorkerDialogOpen] = React.useState(false);
   const [editingWorker, setEditingWorker] = React.useState<EmployeeWithPoints | null>(null);
   const [undoTarget, setUndoTarget] = React.useState<StaffPointAward | null>(null);
-  const [photoUrl, setPhotoUrl] = React.useState<string | null>(null);
+  /**
+   * The hardcopy photo being examined, and the day it belongs to.
+   *
+   * The date rides along because the lightbox is a reconciliation tool, not a
+   * gallery: the whole point is "does the register for 12 Jul agree with the
+   * ledger for 12 Jul", and once the sheet is open covering the row it came
+   * from, the day is the one thing that is no longer on screen. It also names
+   * the file when the photo is saved to the phone.
+   */
+  const [photo, setPhoto] = React.useState<{ url: string; workDate: string } | null>(
+    null,
+  );
   /** The warrior whose detail panel is open, or `null`. */
   const [detailId, setDetailId] = React.useState<string | null>(null);
 
@@ -489,36 +500,36 @@ export function DealerStaffTab({ dealer }: Props) {
                   return {
                     key: row.employeeId,
                     onClick: () => setDetailId(row.employeeId),
+                    // Rank and name share the title, and nothing else does.
+                    // `primaryRight` is `shrink-0`, so the "/ 3100" half of the
+                    // figure was taken straight out of the name's width — at
+                    // 360px that left ~175px, cutting "#12 Ramesh Kumar Singh"
+                    // at about eighteen characters. The target moved to the
+                    // wrapping meta line, where it also gets to say "met" in
+                    // words rather than only in green.
                     primary: (
-                      <span className="block truncate font-medium text-text">
-                        <span className="text-text-muted tabular-nums">
+                      <span className="block font-medium text-text">
+                        <span className="tabular-nums text-text-muted">
                           #{i + 1}
                         </span>{' '}
                         {row.employeeName}
                       </span>
                     ),
                     primaryRight: (
-                      <span className="whitespace-nowrap">
-                        <span className="tabular-nums font-semibold">
-                          {fmtPoints(row.totalPoints)}
-                        </span>
-                        {rowTarget !== undefined ? (
-                          <span
-                            className={
-                              hitTarget
-                                ? 'ml-1 text-xs text-success'
-                                : 'ml-1 text-xs text-text-subtle'
-                            }
-                          >
-                            / {fmtPoints(rowTarget)}
-                          </span>
-                        ) : null}
+                      <span className="whitespace-nowrap tabular-nums font-semibold">
+                        {fmtPoints(row.totalPoints)}
                       </span>
                     ),
                     meta: (
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex flex-wrap items-center gap-1.5">
                         <EmployeeStatusChip status={row.status} />
                         <span>· {row.awardCount} awards</span>
+                        {rowTarget !== undefined ? (
+                          <span className={hitTarget ? 'text-success' : undefined}>
+                            · {fmtPoints(rowTarget)} target
+                            {hitTarget ? ' · met' : ''}
+                          </span>
+                        ) : null}
                       </span>
                     ),
                   };
@@ -687,20 +698,21 @@ export function DealerStaffTab({ dealer }: Props) {
                     updateEmployee.variables?.id === emp.id;
                   return {
                     key: emp.id,
+                    // The status chip is `shrink-0` and eats ~66px of a ~278px
+                    // card, so the title had ~200px for a name AND a
+                    // designation and truncated the warrior's name — the one
+                    // string the admin is looking for. The name owns the title
+                    // now; designation joins the phone on the line below.
                     primary: (
-                      <span className="block truncate font-medium text-text">
-                        {emp.name}
-                        {emp.designation ? (
-                          <span className="ml-2 text-xs font-normal text-text-subtle">
-                            {emp.designation}
-                          </span>
-                        ) : null}
-                      </span>
+                      <span className="block font-medium text-text">{emp.name}</span>
                     ),
                     primaryRight: <EmployeeStatusChip status={emp.status} />,
-                    secondary: emp.phone ? (
-                      <span className="block">{emp.phone}</span>
-                    ) : undefined,
+                    secondary:
+                      emp.designation || emp.phone ? (
+                        <span className="block">
+                          {[emp.designation, emp.phone].filter(Boolean).join(' · ')}
+                        </span>
+                      ) : undefined,
                     meta: (
                       <span>
                         Window{' '}
@@ -883,7 +895,8 @@ export function DealerStaffTab({ dealer }: Props) {
             </CardTitle>
             <CardSubtitle>
               Submitted batches with their hardcopy photo — the hard-vs-soft-copy
-              reconciliation view. Click a photo to enlarge.
+              reconciliation view. Tap a photo to open it, then pinch or
+              double-tap to read the handwriting.
             </CardSubtitle>
           </div>
         </CardHeader>
@@ -941,7 +954,13 @@ export function DealerStaffTab({ dealer }: Props) {
                           {b.hardCopyImageUrl ? (
                             <button
                               type="button"
-                              onClick={() => setPhotoUrl(b.hardCopyImageUrl ?? null)}
+                              onClick={() =>
+                                setPhoto(
+                                  b.hardCopyImageUrl
+                                    ? { url: b.hardCopyImageUrl, workDate: b.workDate }
+                                    : null,
+                                )
+                              }
                               className="block h-11 w-11 overflow-hidden rounded-sm border border-border hover:ring-2 hover:ring-focus-ring"
                               aria-label="View hardcopy photo"
                             >
@@ -988,7 +1007,13 @@ export function DealerStaffTab({ dealer }: Props) {
                   actions: b.hardCopyImageUrl ? (
                     <button
                       type="button"
-                      onClick={() => setPhotoUrl(b.hardCopyImageUrl ?? null)}
+                      onClick={() =>
+                        setPhoto(
+                          b.hardCopyImageUrl
+                            ? { url: b.hardCopyImageUrl, workDate: b.workDate }
+                            : null,
+                        )
+                      }
                       className="flex items-center gap-2 rounded-sm text-sm text-text-muted"
                       aria-label="View hardcopy photo"
                     >
@@ -1133,10 +1158,14 @@ export function DealerStaffTab({ dealer }: Props) {
             : undefined
         }
         footer={
-          // Stack full-width on mobile (each button is large and unambiguous;
-          // the two destructive "Undo" variants are no longer side-by-side at
-          // thumb width). Desktop keeps the right-aligned row.
-          <div className="grid w-full grid-cols-1 gap-2 md:flex md:justify-end md:gap-2">
+          // The stacking is `Dialog`'s own: its footer renders through
+          // `ActionRow below="stack"`, which is full-width buttons in a column
+          // below md and the right-aligned row at md. The hand-rolled grid that
+          // used to be here sat INSIDE that ActionRow as a single child, which
+          // meant `flex-col-reverse` had nothing to reverse and "Undo this
+          // entry" — the action the admin came for — landed at the bottom of
+          // the stack instead of under the thumb.
+          <>
             <Button variant="secondary" onClick={() => setUndoTarget(null)}>
               Cancel
             </Button>
@@ -1156,7 +1185,7 @@ export function DealerStaffTab({ dealer }: Props) {
             >
               Undo this entry
             </Button>
-          </div>
+          </>
         }
       >
         <p className="text-sm text-text-muted">
@@ -1168,12 +1197,27 @@ export function DealerStaffTab({ dealer }: Props) {
         </p>
       </Dialog>
 
+      {/* The hardcopy photo, zoomable.
+          This card exists to reconcile a handwritten register against the
+          ledger, and below md the sheet is ~328px wide — a phone photo of an
+          A4 register scaled to that is unreadable, and `index.html` ships
+          `maximum-scale=1.0` so there is no pinch to recover with. The
+          lightbox's own `ZoomableImage` (on by default) is the zoom; the
+          Download is the escape hatch for the cases zoom cannot rescue — a
+          skewed or multi-column sheet the admin wants open in the phone's own
+          photo viewer, beside the ledger. It reports its own failure, so a tap
+          never does nothing silently. */}
       <ImageLightbox
-        open={!!photoUrl}
-        onClose={() => setPhotoUrl(null)}
-        src={photoUrl ?? ''}
-        alt="Hardcopy submission"
-        title="Hardcopy photo"
+        open={!!photo}
+        onClose={() => setPhoto(null)}
+        src={photo?.url ?? ''}
+        downloadUrl={photo?.url}
+        alt={
+          photo
+            ? `Hardcopy submission for ${formatYmd(photo.workDate)}`
+            : 'Hardcopy submission'
+        }
+        title={photo ? `Hardcopy · ${formatYmd(photo.workDate)}` : 'Hardcopy photo'}
       />
     </div>
   );

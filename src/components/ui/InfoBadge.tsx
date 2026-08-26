@@ -36,15 +36,29 @@ export interface InfoBadgeProps {
   /** The explanation. Never put this only in `title`. */
   detail: React.ReactNode;
   sheetTitle?: string;
+  /**
+   * Classes for the outer element — which is the `Badge` itself at md+ and the
+   * wrapping `<button>` below md. Anything that sizes or tints the pill belongs
+   * in `badgeClassName`, which always lands on the `Badge` at both widths.
+   */
   className?: string;
+  badgeClassName?: string;
 }
 
+/**
+ * NOT LEGAL INSIDE A TAPPABLE ROW. Below md this renders a real `<button>`, so
+ * dropping one into a `MobileCard` that has an `onClick`, or into a `DataList`
+ * row with `onRowClick`, nests a button inside a button — invalid HTML, and on
+ * Android the inner one simply never fires. Lift the badge out of the tap
+ * target, as the Credit & DOD history card does.
+ */
 export function InfoBadge({
   intent = 'neutral',
   label,
   detail,
   sheetTitle,
   className,
+  badgeClassName,
 }: InfoBadgeProps) {
   const isMd = useMediaQuery('(min-width: 768px)');
   const [open, setOpen] = React.useState(false);
@@ -54,7 +68,11 @@ export function InfoBadge({
 
   if (isMd) {
     return (
-      <Badge intent={intent} title={titleText} className={className}>
+      <Badge
+        intent={intent}
+        title={titleText}
+        className={cn(className, badgeClassName)}
+      >
         {label}
       </Badge>
     );
@@ -73,7 +91,7 @@ export function InfoBadge({
           className,
         )}
       >
-        <Badge intent={intent} className="gap-1">
+        <Badge intent={intent} className={cn('gap-1', badgeClassName)}>
           <span className="min-w-0 truncate">{label}</span>
           <Info
             width={12}

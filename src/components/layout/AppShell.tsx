@@ -47,7 +47,10 @@ function NavList({
           <li key={item.to}>
             <NavLink
               to={item.to}
-              end={item.to === '/'}
+              // Prefix matching is the default, so an item that is a prefix of
+              // another route (`/kavach` vs `/kavach/defaults`) lights two rows
+              // at once unless it opts out.
+              end={item.end ?? item.to === '/'}
               onClick={onNavigate}
               className={({ isActive }) =>
                 cn(

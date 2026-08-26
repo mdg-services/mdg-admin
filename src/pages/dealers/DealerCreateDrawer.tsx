@@ -50,7 +50,12 @@ export function DealerCreateDrawer({ open, onClose, loading, onSubmit }: Props) 
         reset();
       }}
       title="Add dealer"
-      description="The dealer code is how this outlet is identified everywhere — on their reports, in chat and in every list. Everything else is filled in as the onboarding journey progresses."
+      // One short sentence only. `Drawer` renders `description` in the panel's
+      // NON-scrolling header, above the `flex-1 overflow-y-auto` body: the
+      // three-sentence version was ~110px of a `max-h-[95dvh]` sheet that also
+      // has to hold two fields, a footer and the keyboard. The rest of it is in
+      // the body, where it scrolls away like anything else.
+      description="Start a new outlet's onboarding journey."
       footer={
         <>
           <Button
@@ -69,6 +74,11 @@ export function DealerCreateDrawer({ open, onClose, loading, onSubmit }: Props) 
       }
     >
       <form onSubmit={submit} noValidate className="grid gap-4">
+        <p className="text-sm text-text-muted">
+          The dealer code is how this outlet is identified everywhere — on their
+          reports, in chat and in every list. Everything else is filled in as the
+          onboarding journey progresses.
+        </p>
         <div>
           <Label htmlFor="code" required>
             Dealer code

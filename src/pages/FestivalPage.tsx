@@ -11,13 +11,16 @@ import {
   CardHeader,
   CardSubtitle,
   CardTitle,
+  Checkbox,
   Input,
   Label,
   Select,
   Skeleton,
+  StickyActionBar,
   useToast,
 } from '@/components/ui';
 import { useFestivalQuery, useUpdateFestival } from '@/hooks/api/useFestival';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import {
   FESTIVAL_CATALOG,
@@ -27,6 +30,10 @@ import {
   type FestivalDefinition,
   type FestivalKey,
 } from '@dk/shared';
+
+/** The smallest scale at which the band's 20px English greeting is still
+ *  readable (~11px). Below md the preview is floored here and pans instead. */
+const MIN_READABLE_SCALE = 0.55;
 
 /** "Sat, 15 Aug 2026" from a YYYY-MM-DD calendar date. */
 function formatDay(date: string): string {
@@ -64,17 +71,27 @@ function nextOccurrence(observedOn: string, today: string): string {
  */
 function BandPreview({ festival }: { festival: FestivalDefinition }) {
   const wrapRef = React.useRef<HTMLDivElement>(null);
-  const [scale, setScale] = React.useState(1);
+  const [fitScale, setFitScale] = React.useState(1);
+  const isMd = useMediaQuery('(min-width: 768px)');
 
   React.useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const fit = () => setScale(Math.min(1, el.clientWidth / 1000));
+    const fit = () => setFitScale(Math.min(1, el.clientWidth / 1000));
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  /* Fit-to-width is honest at desktop widths and useless at 360: the card has
+     ~294px inside it, so scale = 0.294 and the 27px Hindi greeting renders at
+     8px. This page exists so an admin can APPROVE what dealers will see, and
+     with `maximum-scale=1.0` there is no pinch to read it. Below md the scale
+     is floored at a legible 0.55 and the 1000px stage pans sideways in its own
+     scroller instead. At md the behaviour is exactly what it was. */
+  const scale = isMd ? fitScale : Math.max(fitScale, MIN_READABLE_SCALE);
+  const pannable = scale > fitScale;
 
   const [a, b, c] = festival.colors;
   // Kept in step with `festivalBand.ts` — same heights, same stops, same pill
@@ -93,110 +110,121 @@ function BandPreview({ festival }: { festival: FestivalDefinition }) {
       };
 
   return (
-    <div
-      ref={wrapRef}
-      className="overflow-hidden rounded-md border border-border"
-      // 86px band + 124px card header, both scaled — keeps the box exactly as
-      // tall as its contents at any width.
-      style={{ height: (86 + 124) * scale }}
-    >
+    <>
+      {/* `overflow-hidden` first and `overflow-x-auto` after it: Tailwind emits
+          the axis utilities later, so this resolves to `overflow-x: auto` with
+          `overflow-y: hidden`, and `md:overflow-x-hidden` puts the desktop box
+          back to plain `overflow: hidden`. */}
       <div
-        style={{
-          width: 1000,
-          transform: `scale(${scale})`,
-          transformOrigin: 'top left',
-        }}
+        ref={wrapRef}
+        className="overflow-hidden overflow-x-auto overscroll-x-contain rounded-md border border-border md:overflow-x-hidden"
+        // 86px band + 124px card header, both scaled — keeps the box exactly as
+        // tall as its contents at any width.
+        style={{ height: (86 + 124) * scale }}
       >
         <div
           style={{
-            height: 86,
-            background,
-            borderBottom: '2px solid #7f1d1d',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            width: 1000,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
           }}
         >
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14,
-              whiteSpace: 'nowrap',
-              color: festival.ink,
-              ...pill,
-            }}
-          >
-            {festival.emblemSvg ? (
-              <span
-                style={{ display: 'flex', alignItems: 'center' }}
-                // Static markup from our own catalog — never admin input.
-                dangerouslySetInnerHTML={{ __html: festival.emblemSvg }}
-              />
-            ) : null}
-            <span style={{ fontSize: 27, fontWeight: 800 }}>{festival.greetingHi}</span>
-            <span style={{ fontSize: 22, fontWeight: 700, opacity: 0.45 }}>·</span>
-            <span style={{ fontSize: 20, fontWeight: 700, opacity: 0.82 }}>
-              {festival.greetingEn}
-            </span>
-            {festival.emblemSvg ? (
-              <span
-                style={{ display: 'flex', alignItems: 'center' }}
-                dangerouslySetInnerHTML={{ __html: festival.emblemSvg }}
-              />
-            ) : null}
-          </div>
-        </div>
-        {/* The real card's header, so the band is seen in context. */}
-        <div
-          style={{
-            height: 124,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '0 22px',
-            background: 'linear-gradient(180deg, #7f1d1d, #5c1010)',
-          }}
-        >
-          <div
-            style={{
-              width: 70,
-              height: 70,
-              borderRadius: 16,
-              background: '#fff',
-              color: '#7f1d1d',
+              height: 86,
+              background,
+              borderBottom: '2px solid #7f1d1d',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 21,
-              fontWeight: 800,
             }}
           >
-            MDG
-          </div>
-          <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: 38, fontWeight: 800, color: '#fff', lineHeight: 1.05 }}>
-              CREDIT &amp; DOD MONITORING
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                whiteSpace: 'nowrap',
+                color: festival.ink,
+                ...pill,
+              }}
+            >
+              {festival.emblemSvg ? (
+                <span
+                  style={{ display: 'flex', alignItems: 'center' }}
+                  // Static markup from our own catalog — never admin input.
+                  dangerouslySetInnerHTML={{ __html: festival.emblemSvg }}
+                />
+              ) : null}
+              <span style={{ fontSize: 27, fontWeight: 800 }}>{festival.greetingHi}</span>
+              <span style={{ fontSize: 22, fontWeight: 700, opacity: 0.45 }}>·</span>
+              <span style={{ fontSize: 20, fontWeight: 700, opacity: 0.82 }}>
+                {festival.greetingEn}
+              </span>
+              {festival.emblemSvg ? (
+                <span
+                  style={{ display: 'flex', alignItems: 'center' }}
+                  dangerouslySetInnerHTML={{ __html: festival.emblemSvg }}
+                />
+              ) : null}
             </div>
-            <div style={{ fontSize: 21, fontWeight: 600, color: '#f59e0b', marginTop: 4 }}>
-              रोज़ का उधार-हिसाब
-            </div>
           </div>
+          {/* The real card's header, so the band is seen in context. */}
           <div
             style={{
-              background: '#f59e0b',
-              color: '#7f1d1d',
-              borderRadius: 10,
-              padding: '8px 16px',
-              fontSize: 25,
-              fontWeight: 800,
+              height: 124,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '0 22px',
+              background: 'linear-gradient(180deg, #7f1d1d, #5c1010)',
             }}
           >
-            RO CODE
+            <div
+              style={{
+                width: 70,
+                height: 70,
+                borderRadius: 16,
+                background: '#fff',
+                color: '#7f1d1d',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 21,
+                fontWeight: 800,
+              }}
+            >
+              MDG
+            </div>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ fontSize: 38, fontWeight: 800, color: '#fff', lineHeight: 1.05 }}>
+                CREDIT &amp; DOD MONITORING
+              </div>
+              <div style={{ fontSize: 21, fontWeight: 600, color: '#f59e0b', marginTop: 4 }}>
+                रोज़ का उधार-हिसाब
+              </div>
+            </div>
+            <div
+              style={{
+                background: '#f59e0b',
+                color: '#7f1d1d',
+                borderRadius: 10,
+                padding: '8px 16px',
+                fontSize: 25,
+                fontWeight: 800,
+              }}
+            >
+              RO CODE
+            </div>
           </div>
         </div>
       </div>
-    </div>
+      {pannable ? (
+        <p className="mt-1 text-xs text-text-subtle md:hidden">
+          Drag sideways to see the whole band.
+        </p>
+      ) : null}
+    </>
   );
 }
 
@@ -284,6 +312,15 @@ export function FestivalPage() {
 
   const savedDef = findFestival(festivalQ.data?.setting?.festivalKey);
 
+  // What the sticky bar says, including WHY Save is dead when it is.
+  const saveSummary = !startDate
+    ? 'Pick a start date to save.'
+    : days < 1
+      ? 'Show for must be at least 1 day.'
+      : dirty
+        ? 'Unsaved changes.'
+        : 'No unsaved changes.';
+
   return (
     <div>
       <PageHeader
@@ -295,7 +332,12 @@ export function FestivalPage() {
         <Skeleton className="h-64 w-full" />
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card>
+          {/* Below md the Status card is ~250px of prose sitting between the
+              Preview and the festival picker that drives it, so the admin chose
+              a festival with the preview off the top of the screen. `order-last`
+              moves it under both; `md:order-none` leaves every width from 768px
+              up in DOM order, exactly as today. */}
+          <Card className="order-last md:order-none">
             <CardHeader>
               <div>
                 <CardTitle>Status</CardTitle>
@@ -406,22 +448,26 @@ export function FestivalPage() {
                 </div>
               </div>
 
-              <label className="flex items-start gap-2.5 rounded-md border border-border p-3">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 accent-brand"
-                  checked={enabled}
-                  onChange={(e) => setEnabled(e.target.checked)}
-                />
-                <span className="text-sm">
-                  <span className="font-medium text-text">
-                    Show this greeting to dealers
-                  </span>
-                  <span className="block text-text-muted">
-                    Turning this off removes the band immediately, whatever the dates say.
-                  </span>
-                </span>
-              </label>
+              {/* `align="start"` so the box lines up with the first line of a
+                  two-line label. This was a raw input because the primitive's
+                  base `items-center` could not be overridden from a call site
+                  (`cn` is clsx); it takes the alignment as a prop now. */}
+              <Checkbox
+                align="start"
+                labelClassName="gap-2.5 rounded-md border border-border p-3"
+                checked={enabled}
+                onChange={(e) => setEnabled(e.target.checked)}
+                label={
+                  <>
+                    <span className="font-medium text-text">
+                      Show this greeting to dealers
+                    </span>
+                    <span className="block text-text-muted">
+                      Turning this off removes the band immediately, whatever the dates say.
+                    </span>
+                  </>
+                }
+              />
 
               {draftWindow && startDate ? (
                 <p className="text-sm text-text-muted">
@@ -444,7 +490,7 @@ export function FestivalPage() {
                 </p>
               ) : null}
 
-              <div className="flex items-center gap-3">
+              <div className="hidden items-center gap-3 md:flex">
                 <Button
                   onClick={() => void onSave()}
                   loading={save.isPending}
@@ -460,6 +506,27 @@ export function FestivalPage() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Save sat at the natural end of a ~1200px single-column page, and the
+          only unsaved-state cue sat next to it — off screen while editing. The
+          bar carries both, and states the reason the button is dead rather than
+          leaving it to a `title` no phone renders. */}
+      {festivalQ.isLoading ? null : (
+        <StickyActionBar
+          visibility="below-md"
+          summary={saveSummary}
+          summaryOnMobile
+        >
+          <Button
+            onClick={() => void onSave()}
+            loading={save.isPending}
+            disabled={!dirty || !startDate || days < 1}
+            leftIcon={<PartyPopper width={16} height={16} strokeWidth={1.75} />}
+          >
+            Save
+          </Button>
+        </StickyActionBar>
       )}
     </div>
   );

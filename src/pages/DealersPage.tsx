@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   EmptyState,
   Input,
   MobileCardList,
@@ -182,15 +183,12 @@ export function DealersPage() {
             </Select>
           </div>
           {isSuperAdmin ? (
-            <label className="flex shrink-0 items-center gap-2 text-sm text-text-muted">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-border-strong accent-brand"
-                checked={showArchived}
-                onChange={(e) => setShowArchived(e.target.checked)}
-              />
-              Show deleted
-            </label>
+            <Checkbox
+              label="Show deleted"
+              labelClassName="shrink-0 text-text-muted"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+            />
           ) : null}
         </CardContent>
       </Card>
@@ -280,7 +278,7 @@ export function DealersPage() {
                   primary: (
                     <span
                       className={cn(
-                        'block truncate font-mono font-medium text-text',
+                        'block break-all font-mono font-medium text-text',
                         d.archivedAt && 'opacity-60',
                       )}
                     >
@@ -290,24 +288,32 @@ export function DealersPage() {
                   primaryRight: d.archivedAt ? (
                     <Badge intent="danger">Deleted</Badge>
                   ) : null,
-                  meta: (
-                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  // The roster's whole question is "was this done today", and on
+                  // a phone the answer used to exist only in the `title` of a
+                  // span nested inside the card's own <button> — a tooltip no
+                  // touch gesture shows, on an element long-press cannot reach
+                  // either. So `showWhen` is back on and the five services are
+                  // a two-column list instead of a wrapped inline run: label
+                  // left, state and date right, one service per line. It sits
+                  // in `secondary` rather than `meta` because `meta` forces
+                  // `text-xs`, and this is the content of the card.
+                  secondary: (
+                    <span className="grid grid-cols-[64px_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1">
                       {ROSTER_SERVICES.map((spec) => {
                         const entry = servicesByDealer.get(d.id)?.get(spec.id);
                         return (
-                          <span
-                            key={spec.id}
-                            className="inline-flex items-center gap-1"
-                            title={serviceStateTitle(entry, spec)}
-                          >
-                            {spec.shortLabel}
-                            <ServiceStateChip
-                              entry={entry}
-                              spec={spec}
-                              loading={!servicesKnown(d.id)}
-                              showWhen={false}
-                            />
-                          </span>
+                          <React.Fragment key={spec.id}>
+                            <span className="text-text-subtle">
+                              {spec.shortLabel}
+                            </span>
+                            <span className="min-w-0">
+                              <ServiceStateChip
+                                entry={entry}
+                                spec={spec}
+                                loading={!servicesKnown(d.id)}
+                              />
+                            </span>
+                          </React.Fragment>
                         );
                       })}
                     </span>

@@ -1,6 +1,9 @@
 import {
   AlertCircle,
+  ArrowDownRight,
   ArrowRight,
+  ArrowUpRight,
+  Check,
   FileBarChart2,
   Search,
 } from 'lucide-react';
@@ -124,8 +127,11 @@ export function DsrVaultPage() {
 
       <Card>
         <CardContent className="p-0">
-          <div className="flex flex-col gap-2 border-b border-border p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative sm:max-w-xs sm:flex-1">
+          {/* `md:`, not `sm:`. 640px fires on no phone in the target set and
+              produced a desktop-shaped row while the shell was still in phone
+              mode; ≥768px is unchanged. */}
+          <div className="flex flex-col gap-2 border-b border-border p-3 md:flex-row md:items-center md:justify-between">
+            <div className="relative md:max-w-xs md:flex-1">
               <Search
                 width={15}
                 height={15}
@@ -149,7 +155,7 @@ export function DsrVaultPage() {
                   status: e.target.value === 'all' ? null : e.target.value,
                 })
               }
-              className="w-full sm:w-48"
+              className="w-full md:w-48"
             >
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -196,7 +202,16 @@ export function DsrVaultPage() {
   );
 }
 
-/** Per-product variation chips — green within limit, red when outside it. */
+/**
+ * Per-product variation chips — green within limit, red when outside it.
+ *
+ * The one fact this whole screen is built around used to be carried by colour
+ * alone: the words "(within limit)" / "(outside limit)" lived only in a `title`,
+ * which touch never shows and a colour-blind reader never had. The glyph is the
+ * second encoding channel — a tick inside the band, an arrow in the direction
+ * the stock went outside it, matching the icons `DsrReportPanel` already puts on
+ * its advisory badge. The tooltip stays for the desktop pointer.
+ */
 function VariationChips({ products }: { products: DsrProductHeadline[] }) {
   if (products.length === 0) {
     return <span className="text-text-subtle">—</span>;
@@ -216,9 +231,39 @@ function VariationChips({ products }: { products: DsrProductHeadline[] }) {
               : 'bg-danger-soft text-danger',
           )}
         >
+          {p.withinLimit ? (
+            <Check
+              width={11}
+              height={11}
+              strokeWidth={2.5}
+              aria-hidden
+              className="shrink-0"
+            />
+          ) : p.variation < 0 ? (
+            <ArrowDownRight
+              width={11}
+              height={11}
+              strokeWidth={2.5}
+              aria-hidden
+              className="shrink-0"
+            />
+          ) : (
+            <ArrowUpRight
+              width={11}
+              height={11}
+              strokeWidth={2.5}
+              aria-hidden
+              className="shrink-0"
+            />
+          )}
           <span className="font-mono font-semibold">{p.productKey}</span>
           <span className="tabular-nums">
             {formatLitres(p.variation, { sign: true })}
+          </span>
+          {/* The word itself, for the reader who has neither hover nor colour.
+              `sr-only` at md, where the tooltip and the table header carry it. */}
+          <span className="sr-only">
+            {p.withinLimit ? 'within limit' : 'outside limit'}
           </span>
         </span>
       ))}
@@ -363,10 +408,20 @@ function DealerList({
               <NotGeneratedChip />
             ),
             secondary: (
-              <span className="flex flex-wrap items-center gap-x-2 text-xs">
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                 <span className="font-mono">{row.dealerCode || '—'}</span>
                 {latest ? (
                   <span>· Generated {formatDateTime(latest.generatedAt)}</span>
+                ) : null}
+                {/* The desktop table shows this and the phone card dropped it:
+                    a report carrying three data-quality notes looked identical
+                    to a clean one, and this badge is the only cross-dealer
+                    signal that one needs a look before it is trusted. */}
+                {latest && latest.warningCount > 0 ? (
+                  <Badge intent="warning">
+                    {latest.warningCount} note
+                    {latest.warningCount === 1 ? '' : 's'}
+                  </Badge>
                 ) : null}
                 {latest?.stale ? (
                   <Badge intent="warning">Needs regenerating</Badge>

@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   CardContent,
+  CardHeader,
   EmptyState,
   MobileCardList,
   Skeleton,
@@ -19,37 +20,11 @@ import {
 import { useCreditDodLedger, useCreditDodVault } from '@/hooks/api/useCreditDod';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, formatDmy, inrFormat } from '@/lib/format';
+import { Amount, Balance } from '@/pages/dataVault/padLedgerFigures';
 
 import type { DealerVaultPaneProps } from './types';
 
 const LEDGER_PAGE_SIZE = 50;
-
-/**
- * A running balance, coloured by which way it points — negative is an ADVANCE
- * (the dealer is in credit), positive is owed. Same convention as the
- * cross-dealer PAD ledger and the report card; the title spells it out so a bare
- * minus sign is never read the wrong way round.
- */
-function Balance({ value }: { value: number }) {
-  return (
-    <span
-      className={value < 0 ? 'text-success' : 'text-text'}
-      title={
-        value < 0
-          ? 'Advance — the dealer is in credit with IndianOil'
-          : 'Outstanding against the dealer'
-      }
-    >
-      {inrFormat(value)}
-    </span>
-  );
-}
-
-/** An amount column where zero means "nothing on this side of the entry". */
-function Amount({ value }: { value: number }) {
-  if (!value) return <span className="text-text-subtle">—</span>;
-  return <>{inrFormat(value)}</>;
-}
 
 /**
  * This dealer's slice of the PAD ledger — the same accumulated Credit & DOD
@@ -127,20 +102,26 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
 
       <Card>
         <CardContent className="p-0">
-          <div className="flex items-center justify-between gap-3 border-b border-border p-4">
-            <div>
-              <p className="text-base font-semibold text-text">Maintained PAD ledger</p>
-              <p className="text-sm text-text-muted">
-                Most recently published first. SDMS posts a transaction a day or two
-                after its value date, so the dates do not run strictly downwards.
-              </p>
-            </div>
-            {total > 0 ? (
-              <Badge intent="neutral" className="tabular-nums">
-                {total.toLocaleString('en-IN')} txns
-              </Badge>
-            ) : null}
-          </div>
+          {/* `CardHeader action`: the `whitespace-nowrap` count badge does not
+              shrink, so in a `justify-between` row that cannot wrap it squeezed
+              the description beside it at 296px. */}
+          <CardHeader
+            align="center"
+            padding="comfortable"
+            action={
+              total > 0 ? (
+                <Badge intent="neutral" className="tabular-nums">
+                  {total.toLocaleString('en-IN')} txns
+                </Badge>
+              ) : undefined
+            }
+          >
+            <p className="text-base font-semibold text-text">Maintained PAD ledger</p>
+            <p className="text-sm text-text-muted">
+              Most recently published first. SDMS posts a transaction a day or two
+              after its value date, so the dates do not run strictly downwards.
+            </p>
+          </CardHeader>
 
           {isLoading ? (
             <div className="grid gap-2 p-4">

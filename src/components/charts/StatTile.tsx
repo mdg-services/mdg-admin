@@ -133,7 +133,15 @@ export function Meter({
   return (
     <div className={cn('grid gap-1.5', className)}>
       <div className="flex items-baseline justify-between gap-3">
-        <span className="min-w-0 truncate text-sm text-text-muted">{label}</span>
+        {/* Wraps below md, `truncate` from md up. A meter's label is often the
+            only place the PERIOD is named — "Points on Sat, 12 Jul 2026" wants
+            ~200px of the ~190px it gets at 360px, and the half that got cut was
+            the date, i.e. the whole content. A phone has the vertical room and
+            not the horizontal one; a desktop row has the opposite, and keeps
+            today's single line. */}
+        <span className="min-w-0 break-words text-sm text-text-muted md:truncate">
+          {label}
+        </span>
         <span className="shrink-0 text-sm font-semibold tabular-nums text-text">
           {valueLabel ?? `${value} / ${limit}`}
         </span>

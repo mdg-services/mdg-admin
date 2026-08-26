@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import * as React from 'react';
 
-import { Button, Skeleton } from '@/components/ui';
+import { IconButton, Skeleton } from '@/components/ui';
 import { cn } from '@/lib/cn';
 
 import {
@@ -26,11 +26,19 @@ import {
  * a thumb can hit. Seven columns by five rows shows the entire month at once and
  * turns a missed week into a visible hole in the block.
  *
- * The geometry is load-bearing, not tidy-able. On a 390px phone the admin's
- * `main` padding leaves 358px, the card's `p-3` leaves 334px, and seven columns
- * at `gap-1` land on 44.3px cells — exactly the touch floor. Changing this card
- * to `p-4` and the grid to `gap-2` drops the cells to ~40px, and pinch-zoom is
- * disabled app-wide, so there is no recovering from it on the device.
+ * The geometry is load-bearing, not tidy-able, and the hard case is 360px, not
+ * 390. At 360 the admin's `main` padding leaves 328px and the card's `p-3`
+ * leaves 304px; seven columns at `gap-1` land on (304 − 6×4) / 7 = **40.0px**,
+ * four pixels under the touch floor, on the tap that opens the whole upload
+ * flow. Two changes below md buy it back: the grid is pulled back out of the
+ * card's own padding (`-mx-3`, so it spans the full 328px) and the gap drops to
+ * 2px, giving (328 − 6×2) / 7 = **45.1px**. On a 390px phone the same sums give
+ * 352px (the cap) and 48.6px.
+ *
+ * Both are undone at md (`md:mx-0`, `md:gap-1.5`), where the card is `p-4` and
+ * the grid is capped at 352px anyway, so the desktop calendar is untouched.
+ * Pinch-zoom is disabled app-wide, so a cell under 44px has no recovery on the
+ * device — this arithmetic is the only defence there is.
  */
 
 /** Sunday-first, because that is how the portal and every Indian wall calendar print it. */
@@ -174,29 +182,31 @@ export function DayMarkCalendar({
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Button
+          {/* `IconButton`: the `px-2` these carried never applied — `cn` is
+              plain clsx, so it landed beside the size's `px-3` and lost on
+              stylesheet order — and a 16px glyph in a `Button` is 40 wide by 44
+              tall, short on the axis a thumb travels along. */}
+          <IconButton
             variant="secondary"
             size="sm"
-            className="px-2"
             aria-label="Previous month"
             disabled={!canGoPrev}
             onClick={() => onMonthChange(prev.year, prev.month)}
           >
             <ChevronLeft width={16} height={16} strokeWidth={1.75} />
-          </Button>
+          </IconButton>
           <div className="min-w-[9rem] text-center text-base font-semibold text-text">
             {monthLabel(year, month)}
           </div>
-          <Button
+          <IconButton
             variant="secondary"
             size="sm"
-            className="px-2"
             aria-label="Next month"
             disabled={!canGoNext}
             onClick={() => onMonthChange(next.year, next.month)}
           >
             <ChevronRight width={16} height={16} strokeWidth={1.75} />
-          </Button>
+          </IconButton>
         </div>
         {/* Announced, because it changes under the operator when they upload. */}
         <p className="text-sm text-text-muted" aria-live="polite">
@@ -214,9 +224,9 @@ export function DayMarkCalendar({
         ref={gridRef}
         role="grid"
         aria-label={`Density register photos, ${monthLabel(year, month)}`}
-        className="mt-3 max-w-[352px]"
+        className="-mx-3 mt-3 max-w-[352px] md:mx-0"
       >
-        <div role="row" className="grid grid-cols-7 gap-1 md:gap-1.5">
+        <div role="row" className="grid grid-cols-7 gap-0.5 md:gap-1.5">
           {WEEKDAY_HEADS.map((d, i) => (
             <div
               key={`${d}-${i}`}
@@ -229,7 +239,11 @@ export function DayMarkCalendar({
         </div>
 
         {rows.map((week, wi) => (
-          <div key={wi} role="row" className="mt-1 grid grid-cols-7 gap-1 md:mt-1.5 md:gap-1.5">
+          <div
+            key={wi}
+            role="row"
+            className="mt-1 grid grid-cols-7 gap-0.5 md:mt-1.5 md:gap-1.5"
+          >
             {week.map((ymd, di) => {
               if (!ymd) return <div key={`blank-${wi}-${di}`} role="gridcell" />;
               if (loading) {

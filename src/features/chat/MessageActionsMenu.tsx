@@ -1,6 +1,7 @@
 import { Copy, Download, Info, Reply } from 'lucide-react';
 import * as React from 'react';
 
+import { Sheet } from '@/components/ui/Sheet';
 import { useToast } from '@/components/ui/Toast';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
@@ -91,7 +92,12 @@ export function MessageActionsMenu({
     });
   }, [anchor.x, anchor.y, message.id, isMd]);
 
+  // Desktop only. Below md the shared `Sheet` owns dismissal — backdrop
+  // pointerdown and Escape — and a document-level pointerdown handler keyed on
+  // `cardRef` (which the sheet branch no longer sets) would close the sheet on
+  // the first tap *inside* it.
   React.useEffect(() => {
+    if (!isMd) return;
     const onPointerDown = (e: PointerEvent) => {
       if (!cardRef.current?.contains(e.target as Node)) onClose();
     };
@@ -100,18 +106,14 @@ export function MessageActionsMenu({
     };
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown);
-    // The desktop popover follows the anchor, so a scroll/resize invalidates it
-    // and closes. The mobile sheet is a fixed overlay — keep it open.
-    let onScroll: (() => void) | undefined;
-    if (isMd) {
-      onScroll = () => onClose();
-      window.addEventListener('scroll', onScroll, true);
-      window.addEventListener('resize', onClose);
-    }
+    // The popover follows the anchor, so a scroll/resize invalidates it.
+    const onScroll = () => onClose();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onClose);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKeyDown);
-      if (onScroll) window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onClose);
     };
   }, [onClose, isMd]);
@@ -206,23 +208,17 @@ export function MessageActionsMenu({
     </>
   );
 
-  // Mobile: a bottom sheet. The dimmed overlay isn't tappable-to-close on its
-  // own — the global outside-pointerdown handler (cardRef) covers that.
+  // Mobile: the shared bottom sheet. This used to be a hand-rolled copy of it
+  // that had drifted — no `max-h-[85dvh]`, no internal scroll — so a message
+  // with five attachments (one Download row each) grew past the screen and the
+  // trailing "Message info" row could not be reached at all.
   if (!isMd) {
     return (
-      <div
-        className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40"
-        role="menu"
-        aria-label="Message actions"
-      >
-        <div
-          ref={cardRef}
-          className="w-full rounded-t-2xl border-t border-border bg-surface pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-lg animate-sheet-up"
-        >
-          <div className="mx-auto mb-1 mt-2 h-1 w-9 rounded-full bg-border-strong" />
-          <div className="py-1">{content}</div>
+      <Sheet open onClose={onClose}>
+        <div role="menu" aria-label="Message actions">
+          {content}
         </div>
-      </div>
+      </Sheet>
     );
   }
 

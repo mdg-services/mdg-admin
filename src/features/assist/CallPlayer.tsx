@@ -1,9 +1,15 @@
-import { AlertTriangle, Pause, Play, SkipBack } from 'lucide-react';
+import { AlertTriangle, Pause, Play, RotateCcw, RotateCw, SkipBack } from 'lucide-react';
 import * as React from 'react';
 
-import { Button } from '@/components/ui';
+import { Button, IconButton } from '@/components/ui';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
-import { formatDuration } from '@/lib/uploadAttachment';
+// Aliased on import: `@/lib/format` exports a DIFFERENT `formatDuration` that
+// renders `3m 4s`, and `SessionDrawer` — the only place this player is used —
+// imports that one for its header. Two functions of the same name printing the
+// same milliseconds two ways into one panel is a trap; the clock keeps the
+// clock name here.
+import { formatDuration as formatClock } from '@/lib/uploadAttachment';
 import type { AssistRecordingSegmentView } from '@dk/shared';
 
 /**
@@ -27,6 +33,29 @@ import type { AssistRecordingSegmentView } from '@dk/shared';
  *    visible marker on the bar, instead of stalling the whole recording. A gap
  *    you can see is recoverable; a play button that stops working is not.
  *
+ * THE TWO RULES THAT KEEP PLAY WORKING ON A PHONE
+ * -----------------------------------------------
+ * 1. **`play()` is called inside the click handler, not from an effect.** A
+ *    WebView only honours playback that starts inside a user gesture, and the
+ *    gesture window closes the moment the handler returns. Setting React state
+ *    and letting the effect below press play means the call happens a tick (or,
+ *    when the element still has to load, a whole network round trip) later — by
+ *    which time the browser refuses. The effect is still here, but only for the
+ *    resume path: crossing into a segment the element has not loaded yet, where
+ *    there is no gesture to preserve because the element has already been
+ *    unlocked by the tap that started the recording.
+ * 2. **Only a genuinely dead object marks a segment failed.** `play()` rejects
+ *    for three quite different reasons and the old code treated all of them as
+ *    "this audio is broken": `AbortError` fires at EVERY segment boundary and
+ *    on every seek, because swapping `src` interrupts the play in flight;
+ *    `NotAllowedError` means the gesture was not honoured and the recording is
+ *    perfectly fine. Marking the segment failed on those two poisoned one index
+ *    per tap until `Play` went disabled with no way back inside the session —
+ *    and the `<audio>` is hidden, so there were no native controls to fall back
+ *    on either. Now `AbortError` is ignored, `NotAllowedError` says "tap Play
+ *    again", and anything that IS a dead object can still be retried from the
+ *    bar's own control.
+ *
  * Privacy is handled the way the client's voice notes handle it: the OS cast /
  * AirPlay route is stripped and the Now-Playing tile is cleared, so a
  * stranger's phone call cannot be pushed to a speaker in the room or surfaced
@@ -43,6 +72,20 @@ export interface CallPlayerProps {
   className?: string;
 }
 
+/** How far one tap of the skip buttons moves the playhead. */
+const SKIP_MS = 10_000;
+
+/**
+ * Past this many utterances the per-turn bar is not a bar any more.
+ *
+ * A 15-minute call with short turns runs to ~100 blocks; at 2px plus a hairline
+ * gap that is 299px of minimum width inside a ~304px track, and the next
+ * utterance spills out of the bordered box and gives the whole drawer a
+ * sideways scroll. The turn-taking texture is unreadable at that density
+ * anyway, so below md a long call gets one plain progress bar instead.
+ */
+const DENSE_SEGMENTS = 60;
+
 /** Strip the cast / AirPlay route and the Now-Playing tile off a hidden audio element. */
 function harden(el: HTMLAudioElement | null) {
   if (!el) return;
@@ -50,6 +93,24 @@ function harden(el: HTMLAudioElement | null) {
     true;
   el.setAttribute('x-webkit-airplay', 'deny');
   if ('mediaSession' in navigator) navigator.mediaSession.metadata = null;
+}
+
+/**
+ * The `name` off a rejected `play()`.
+ *
+ * Read by duck typing rather than `instanceof DOMException`: a DOMException is
+ * not an `Error` in every engine, and the one thing every one of them agrees on
+ * is that it carries a `name`.
+ */
+function errorName(err: unknown): string {
+  if (typeof err === 'object' && err !== null && 'name' in err) {
+    return String((err as { name: unknown }).name);
+  }
+  return '';
+}
+
+function roleName(segment: AssistRecordingSegmentView): string {
+  return segment.role === 'visitor' ? 'Visitor' : 'Assistant';
 }
 
 export function CallPlayer({
@@ -64,6 +125,10 @@ export function CallPlayer({
   /** The URL the element is known to have loaded. See the play effect. */
   const loadedUrlRef = React.useRef<string | undefined>(undefined);
   const trackRef = React.useRef<HTMLDivElement>(null);
+  /** True between pointerdown and pointerup on the track — a scrub in progress. */
+  const scrubbingRef = React.useRef(false);
+
+  const isMd = useMediaQuery('(min-width: 768px)');
 
   const [idx, setIdx] = React.useState(0);
   const [playing, setPlaying] = React.useState(false);
@@ -71,6 +136,8 @@ export function CallPlayer({
   const [touched, setTouched] = React.useState(false);
   /** Indexes whose audio would not load. Kept as a list so the state is a new array. */
   const [failed, setFailed] = React.useState<number[]>([]);
+  /** The browser refused a play() for want of a gesture. Cleared by the next one. */
+  const [needsTap, setNeedsTap] = React.useState(false);
 
   /** Cumulative start offset of every segment, and the total length. */
   const { offsets, totalMs } = React.useMemo(() => {
@@ -99,12 +166,20 @@ export function CallPlayer({
     [segments.length, playable],
   );
 
+  /** The first segment that has a URL at all, ignoring what we marked failed. */
+  const firstWithUrl = React.useCallback(() => {
+    for (let i = 0; i < segments.length; i += 1) if (segments[i]?.url) return i;
+    return -1;
+  }, [segments]);
+
   const current = segments[idx];
   const currentUrl = playable(idx) ? current?.url : undefined;
   const nextIdx = nextPlayable(idx + 1);
   const nextUrl = nextIdx >= 0 ? segments[nextIdx]?.url : undefined;
   const elapsedMs = Math.min(totalMs, (offsets[idx] ?? 0) + posMs);
   const anyPlayable = nextPlayable(0) >= 0;
+  /** There is audio to try, even if every index is currently marked failed. */
+  const hasAudio = segments.some((s) => !!s.url);
 
   /* Cast / AirPlay off, on both elements, once each. */
   React.useEffect(() => {
@@ -129,13 +204,52 @@ export function CallPlayer({
   }, []);
 
   /**
-   * Start (or resume) the segment on screen.
+   * What to do with a rejected `play()`, by reason.
    *
-   * React has already swapped `src` by the time this runs, so all that is left
-   * is to honour a pending seek offset and press play. Waiting for
-   * `loadedmetadata` is the fiddly half: setting `currentTime` on an element
-   * that has not read its duration yet is silently dropped, which is how a
-   * mid-call seek lands back at the start of the utterance.
+   * The three cases are genuinely different and used to be collapsed into one
+   * `markFailed`, which is what made a single bad tap permanent. See the note
+   * at the top of the file.
+   */
+  const onPlayRejected = React.useCallback(
+    (err: unknown, i: number) => {
+      const name = errorName(err);
+      // The src was swapped out from under this play(). That happens at every
+      // segment boundary and on every seek; the new src has its own play()
+      // coming. Nothing is wrong.
+      if (name === 'AbortError') return;
+      // The browser would not start audio without a gesture it recognised. The
+      // recording is fine — the tap was not honoured — so say so and stop.
+      if (name === 'NotAllowedError') {
+        setNeedsTap(true);
+        setPlaying(false);
+        return;
+      }
+      // Everything left means this object will not play: an expired signed URL,
+      // a codec the WebView will not take. Mark it, skip it, keep going.
+      markFailed(i);
+      setPlaying(false);
+    },
+    [markFailed],
+  );
+
+  const attemptPlay = React.useCallback(
+    (el: HTMLAudioElement, i: number) => {
+      void el.play().catch((err: unknown) => onPlayRejected(err, i));
+    },
+    [onPlayRejected],
+  );
+
+  /**
+   * Resume the segment on screen after React has swapped `src`.
+   *
+   * This is the CROSS-SEGMENT path only — the gesture-carrying first press is
+   * handled synchronously in `toggle` (see the note at the top). By the time
+   * this runs the element has already been unlocked by that press, so a
+   * programmatic play is allowed.
+   *
+   * Waiting for `loadedmetadata` is the fiddly half: setting `currentTime` on
+   * an element that has not read its duration yet is silently dropped, which is
+   * how a mid-call seek lands back at the start of the utterance.
    *
    * `readyState` alone is not a safe test for that, because it can still be
    * reporting the PREVIOUS object in the moment after `src` changes. So the
@@ -161,7 +275,8 @@ export function CallPlayer({
           /* Not seekable yet — playback starts from the top of the segment. */
         }
       }
-      void el.play().catch(() => markFailed(idx));
+      if (!el.paused) return;
+      attemptPlay(el, idx);
     };
 
     if (el.readyState >= 1 && loadedUrlRef.current === currentUrl) {
@@ -175,7 +290,7 @@ export function CallPlayer({
       cancelled = true;
       el.removeEventListener('loadedmetadata', go);
     };
-  }, [idx, playing, currentUrl, markFailed]);
+  }, [idx, playing, currentUrl, attemptPlay]);
 
   const stop = React.useCallback(() => {
     const el = audioRef.current;
@@ -199,20 +314,52 @@ export function CallPlayer({
 
   function toggle() {
     const el = audioRef.current;
-    if (!el || !anyPlayable) return;
+    if (!el || !hasAudio) return;
     setTouched(true);
+    setNeedsTap(false);
+
     if (playing) {
       stop();
       return;
     }
-    // Finished, or parked on a dead segment: rewind to the first playable one.
-    if (!playable(idx) || elapsedMs >= totalMs - 50) {
-      const first = nextPlayable(0);
-      if (first < 0) return;
+
+    // Every index has been marked failed — the dead end the old error handling
+    // used to leave behind. Clear the marks and start over rather than
+    // presenting a disabled button with nothing behind it.
+    const retryAll = !anyPlayable;
+    const finished = elapsedMs >= totalMs - 50;
+    let startAt = idx;
+    if (retryAll) startAt = firstWithUrl();
+    else if (!playable(idx) || finished) startAt = nextPlayable(0);
+    if (startAt < 0) return;
+
+    if (retryAll) setFailed([]);
+    if (startAt !== idx) {
       pendingOffsetRef.current = 0;
       setPosMs(0);
-      setIdx(first);
+      setIdx(startAt);
     }
+
+    // THE GESTURE. Called here, synchronously, and not from the effect above:
+    // the effect runs after React has committed and — for a segment the element
+    // has not loaded — after a network round trip, by which time the browser no
+    // longer sees a user gesture and refuses. The condition is exactly "the
+    // element already holds the object we are about to play"; the cross-segment
+    // case falls through to the effect, which is allowed because this same tap
+    // has unlocked the element.
+    if (startAt === idx && currentUrl) {
+      const pending = pendingOffsetRef.current;
+      pendingOffsetRef.current = null;
+      if (pending !== null && pending > 0) {
+        try {
+          el.currentTime = pending / 1000;
+        } catch {
+          /* Applied by the effect once the metadata lands. */
+        }
+      }
+      attemptPlay(el, idx);
+    }
+
     setPlaying(true);
   }
 
@@ -268,26 +415,16 @@ export function CallPlayer({
   if (segments.length === 0) return null;
 
   const skipped = segments.filter((_s, i) => !playable(i)).length;
+  const dense = !isMd && segments.length > DENSE_SEGMENTS;
+  const playedPct = totalMs > 0 ? Math.min(100, (elapsedMs / totalMs) * 100) : 0;
 
   return (
     <div className={cn('rounded-md border border-border bg-surface p-3', className)}>
-      <div className="flex items-center gap-3">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={toggle}
-          disabled={!anyPlayable}
-          aria-label={playing ? 'Pause the recording' : 'Play the recording'}
-          leftIcon={
-            playing ? (
-              <Pause width={14} height={14} strokeWidth={2} />
-            ) : (
-              <Play width={14} height={14} strokeWidth={2} />
-            )
-          }
-        >
-          {playing ? 'Pause' : 'Play'}
-        </Button>
+      {/* Wraps rather than one nowrap row: four transport controls plus the
+          clock need ~350px and the drawer offers ~280px at 360px, and `main`
+          clips rather than scrolls. At md every one of them fits the single
+          line it always had. */}
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="ghost"
           size="sm"
@@ -298,8 +435,44 @@ export function CallPlayer({
         >
           Start
         </Button>
+        {/* Seek by a fixed step, on screen. It existed only as ArrowLeft /
+            ArrowRight on the scrub bar, and a phone has no arrow keys — so the
+            only touch seek was a single tap on a ~304px track, which for a
+            15-minute call is about 3 seconds per pixel. */}
+        <IconButton
+          size="sm"
+          aria-label="Back ten seconds"
+          onClick={() => seekTo(elapsedMs - SKIP_MS)}
+          disabled={!anyPlayable}
+        >
+          <RotateCcw width={16} height={16} strokeWidth={2} />
+        </IconButton>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={toggle}
+          disabled={!hasAudio}
+          aria-label={playing ? 'Pause the recording' : 'Play the recording'}
+          leftIcon={
+            playing ? (
+              <Pause width={14} height={14} strokeWidth={2} />
+            ) : (
+              <Play width={14} height={14} strokeWidth={2} />
+            )
+          }
+        >
+          {playing ? 'Pause' : hasAudio && !anyPlayable ? 'Try again' : 'Play'}
+        </Button>
+        <IconButton
+          size="sm"
+          aria-label="Forward ten seconds"
+          onClick={() => seekTo(elapsedMs + SKIP_MS)}
+          disabled={!anyPlayable}
+        >
+          <RotateCw width={16} height={16} strokeWidth={2} />
+        </IconButton>
         <span className="ml-auto shrink-0 text-xs tabular-nums text-text-muted">
-          {formatDuration(elapsedMs)} / {formatDuration(totalMs)}
+          {formatClock(elapsedMs)} / {formatClock(totalMs)}
         </span>
       </div>
 
@@ -314,8 +487,33 @@ export function CallPlayer({
         aria-valuemin={0}
         aria-valuemax={Math.round(totalMs)}
         aria-valuenow={Math.round(elapsedMs)}
-        aria-valuetext={`${formatDuration(elapsedMs)} of ${formatDuration(totalMs)}`}
-        onClick={(e) => seekFromPointer(e.clientX)}
+        aria-valuetext={`${formatClock(elapsedMs)} of ${formatClock(totalMs)}`}
+        // Drag, not just tap. `touch-pan-y` is what makes it a drag and not a
+        // fight with the sheet: a vertical swipe still scrolls the drawer (the
+        // browser cancels the pointer), while a horizontal one is ours.
+        onPointerDown={(e) => {
+          if (!anyPlayable) return;
+          scrubbingRef.current = true;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          seekFromPointer(e.clientX);
+        }}
+        onPointerMove={(e) => {
+          if (!scrubbingRef.current) return;
+          seekFromPointer(e.clientX);
+        }}
+        onPointerUp={(e) => {
+          scrubbingRef.current = false;
+          // Guarded: a pointerup can arrive without a matching capture — the
+          // press landed while the bar was disabled, or the browser released it
+          // when the gesture became a scroll — and releasing one we never took
+          // throws.
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+          }
+        }}
+        onPointerCancel={() => {
+          scrubbingRef.current = false;
+        }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowRight') {
             e.preventDefault();
@@ -331,48 +529,102 @@ export function CallPlayer({
             seekTo(totalMs);
           }
         }}
-        className="mt-3 flex h-11 w-full cursor-pointer items-center gap-px rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:h-6"
+        className="mt-3 flex h-11 w-full touch-pan-y cursor-pointer items-center gap-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:h-6 md:gap-px"
       >
-        {segments.map((s, i) => {
-          const dead = !playable(i);
-          const fillPct =
-            i < idx ? 100 : i > idx ? 0 : s.ms > 0 ? Math.min(100, (posMs / s.ms) * 100) : 0;
-          return (
-            <div
-              key={`${s.seq}-${s.key}`}
-              style={{ flexGrow: Math.max(1, s.ms || 1) }}
-              title={
-                dead
-                  ? 'This part of the recording could not be loaded'
-                  : `${s.role === 'visitor' ? 'Visitor' : 'Assistant'} · ${formatDuration(s.ms)}`
-              }
-              className={cn(
-                'h-2.5 min-w-[2px] overflow-hidden rounded-[2px]',
-                dead ? 'chart-hatch bg-danger-soft' : 'bg-brand-soft',
-                // The assistant's turns sit a shade lower so the back-and-forth
-                // is readable as shape, not as a second hue.
-                s.role === 'assistant' && !dead ? 'h-1.5 self-center' : null,
-              )}
-            >
-              {dead ? null : (
-                <div className="h-full bg-brand" style={{ width: `${fillPct}%` }} />
-              )}
-            </div>
-          );
-        })}
+        {dense ? (
+          // One plain bar. See DENSE_SEGMENTS: past ~60 utterances the per-turn
+          // blocks are wider than the track and spill out of the card.
+          <div className="h-2.5 w-full overflow-hidden rounded-[2px] bg-brand-soft">
+            <div className="h-full bg-brand" style={{ width: `${playedPct}%` }} />
+          </div>
+        ) : (
+          segments.map((s, i) => {
+            const dead = !playable(i);
+            const fillPct =
+              i < idx ? 100 : i > idx ? 0 : s.ms > 0 ? Math.min(100, (posMs / s.ms) * 100) : 0;
+            return (
+              <div
+                key={`${s.seq}-${s.key}`}
+                style={{ flexGrow: Math.max(1, s.ms || 1) }}
+                title={
+                  dead
+                    ? 'This part of the recording could not be loaded'
+                    : `${roleName(s)} · ${formatClock(s.ms)}`
+                }
+                className={cn(
+                  // `min-w-px` below md: at 2px plus a gap, a hundred-utterance
+                  // call is wider than the track and overflows the card.
+                  'h-2.5 min-w-px overflow-hidden rounded-[2px] md:min-w-[2px]',
+                  dead ? 'chart-hatch bg-danger-soft' : 'bg-brand-soft',
+                  // The assistant's turns sit a shade lower so the back-and-forth
+                  // is readable as shape, not as a second hue.
+                  s.role === 'assistant' && !dead ? 'h-1.5 self-center' : null,
+                )}
+              >
+                {dead ? null : (
+                  <div className="h-full bg-brand" style={{ width: `${fillPct}%` }} />
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
 
-      <p className="mt-2 text-xs text-text-subtle">
-        {segments.length} {segments.length === 1 ? 'utterance' : 'utterances'}, played
-        end to end.
-        {skipped > 0 ? (
-          <span className="ml-1 inline-flex items-center gap-1 text-danger">
-            <AlertTriangle width={12} height={12} strokeWidth={2} aria-hidden />
-            {skipped} could not be loaded and {skipped === 1 ? 'is' : 'are'} skipped
-            (marked on the bar).
+      {/* Who is speaking, in words. It used to live only in each block's `title`
+          — invisible on touch — with the visitor/assistant distinction carried
+          otherwise by a 1px height difference on a 2-8px block. */}
+      {current ? (
+        <p className="mt-2 text-xs text-text-muted">
+          <span className="font-medium text-text">
+            {playing ? 'Playing' : touched ? 'Paused in' : 'Starts with'}
+          </span>{' '}
+          {roleName(current)} · {formatClock(current.ms)}
+          {playable(idx) ? null : ' · this part could not be loaded'}
+        </p>
+      ) : null}
+
+      {needsTap ? (
+        <p className="mt-2 text-xs text-warning">
+          The browser would not start the audio on that tap. Tap Play again — the
+          recording itself is fine.
+        </p>
+      ) : null}
+
+      {/* Below md the player is pinned to the bottom of the sheet, and every
+          line it keeps is a line of transcript it covers — so the standing "N
+          utterances" description only renders where there is room for it. The
+          warning about skipped parts is operational and always renders. */}
+      {isMd || skipped > 0 ? (
+        <p className="mt-2 text-xs text-text-subtle">
+          <span className="hidden md:inline">
+            {segments.length} {segments.length === 1 ? 'utterance' : 'utterances'},
+            played end to end.
           </span>
-        ) : null}
-      </p>
+          {skipped > 0 ? (
+            <span className="inline-flex items-center gap-1 text-danger md:ml-1">
+              <AlertTriangle width={12} height={12} strokeWidth={2} aria-hidden />
+              {skipped} could not be loaded and {skipped === 1 ? 'is' : 'are'} skipped
+              (marked on the bar).
+            </span>
+          ) : null}
+        </p>
+      ) : null}
+
+      {/* The escape hatch. A signed URL that had expired when it was first tried
+          usually works on the next request, and without this the marks last as
+          long as the drawer is open. */}
+      {skipped > 0 ? (
+        <button
+          type="button"
+          onClick={() => {
+            setFailed([]);
+            setNeedsTap(false);
+          }}
+          className="tap-target mt-1 w-fit rounded-sm px-1 py-1 text-left text-xs font-medium text-brand"
+        >
+          Try the skipped parts again
+        </button>
+      ) : null}
 
       <audio
         ref={audioRef}
@@ -385,7 +637,10 @@ export function CallPlayer({
         onLoadedMetadata={() => {
           loadedUrlRef.current = currentUrl;
         }}
-        onPlay={() => setPlaying(true)}
+        onPlay={() => {
+          setNeedsTap(false);
+          setPlaying(true);
+        }}
         // Reaching the end of an utterance fires `pause` BEFORE `ended` — the
         // spec sets `paused` and fires both from one task, in that order. Taking
         // that as "the listener stopped it" clears `playing`, and then `advance`
@@ -399,6 +654,9 @@ export function CallPlayer({
           setPlaying(false);
         }}
         onEnded={advance}
+        // The element's own error event, unlike a rejected play(), only ever
+        // means the object itself would not load. This is the honest source for
+        // a failed segment.
         onError={() => {
           markFailed(idx);
           advance();

@@ -1,22 +1,14 @@
-import { AlertCircle, Download, ExternalLink, FileBarChart2 } from 'lucide-react';
+import { AlertCircle, FileBarChart2 } from 'lucide-react';
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import {
-  Button,
-  Card,
-  CardContent,
-  EmptyState,
-  Label,
-  Select,
-  Skeleton,
-} from '@/components/ui';
+import { Card, CardContent, EmptyState, Skeleton } from '@/components/ui';
 import { useDsrLatest, useDsrReport, useDsrReports } from '@/hooks/api/useDsr';
 import { ApiError } from '@/lib/api';
-import { formatDateTime } from '@/lib/format';
 import type { Dealer } from '@dk/shared';
 
-import { DsrReportPanel, dsrDateLabel } from '../dsr/DsrReportPanel';
+import { DsrReportPanel } from '../dsr/DsrReportPanel';
+import { DsrDateToolbar, DsrReportActions } from '../dsr/DsrToolbar';
 import { EditShiftDataButton } from '../dsr/EditShiftDataButton';
 import { GenerateDsrButton, GenerateDsrForDate } from '../dsr/GenerateDsrButton';
 
@@ -28,17 +20,6 @@ interface Props {
 /** A 404 from the report endpoints just means "nothing generated yet". */
 function isNotFound(err: unknown): boolean {
   return err instanceof ApiError && err.status === 404;
-}
-
-/** Kick off a signed-URL download without leaving a blank tab behind. */
-function triggerDownload(url: string) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.target = '_blank';
-  a.rel = 'noreferrer';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
 }
 
 /**
@@ -97,55 +78,20 @@ export function DealerDsrTab({ dealer }: Props) {
     setPinnedId(hit.id === reports[0]?.id ? null : hit.id);
   }, [pendingDate, reports]);
 
-  const openFull = (
-    <Button
-      variant="ghost"
-      size="sm"
-      rightIcon={<ExternalLink width={14} height={14} strokeWidth={1.75} />}
-      onClick={() => navigate(`/dsr/dealers/${dealer.id}`)}
-    >
-      Open full view
-    </Button>
-  );
-
   return (
     <div className="grid gap-4">
       {/* Business-date selector — the way back through previous days — plus a
           date picker to originate a brand-new back-dated report. */}
       {reports.length > 0 ? (
-        <Card>
-          <CardContent className="flex flex-wrap items-end gap-4 p-3">
-            <div>
-              <Label htmlFor={`dsr-date-${dealer.id}`}>Business date</Label>
-              <Select
-                id={`dsr-date-${dealer.id}`}
-                value={report?.id ?? reports[0]?.id ?? ''}
-                onChange={(e) => selectReport(e.target.value)}
-                className="w-full sm:w-72"
-              >
-                {reports.map((r, i) => (
-                  <option key={r.id} value={r.id}>
-                    {dsrDateLabel(r.businessDate)}
-                    {i === 0 ? ' · latest' : ''}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <GenerateDsrForDate
-              dealerId={dealer.id}
-              onGenerated={setPendingDate}
-            />
-            <EditShiftDataButton
-              dealerId={dealer.id}
-              businessDate={report?.businessDate}
-            />
-            {report ? (
-              <p className="ml-auto text-xs text-text-subtle">
-                Generated {formatDateTime(report.generatedAt)}
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
+        <DsrDateToolbar
+          dealerId={dealer.id}
+          reports={reports}
+          selectedId={report?.id ?? reports[0]?.id ?? ''}
+          onSelect={selectReport}
+          businessDate={report?.businessDate}
+          generatedAt={report?.generatedAt}
+          onGenerated={setPendingDate}
+        />
       ) : null}
 
       {reportQ.isLoading ? (
@@ -163,18 +109,25 @@ export function DealerDsrTab({ dealer }: Props) {
               title="No Daily Sales Report yet"
               description="Generate the latest available day-book, or pick a past date to back-fill one. Make sure the Daily Sales Report service is attached from the Services tab first."
               cta={
-                <div className="grid justify-items-center gap-3">
+                // Full-width below md: `justify-items-center` sizes each item
+                // to its content, so a `w-full` control inside it would resolve
+                // against its own width and stay narrow.
+                <div className="grid w-full gap-3 md:w-auto md:justify-items-center">
                   <GenerateDsrButton
                     dealerId={dealer.id}
                     variant="primary"
                     label="Generate now"
+                    className="w-full md:w-auto"
                     onQueued={() => setPinnedId(null)}
                   />
                   <GenerateDsrForDate
                     dealerId={dealer.id}
                     onGenerated={setPendingDate}
                   />
-                  <EditShiftDataButton dealerId={dealer.id} />
+                  <EditShiftDataButton
+                    dealerId={dealer.id}
+                    className="w-full md:w-auto"
+                  />
                 </div>
               }
             />
@@ -194,41 +147,11 @@ export function DealerDsrTab({ dealer }: Props) {
         <DsrReportPanel
           report={report}
           actions={
-            <>
-              {openFull}
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={
-                  <Download width={14} height={14} strokeWidth={1.75} />
-                }
-                disabled={!report.xlsxUrl}
-                onClick={() =>
-                  report.xlsxUrl && triggerDownload(report.xlsxUrl)
-                }
-              >
-                Download Excel
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={
-                  <Download width={14} height={14} strokeWidth={1.75} />
-                }
-                disabled={!report.jsonUrl}
-                onClick={() =>
-                  report.jsonUrl && triggerDownload(report.jsonUrl)
-                }
-              >
-                Download JSON
-              </Button>
-              <GenerateDsrButton
-                dealerId={dealer.id}
-                businessDate={report.businessDate}
-                label="Regenerate"
-                onQueued={() => setPendingDate(report.businessDate)}
-              />
-            </>
+            <DsrReportActions
+              report={report}
+              onRegenerated={setPendingDate}
+              onOpenFullView={() => navigate(`/dsr/dealers/${dealer.id}`)}
+            />
           }
         />
       )}

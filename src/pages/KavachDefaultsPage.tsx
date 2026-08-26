@@ -17,11 +17,14 @@ import {
   CardHeader,
   CardSubtitle,
   CardTitle,
+  Checkbox,
+  ConfirmDialog,
   Dialog,
   EmptyState,
   FieldError,
   Input,
   Label,
+  MobileCardList,
   Select,
   Skeleton,
   Table,
@@ -203,6 +206,8 @@ export function KavachDefaultsPage() {
                 </div>
               </CardHeader>
               <CardContent className="p-0">
+                {/* Desktop table (≥ md) */}
+                <div className="hidden md:block">
                 <Table>
                   <THead>
                     <TRow>
@@ -301,6 +306,115 @@ export function KavachDefaultsPage() {
                     ))}
                   </TBody>
                 </Table>
+                </div>
+
+                {/* Mobile card-stack (< md).
+                    The table is eight columns wide — Edit and a destructive
+                    Retire sat about 530px right of a 328px fold, behind a drag
+                    `main` does not even allow (it is `overflow-x-hidden`, so
+                    the columns were clipped rather than scrollable). This is
+                    the super-admin's only editor for the catalog that scores
+                    every dealer, so those two controls have to be on screen.
+                    A card with `actions` carries no `onClick`: buttons never
+                    nest. */}
+                <MobileCardList
+                  className="p-3"
+                  cards={g.items.map((it) => ({
+                    key: it.code,
+                    tone: it.active ? ('default' as const) : ('muted' as const),
+                    primary: (
+                      <span className="block break-words font-medium text-text">
+                        {it.labelEn}
+                      </span>
+                    ),
+                    primaryRight: (
+                      <Badge intent={it.active ? 'success' : 'neutral'}>
+                        {it.active ? 'Active' : 'Retired'}
+                      </Badge>
+                    ),
+                    secondary: (
+                      <span className="block break-words">{it.labelHi}</span>
+                    ),
+                    kv: [
+                      { label: 'Sr', value: it.srNo, numeric: true },
+                      { label: 'Points', value: it.points, numeric: true },
+                      {
+                        label: 'Cadence',
+                        value:
+                          it.cadenceDays == null ? '—' : `${it.cadenceDays}d`,
+                        numeric: true,
+                      },
+                      {
+                        label: 'Verified by',
+                        value: (
+                          <Badge intent={verificationIntent(it.verification)}>
+                            {VERIFICATION_LABEL[it.verification]}
+                          </Badge>
+                        ),
+                      },
+                      {
+                        label: 'Evidence',
+                        value: EVIDENCE_LABEL[it.evidence],
+                      },
+                    ],
+                    meta: (
+                      <span className="block break-all">
+                        <code>{it.code}</code>
+                        {' · '}
+                        {KAVACH_DOMAIN_LABEL[it.domain]}
+                        {it.signalId ? (
+                          <>
+                            {' · '}
+                            <code>{it.signalId}</code>
+                          </>
+                        ) : null}
+                      </span>
+                    ),
+                    actions: (
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setEditing(it)}
+                          leftIcon={
+                            <Pencil width={14} height={14} strokeWidth={1.75} />
+                          }
+                        >
+                          Edit
+                        </Button>
+                        {it.active ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setRetiring(it)}
+                          >
+                            Retire
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            loading={
+                              update.isPending &&
+                              update.variables?.code === it.code &&
+                              update.variables?.active === true
+                            }
+                            onClick={() => revive(it)}
+                            leftIcon={
+                              <RotateCcw
+                                width={14}
+                                height={14}
+                                strokeWidth={1.75}
+                              />
+                            }
+                          >
+                            Revive
+                          </Button>
+                        )}
+                      </div>
+                    ),
+                  }))}
+                />
               </CardContent>
             </Card>
           ))}
@@ -310,29 +424,37 @@ export function KavachDefaultsPage() {
       <CreateTaskDialog open={createOpen} onClose={() => setCreateOpen(false)} />
       <EditTaskDialog item={editing} onClose={() => setEditing(null)} />
 
-      <Dialog
+      {/* The hand-rolled shape this replaces had drifted from the other three
+          confirms in the app. `ConfirmDialog` is the one place the destructive
+          button's colour, its order under a thumb, and the inert backdrop while
+          the request is in flight are decided. The task being retired moves
+          from the dialog's sub-title into the first line of the body, which is
+          the only slot `ConfirmDialog` has for it. */}
+      <ConfirmDialog
         open={!!retiring}
-        onClose={() => setRetiring(null)}
+        onCancel={() => setRetiring(null)}
+        onConfirm={confirmRetire}
+        loading={retire.isPending}
         title="Retire this task"
-        description={retiring ? `${retiring.labelEn} (${retiring.code})` : undefined}
-        footer={
+        confirmLabel="Retire task"
+        confirmVariant="danger"
+        description={
           <>
-            <Button variant="secondary" onClick={() => setRetiring(null)}>
-              Cancel
-            </Button>
-            <Button variant="danger" loading={retire.isPending} onClick={confirmRetire}>
-              Retire task
-            </Button>
+            <p className="font-medium text-text">
+              {retiring?.labelEn}{' '}
+              <span className="break-all font-normal text-text-muted">
+                ({retiring?.code})
+              </span>
+            </p>
+            <p className="mt-2">
+              A retired task drops off every dealer&apos;s list at their next
+              evaluation, and its points leave their score&apos;s denominator.
+              Nothing is deleted: every completion already recorded against it
+              stays readable, and you can revive the task from this page.
+            </p>
           </>
         }
-      >
-        <p className="text-sm text-text-muted">
-          A retired task drops off every dealer&apos;s list at their next
-          evaluation, and its points leave their score&apos;s denominator.
-          Nothing is deleted: every completion already recorded against it stays
-          readable, and you can revive the task from this page.
-        </p>
-      </Dialog>
+      />
     </div>
   );
 }
@@ -578,14 +700,13 @@ function EditTaskDialog({
           showTitles
         />
 
-        <label className="flex items-center gap-2 text-sm text-text">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-border-strong accent-brand"
-            {...register('active')}
-          />
-          Active (every dealer is scored against this task)
-        </label>
+        {/* The control that takes a task off every dealer's list, in a 20px
+            row with a 16px box. `Checkbox` makes the whole label the target
+            and floors it at 44px below md. */}
+        <Checkbox
+          label="Active (every dealer is scored against this task)"
+          {...register('active')}
+        />
 
         <Callout intent={pointsChanged || cadenceChanged ? 'warning' : 'info'}>
           {pointsChanged || cadenceChanged

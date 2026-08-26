@@ -15,6 +15,7 @@ import {
   Button,
   Card,
   CardContent,
+  CardHeader,
   EmptyState,
   Input,
   MobileCardList,
@@ -36,6 +37,7 @@ import type {
 } from '@/types/creditDod';
 import { compareDealerCodes, dealerCodeLabel } from '@dk/shared';
 
+import { Amount, Balance } from './padLedgerFigures';
 import { StatTile, StatTileRow, StatTileSkeletons } from './StatTile';
 import type { VaultDatasetProps } from './types';
 
@@ -74,34 +76,6 @@ function matchesStatus(row: CreditDodVaultDealerRow, status: StatusFilter): bool
   if (status === 'empty') return row.rowCount === 0;
   if (status === 'paused') return !row.enabled;
   return true;
-}
-
-/**
- * A running balance, coloured by which way it points. Negative is an ADVANCE —
- * the dealer is in credit — and positive is owed, the same convention the
- * report card and the dealer's own ledger use. The title spells it out, because
- * a bare minus sign in a money column is the kind of thing an admin reads the
- * wrong way round exactly once, in front of a dealer.
- */
-function Balance({ value }: { value: number }) {
-  return (
-    <span
-      className={value < 0 ? 'text-success' : 'text-text'}
-      title={
-        value < 0
-          ? 'Advance — the dealer is in credit with IndianOil'
-          : 'Outstanding against the dealer'
-      }
-    >
-      {inrFormat(value)}
-    </span>
-  );
-}
-
-/** An amount column where zero means "nothing on this side of the entry". */
-function Amount({ value }: { value: number }) {
-  if (!value) return <span className="text-text-subtle">—</span>;
-  return <>{inrFormat(value)}</>;
 }
 
 /**
@@ -644,23 +618,27 @@ function DealerLedger({
 
       <Card>
         <CardContent className="p-0">
-          <div className="flex items-center justify-between gap-3 border-b border-border p-4">
-            <div>
-              <p className="text-base font-semibold text-text">
-                Maintained PAD ledger
-              </p>
-              <p className="text-sm text-text-muted">
-                Accumulated transactions reconstructed from SDMS statements, most
-                recently published first. SDMS posts a transaction a day or two
-                after its value date, so the dates do not run strictly downwards.
-              </p>
-            </div>
-            {total > 0 ? (
-              <Badge intent="neutral" className="tabular-nums">
-                {total.toLocaleString('en-IN')} txns
-              </Badge>
-            ) : null}
-          </div>
+          {/* `CardHeader action`: the `whitespace-nowrap` count badge does not
+              shrink, so in a `justify-between` row that cannot wrap it left the
+              three-sentence description ~204px at 360px — six or seven lines. */}
+          <CardHeader
+            align="center"
+            padding="comfortable"
+            action={
+              total > 0 ? (
+                <Badge intent="neutral" className="tabular-nums">
+                  {total.toLocaleString('en-IN')} txns
+                </Badge>
+              ) : undefined
+            }
+          >
+            <p className="text-base font-semibold text-text">Maintained PAD ledger</p>
+            <p className="text-sm text-text-muted">
+              Accumulated transactions reconstructed from SDMS statements, most
+              recently published first. SDMS posts a transaction a day or two
+              after its value date, so the dates do not run strictly downwards.
+            </p>
+          </CardHeader>
 
           {isLoading ? (
             <div className="grid gap-2 p-4">

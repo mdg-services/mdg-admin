@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardSubtitle,
   CardTitle,
-  Dialog,
+  ConfirmDialog,
   useToast,
 } from '@/components/ui';
 import { useArchiveDealer, useRestoreDealer } from '@/hooks/api/useDealers';
@@ -67,63 +67,64 @@ export function DealerArchiveDialogs({
     }
   }
 
+  // Both go through the shared `ConfirmDialog` rather than repeating its shape:
+  // it supplies the Cancel/confirm footer, keeps the destructive button red and
+  // last, and — the part that matters on a phone — inherits `Dialog`'s bottom
+  // sheet, its internal scroll and a footer that stays above the keyboard and
+  // the safe area.
   return (
     <>
-      <Dialog
+      <ConfirmDialog
         open={action === 'archive'}
-        onClose={onClose}
+        onCancel={onClose}
+        onConfirm={() => void run('archive')}
         title="Delete this dealer?"
-        description={dealerCodeLabel(dealer.code)}
-        footer={
-          <>
-            <Button variant="secondary" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => run('archive')}
-              loading={archive.isPending}
-            >
-              Delete dealer
-            </Button>
-          </>
+        // `size="md"` restores the `max-w-lg` panel the hand-rolled Dialog this
+        // replaced had, so adopting the primitive is a no-op at md.
+        size="md"
+        confirmLabel="Delete dealer"
+        confirmVariant="danger"
+        loading={archive.isPending}
+        description={
+          <div className="grid gap-3">
+            <p className="font-medium text-text">
+              {dealerCodeLabel(dealer.code)}
+            </p>
+            <p>This will:</p>
+            <ul className="list-disc pl-5">
+              <li>Remove the dealer from the dealer list and the dashboard counts</li>
+              <li>Pause every service, so no more automatic reports run for them</li>
+              <li>Stop the owner and their team from signing in</li>
+            </ul>
+            <p className="font-medium text-text">
+              Nothing is deleted. You can restore this dealer at any time.
+            </p>
+          </div>
         }
-      >
-        <div className="grid gap-3 text-sm text-text-muted">
-          <p>This will:</p>
-          <ul className="list-disc pl-5">
-            <li>Remove the dealer from the dealer list and the dashboard counts</li>
-            <li>Pause every service, so no more automatic reports run for them</li>
-            <li>Stop the owner and their team from signing in</li>
-          </ul>
-          <p className="font-medium text-text">
-            Nothing is deleted. You can restore this dealer at any time.
-          </p>
-        </div>
-      </Dialog>
+      />
 
-      <Dialog
+      <ConfirmDialog
         open={action === 'restore'}
-        onClose={onClose}
+        onCancel={onClose}
+        onConfirm={() => void run('restore')}
         title="Restore this dealer?"
-        description={dealerCodeLabel(dealer.code)}
-        footer={
-          <>
-            <Button variant="secondary" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button onClick={() => run('restore')} loading={restore.isPending}>
-              Restore dealer
-            </Button>
-          </>
+        size="md"
+        confirmLabel="Restore dealer"
+        loading={restore.isPending}
+        description={
+          <div className="grid gap-3">
+            <p className="font-medium text-text">
+              {dealerCodeLabel(dealer.code)}
+            </p>
+            <p>
+              The dealer comes back into the list and its team can sign in
+              again. Services stay paused and the status stays Suspended, so
+              nothing starts running on its own — turn those back on when you
+              are ready.
+            </p>
+          </div>
         }
-      >
-        <p className="text-sm text-text-muted">
-          The dealer comes back into the list and its team can sign in again.
-          Services stay paused and the status stays Suspended, so nothing starts
-          running on its own — turn those back on when you are ready.
-        </p>
-      </Dialog>
+      />
     </>
   );
 }

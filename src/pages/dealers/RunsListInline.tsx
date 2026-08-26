@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Download, Eye } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Eye } from 'lucide-react';
 import * as React from 'react';
 
 import {
@@ -16,6 +16,7 @@ import {
   TRow,
   Dialog,
   Button,
+  DownloadButton,
 } from '@/components/ui';
 import { useCreditDodSnapshot } from '@/hooks/api/useCreditDod';
 import { useRunDetail } from '@/hooks/api/useRunDetail';
@@ -137,16 +138,23 @@ export function RunsListInline({ dealerId, serviceId }: Props) {
         cards={data.items.map((r) => ({
           key: r.id,
           onClick: () => setOpenRunId(r.id),
+          // `truncate` implies `white-space: nowrap`, and `TriggerBadge` is
+          // itself `whitespace-nowrap` — so the badge was forced onto the same
+          // line and clipped off every card. Its text ("Auto · for Daily Sales
+          // Report") is the entire explanation of why a run nobody asked for is
+          // sitting in the history, which is the reason the badge was written.
           primary: (
             <span className="block truncate font-medium text-text">
               {runName(r.serviceId)}
-              <TriggerBadge label={backfillFor(r)} />
             </span>
           ),
           primaryRight: <StatusChip kind="run" value={r.status} />,
           meta: (
-            <span>
-              {formatDateTime(r.startedAt)} · {formatDuration(r.durationMs)}
+            <span className="flex flex-wrap items-center gap-x-1">
+              <TriggerBadge label={backfillFor(r)} />
+              <span>
+                {formatDateTime(r.startedAt)} · {formatDuration(r.durationMs)}
+              </span>
             </span>
           ),
         }))}
@@ -256,7 +264,9 @@ function RunDetail({
 
   return (
     <div className="grid gap-3 text-sm">
-      <div className="grid grid-cols-2 gap-2">
+      {/* One column below md. Two 150px columns inside the Dialog cannot hold a
+          24-character ObjectId, and `main` clips rather than scrolls. */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-2">
         <Field
           label="Service"
           value={isSuperAdmin ? run.serviceId : serviceLabel(run.serviceId)}
@@ -275,10 +285,10 @@ function RunDetail({
           />
         ) : null}
         {isSuperAdmin ? (
-          <Field label="Dealer" value={run.dealerId} />
+          <Field label="Dealer" value={run.dealerId} identifier />
         ) : null}
         {isSuperAdmin && run.parentRunId ? (
-          <Field label="Parent run" value={run.parentRunId} />
+          <Field label="Parent run" value={run.parentRunId} identifier />
         ) : null}
       </div>
 
@@ -292,7 +302,7 @@ function RunDetail({
       {isSuperAdmin && run.error && !isCreditDodFailure ? (
         <section>
           <SectionLabel>Error</SectionLabel>
-          <pre className="overflow-auto rounded-md bg-surface-2 p-3 text-xs">
+          <pre className="scroll-pane overflow-auto rounded-md bg-surface-2 p-3 text-xs">
             {run.error.message}
             {run.error.stack ? `\n${run.error.stack}` : ''}
           </pre>
@@ -346,7 +356,7 @@ function RunDetail({
       ) : isSuperAdmin ? (
         <section>
           <SectionLabel>Output</SectionLabel>
-          <pre className="max-h-72 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
+          <pre className="scroll-pane max-h-72 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
             {JSON.stringify(run.output ?? null, null, 2)}
           </pre>
         </section>
@@ -370,19 +380,27 @@ function RunDetail({
             {visibleArtifacts.map((a) => (
               <li
                 key={a.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface-2 px-3 py-2"
+                className="flex flex-col items-stretch gap-2 rounded-md border border-border bg-surface-2 px-3 py-2 md:flex-row md:flex-wrap md:items-center md:justify-between"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-text">
                     {a.reportCode ?? a.filename}
                   </p>
-                  <p className="text-xs text-text-muted">
+                  <p className="break-words text-xs text-text-muted">
                     {a.reportCode ? a.filename : null}
                     {a.reportCode && typeof a.size === 'number' ? ' · ' : ''}
                     {typeof a.size === 'number' ? formatBytes(a.size) : null}
+                    {/* The disabled control's reason, on screen. It used to be a
+                        `title`, which never fires on touch. */}
+                    {run.artifactUrls?.[a.id] ? null : (
+                      <span className="md:hidden">
+                        {a.reportCode || typeof a.size === 'number' ? ' · ' : ''}
+                        preparing a secure link
+                      </span>
+                    )}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {/*
                     A failure screenshot is something you LOOK at. Offering only
                     a download meant an operator diagnosing a failed run had to
@@ -392,8 +410,10 @@ function RunDetail({
                     The backend already signs an `inline` twin for every image.
                   */}
                   {a.contentType?.startsWith('image/') && run.artifactViewUrls?.[a.id] ? (
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="flex-1 md:flex-initial"
                       onClick={() =>
                         setViewing({
                           src: run.artifactViewUrls?.[a.id] ?? '',
@@ -401,37 +421,44 @@ function RunDetail({
                           downloadUrl: run.artifactUrls?.[a.id],
                         })
                       }
-                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 text-sm font-semibold text-text hover:bg-surface-2"
+                      leftIcon={<Eye width={14} height={14} strokeWidth={1.75} />}
                     >
-                      <Eye width={14} height={14} strokeWidth={1.75} />
                       View
-                    </button>
+                    </Button>
                   ) : null}
                   {/*
-                    Only ever render a link that can actually fetch the file. The
-                    signed URL needs no token; the legacy route needs a bearer
-                    header a plain <a> navigation cannot send, so linking to it
-                    produces a 401 and the appearance of a dead button. While the
-                    detail request is still in flight we render the disabled twin
-                    instead of a link that would fail if clicked.
+                    Only ever offer a control that can actually fetch the file.
+                    The signed URL needs no token; the legacy route needs a
+                    bearer header a plain navigation cannot send, so pointing at
+                    it produces a 401 and the appearance of a dead button. While
+                    the detail request is still in flight we render the disabled
+                    twin instead.
+
+                    It was a cross-origin `<a href download>`: `download` is
+                    ignored across origins, so in the shell the tap either
+                    navigated the WebView off the SPA — tearing down this very
+                    dialog — or did nothing and said nothing. On a failed run
+                    these artifacts ARE the diagnosis.
                   */}
                   {run.artifactUrls?.[a.id] ? (
-                    <a
-                      href={run.artifactUrls[a.id]}
-                      download
-                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 text-sm font-semibold text-text hover:bg-surface-2"
-                    >
-                      <Download width={14} height={14} strokeWidth={1.75} />
-                      Download
-                    </a>
+                    <DownloadButton
+                      className="flex-1 md:flex-initial"
+                      url={run.artifactUrls[a.id]}
+                      filename={a.filename}
+                      {...(a.contentType ? { contentType: a.contentType } : {})}
+                      kind={
+                        a.contentType?.startsWith('image/') ? 'image' : 'file'
+                      }
+                    />
                   ) : (
-                    <span
-                      className="inline-flex h-8 cursor-not-allowed items-center gap-1.5 rounded-md border border-border bg-surface-2 px-3 text-sm font-semibold text-text-muted"
-                      title="Preparing a secure link…"
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="flex-1 md:flex-initial"
+                      disabled
                     >
-                      <Download width={14} height={14} strokeWidth={1.75} />
                       Preparing…
-                    </span>
+                    </Button>
                   )}
                 </div>
               </li>
@@ -557,19 +584,34 @@ function RunStatusNotice({
   );
 }
 
+/**
+ * `identifier` is `break-all`, not `break-words`: a 24-character hex ObjectId
+ * has no break opportunity at all, so `break-words` leaves it overflowing its
+ * own column and `main`'s `overflow-x-hidden` then makes it unreadable rather
+ * than merely wide.
+ */
 function Field({
   label,
   value,
+  identifier = false,
 }: {
   label: string;
   value: React.ReactNode;
+  identifier?: boolean;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-xs uppercase tracking-wide text-text-subtle">
         {label}
       </p>
-      <p className="text-text">{value}</p>
+      <p
+        className={cn(
+          'min-w-0 break-words text-text',
+          identifier && 'break-all font-mono',
+        )}
+      >
+        {value}
+      </p>
     </div>
   );
 }

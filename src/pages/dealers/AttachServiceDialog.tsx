@@ -96,7 +96,11 @@ export function AttachServiceDialog({
       open={open}
       onClose={onClose}
       title="Attach service"
-      description="Pick a plugin and provide its configuration. The form is generated from the plugin's JSON Schema."
+      // Kept to one line: `Dialog` puts `description` in the sticky,
+      // non-scrolling header, so every extra sentence is permanent height in a
+      // sheet that also holds the form, the footer and the keyboard. The
+      // explanation moved into the scrolling body below.
+      description="Pick a plugin and configure it."
       size="lg"
       footer={
         <>
@@ -127,23 +131,33 @@ export function AttachServiceDialog({
         />
       ) : (
         <div className="grid gap-4">
+          {/* min-w-0 + break-words + shrink-0, matching EditServiceDialog: a
+              flex item defaults to `min-width: auto`, so a plugin id or a URL
+              inside the description had no break opportunity, refused to shrink
+              and pushed this block past the 304px sheet — where `main`'s
+              `overflow-x-hidden` clips rather than scrolls. */}
           <div className="flex items-start justify-between gap-3 rounded-md border border-border bg-surface-2 p-3">
-            <div>
-              <p className="text-sm font-semibold text-text">
+            <div className="min-w-0">
+              <p className="break-words text-sm font-semibold text-text">
                 {selected.name}
               </p>
-              <p className="text-xs text-text-muted">
+              <p className="break-words text-xs text-text-muted">
                 {selected.description}
               </p>
             </div>
             <Button
               variant="ghost"
               size="sm"
+              className="shrink-0"
               onClick={() => setSelectedId('')}
             >
               Change
             </Button>
           </div>
+
+          <p className="text-sm text-text-muted">
+            The form below is generated from the plugin&apos;s own JSON Schema.
+          </p>
 
           {selected.id === DSR_SERVICE_ID && (
             <DsrLayoutPrefill

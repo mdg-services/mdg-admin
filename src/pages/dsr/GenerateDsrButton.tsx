@@ -11,6 +11,7 @@ import {
 } from '@/components/ui';
 import { useGenerateDsr } from '@/hooks/api/useDsr';
 import { ApiError } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import { istTodayYmd, isYmd } from '@/lib/format';
 
 import { useDsrRunWatcher } from './useDsrRunWatcher';
@@ -133,9 +134,15 @@ export function GenerateDsrForDate({
   const valid = isYmd(date) && date >= MIN_SELECTABLE_YMD && date <= today;
 
   return (
-    <div className={className}>
+    // A pinned `w-40` input plus a ~120px button needs ~288px, and this renders
+    // inside an EmptyState (px-6) inside a Card (p-4) where 360px leaves ~248px.
+    // `main` is `overflow-x-hidden`, so the Generate button's right edge was not
+    // scrolled off — it was CLIPPED, and back-filling a date on a dealer with no
+    // report yet was unreachable on a phone. Stacking is the only shape that
+    // always fits; every `md:` below restores today's row exactly.
+    <div className={cn('w-full md:w-auto', className)}>
       <Label htmlFor={inputId}>Generate for a date</Label>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center">
         <Input
           id={inputId}
           type="date"
@@ -143,19 +150,27 @@ export function GenerateDsrForDate({
           min={MIN_SELECTABLE_YMD}
           max={today}
           onChange={(e) => setDate(e.target.value)}
-          className="w-40"
+          className="w-full md:w-40"
         />
         <GenerateDsrButton
           dealerId={dealerId}
           businessDate={valid ? date : undefined}
           disabled={!valid}
           label="Generate"
+          className="w-full md:w-auto"
           icon={<CalendarPlus width={14} height={14} strokeWidth={1.75} />}
           onQueued={() => {
             if (valid) onGenerated?.(date);
           }}
         />
       </div>
+      {/* A disabled action has to say why on screen — `title` never fires on
+          touch, and the long-press callout is off app-wide. */}
+      {date && !valid ? (
+        <p className="mt-1 text-xs text-warning">
+          Pick a date between {MIN_SELECTABLE_YMD} and today.
+        </p>
+      ) : null}
     </div>
   );
 }

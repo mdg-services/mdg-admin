@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   Check,
+  ChevronDown,
   CircleDot,
   Copy,
   KeyRound,
@@ -12,10 +13,12 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import {
+  ActionRow,
   Badge,
   Button,
   Card,
   CardContent,
+  Copyable,
   Dialog,
   FieldError,
   Input,
@@ -29,6 +32,7 @@ import {
   useStepCompleteMutation,
   useStepReopenMutation,
 } from '@/hooks/api/useDealerOnboarding';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { formatDateTime } from '@/lib/format';
 import { generatePassword } from '@/lib/password';
 import { ONBOARDING_STEPS, stepById } from '@dk/shared';
@@ -160,48 +164,122 @@ function StepCard({
   const status = entry?.status ?? 'PENDING';
   const isDone = status === 'DONE';
   const reopenable = def.reopenable;
+  const isMd = useMediaQuery('(min-width: 768px)');
+  const [expanded, setExpanded] = useState(false);
+
+  /* The one-time credentials live HERE, not inside the form that produced
+     them. Completing `issue-app-login` is the last step, so the server sets
+     `currentStepId` to null; the mutation then invalidates the onboarding
+     query, `isCurrent` goes false, and the form — holding the generated
+     password in its own state — unmounted. The panel that says on its own next
+     line that the password "cannot be retrieved later" was therefore on screen
+     for exactly one network round-trip. Held one level up, it survives the step
+     going DONE and stays there until the admin leaves the page. */
+  const [issued, setIssued] = useState<{ email: string; password: string } | null>(
+    null,
+  );
+
+  /* Seven steps all rendered open run to 2,000-2,500px at 360px, and the admin
+     lands at the top and scrolls past every finished one to reach the single
+     piece of work. A DONE step is a receipt, not a task: below md it folds back
+     to its title row, and that row is itself the 44px control that unfolds it.
+     At md everything stays open, exactly as today. A step still holding a
+     one-time password is never folded away. */
+  const collapsible = isDone && !isMd && issued === null;
+  const showBody = !collapsible || expanded;
 
   return (
     <Card>
       <CardContent>
-        <div className="flex items-start gap-4">
+        {/* The step number is decoration that costs 48px — 16% — of a 294px
+            card on the densest form screen in the app. Smaller dot, smaller
+            gap below md; both restored at md. */}
+        <div className="flex items-start gap-3 md:gap-4">
           <StepDot order={order} done={isDone} current={isCurrent} />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm font-semibold text-text">{def.title}</div>
-              <StepBadge isDone={isDone} isCurrent={isCurrent} />
-            </div>
-            <p className="mt-1 text-sm text-text-muted">{def.description}</p>
-            {isDone && entry?.completedAt ? (
-              <p className="mt-2 text-xs text-text-subtle">
-                Completed {formatDateTime(entry.completedAt)}
-                {entry.completedBy ? ` by ${entry.completedBy.slice(-6)}` : null}
-              </p>
-            ) : null}
-
-            {/* Once issued, show a copyable credentials panel even after the
-                step is DONE so the admin can re-share the login email. */}
-            {stepId === 'issue-app-login' && isDone && dealer.portalCredentials ? (
-              <div className="mt-3">
-                <IssuedLoginPanel email={dealer.portalCredentials.username} />
+            {collapsible ? (
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                aria-expanded={expanded}
+                className="flex min-h-11 w-full items-center justify-between gap-2 text-left"
+              >
+                <span className="min-w-0 break-words text-sm font-semibold text-text">
+                  {def.title}
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <StepBadge isDone={isDone} isCurrent={isCurrent} />
+                  <ChevronDown
+                    width={16}
+                    height={16}
+                    strokeWidth={1.75}
+                    aria-hidden
+                    className={
+                      expanded
+                        ? 'rotate-180 text-text-subtle transition-transform'
+                        : 'text-text-subtle transition-transform'
+                    }
+                  />
+                </span>
+              </button>
+            ) : (
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold text-text">{def.title}</div>
+                <StepBadge isDone={isDone} isCurrent={isCurrent} />
               </div>
-            ) : null}
+            )}
 
-            {isCurrent ? (
-              <div className="mt-3">
-                <StepForm dealerId={dealerId} dealer={dealer} stepId={stepId} />
-              </div>
-            ) : null}
+            {showBody ? (
+              <>
+                <p className="mt-1 text-sm text-text-muted">{def.description}</p>
+                {isDone && entry?.completedAt ? (
+                  <p className="mt-2 text-xs text-text-subtle">
+                    Completed {formatDateTime(entry.completedAt)}
+                    {entry.completedBy ? ` by ${entry.completedBy.slice(-6)}` : null}
+                  </p>
+                ) : null}
 
-            {isDone ? (
-              <div className="mt-3">
-                <ReopenAction
-                  dealerId={dealerId}
-                  stepId={stepId}
-                  mutating={def.mutating}
-                  reopenable={reopenable}
-                />
-              </div>
+                {/* Once issued, show a copyable credentials panel even after the
+                    step is DONE so the admin can re-share the login email. The
+                    password is only ever in memory, so the fuller panel wins
+                    while it is still there. */}
+                {issued ? (
+                  <div className="mt-3">
+                    <ShareCredentialsPanel
+                      email={issued.email}
+                      password={issued.password}
+                    />
+                  </div>
+                ) : stepId === 'issue-app-login' &&
+                  isDone &&
+                  dealer.portalCredentials ? (
+                  <div className="mt-3">
+                    <IssuedLoginPanel email={dealer.portalCredentials.username} />
+                  </div>
+                ) : null}
+
+                {isCurrent && !issued ? (
+                  <div className="mt-3">
+                    <StepForm
+                      dealerId={dealerId}
+                      dealer={dealer}
+                      stepId={stepId}
+                      onIssued={setIssued}
+                    />
+                  </div>
+                ) : null}
+
+                {isDone ? (
+                  <div className="mt-3">
+                    <ReopenAction
+                      dealerId={dealerId}
+                      stepId={stepId}
+                      mutating={def.mutating}
+                      reopenable={reopenable}
+                    />
+                  </div>
+                ) : null}
+              </>
             ) : null}
           </div>
         </div>
@@ -226,7 +304,7 @@ function StepDot({
       : 'bg-surface-2 text-text-subtle';
   return (
     <div
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${cls} text-xs font-semibold`}
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full md:h-8 md:w-8 ${cls} text-xs font-semibold`}
       aria-hidden
     >
       {done ? <Check width={14} height={14} /> : order}
@@ -252,10 +330,14 @@ function StepForm({
   dealerId,
   dealer,
   stepId,
+  onIssued,
 }: {
   dealerId: string;
   dealer: Dealer;
   stepId: OnboardingStepId;
+  /** Hands the one-time credentials up to `StepCard`, which outlives this
+   *  form — see the note there. */
+  onIssued: (c: { email: string; password: string }) => void;
 }) {
   switch (stepId) {
     case 'collect-phone':
@@ -271,7 +353,13 @@ function StepForm({
     case 'assign-code':
       return <AssignCodeForm dealerId={dealerId} dealer={dealer} />;
     case 'issue-app-login':
-      return <IssueAppLoginForm dealerId={dealerId} dealer={dealer} />;
+      return (
+        <IssueAppLoginForm
+          dealerId={dealerId}
+          dealer={dealer}
+          onIssued={onIssued}
+        />
+      );
   }
 }
 
@@ -322,9 +410,16 @@ function ComposeMessageBlock({
           {copied ? 'Copied' : 'Copy'}
         </Button>
       </div>
+      {/* The 16px floor in `index.css` gives this box about 24 characters a
+          line on a phone, and the default welcome message is ~230 characters —
+          eleven lines in a six-row box, scrolling inside the page scroller.
+          `min-h` buys the rows back below md without touching the desktop
+          size, and `overscroll-contain` stops a flick at the end of the text
+          from dragging the page behind it. */}
       <Textarea
         id="compose-message"
         rows={6}
+        className="min-h-[15rem] overscroll-contain md:min-h-0"
         value={message}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -372,11 +467,14 @@ function SendMessageStep({
         onChange={setMessage}
         helper={helper}
       />
-      <div className="flex justify-end">
+      {/* `ActionRow` stretches a step's primary action to the full card width
+          below md — it was an auto-width button in the far corner of a ~250px
+          column, the hardest place on a big phone to reach one-handed. */}
+      <ActionRow>
         <Button type="button" onClick={markDone} loading={mutate.isPending}>
           Mark sent
         </Button>
-      </div>
+      </ActionRow>
     </div>
   );
 }
@@ -409,9 +507,12 @@ function PaymentAndGstForm({ dealerId }: { dealerId: string }) {
     }
   });
 
+  // One column at every width: every child used to carry `md:col-span-2`, so
+  // the `md:grid-cols-2` on the form could never fire. The classes are gone
+  // rather than made to work — these three fields read better stacked.
   return (
-    <form onSubmit={submit} className="grid gap-3 md:grid-cols-2">
-      <div className="md:col-span-2">
+    <form onSubmit={submit} className="grid gap-3">
+      <div>
         <Label htmlFor="gst" required>
           GST number
         </Label>
@@ -423,7 +524,7 @@ function PaymentAndGstForm({ dealerId }: { dealerId: string }) {
         />
         <FieldError message={errors.gst?.message} />
       </div>
-      <div className="md:col-span-2">
+      <div>
         <Label htmlFor="paymentNote" required>
           Payment note
         </Label>
@@ -436,15 +537,15 @@ function PaymentAndGstForm({ dealerId }: { dealerId: string }) {
         />
         <FieldError message={errors.paymentNote?.message} />
       </div>
-      <div className="md:col-span-2">
+      <div>
         <Label htmlFor="note">Internal note (optional)</Label>
         <Textarea id="note" rows={2} {...register('note')} />
       </div>
-      <div className="md:col-span-2 flex justify-end">
+      <ActionRow>
         <Button type="submit" loading={mutate.isPending}>
           Mark done
         </Button>
-      </div>
+      </ActionRow>
     </form>
   );
 }
@@ -511,11 +612,11 @@ function CollectPhoneForm({
         <Label htmlFor="collect-phone-note">Internal note (optional)</Label>
         <Textarea id="collect-phone-note" rows={2} {...register('note')} />
       </div>
-      <div className="flex justify-end">
+      <ActionRow>
         <Button type="submit" loading={mutate.isPending}>
           Save phone number
         </Button>
-      </div>
+      </ActionRow>
     </form>
   );
 }
@@ -578,11 +679,11 @@ function AssignCodeForm({ dealerId, dealer }: { dealerId: string; dealer: Dealer
         <Label htmlFor="note">Internal note (optional)</Label>
         <Textarea id="note" rows={2} {...register('note')} />
       </div>
-      <div className="flex justify-end">
+      <ActionRow>
         <Button type="submit" loading={mutate.isPending}>
           Confirm code
         </Button>
-      </div>
+      </ActionRow>
     </form>
   );
 }
@@ -599,7 +700,9 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       toast.success(`${label} copied`);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      toast.error('Could not copy — copy manually.');
+      toast.error(
+        'Could not copy. Both values are in the fields below — tap one and long-press to copy it.',
+      );
     }
   }
   return (
@@ -607,6 +710,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       type="button"
       variant="secondary"
       size="sm"
+      className="shrink-0"
       onClick={copy}
       leftIcon={
         copied ? <Check width={14} height={14} /> : <Copy width={14} height={14} />
@@ -617,7 +721,15 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   );
 }
 
-/** Shown after issue-app-login is done — surfaces the owner's login email. */
+/**
+ * Shown after issue-app-login is done — surfaces the owner's login email.
+ *
+ * `Copyable mode="field"`, not a `<div>`: `index.css` sets `user-select: none`
+ * on `#root` and exempts only inputs, so a value printed into a div on a phone
+ * can be neither selected nor long-pressed. Truncated to ~118px next to the old
+ * Copy button, this panel — kept visible after the step is DONE precisely so
+ * the login can be re-shared — could not serve that purpose at all.
+ */
 function IssuedLoginPanel({ email }: { email: string }) {
   return (
     <div className="grid gap-2 rounded-md border border-success/40 bg-success-soft/50 p-3">
@@ -625,13 +737,12 @@ function IssuedLoginPanel({ email }: { email: string }) {
         <KeyRound width={15} height={15} strokeWidth={1.75} className="text-success" />
         App login issued
       </div>
-      <div className="flex items-center justify-between gap-2 rounded-sm border border-border bg-surface px-2 py-1.5">
-        <div className="min-w-0">
-          <div className="text-xs text-text-subtle">Login email</div>
-          <div className="truncate font-mono text-sm text-text">{email}</div>
-        </div>
-        <CopyButton value={email} label="Email" />
-      </div>
+      <Copyable
+        label="Login email"
+        value={email}
+        mono
+        toastLabel="Email copied"
+      />
       <p className="text-xs text-text-subtle">
         The password is set, hashed and never returned. Reopen this step to issue
         a new password if it needs to be re-shared.
@@ -640,7 +751,26 @@ function IssuedLoginPanel({ email }: { email: string }) {
   );
 }
 
-/** Credentials panel shown immediately after issuing, including the password. */
+/**
+ * Credentials panel shown immediately after issuing, including the password.
+ *
+ * THIS IS THE APP'S ONE DATA-LOSS PATH, and it was a layout bug.
+ *
+ * The temporary password is shown exactly once — the panel says so on its own
+ * next line — and it was rendered as `truncate font-mono` in a box about 118px
+ * wide, which cuts a 14-character generated password at or just past its last
+ * character and a realistic email roughly in half. The recovery the failed-copy
+ * toast offered ("copy it manually") did not exist: `#root` carries
+ * `user-select: none`, only `input`/`textarea`/`[contenteditable]` are exempt,
+ * and a `<div>` is none of them — so on a phone the value could not be read in
+ * full, selected, or long-pressed. A dealer's login was one clipboard failure
+ * away from being permanently lost.
+ *
+ * `Copyable mode="field"` renders a real `<input readOnly>`: the whole value at
+ * full width, selection and the long-press callout back, and a copy that falls
+ * from the Clipboard API to `execCommand` to selecting the text and SAYING it
+ * has done so.
+ */
 function ShareCredentialsPanel({
   email,
   password,
@@ -652,31 +782,38 @@ function ShareCredentialsPanel({
   return (
     <div className="grid gap-2 rounded-md border border-success/50 bg-success-soft/60 p-3">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm font-semibold text-text">
-          <KeyRound width={15} height={15} strokeWidth={1.75} className="text-success" />
+        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-text">
+          <KeyRound
+            width={15}
+            height={15}
+            strokeWidth={1.75}
+            className="shrink-0 text-success"
+          />
           Share these with the dealer
         </div>
         <CopyButton value={both} label="Credentials" />
       </div>
       <p className="text-xs text-text-subtle">
         This password is shown once. Copy it now — it is stored hashed and cannot
-        be retrieved later.
+        be retrieved later. If the copy button ever fails, tap a field below and
+        long-press to copy it by hand.
       </p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <div className="flex items-center justify-between gap-2 rounded-sm border border-border bg-surface px-2 py-1.5">
-          <div className="min-w-0">
-            <div className="text-xs text-text-subtle">Login email</div>
-            <div className="truncate font-mono text-sm text-text">{email}</div>
-          </div>
-          <CopyButton value={email} label="Email" />
-        </div>
-        <div className="flex items-center justify-between gap-2 rounded-sm border border-border bg-surface px-2 py-1.5">
-          <div className="min-w-0">
-            <div className="text-xs text-text-subtle">Temporary password</div>
-            <div className="truncate font-mono text-sm text-text">{password}</div>
-          </div>
-          <CopyButton value={password} label="Password" />
-        </div>
+      {/* `md:`, not `sm:`: this panel lives in a dealer-detail tab column, and
+          two columns of it at 640px leave each field too narrow to show a
+          14-character password beside a 44px copy button. */}
+      <div className="grid gap-2 md:grid-cols-2">
+        <Copyable
+          label="Login email"
+          value={email}
+          mono
+          toastLabel="Email copied"
+        />
+        <Copyable
+          label="Temporary password"
+          value={password}
+          mono
+          toastLabel="Password copied"
+        />
       </div>
     </div>
   );
@@ -685,9 +822,11 @@ function ShareCredentialsPanel({
 function IssueAppLoginForm({
   dealerId,
   dealer,
+  onIssued,
 }: {
   dealerId: string;
   dealer: Dealer;
+  onIssued: (c: { email: string; password: string }) => void;
 }) {
   const toast = useToast();
   const mutate = useStepCompleteMutation(dealerId);
@@ -716,10 +855,6 @@ function IssueAppLoginForm({
     },
   });
 
-  // Once issued, the credentials are shown once for the admin to hand over.
-  const [issued, setIssued] = useState<{ email: string; password: string } | null>(
-    null,
-  );
   const [copiedPw, setCopiedPw] = useState(false);
 
   function fillGenerated() {
@@ -742,15 +877,13 @@ function IssueAppLoginForm({
     try {
       await mutate.mutateAsync({ stepId: 'issue-app-login', payload: values });
       toast.success('App login issued. Dealer is now ACTIVE.');
-      setIssued({ email: values.email.toLowerCase(), password: values.password });
+      // Handed upward before this component is unmounted by the refetch that
+      // the mutation's own invalidation is already triggering.
+      onIssued({ email: values.email.toLowerCase(), password: values.password });
     } catch (e) {
       toast.error((e as Error).message);
     }
   });
-
-  if (issued) {
-    return <ShareCredentialsPanel email={issued.email} password={issued.password} />;
-  }
 
   return (
     <form onSubmit={submit} className="grid gap-3 md:grid-cols-2">
@@ -838,10 +971,20 @@ function IssueAppLoginForm({
         <Label htmlFor="app-note">Internal note (optional)</Label>
         <Textarea id="app-note" rows={2} {...register('note')} />
       </div>
-      <div className="md:col-span-2 flex justify-end">
-        <Button type="submit" loading={mutate.isPending}>
-          Issue login — activate dealer
-        </Button>
+      <div className="grid gap-2 md:col-span-2">
+        <ActionRow>
+          {/* `Button` is unconditionally `whitespace-nowrap` and `cn` is plain
+              clsx, so a `whitespace-normal` from here would lose to it —
+              stylesheet order decides and `nowrap` is emitted second. The
+              short label is the fix; the consequence moves to helper text. */}
+          <Button type="submit" loading={mutate.isPending}>
+            <span className="md:hidden">Issue login</span>
+            <span className="hidden md:inline">Issue login — activate dealer</span>
+          </Button>
+        </ActionRow>
+        <p className="text-xs text-text-subtle md:hidden">
+          This also flips the dealer to ACTIVE.
+        </p>
       </div>
     </form>
   );
@@ -865,9 +1008,13 @@ function ReopenAction({
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   if (!reopenable) {
+    // 12px explaining why an expected control is absent, on a viewport with no
+    // pinch-zoom, was the smallest text on the screen. 14px below md; the icon
+    // and the type both go back to 12px at md.
     return (
-      <div className="flex items-center gap-2 text-xs text-text-subtle">
-        <Lock width={12} height={12} /> Append-only — cannot be reopened.
+      <div className="flex items-center gap-2 text-sm text-text-subtle md:text-xs">
+        <Lock width={14} height={14} className="shrink-0 md:h-3 md:w-3" />{' '}
+        Append-only — cannot be reopened.
       </div>
     );
   }

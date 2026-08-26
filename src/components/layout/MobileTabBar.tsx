@@ -51,6 +51,11 @@ export function MobileTabBar({ className }: { className?: string }) {
           <NavLink
             key={item.to}
             to={item.to}
+            // `/kavach` is a prefix of `/kavach/defaults`, and NavLink matches
+            // by prefix by default — so on the defaults page the Kavach tab and
+            // More both read as active. The flag lives on the item, next to the
+            // route it is about.
+            end={item.end}
             className={({ isActive }) =>
               cn(
                 'relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5',

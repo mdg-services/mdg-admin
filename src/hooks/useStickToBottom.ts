@@ -82,7 +82,13 @@ export function useStickToBottom<T extends HTMLElement>(
     };
   }, []);
 
-  React.useEffect(() => {
+  // `useLayoutEffect`, not `useEffect`: this is the branch that fires when a
+  // thread first loads, and after paint means the reader sees the TOP of the
+  // page they just opened for one frame before it jumps. The count-keyed code
+  // this replaced was a layout effect, and dropping to a passive one was a
+  // regression on a slow phone. The ResizeObserver and visualViewport branches
+  // above stay passive — they react to events, not to a render.
+  React.useLayoutEffect(() => {
     if (pinnedRef.current) scrollToBottom();
     // The caller owns this dependency list — it is the "content changed" signal
     // (message ids, a pending upload) and cannot be spelled out here.

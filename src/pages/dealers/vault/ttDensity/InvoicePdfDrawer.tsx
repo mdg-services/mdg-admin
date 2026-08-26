@@ -1,9 +1,10 @@
-import { Download, ExternalLink, FileWarning, RotateCw } from 'lucide-react';
+import { ExternalLink, FileWarning, RotateCw } from 'lucide-react';
 import * as React from 'react';
 
 import {
   Button,
   Callout,
+  DownloadButton,
   Drawer,
   Skeleton,
   useToast,
@@ -134,17 +135,32 @@ export function InvoicePdfDrawer({
               Open in a new tab
             </Button>
           ) : null}
+          {/*
+            One control on a phone, not two. `openOnPhone()` already hands the
+            file to the shell's own download path, which saves it and opens it in
+            whatever the phone uses for PDFs — so a second "Download" beside it
+            did the same job, and did it through `window.open`, which this file
+            documents (above) as unreliable here because the shell runs
+            `setSupportMultipleWindows={false}`. A button that probably does
+            nothing, beside one that works, is worse than no button.
+
+            At md the pair is meaningful again — view in a tab, or save — and the
+            save goes through `DownloadButton`, so a landscape phone (already
+            `≥ md` at 852px) still gets the native route and a visible error
+            instead of a dropped window.
+          */}
           {!wideEnoughToEmbed && urls ? (
-            <Button onClick={() => void openOnPhone()}>Open the invoice PDF</Button>
+            <Button onClick={() => void openOnPhone()}>Open PDF</Button>
           ) : null}
-          {urls ? (
-            <Button
+          {wideEnoughToEmbed && urls ? (
+            <DownloadButton
               variant="ghost"
-              leftIcon={<Download width={14} height={14} strokeWidth={1.75} />}
-              onClick={() => window.open(urls.downloadUrl, '_blank', 'noopener')}
-            >
-              Download
-            </Button>
+              size="md"
+              url={urls.downloadUrl}
+              filename={urls.filename}
+              contentType={urls.contentType}
+              kind="file"
+            />
           ) : null}
           <Button variant="ghost" onClick={onClose}>
             Close

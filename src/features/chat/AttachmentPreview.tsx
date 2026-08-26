@@ -3,6 +3,7 @@ import * as React from 'react';
 
 
 import { ImageLightbox } from '@/components/ui/ImageLightbox';
+import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/cn';
 import { downloadAttachment } from '@/lib/downloadAttachment';
@@ -18,6 +19,7 @@ export function formatBytes(bytes: number): string {
 /** Inline audio player for a received voice note. */
 function VoiceMessage({ attachment }: { attachment: Attachment }) {
   const audioRef = React.useRef<HTMLAudioElement>(null);
+  const trackRef = React.useRef<HTMLButtonElement>(null);
   const [playing, setPlaying] = React.useState(false);
   const [currentMs, setCurrentMs] = React.useState(0);
   const [loadedMs, setLoadedMs] = React.useState<number | null>(null);
@@ -32,13 +34,40 @@ function VoiceMessage({ attachment }: { attachment: Attachment }) {
     else el.pause();
   };
 
+  /**
+   * Where a re-listen should land, from where the tap fell. On `click` rather
+   * than `pointerdown`: a pointerdown here also starts a scroll of the thread,
+   * and the bubble's long-press swallows the trailing click, so a press-and-hold
+   * opens the message menu without also jumping the audio.
+   */
+  function seekFromPointer(e: React.MouseEvent<HTMLButtonElement>) {
+    const el = audioRef.current;
+    const track = trackRef.current;
+    if (!el || !track) return;
+    const duration = Number.isFinite(el.duration) ? el.duration : totalMs / 1000;
+    if (!duration) return;
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    el.currentTime = ratio * duration;
+    setCurrentMs(ratio * duration * 1000);
+  }
+
+  function nudge(seconds: number) {
+    const el = audioRef.current;
+    if (!el) return;
+    const duration = Number.isFinite(el.duration) ? el.duration : totalMs / 1000;
+    const next = Math.min(duration || 0, Math.max(0, el.currentTime + seconds));
+    el.currentTime = next;
+    setCurrentMs(next * 1000);
+  }
+
   return (
     <div className="flex min-w-[180px] items-center gap-2.5 rounded-lg border border-border bg-surface px-2.5 py-2">
       <button
         type="button"
         onClick={toggle}
         aria-label={playing ? 'Pause voice message' : 'Play voice message'}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand md:h-8 md:w-8"
       >
         {playing ? (
           <Pause width={15} strokeWidth={2} />
@@ -46,17 +75,35 @@ function VoiceMessage({ attachment }: { attachment: Attachment }) {
           <Play width={15} strokeWidth={2} className="translate-x-[1px]" />
         )}
       </button>
-      <div className="flex flex-1 flex-col gap-1">
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
-          <div
-            className="h-full rounded-full bg-brand"
+      {/* Play/pause used to be the entire interaction surface of a voice note —
+          the bar was a painted div. It is now the seek control, and the whole
+          column is the target so no 6px bar has to be hit. */}
+      <button
+        ref={trackRef}
+        type="button"
+        aria-label="Seek voice message"
+        onClick={seekFromPointer}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            nudge(-5);
+          } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            nudge(5);
+          }
+        }}
+        className="flex min-h-11 flex-1 flex-col justify-center gap-1 text-left md:min-h-0"
+      >
+        <span className="block h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+          <span
+            className="block h-full rounded-full bg-brand"
             style={{ width: `${progress}%` }}
           />
-        </div>
+        </span>
         <span className="text-[11px] tabular-nums text-text-subtle">
           {formatDuration(playing || currentMs > 0 ? currentMs : totalMs)}
         </span>
-      </div>
+      </button>
       <audio
         ref={audioRef}
         src={attachment.url}
@@ -127,17 +174,28 @@ export function AttachmentPreview({ attachment }: { attachment: Attachment }) {
     );
   }
 
-  const href = attachment.url ?? '#';
+  // Was `<a target="_blank">` on the signed URL that rode in with the message.
+  // Two failures: that URL expires, so a document on an older message 403s; and
+  // the shell runs `setSupportMultipleWindows={false}`, so the tap could also
+  // do nothing at all. `handleDownload` presigns a fresh URL and goes through
+  // the native download bridge — the same path the long-press menu already used.
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer noopener"
-      className="inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-text hover:bg-surface-2"
+    <button
+      type="button"
+      onClick={() => void handleDownload()}
+      disabled={downloading}
+      aria-label={`Download ${attachment.filename}`}
+      className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-text hover:bg-surface-2 disabled:opacity-70 md:min-h-0"
     >
-      <Paperclip width={14} height={14} strokeWidth={1.75} />
+      {downloading ? (
+        <Spinner size={14} />
+      ) : (
+        <Paperclip width={14} height={14} strokeWidth={1.75} />
+      )}
       <span className="truncate">{attachment.filename}</span>
-      <span className="text-text-subtle">{formatBytes(attachment.size)}</span>
-    </a>
+      <span className="shrink-0 text-text-subtle">
+        {formatBytes(attachment.size)}
+      </span>
+    </button>
   );
 }

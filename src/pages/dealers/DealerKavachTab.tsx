@@ -218,13 +218,18 @@ export function DealerKavachTab({ dealer }: Props) {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <label htmlFor="kavach-digest-hour" className="text-xs text-text-muted">
+              {/* `h-9 w-auto` used to sit on the Select and did nothing at all:
+                  `cn` is plain clsx, and Tailwind emits `.h-9` before `.h-11`
+                  and `.w-auto` before `.w-full`, so the primitive's own classes
+                  won both. The width now lives where it can be honoured — the
+                  field fills its row on a phone, and is a fixed 14rem at md. */}
+              <div className="flex w-full items-center gap-1.5 md:w-auto">
+                <label htmlFor="kavach-digest-hour" className="shrink-0 text-xs text-text-muted">
                   Digest time
                 </label>
                 <Select
                   id="kavach-digest-hour"
-                  className="h-9 w-auto"
+                  className="md:w-56"
                   value={programme.reminderHour ?? ''}
                   disabled={updateProgramme.isPending}
                   onChange={(e) => {
@@ -365,7 +370,11 @@ export function DealerKavachTab({ dealer }: Props) {
       <Callout intent="info">
         Tasks are added, hidden or re-pointed for this outlet on its{' '}
         <span className="font-medium">Kavach work list</span> tab. Verifying them
-        happens in the work queue — this panel shows where the dealer stands.
+        happens in the work queue — this panel shows where the dealer stands.{' '}
+        {/* The pause button's consequence used to live only in a `title`, which
+            no touch gesture reveals. Said once here rather than on all 45 rows. */}
+        Pausing a task takes it out of this dealer&apos;s score and out of the
+        work queue until it is resumed.
       </Callout>
 
       {/* Items grouped by bucket */}

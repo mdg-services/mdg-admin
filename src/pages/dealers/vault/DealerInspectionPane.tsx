@@ -13,8 +13,10 @@ import {
   Button,
   Card,
   CardContent,
+  CardHeader,
   Drawer,
   EmptyState,
+  KeyValueList,
   MobileCardList,
   Skeleton,
   Table,
@@ -241,21 +243,27 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
 
           <Card>
             <CardContent className="p-0">
-              <div className="flex items-center justify-between gap-3 border-b border-border p-4">
-                <div>
-                  <p className="text-base font-semibold text-text">
-                    Latest inspection reports
-                  </p>
-                  <p className="text-sm text-text-muted">
-                    The most recent reports captured from the e-Mitra portal.
-                  </p>
-                </div>
-                {summary.total > 0 ? (
-                  <Badge intent="neutral" className="tabular-nums">
-                    {summary.latest.length} of {summary.total.toLocaleString('en-IN')}
-                  </Badge>
-                ) : null}
-              </div>
+              {/* `CardHeader action`: the count badge is `whitespace-nowrap`
+                  and does not shrink, so in a `justify-between` row that cannot
+                  wrap it squeezed the sentence beside it at 296px. */}
+              <CardHeader
+                align="center"
+                padding="comfortable"
+                action={
+                  summary.total > 0 ? (
+                    <Badge intent="neutral" className="tabular-nums">
+                      {summary.latest.length} of {summary.total.toLocaleString('en-IN')}
+                    </Badge>
+                  ) : undefined
+                }
+              >
+                <p className="text-base font-semibold text-text">
+                  Latest inspection reports
+                </p>
+                <p className="text-sm text-text-muted">
+                  The most recent reports captured from the e-Mitra portal.
+                </p>
+              </CardHeader>
 
               {summary.latest.length === 0 ? (
                 <EmptyState
@@ -398,31 +406,75 @@ function ReportView({ detail }: { detail: InspectionReportDetail }) {
   );
 }
 
-/** One report section — a generic bordered table of the portal's own cells. */
+/**
+ * One report section — the portal's own cells, in whichever shape fits.
+ *
+ * The portal's table is kept verbatim at md and above: it is a statutory form
+ * and its column order is part of what an operator is reading. Below md it
+ * cannot be kept at all. This renders inside a `Drawer`, whose body is 328px at
+ * 360px, and the section has an arbitrary number of columns with no sticky
+ * label column — so the row's own label scrolled away with everything else, and
+ * a six-column section became a sideways puzzle inside a bottom sheet.
+ *
+ * So below md each row is stacked: the first cell is the row's name and the rest
+ * are its values under it, which is exactly the shape `KeyValueList` exists for.
+ * A one-cell row is a heading in both shapes.
+ */
 function ReportSection({ section }: { section: InspectionReportSection }) {
   if (section.rows.length === 0) return null;
+  const headers = section.columns ?? [];
   return (
-    <div className="overflow-x-auto rounded-md border border-border">
-      <table className="w-full border-collapse text-sm">
-        <tbody>
-          {section.rows.map((row, ri) => (
-            <tr key={ri}>
-              {row.map((cell, ci) => (
-                <td
-                  key={ci}
-                  className={`border border-border px-2.5 py-1.5 align-top ${
-                    row.length === 1
-                      ? 'bg-surface-2 font-semibold text-text'
-                      : 'text-text'
-                  }`}
-                >
-                  {cell || '—'}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <div className="grid gap-2 md:hidden">
+        {section.rows.map((row, ri) =>
+          row.length === 1 ? (
+            <p
+              key={ri}
+              className="rounded-md bg-surface-2 px-2.5 py-1.5 text-sm font-semibold text-text"
+            >
+              {row[0] || '—'}
+            </p>
+          ) : (
+            <div key={ri} className="rounded-md border border-border px-2.5 py-2">
+              <p className="break-words text-sm font-medium text-text">{row[0] || '—'}</p>
+              <KeyValueList
+                className="mt-1.5"
+                items={row.slice(1).map((cell, ci) => ({
+                  key: String(ci),
+                  // The portal does not always send a header row; the column
+                  // number is a poor label but a truthful one, and it keeps the
+                  // values in the order the form prints them.
+                  label: headers[ci + 1] || `Column ${ci + 2}`,
+                  value: cell || '—',
+                }))}
+              />
+            </div>
+          ),
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-md border border-border md:block">
+        <table className="w-full border-collapse text-sm">
+          <tbody>
+            {section.rows.map((row, ri) => (
+              <tr key={ri}>
+                {row.map((cell, ci) => (
+                  <td
+                    key={ci}
+                    className={`border border-border px-2.5 py-1.5 align-top ${
+                      row.length === 1
+                        ? 'bg-surface-2 font-semibold text-text'
+                        : 'text-text'
+                    }`}
+                  >
+                    {cell || '—'}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

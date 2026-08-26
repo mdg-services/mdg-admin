@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Database,
   FileBarChart2,
+  Gauge,
   Headset,
   LayoutDashboard,
   ListChecks,
@@ -44,7 +45,19 @@ export const NAV_ITEMS: NavItem[] = [
   // The WORK QUEUE is what "Kavach" means to an admin day to day: what has to be
   // verified right now, across every dealer. The per-dealer standing view lives
   // one level down at /kavach/dashboard.
-  { to: '/kavach', label: 'Kavach', icon: ShieldCheck },
+  //
+  // `end` matters here and nowhere else in this list: `/kavach` is a PREFIX of
+  // `/kavach/dashboard` and `/kavach/defaults`, and a NavLink matches by prefix
+  // unless told otherwise — so without it the Kavach tab and the More tab both
+  // lit up on the two child routes, and the desktop sidebar highlighted two
+  // rows at once.
+  { to: '/kavach', label: 'Kavach', icon: ShieldCheck, end: true },
+  // Where every dealer stands, and — the only alarm anywhere for OUR backlog —
+  // how long since anybody at MDG verified each outlet. It has a route in
+  // `App.tsx` but had no link from anywhere, and the admin app is a WebView
+  // shell with no address bar: on a phone the screen simply could not be
+  // opened. Not in `BOTTOM_TAB_ROUTES`, so it falls into the More sheet.
+  { to: '/kavach/dashboard', label: 'Kavach standing', icon: Gauge },
   // Every dealer's collected IRAS shift data in one place — an everyday admin
   // surface, so deliberately NOT `superAdminOnly`.
   { to: '/data-vault', label: 'Data Vault', icon: Database },

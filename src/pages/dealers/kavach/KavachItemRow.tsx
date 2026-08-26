@@ -1,6 +1,6 @@
 import { Flag, FlagOff, Pause, Play } from 'lucide-react';
 
-import { Badge, Button } from '@/components/ui';
+import { Badge, Button, InfoBadge } from '@/components/ui';
 import { formatDate } from '@/lib/format';
 import {
   cadenceLabel,
@@ -61,13 +61,22 @@ export function KavachItemRow({ item, busy, onTogglePause, onToggleSos }: Props)
               paused
             </Badge>
           ) : (
-            <Badge
+            // What "Held" or "Never checked" actually means used to live only
+            // in a `title`, and a phone has no hover. `InfoBadge` keeps the
+            // desktop tooltip and gives touch a tappable badge that opens a
+            // sheet with the same sentence.
+            <InfoBadge
               intent={itemStatusIntent(item.status)}
-              className="h-5 text-[11px]"
-              title={ITEM_STATUS_HINT[item.status]}
-            >
-              {ITEM_STATUS_LABEL[item.status]}
-            </Badge>
+              label={ITEM_STATUS_LABEL[item.status]}
+              detail={ITEM_STATUS_HINT[item.status]}
+              // `badgeClassName`, not `className`: the latter lands on the pill
+              // at md and on the wrapping BUTTON below it, so the same string
+              // means two different things at two widths. Only the `md:` half
+              // ever did anything — `Badge`'s own `h-[22px]` and `text-xs` are
+              // emitted after `.h-5` and `.text-[11px]`, so an unprefixed
+              // override of either loses (see MOBILE.md, "dead overrides").
+              badgeClassName="md:h-5"
+            />
           )}
           {requestLive ? (
             <Badge
@@ -78,7 +87,12 @@ export function KavachItemRow({ item, busy, onTogglePause, onToggleSos }: Props)
             </Badge>
           ) : null}
         </div>
-        <p className="mt-0.5 truncate text-xs text-text-muted">{item.labelHi}</p>
+        {/* The Hindi line is what the DEALER sees for this task, and on a phone
+            there is no second place to read it and no expand — so it wraps
+            below md and keeps the desktop table's single line at md. */}
+        <p className="mt-0.5 break-words text-xs text-text-muted md:truncate">
+          {item.labelHi}
+        </p>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-subtle">
           <span>{item.points} pts</span>
           <Badge intent={tierIntent(item.tier)} className="h-5 text-[11px]">
@@ -138,11 +152,17 @@ export function KavachItemRow({ item, busy, onTogglePause, onToggleSos }: Props)
               : 'Pause (exclude from the score and the work queue)'
           }
         >
+          {/* The word rides beside the glyph below md. The `title` above is the
+              desktop tooltip and nothing else — touch never fires it — so on a
+              phone this control was a bare ⏸ with no label anywhere. */}
           {item.paused ? (
             <Play width={14} height={14} strokeWidth={1.75} />
           ) : (
             <Pause width={14} height={14} strokeWidth={1.75} />
           )}
+          <span className="ml-1.5 md:hidden">
+            {item.paused ? 'Resume' : 'Pause'}
+          </span>
         </Button>
       </div>
     </div>

@@ -61,7 +61,10 @@ export function KavachDashboardPage() {
   return (
     <div>
       <PageHeader
-        title="Kavach"
+        // "Kavach" is the work queue's name in the nav; this screen is reached
+        // from "Kavach standing", so the heading has to be the same words or
+        // the admin cannot tell which of the two they landed on.
+        title="Kavach standing"
         subtitle="Where each dealer stands, and how long since we last verified them."
         actions={
           rows.length > 0 ? (

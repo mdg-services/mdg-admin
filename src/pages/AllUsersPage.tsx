@@ -22,6 +22,7 @@ import {
   Button,
   Card,
   CardContent,
+  ConfirmDialog,
   Dialog,
   EmptyState,
   FieldError,
@@ -142,9 +143,14 @@ export function AllUsersPage() {
           />
         </div>
         {archivedCount > 0 ? (
+          // `w-full` below md forces this onto its own line in the wrapping
+          // row. Sharing the line, its ~174px `whitespace-nowrap` label left
+          // the search field ~142px — ~105px of typing room after the `pl-9`
+          // icon inset, so the placeholder was cut after eight characters.
           <Button
             variant={showArchived ? 'secondary' : 'ghost'}
             size="sm"
+            className="w-full md:w-auto"
             onClick={() => setShowArchived((v) => !v)}
             leftIcon={<Archive width={14} height={14} strokeWidth={1.75} />}
           >
@@ -315,7 +321,10 @@ function GroupCard({
                 {u.isSuperAdmin ? ' · Super' : ''}
               </Badge>
             ),
-            secondary: <span className="block truncate font-mono">{u.email}</span>,
+            // `break-all`, not `truncate`: `#root { user-select: none }` means a
+            // truncated email in a <div> can be neither read in full nor
+            // selected to recover the rest. Two lines is the cheaper failure.
+            secondary: <span className="block break-all font-mono">{u.email}</span>,
             meta: u.archivedAt ? (
               <Badge intent="danger">Archived</Badge>
             ) : u.status === 'ACTIVE' ? (
@@ -340,6 +349,13 @@ function GroupCard({
     </Card>
   );
 }
+
+/* Why each privileged control is dead on your own row. A `title` is a hover
+   tooltip and never fires on touch, so these are also printed on screen below
+   md, beside the control they explain. */
+const SELF_SUSPEND_NOTE = "You can't suspend your own account";
+const SELF_SUPER_NOTE = "You can't remove your own super-admin access";
+const SELF_ARCHIVE_NOTE = "You can't archive your own account";
 
 const credentialsFormSchema = z.object({
   email: z.string().trim().email('Enter a valid email'),
@@ -373,6 +389,7 @@ function ManageUserDialog({
   const restoreUser = useRestoreUser();
   const [copied, setCopied] = React.useState(false);
   const [confirming, setConfirming] = React.useState<null | 'role' | 'archive'>(null);
+  const [discardOpen, setDiscardOpen] = React.useState(false);
 
   const {
     register,
@@ -380,7 +397,7 @@ function ManageUserDialog({
     reset,
     setValue,
     getValues,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<CredentialsForm>({
     resolver: zodResolver(credentialsFormSchema),
     defaultValues: { email: '', password: '' },
@@ -389,6 +406,7 @@ function ManageUserDialog({
   // Re-seed the form and clear any pending confirm each time a user is opened.
   React.useEffect(() => {
     setConfirming(null);
+    setDiscardOpen(false);
     if (user) reset({ email: user.email, password: '' });
   }, [user, reset]);
 
@@ -488,17 +506,43 @@ function ManageUserDialog({
   const dealerLabel = user?.dealerId ? 'Dealer member' : 'Platform admin';
   const roleText = user ? ROLE_LABEL[user.role] + (user.isSuperAdmin ? ' · Super' : '') : '';
 
+  /* Close is the one permanently-visible button in the sheet and it DISCARDS —
+     so an edited email left by the obvious bottom button used to vanish with no
+     word said. Ask first when there is something to lose. The backdrop and
+     Escape route through here too, which is the point. */
+  function requestClose() {
+    if (isDirty) {
+      setDiscardOpen(true);
+      return;
+    }
+    onClose();
+  }
+
   return (
     <Dialog
       open={!!user}
-      onClose={onClose}
+      onClose={requestClose}
       size="lg"
       title="Manage user"
       description={user ? `${user.name} — ${roleText} · ${dealerLabel}` : undefined}
       footer={
-        <Button variant="secondary" onClick={onClose}>
-          Close
-        </Button>
+        <>
+          <Button variant="secondary" onClick={requestClose}>
+            Close
+          </Button>
+          {/* The real "Save credentials" is a `size="sm"` button roughly 700px
+              down a sheet capped at 92dvh. Below md it gets a seat in the
+              footer beside Close, where `ActionRow`'s `flex-col-reverse` puts
+              it on top — under the thumb, and unmistakably the commit. */}
+          <Button
+            className="md:hidden"
+            onClick={saveCredentials}
+            loading={updateUser.isPending}
+            disabled={busy}
+          >
+            Save credentials
+          </Button>
+        </>
       }
     >
       {user ? (
@@ -525,6 +569,13 @@ function ManageUserDialog({
                     {user.status === 'ACTIVE'
                       ? 'Active — can sign in.'
                       : 'Suspended — sign-in is blocked.'}
+                    {/* The disabled button explains itself with a `title`,
+                        which a touch device never renders — so on a phone this
+                        was a grey button and no reason. Desktop keeps the
+                        tooltip and gains nothing. */}
+                    {isSelf && user.status === 'ACTIVE' ? (
+                      <span className="mt-1 block md:hidden">{SELF_SUSPEND_NOTE}</span>
+                    ) : null}
                   </div>
                   <Button
                     variant={user.status === 'ACTIVE' ? 'secondary' : 'primary'}
@@ -533,9 +584,7 @@ function ManageUserDialog({
                     disabled={(isSelf && user.status === 'ACTIVE') || busy}
                     loading={updateUser.isPending}
                     title={
-                      isSelf && user.status === 'ACTIVE'
-                        ? "You can't suspend your own account"
-                        : undefined
+                      isSelf && user.status === 'ACTIVE' ? SELF_SUSPEND_NOTE : undefined
                     }
                   >
                     {user.status === 'ACTIVE' ? 'Suspend' : 'Reactivate'}
@@ -589,6 +638,9 @@ function ManageUserDialog({
                       {user.isSuperAdmin
                         ? 'Can view the Activity log and manage the team.'
                         : 'Regular admin — no Activity log or team management.'}
+                      {isSelf && user.isSuperAdmin ? (
+                        <span className="mt-1 block md:hidden">{SELF_SUPER_NOTE}</span>
+                      ) : null}
                     </div>
                     <Button
                       variant="secondary"
@@ -596,11 +648,7 @@ function ManageUserDialog({
                       onClick={toggleSuperAdmin}
                       disabled={(isSelf && user.isSuperAdmin) || busy}
                       loading={updateUser.isPending}
-                      title={
-                        isSelf && user.isSuperAdmin
-                          ? "You can't remove your own super-admin access"
-                          : undefined
-                      }
+                      title={isSelf && user.isSuperAdmin ? SELF_SUPER_NOTE : undefined}
                       leftIcon={<ShieldCheck width={14} height={14} strokeWidth={1.75} />}
                     >
                       {user.isSuperAdmin ? 'Revoke super-admin' : 'Make super-admin'}
@@ -669,7 +717,13 @@ function ManageUserDialog({
                 <FieldError message={errors.password?.message} />
               </div>
               <div>
-                <Button type="submit" size="sm" loading={updateUser.isPending} disabled={busy}>
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="w-full md:w-auto"
+                  loading={updateUser.isPending}
+                  disabled={busy}
+                >
                   Save credentials
                 </Button>
               </div>
@@ -701,6 +755,9 @@ function ManageUserDialog({
                 <div className="text-sm text-text-muted">
                   Disable this login and hide them from the roster. Reversible — their
                   record and chat history are kept.
+                  {isSelf ? (
+                    <span className="mt-1 block md:hidden">{SELF_ARCHIVE_NOTE}</span>
+                  ) : null}
                 </div>
                 {confirming === 'archive' ? (
                   <div className="flex shrink-0 items-center gap-1">
@@ -723,7 +780,7 @@ function ManageUserDialog({
                     size="sm"
                     onClick={() => setConfirming('archive')}
                     disabled={isSelf || busy}
-                    title={isSelf ? "You can't archive your own account" : undefined}
+                    title={isSelf ? SELF_ARCHIVE_NOTE : undefined}
                     leftIcon={<Archive width={14} height={14} strokeWidth={1.75} />}
                   >
                     Archive user
@@ -734,6 +791,22 @@ function ManageUserDialog({
           </section>
         </div>
       ) : null}
+      {/* Nested inside the Dialog's subtree but portalled to <body> like every
+          overlay here, so the sheet's own `transform` cannot become its
+          containing block — and the one opened last paints on top. */}
+      <ConfirmDialog
+        open={discardOpen}
+        onCancel={() => setDiscardOpen(false)}
+        onConfirm={() => {
+          setDiscardOpen(false);
+          onClose();
+        }}
+        title="Discard credential changes?"
+        description="The email or password you typed has not been saved. Closing now loses it."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        confirmVariant="danger"
+      />
     </Dialog>
   );
 }

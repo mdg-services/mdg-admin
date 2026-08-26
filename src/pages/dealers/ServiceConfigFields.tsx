@@ -8,6 +8,7 @@ import { FieldError, Input, Label, Select } from '@/components/ui';
 import { CADENCES, type Cadence } from '@dk/shared';
 import { cronSchema } from '@dk/shared/schemas';
 
+import { RJSF_TEMPLATES, RJSF_WIDGETS } from './rjsfTheme';
 import {
   buildCron,
   DEFAULT_PARTS,
@@ -186,6 +187,8 @@ export function ServiceConfigFields({
               }
               liveValidate
               showErrorList={false}
+              templates={RJSF_TEMPLATES}
+              widgets={RJSF_WIDGETS}
               uiSchema={{ 'ui:submitButtonOptions': { norender: true } }}
             />
           </RJSFContainer>
@@ -434,10 +437,26 @@ function ScheduleHint({
 /**
  * Light-touch styling for RJSF. We rely on default markup, but make labels
  * and inputs visually consistent with the rest of the app.
+ *
+ * The input rules are scoped away from checkboxes and radios. `[&_input]` also
+ * matches `input[type="checkbox"]`, and Blink honours width and height on one —
+ * so three attachable plugins that declare a boolean (IRAS shift data,
+ * TT density, water-ingress testing) drew that field as a full-width, 44px-tall
+ * bordered rectangle with no visible checked state and a label sitting apart
+ * from it. Booleans now come through `rjsfTheme`'s `CheckboxWidget` instead, and
+ * the selectors below only have to describe text, number, textarea and select.
+ *
+ * `text-sm` is also now `md:` only. `index.css` floors every `input`,
+ * `textarea` and `select` at 16px against iOS focus-zoom, but that is a bare
+ * element rule (0,0,1) and an arbitrary `[&_input]:text-sm` compiles to a
+ * class-plus-element descendant selector (0,1,1) — so it won every time, at
+ * every width, and every generated field rendered at 14px. Below md the floor
+ * now holds; `md:` restores today's desktop density, exactly as `Input`,
+ * `Select` and `Textarea` themselves do.
  */
 function RJSFContainer({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rjsf [&_label]:text-sm [&_label]:font-medium [&_label]:text-text [&_input]:h-11 md:[&_input]:h-9 [&_input]:w-full [&_input]:rounded-sm [&_input]:border [&_input]:border-border-strong [&_input]:bg-surface [&_input]:px-3 [&_input]:text-sm [&_textarea]:w-full [&_textarea]:rounded-sm [&_textarea]:border [&_textarea]:border-border-strong [&_textarea]:bg-surface [&_textarea]:px-3 [&_textarea]:py-2 [&_textarea]:text-sm [&_select]:h-11 md:[&_select]:h-9 [&_select]:w-full [&_select]:rounded-sm [&_select]:border [&_select]:border-border-strong [&_select]:bg-surface [&_select]:px-2 [&_select]:text-sm [&_.field]:mb-3 [&_.field-description]:text-xs [&_.field-description]:text-text-subtle [&_.error-detail]:text-xs [&_.error-detail]:text-danger">
+    <div className="rjsf [&_label]:text-sm [&_label]:font-medium [&_label]:text-text [&_input:not([type=checkbox]):not([type=radio])]:h-11 md:[&_input:not([type=checkbox]):not([type=radio])]:h-9 [&_input:not([type=checkbox]):not([type=radio])]:w-full [&_input:not([type=checkbox]):not([type=radio])]:rounded-sm [&_input:not([type=checkbox]):not([type=radio])]:border [&_input:not([type=checkbox]):not([type=radio])]:border-border-strong [&_input:not([type=checkbox]):not([type=radio])]:bg-surface [&_input:not([type=checkbox]):not([type=radio])]:px-3 md:[&_input:not([type=checkbox]):not([type=radio])]:text-sm [&_textarea]:w-full [&_textarea]:rounded-sm [&_textarea]:border [&_textarea]:border-border-strong [&_textarea]:bg-surface [&_textarea]:px-3 [&_textarea]:py-2 md:[&_textarea]:text-sm [&_select]:h-11 md:[&_select]:h-9 [&_select]:w-full [&_select]:rounded-sm [&_select]:border [&_select]:border-border-strong [&_select]:bg-surface [&_select]:px-2 md:[&_select]:text-sm [&_.field]:mb-3 [&_.field-description]:text-xs [&_.field-description]:text-text-subtle [&_.error-detail]:text-xs [&_.error-detail]:text-danger">
       {children}
     </div>
   );

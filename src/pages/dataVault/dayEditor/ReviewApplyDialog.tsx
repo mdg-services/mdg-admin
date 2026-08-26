@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Callout,
+  Checkbox,
   Dialog,
   FieldError,
   Label,
@@ -97,24 +98,36 @@ export function ReviewApplyDialog({
       description={`${dealerCodeLabel(day.dealer.code)} · ${formatYmd(day.businessDate)}`}
       footer={
         <>
+          {/*
+            The reason Apply is dead is written on screen, not carried in a
+            `title` on a wrapper span. Two things were wrong with the wrapper:
+            `title` never fires on touch, so on a phone a disabled primary action
+            was silent and unexplained; and the footer stacks its children
+            full width below md (`items-stretch`), which stretched the SPAN while
+            the `inline-flex` Button inside it kept its natural width — so the
+            primary action rendered short and left-aligned beside a full-width
+            Cancel.
+
+            It is stated before the operator has typed anything, unlike the
+            FieldError beside the box: the box scrolls out of the panel, and this
+            line is the only thing next to the button they are pressing.
+          */}
+          {reasonOk ? null : (
+            // `order-last` reads backwards on purpose: the footer is
+            // `flex-col-reverse` below md, so the highest order lands at the
+            // TOP — above the buttons, where the sentence explains the one
+            // underneath it. `md:order-none` puts it back at the head of the
+            // right-aligned row at md.
+            <p className="order-last w-full text-sm text-text-muted md:order-none md:w-auto">
+              Write at least {REASON_MIN} characters above to apply these changes.
+            </p>
+          )}
           <Button variant="secondary" onClick={onClose} disabled={applying}>
             Cancel
           </Button>
-          {/* The title rides on a wrapper, not the button: a disabled button
-              swallows pointer events in Safari, so its own tooltip never shows —
-              and this tooltip is the only explanation an operator gets once the
-              reason field has scrolled out of the dialog body. */}
-          <span
-            title={
-              reasonOk
-                ? undefined
-                : `Enter a reason of at least ${REASON_MIN} characters to apply these changes.`
-            }
-          >
-            <Button loading={applying} disabled={!reasonOk} onClick={() => onApply(reason.trim())}>
-              Apply {pending.count} change{pending.count === 1 ? '' : 's'}
-            </Button>
-          </span>
+          <Button loading={applying} disabled={!reasonOk} onClick={() => onApply(reason.trim())}>
+            Apply {pending.count} change{pending.count === 1 ? '' : 's'}
+          </Button>
         </>
       }
     >
@@ -158,22 +171,28 @@ export function ReviewApplyDialog({
         </section>
 
         {identityChanges.length > 0 ? (
-          <label className="flex items-start gap-2 rounded-md border border-danger bg-danger-soft px-3 py-2.5 text-sm text-danger">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              onChange={(e) => {
-                // Held in the DOM rather than state: it gates nothing on its own —
-                // the reason field is the real gate — but an operator who has to
-                // tick it has read the sentence above it.
-                e.currentTarget.setAttribute('data-ack', String(e.currentTarget.checked));
-              }}
-            />
-            <span>
-              I meant to move {identityChanges.length === 1 ? 'this row' : 'these rows'} to a
-              different tank, nozzle or product.
-            </span>
-          </label>
+          <Checkbox
+            // Held in the DOM rather than state: it gates nothing on its own —
+            // the reason field is the real gate — but an operator who has to tick
+            // it has read the sentence above it. The browser-default box was
+            // ~13px, a third of the touch floor, on the safety gate in front of
+            // the most dangerous change this editor can make.
+            onChange={(e) => {
+              e.currentTarget.setAttribute('data-ack', String(e.currentTarget.checked));
+            }}
+            // `align="start"`: the sentence runs to two lines at 360px, and the
+            // box belongs beside its first line. It is a prop and not a class
+            // because a call-site `items-start` loses to the base
+            // `items-center` — Tailwind emits start before center, `cn` is clsx.
+            align="start"
+            labelClassName="rounded-md border border-danger bg-danger-soft px-3 py-2.5 text-danger"
+            label={
+              <>
+                I meant to move {identityChanges.length === 1 ? 'this row' : 'these rows'} to a
+                different tank, nozzle or product.
+              </>
+            }
+          />
         ) : null}
 
         <section>
@@ -306,21 +325,33 @@ function PreviewTable({ preview }: { preview: IrasCorrectionPreview | undefined 
         }
         const changed = Math.abs(before.variation - after.variation) > 0.005;
         return (
+          // Below md the product name gets its own line and the before/after
+          // pair is one non-wrapping row under it. Inline, a 328px sheet wraps
+          // this into three lines and the arrow can land alone on one —
+          // separating the two figures the operator opened this dialog to
+          // compare. At md it is the single baseline row it has always been.
           <div
             key={p.productKey}
-            className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-md border border-border px-2.5 py-2 text-sm"
+            className="rounded-md border border-border px-2.5 py-2 text-sm md:flex md:flex-wrap md:items-baseline md:gap-x-2 md:gap-y-1"
           >
             <span className="font-medium text-text">{p.productLabel}</span>
-            <span className="text-text-muted">variation</span>
-            <Limit value={before.variation} outside={before.variationNotWithinLimit} muted />
-            {changed ? (
-              <>
-                <ArrowRight width={13} height={13} strokeWidth={2} className="text-text-subtle" />
-                <Limit value={after.variation} outside={after.variationNotWithinLimit} />
-              </>
-            ) : (
-              <span className="text-text-subtle">· unchanged</span>
-            )}
+            <span className="ml-1 text-text-muted md:ml-0">variation</span>
+            <span className="mt-1 flex items-baseline gap-2 md:mt-0 md:contents">
+              <Limit value={before.variation} outside={before.variationNotWithinLimit} muted />
+              {changed ? (
+                <>
+                  <ArrowRight
+                    width={13}
+                    height={13}
+                    strokeWidth={2}
+                    className="shrink-0 text-text-subtle"
+                  />
+                  <Limit value={after.variation} outside={after.variationNotWithinLimit} />
+                </>
+              ) : (
+                <span className="text-text-subtle">· unchanged</span>
+              )}
+            </span>
           </div>
         );
       })}

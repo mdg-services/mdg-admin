@@ -45,17 +45,27 @@ export function DsrStaleNotice({ report }: { report: DsrReportView }) {
       <div className="min-w-0 flex-1">
         <p className="font-medium">This report is out of date</p>
         <p className="mt-0.5">{report.stale.reason}</p>
-        <p className="mt-0.5 text-xs opacity-90">
-          Flagged {formatDateTime(report.stale.at)}
-          {others.length > 0
-            ? ` · ${others.length} other report${others.length === 1 ? '' : 's'} affected (${others
-                .slice(0, 4)
-                .map((r) => formatYmd(r.businessDate))
-                .join(', ')}${others.length > 4 ? '…' : ''})`
-            : ''}
-        </p>
+        {/* No `opacity-90`. This is amber text on an amber ground already, and
+            the list it carries — which OTHER days this correction invalidated —
+            is the whole "what else needs regenerating" answer. Dimming the one
+            actionable line on the notice by a further 10% is how it goes
+            unread in sunlight. */}
+        <p className="mt-0.5 text-xs">Flagged {formatDateTime(report.stale.at)}</p>
+        {others.length > 0 ? (
+          // Its own line rather than appended after a `·`: at 360px the two ran
+          // together into four wrapped lines with the dates buried mid-sentence.
+          <p className="mt-0.5 text-xs">
+            {others.length} other report{others.length === 1 ? '' : 's'} affected:{' '}
+            {others
+              .slice(0, 4)
+              .map((r) => formatYmd(r.businessDate))
+              .join(', ')}
+            {others.length > 4 ? '…' : ''}
+          </p>
+        ) : null}
       </div>
       <Button
+        className="w-full md:w-auto"
         size="sm"
         loading={busy}
         leftIcon={<RefreshCw width={14} height={14} strokeWidth={1.75} />}

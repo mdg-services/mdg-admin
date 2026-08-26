@@ -19,6 +19,7 @@ import {
   CardContent,
   Drawer,
   EmptyState,
+  IconButton,
   Input,
   MIN_SELECTABLE_YMD,
   MobileCardList,
@@ -41,7 +42,12 @@ import {
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatYmd, istTodayYmd, isYmd, toYmd } from '@/lib/format';
-import { IRAS_REPORT_CODES, compareDealerCodes, dealerCodeLabel } from '@dk/shared';
+import {
+  IRAS_REPORT_CODES,
+  IRAS_REPORT_LABELS,
+  compareDealerCodes,
+  dealerCodeLabel,
+} from '@dk/shared';
 import type {
   IrasDataVaultDealerRow,
   IrasDataVaultOverview,
@@ -300,10 +306,14 @@ function BusinessDateControl({
 }) {
   return (
     <div className="flex items-center gap-1">
-      <Button
+      {/* `IconButton`, not `Button className="px-2"`. `cn` is plain clsx, so
+          that `px-2` landed BESIDE the size's `px-3` and lost on stylesheet
+          order — the override never did anything. And a 16px glyph in a Button
+          is 40×44: wide enough on paper, square on screen, and short on the axis
+          a thumb travels along. */}
+      <IconButton
         variant="secondary"
         size="sm"
-        className="px-2"
         aria-label="Previous day"
         // Bounded at both ends, like "Next day" is at today: an arrow that walks
         // out of the range the field itself offers has nowhere real to land.
@@ -311,7 +321,7 @@ function BusinessDateControl({
         onClick={() => onChange(shiftIso(value, -1))}
       >
         <ChevronLeft width={16} height={16} strokeWidth={1.75} />
-      </Button>
+      </IconButton>
       <Input
         type="date"
         value={value}
@@ -328,18 +338,20 @@ function BusinessDateControl({
           const next = e.target.value;
           if (isYmd(next) && next >= MIN_SELECTABLE_YMD && next <= max) onChange(next);
         }}
-        className="w-[150px]"
+        // A hard 150px is 14px of slack once the two arrows and "Today" are
+        // beside it at 360px, and an Android WebView draws `dd-mm-yyyy` plus a
+        // calendar glyph, which can exceed it and truncate the visible date.
+        className="w-full max-w-[170px] md:w-[150px]"
       />
-      <Button
+      <IconButton
         variant="secondary"
         size="sm"
-        className="px-2"
         aria-label="Next day"
         disabled={value >= max}
         onClick={() => onChange(shiftIso(value, 1))}
       >
         <ChevronRight width={16} height={16} strokeWidth={1.75} />
-      </Button>
+      </IconButton>
       {value !== max ? (
         <Button variant="ghost" size="sm" onClick={() => onChange(max)}>
           Today
@@ -635,8 +647,11 @@ function DealerList({
               <span className="flex flex-col gap-1">
                 <RowCountPills rowCounts={latest.rowCounts} />
                 <span>{formatDateTime(latest.capturedAt)}</span>
+                {/* These come from the portal and can carry an unbroken token —
+                    a URL, a session id — which at 296px would run past the card
+                    and be clipped by `main`'s `overflow-x-hidden`, i.e. lost. */}
                 {latest.failureReason ? (
-                  <span className="text-danger">{latest.failureReason}</span>
+                  <span className="break-words text-danger">{latest.failureReason}</span>
                 ) : null}
               </span>
             ) : (
@@ -667,6 +682,14 @@ function DealerList({
           };
         })}
       />
+      {/* The three codes carried their whole meaning in a `title`, which never
+          fires on touch — so on a phone the row read `TOT 13 · STK 5 · REC —`
+          with no way to learn that the dash means "not collected" rather than
+          "zero rows". */}
+      <p className="px-3 pb-3 text-xs text-text-subtle md:hidden">
+        {IRAS_REPORT_CODES.map((c) => IRAS_REPORT_LABELS[c]).join(' · ')}. A dash means
+        that report was not collected for the day.
+      </p>
     </>
   );
 }

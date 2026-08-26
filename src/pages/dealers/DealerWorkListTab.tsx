@@ -20,8 +20,10 @@ import {
   CardSubtitle,
   CardTitle,
   EmptyState,
+  Input,
   MobileCardList,
   Skeleton,
+  StickyActionBar,
   Table,
   TBody,
   TD,
@@ -38,7 +40,6 @@ import {
 import { useStaffWorkCatalogQuery } from '@/hooks/api/useStaffWorkCatalog';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { ApiError } from '@/lib/api';
-import { cn } from '@/lib/cn';
 import {
   distributionLabel,
   domainLabel,
@@ -234,6 +235,40 @@ export function DealerWorkListTab({ dealer }: Props) {
 
   const hasUnknownHidden = defaultRows.some((r) => !r.known);
 
+  /**
+   * The phone-only search and per-domain grouping over the default catalog.
+   *
+   * On desktop the same ~45 rows are 44px table lines you scan with your eye.
+   * As cards they are ~130px each — roughly 5,800px of thumbing to find the one
+   * work you came to hide, with nothing to jump by. Both of these mount only
+   * below md; the table above still lists every row, in catalog order,
+   * unfiltered, so nothing on desktop moves.
+   */
+  const [defaultQuery, setDefaultQuery] = React.useState('');
+  const searchingDefaults = defaultQuery.trim().length > 0;
+
+  const defaultGroups = React.useMemo(() => {
+    const q = defaultQuery.trim().toLowerCase();
+    const matches = q
+      ? defaultRows.filter(
+          (r) =>
+            r.labelEn.toLowerCase().includes(q) ||
+            r.labelHi.toLowerCase().includes(q) ||
+            r.code.toLowerCase().includes(q),
+        )
+      : defaultRows;
+    const byDomain = new Map<StaffWorkDomain, DefaultRow[]>();
+    for (const r of matches) {
+      const bucket = byDomain.get(r.domain);
+      if (bucket) bucket.push(r);
+      else byDomain.set(r.domain, [r]);
+    }
+    return DOMAIN_ORDER.filter((d) => byDomain.has(d)).map((d) => ({
+      domain: d,
+      rows: byDomain.get(d) ?? [],
+    }));
+  }, [defaultRows, defaultQuery]);
+
   const effectiveCount =
     defaultRows.filter((r) => !hiddenSet.has(r.code)).length +
     customItems.filter((c) => c.active).length;
@@ -320,49 +355,63 @@ export function DealerWorkListTab({ dealer }: Props) {
   return (
     <div className="flex flex-col gap-4">
       {/* Summary + save bar. On mobile it renders last and sticks to the bottom
-          (above the tab bar) so Save stays reachable during a long hide/show
-          session; on desktop it keeps its place at the top. */}
-      <Card className="sticky bottom-0 z-10 order-last md:static md:order-none">
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm">
-            <div className="flex items-center gap-2">
+          so Save stays reachable during a long hide/show session; on desktop it
+          keeps its place at the top, as the card it has always been.
+
+          `StickyActionBar surface="card"` rather than a hand-rolled sticky
+          `Card`: the bar already owns the one thing this screen cannot get
+          wrong. This tab only renders under `/dealers/:id`, a drill-in, where
+          the tab bar is hidden and `body` has `padding-bottom: 0` — so nothing
+          else in the app is holding "Save changes" clear of the Android gesture
+          strip, and both work-list tabs were spelling that inset out by hand,
+          differently. `card` emits the same `p-4` surface at md, so the desktop
+          card is unchanged. The explanatory line stays desktop-only: carrying it
+          on a bar pinned for the whole session cost a quarter of a 640px screen
+          over the list the bar exists to serve. */}
+      <StickyActionBar
+        surface="card"
+        below="wrap"
+        className="order-last md:static md:order-none"
+        summaryOnMobile
+        summary={
+          <>
+            <span className="flex flex-wrap items-center gap-2">
               <ListChecks
                 width={16}
                 height={16}
                 strokeWidth={1.75}
-                className="text-brand"
+                className="shrink-0 text-brand"
               />
               <span className="font-medium text-text">
                 This dealer will see {effectiveCount} work
                 {effectiveCount === 1 ? '' : 's'}
               </span>
               {dirty ? <Badge intent="warning">Unsaved changes</Badge> : null}
-            </div>
-            <p className="mt-1 text-text-muted">
+            </span>
+            <span className="mt-1 hidden text-text-muted md:block">
               Toggle default works on/off and add dealer-specific custom works.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={discard}
-              disabled={!dirty || updateWL.isPending}
-            >
-              Discard
-            </Button>
-            <Button
-              size="sm"
-              onClick={save}
-              loading={updateWL.isPending}
-              disabled={!dirty}
-              leftIcon={<Save width={14} height={14} strokeWidth={1.75} />}
-            >
-              Save changes
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            </span>
+          </>
+        }
+      >
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={discard}
+          disabled={!dirty || updateWL.isPending}
+        >
+          Discard
+        </Button>
+        <Button
+          size="sm"
+          onClick={save}
+          loading={updateWL.isPending}
+          disabled={!dirty}
+          leftIcon={<Save width={14} height={14} strokeWidth={1.75} />}
+        >
+          Save changes
+        </Button>
+      </StickyActionBar>
 
       {/* Default catalog: hide/show */}
       <Card>
@@ -442,59 +491,114 @@ export function DealerWorkListTab({ dealer }: Props) {
                 </Table>
               </div>
 
-              {/* Mobile card-stack (< md) */}
-              <MobileCardList
-                className="p-3"
-                cards={defaultRows.map((r) => {
-                  const hidden = hiddenSet.has(r.code);
-                  return {
-                    key: r.code,
-                    primary: (
-                      <span
-                        className={cn(
-                          'block truncate font-medium text-text',
-                          hidden && 'opacity-60',
-                        )}
-                      >
-                        {r.labelEn}
-                      </span>
-                    ),
-                    primaryRight: (
-                      <span className="tabular-nums text-text-muted">
-                        {r.known ? fmtPoints(r.points) : '—'}
-                      </span>
-                    ),
-                    secondary: (
-                      <span className="block">
-                        {r.labelHi ? (
-                          r.labelHi
-                        ) : (
-                          <code className="text-xs">{r.code}</code>
-                        )}
-                        {' · '}
-                        {domainLabel(r.domain)}
-                      </span>
-                    ),
-                    actions: (
-                      <Button
-                        variant={hidden ? 'secondary' : 'primary'}
-                        size="sm"
-                        className="w-full"
-                        onClick={() => toggleHidden(r.code, !hidden)}
-                        leftIcon={
-                          hidden ? (
-                            <EyeOff width={14} height={14} strokeWidth={1.75} />
-                          ) : (
-                            <Eye width={14} height={14} strokeWidth={1.75} />
-                          )
-                        }
-                      >
-                        {hidden ? 'Hidden — tap to show' : 'Shown — tap to hide'}
-                      </Button>
-                    ),
-                  };
-                })}
-              />
+              {/* Mobile card-stack (< md), searchable and grouped by domain. */}
+              <div className="p-3 md:hidden">
+                <Input
+                  type="search"
+                  inputMode="search"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  value={defaultQuery}
+                  onChange={(e) => setDefaultQuery(e.target.value)}
+                  placeholder="Search works, Hindi labels or codes…"
+                  aria-label="Search default works"
+                />
+                {defaultGroups.length === 0 ? (
+                  <p className="mt-3 break-words text-sm text-text-muted">
+                    No default work matches “{defaultQuery.trim()}”.
+                  </p>
+                ) : (
+                  <div className="mt-3 grid gap-2">
+                    {defaultGroups.map((g) => {
+                      const hiddenHere = g.rows.filter((r) =>
+                        hiddenSet.has(r.code),
+                      ).length;
+                      return (
+                        <details
+                          key={g.domain}
+                          // Forced open while a search is running: a collapsed
+                          // group would bury the rows the search just found.
+                          // Left uncontrolled otherwise, so a group the admin
+                          // opened stays open across a hide/show tap.
+                          open={searchingDefaults || undefined}
+                          className="rounded-lg border border-border"
+                        >
+                          {/* Block, not flex: a flex <summary> loses its native
+                              disclosure triangle, which here is the only cue
+                              that the row opens at all. 44px comes from
+                              min-h-11 + padding instead. */}
+                          <summary className="min-h-11 cursor-pointer select-none px-3 py-3 text-sm font-medium text-text">
+                            {domainLabel(g.domain)}
+                            <span className="ml-2 text-xs font-normal text-text-subtle">
+                              {g.rows.length} work{g.rows.length === 1 ? '' : 's'}
+                              {hiddenHere > 0 ? ` · ${hiddenHere} hidden` : ''}
+                            </span>
+                          </summary>
+                          <MobileCardList
+                            visibility="all"
+                            className="px-3 pb-3"
+                            cards={g.rows.map((r) => {
+                              const hidden = hiddenSet.has(r.code);
+                              return {
+                                key: r.code,
+                                tone: hidden ? 'muted' : 'default',
+                                primary: (
+                                  <span className="block font-medium text-text">
+                                    {r.labelEn}
+                                  </span>
+                                ),
+                                primaryRight: (
+                                  <span className="tabular-nums text-text-muted">
+                                    {r.known ? fmtPoints(r.points) : '—'}
+                                  </span>
+                                ),
+                                secondary: (
+                                  <span className="block">
+                                    {r.labelHi ? (
+                                      r.labelHi
+                                    ) : (
+                                      <code className="break-all text-xs">
+                                        {r.code}
+                                      </code>
+                                    )}
+                                  </span>
+                                ),
+                                actions: (
+                                  <Button
+                                    variant={hidden ? 'secondary' : 'primary'}
+                                    size="sm"
+                                    className="w-full"
+                                    onClick={() => toggleHidden(r.code, !hidden)}
+                                    leftIcon={
+                                      hidden ? (
+                                        <EyeOff
+                                          width={14}
+                                          height={14}
+                                          strokeWidth={1.75}
+                                        />
+                                      ) : (
+                                        <Eye
+                                          width={14}
+                                          height={14}
+                                          strokeWidth={1.75}
+                                        />
+                                      )
+                                    }
+                                  >
+                                    {hidden
+                                      ? 'Hidden — tap to show'
+                                      : 'Shown — tap to hide'}
+                                  </Button>
+                                ),
+                              };
+                            })}
+                          />
+                        </details>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </>
           )}
         </CardContent>
@@ -607,33 +711,34 @@ export function DealerWorkListTab({ dealer }: Props) {
               {/* Mobile card-stack (< md) */}
               <MobileCardList
                 className="p-3"
+                // `primaryRight` is `shrink-0`, so anything parked there is
+                // taken straight out of the title's width. The points figure
+                // earns that; the Active/Inactive badge does not — with both,
+                // the ~110px right rail left the bilingual work name ~165px and
+                // cut it before the Hindi half was ever on screen. Badge and
+                // Hindi label moved down to the wrapping rows.
                 cards={customItems.map((c) => ({
                   key: c._localId,
+                  tone: c.active ? 'default' : 'muted',
                   primary: (
-                    <span className="block truncate font-medium text-text">
-                      {c.labelEn}
-                      {c.labelHi ? (
-                        <span className="ml-1 text-xs font-normal text-text-muted">
-                          / {c.labelHi}
-                        </span>
-                      ) : null}
-                    </span>
+                    <span className="block font-medium text-text">{c.labelEn}</span>
                   ),
                   primaryRight: (
-                    <span className="flex items-center gap-1.5">
-                      <span className="tabular-nums font-semibold">
-                        {fmtPoints(customPoints(c))}
-                      </span>
-                      <Badge intent={c.active ? 'success' : 'neutral'}>
-                        {c.active ? 'Active' : 'Inactive'}
-                      </Badge>
+                    <span className="tabular-nums font-semibold">
+                      {fmtPoints(customPoints(c))}
                     </span>
                   ),
+                  secondary: c.labelHi ? (
+                    <span className="block">{c.labelHi}</span>
+                  ) : undefined,
                   meta: (
                     <span className="flex flex-wrap items-center gap-1.5">
                       {domainLabel(c.domain)} · {distributionLabel(c.distribution)}
                       <Badge intent={pricingModeIntent(c.pricingMode)}>
                         {pricingModeLabel(c.pricingMode)}
+                      </Badge>
+                      <Badge intent={c.active ? 'success' : 'neutral'}>
+                        {c.active ? 'Active' : 'Inactive'}
                       </Badge>
                     </span>
                   ),

@@ -24,6 +24,26 @@ export interface StickyActionBarProps {
    *  the gesture strip itself; use it only when the content is not inside the
    *  page scroller. */
   mode?: 'sticky' | 'fixed';
+  /** How the buttons lay out below md, passed straight to `ActionRow`.
+   *  `'stack'` (default) gives each its own full-width 44px row — right for one
+   *  or two. `'wrap'` keeps them on one wrapped line, which is what three short
+   *  labels want: stacked, Undo / Discard all / Review & apply cost 148px of a
+   *  640px screen. */
+  below?: 'stack' | 'wrap';
+  /**
+   * The bar's own chrome. `'bar'` (default) is the full-bleed `border-t` strip.
+   * `'card'` gives it the rounded `Card` surface used by a save bar that is a
+   * plain card at the top of a desktop page and only becomes a bar on a phone;
+   * pair it with `className="md:static md:order-none"` at that call site.
+   *
+   * It is a prop because two packets needed it and each hand-rolled its own
+   * `Card` plus its own spelling of the safe-area inset — the inset that fact 5
+   * says nothing else on a drill-in is carrying.
+   */
+  surface?: 'bar' | 'card';
+  /** `'below-md'` hides the bar from md up without depending on a `md:hidden`
+   *  in `className` winning against the root's own display class. */
+  visibility?: 'all' | 'below-md';
   summaryOnMobile?: boolean;
   className?: string;
 }
@@ -56,6 +76,9 @@ export function StickyActionBar({
   children,
   hidden = false,
   mode = 'sticky',
+  below = 'stack',
+  surface = 'bar',
+  visibility = 'all',
   summaryOnMobile = false,
   className,
 }: StickyActionBarProps) {
@@ -71,10 +94,19 @@ export function StickyActionBar({
   return (
     <div
       className={cn(
-        'border-t border-border bg-surface px-4 pt-3',
+        'bg-surface px-4',
+        // `card` matches the `Card` + `CardContent` (`p-4`) it replaces exactly,
+        // so adopting it is a no-op at md; `bar` keeps the strip's own py-3.
+        surface === 'card'
+          ? 'rounded-md border border-border pt-4 shadow-sm'
+          : 'border-t border-border pt-3',
         mode === 'sticky'
-          ? 'sticky bottom-0 z-[var(--z-sticky)] pb-[max(env(safe-area-inset-bottom),0.75rem)] md:pb-3'
+          ? cn(
+              'sticky bottom-0 z-[var(--z-sticky)] pb-[max(env(safe-area-inset-bottom),0.75rem)]',
+              surface === 'card' ? 'md:pb-4' : 'md:pb-3',
+            )
           : 'fixed inset-x-0 z-[var(--z-page-bar)]',
+        visibility === 'below-md' && 'md:hidden',
         hidden && 'hidden',
         className,
       )}
@@ -95,7 +127,7 @@ export function StickyActionBar({
             {summary}
           </div>
         ) : null}
-        <ActionRow below="stack" align="end" className="md:shrink-0">
+        <ActionRow below={below} align="end" className="md:shrink-0">
           {children}
         </ActionRow>
       </div>

@@ -14,15 +14,17 @@ import {
   Plus,
   RotateCcw,
   UserPlus,
-  X,
 } from 'lucide-react';
 import * as React from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 
+import { ActionRow } from '@/components/ui/ActionRow';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Drawer } from '@/components/ui/Drawer';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { IconButton } from '@/components/ui/IconButton';
 import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
 import { Sheet, SheetItem } from '@/components/ui/Sheet';
@@ -58,6 +60,7 @@ import { useSendMessage } from '@/hooks/api/useSendMessage';
 import { useServicesQuery } from '@/hooks/api/useServices';
 import { useUpdateTicket } from '@/hooks/api/useUpdateTicket';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useSafeBack } from '@/hooks/useSafeBack';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { Intent } from '@/lib/statusIntent';
@@ -217,7 +220,6 @@ export function InboxPage() {
   // race it to a different thread when the default list is warm in cache). Also
   // switch to a filter that shows a freshly started, unassigned chat.
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const deepLinkId = searchParams.get('c');
 
   const [filter, setFilter] = React.useState<InboxFilter>(deepLinkId ? 'all' : 'mine');
@@ -276,14 +278,18 @@ export function InboxPage() {
   );
 
   // Close the open thread: pop the pushed `?c=` on mobile (matches hardware
-  // back), clear state on desktop.
+  // back), clear state on desktop. A blind `navigate(-1)` walked OUT of the app
+  // whenever the thread was the first history entry, which is exactly what a
+  // push-notification deep link to `/inbox?c=<id>` produces; `useSafeBack`
+  // replaces with the list in that case.
+  const backToList = useSafeBack('/inbox');
   const closeConversation = React.useCallback(() => {
     if (isLg) {
       setSelectedId(null);
     } else {
-      navigate(-1);
+      backToList();
     }
-  }, [isLg, navigate]);
+  }, [isLg, backToList]);
 
   function handleStarted(conversationId: string) {
     setFilter('all');
@@ -478,8 +484,182 @@ export function InboxPage() {
     reopenConv.mutate(conversation.id);
   }
 
+  /*
+   * The details panel's contents, rendered into one of two shells below.
+   *
+   * At ≥ lg it is the inline column it has always been. Below lg it used to be
+   * a bespoke `fixed inset-y-0 right-0` slide-over, and `position: fixed`
+   * resolves against the VIEWPORT rather than against body's
+   * `padding-top: env(safe-area-inset-top)` — so the "Details" heading and its
+   * Close sat under the status bar, the gallery's "View all" landed in the
+   * gesture strip, and there was no scroll lock, no Escape and no grabber. The
+   * shared Drawer carries all of that.
+   */
+  const detailsCards = conversation ? (
+    <>
+      {isAdmin ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Ticket</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <Label htmlFor="ticket-priority">Priority</Label>
+              <Select
+                id="ticket-priority"
+                value={conversation.priority ?? 'normal'}
+                disabled={updateTicket.isPending}
+                onChange={(e) =>
+                  updateTicket.mutate({
+                    conversationId: conversation.id,
+                    priority: e.target.value as TicketPriority,
+                  })
+                }
+              >
+                {TICKET_PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {PRIORITY_LABEL[p]}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="ticket-category">Category</Label>
+              <Select
+                id="ticket-category"
+                value={conversation.category ?? 'general'}
+                disabled={updateTicket.isPending}
+                onChange={(e) =>
+                  updateTicket.mutate({
+                    conversationId: conversation.id,
+                    category: e.target.value as TicketCategory,
+                  })
+                }
+              >
+                {TICKET_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {titleCase(c)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Dealer</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          {dealerQ.isLoading ? (
+            <div className="flex justify-center py-4">
+              <Spinner size={16} />
+            </div>
+          ) : dealerQ.isError || !dealerQ.data ? (
+            <p className="text-xs text-text-muted">
+              Dealer details unavailable.
+            </p>
+          ) : (
+            <>
+              <div>
+                <p className="text-xs text-text-subtle">Code</p>
+                <p className="text-text">
+                  {dealerQ.data.code ?? '-'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-text-subtle">Phone</p>
+                <p className="text-text">{dealerQ.data.phone ?? '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-text-subtle">Status</p>
+                <p className="text-text">{dealerQ.data.status}</p>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <CardTitle className="text-sm">
+            Reports
+            {records.length > 0 ? (
+              <span className="ml-1.5 text-text-subtle">
+                {records.length}
+              </span>
+            ) : null}
+          </CardTitle>
+          <IconButton
+            aria-label="Upload report"
+            size="xs"
+            onClick={() => setUploadOpen(true)}
+            className="text-text-muted"
+          >
+            <FileUp width={15} height={15} strokeWidth={1.75} />
+          </IconButton>
+        </CardHeader>
+        <CardContent className="text-sm">
+          {recordsQ.isLoading ? (
+            <div className="flex justify-center py-3">
+              <Spinner size={16} />
+            </div>
+          ) : records.length === 0 ? (
+            <p className="text-xs text-text-muted">
+              No reports sent yet.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {records.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex items-start gap-2"
+                >
+                  <FileText
+                    width={14}
+                    height={14}
+                    strokeWidth={1.75}
+                    className="mt-0.5 shrink-0 text-text-muted"
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate text-text">
+                      {r.title}
+                    </p>
+                    {r.periodLabel ? (
+                      <p className="truncate text-xs text-text-subtle">
+                        {r.periodLabel}
+                      </p>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <MediaGalleryCard conversationId={conversation.id} />
+    </>
+  ) : null;
+
+  // `main` is `p-4 md:p-6`, and in a thread AppShell adds the bottom safe-area
+  // inset to it as well (the tab bar, which normally carries it, is hidden).
+  // This page cancels that padding with a negative margin — but `h-full`
+  // resolves against main's CONTENT box, so the page rendered 32px (plus the
+  // inset) shorter than the space it occupies, leaving a dead strip of page
+  // background under the composer. Spell the height out, and add the inset back
+  // only in a thread, which is the only case where main is carrying it.
+  const threadOpen = searchParams.has('c');
+
   return (
-    <div className="-m-4 flex h-full md:-m-6">
+    <div
+      className={cn(
+        '-m-4 flex md:-m-6 md:h-full',
+        threadOpen
+          ? 'h-[calc(100%+2rem+env(safe-area-inset-bottom))]'
+          : 'h-[calc(100%+2rem)]',
+      )}
+    >
       {/* Left rail */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface md:flex">
         <div className="px-4 py-3">
@@ -575,7 +755,11 @@ export function InboxPage() {
             );
           })}
         </div>
-        <ul className="flex-1 overflow-y-auto">
+        {/* overscroll-contain: index.css deliberately leaves html/body alone so
+            the shell's pull-to-refresh survives, and contains the inner
+            scrollers instead — this one was missed, so flicking to the top of
+            the list reloaded the page mid-read. */}
+        <ul className="flex-1 overflow-y-auto overscroll-contain">
           {conversationsQ.isLoading ? (
             <li className="flex items-center justify-center py-8">
               <Spinner size={18} />
@@ -648,15 +832,79 @@ export function InboxPage() {
         )}
       >
         {!conversation ? (
-          <div className="flex h-full items-center justify-center">
-            <EmptyState
-              icon={
-                <MessageSquare width={36} height={36} strokeWidth={1.5} />
-              }
-              title="Select a conversation"
-              description="Choose a conversation from the list to view messages."
-            />
-          </div>
+          selectedId ? (
+            /*
+             * A thread is open but its details have not arrived — or never
+             * will. The header, and with it the Back chevron, renders off
+             * `selectedId` and never off the response: in a thread AppShell
+             * hides the tab bar, so until this branch existed a slow link
+             * showed a "Select a conversation" card with no way back, and a
+             * failed GET showed it forever. The Android hardware key was the
+             * only escape, and an iPhone has none.
+             */
+            <>
+              <header className="flex items-center gap-2 border-b border-border bg-surface px-3 py-3 md:px-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileContextOpen(false);
+                    closeConversation();
+                  }}
+                  aria-label="Back to conversations"
+                  className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 md:hidden"
+                >
+                  <ChevronLeft width={20} height={20} strokeWidth={1.75} />
+                </button>
+                <h2 className="min-w-0 truncate text-base font-semibold text-text">
+                  {selectedQ.isError ? 'Conversation' : 'Opening…'}
+                </h2>
+              </header>
+              {selectedQ.isError ? (
+                <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+                  <div className="w-full max-w-sm">
+                    <p className="text-sm font-medium text-text">
+                      This conversation could not be loaded.
+                    </p>
+                    <p className="mt-1 text-sm text-text-muted">
+                      The request failed. Check the connection and try again.
+                    </p>
+                    <ActionRow className="mt-4">
+                      <Button
+                        variant="secondary"
+                        className="md:hidden"
+                        onClick={() => {
+                          setMobileContextOpen(false);
+                          closeConversation();
+                        }}
+                      >
+                        Back to conversations
+                      </Button>
+                      <Button
+                        onClick={() => void selectedQ.refetch()}
+                        loading={selectedQ.isFetching}
+                      >
+                        Try again
+                      </Button>
+                    </ActionRow>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex min-h-0 flex-1 items-center justify-center">
+                  <Spinner size={20} />
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <EmptyState
+                icon={
+                  <MessageSquare width={36} height={36} strokeWidth={1.5} />
+                }
+                title="Select a conversation"
+                description="Choose a conversation from the list to view messages."
+              />
+            </div>
+          )
         ) : (
           <>
             <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-3 py-3 md:px-4">
@@ -673,12 +921,20 @@ export function InboxPage() {
                   <ChevronLeft width={20} height={20} strokeWidth={1.75} />
                 </button>
                 <div className="min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <h2 className="truncate text-base font-semibold text-text">
                     {memberLabel(conversation)}
                   </h2>
-                  {statusBadge(conversation.status)}
-                  <TicketFlagBadge conversation={conversation} now={now} />
+                  {/* At 360px the right-hand cluster (a status button plus two
+                      44px icons) and the Back chevron already own ~246 of the
+                      336 usable px, so these two badges left the member's name
+                      rendering as "…". The status is on screen anyway — it is
+                      what chooses Pick up / Resolve / Reopen — and the SLA flag
+                      moves to its own line below, where it can wrap. */}
+                  <span className="hidden md:contents">
+                    {statusBadge(conversation.status)}
+                    <TicketFlagBadge conversation={conversation} now={now} />
+                  </span>
                 </div>
                 <p className="truncate text-xs text-text-muted">
                   {dealerCodeLabel(conversation.dealerCode)}
@@ -686,6 +942,12 @@ export function InboxPage() {
                     ? ` · Assigned to ${conversation.assignedAdminName}`
                     : null}
                 </p>
+                {/* empty:hidden — TicketFlagBadge renders nothing on a ticket
+                    that is not waiting, and an empty flex row would still cost
+                    its margin. */}
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 empty:hidden md:hidden">
+                  <TicketFlagBadge conversation={conversation} now={now} />
+                </div>
                 </div>
               </div>
               {/* Mobile action cluster: one primary by status + details + a
@@ -881,180 +1143,22 @@ export function InboxPage() {
                 />
               </div>
 
-              {(isLg && contextOpen) || (!isLg && mobileContextOpen) ? (
-                <>
-                  {!isLg ? (
-                    <div
-                      className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-                      onClick={() => setMobileContextOpen(false)}
-                    />
-                  ) : null}
-                  <aside
-                    className={cn(
-                      'space-y-3 overflow-y-auto border-l border-border bg-surface p-3',
-                      isLg
-                        ? 'w-72 shrink-0'
-                        : 'fixed inset-y-0 right-0 z-50 w-80 max-w-[85%] shadow-xl',
-                    )}
-                  >
-                  {!isLg ? (
-                    <div className="mb-1 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-text">Details</h3>
-                      <button
-                        type="button"
-                        aria-label="Close details"
-                        onClick={() => setMobileContextOpen(false)}
-                        className="flex h-11 w-11 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 md:h-9 md:w-9"
-                      >
-                        <X width={18} height={18} strokeWidth={1.75} />
-                      </button>
-                    </div>
-                  ) : null}
-                  {isAdmin ? (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-sm">Ticket</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div>
-                          <Label htmlFor="ticket-priority">Priority</Label>
-                          <Select
-                            id="ticket-priority"
-                            value={conversation.priority ?? 'normal'}
-                            disabled={updateTicket.isPending}
-                            onChange={(e) =>
-                              updateTicket.mutate({
-                                conversationId: conversation.id,
-                                priority: e.target.value as TicketPriority,
-                              })
-                            }
-                          >
-                            {TICKET_PRIORITIES.map((p) => (
-                              <option key={p} value={p}>
-                                {PRIORITY_LABEL[p]}
-                              </option>
-                            ))}
-                          </Select>
-                        </div>
-                        <div>
-                          <Label htmlFor="ticket-category">Category</Label>
-                          <Select
-                            id="ticket-category"
-                            value={conversation.category ?? 'general'}
-                            disabled={updateTicket.isPending}
-                            onChange={(e) =>
-                              updateTicket.mutate({
-                                conversationId: conversation.id,
-                                category: e.target.value as TicketCategory,
-                              })
-                            }
-                          >
-                            {TICKET_CATEGORIES.map((c) => (
-                              <option key={c} value={c}>
-                                {titleCase(c)}
-                              </option>
-                            ))}
-                          </Select>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ) : null}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Dealer</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                      {dealerQ.isLoading ? (
-                        <div className="flex justify-center py-4">
-                          <Spinner size={16} />
-                        </div>
-                      ) : dealerQ.isError || !dealerQ.data ? (
-                        <p className="text-xs text-text-muted">
-                          Dealer details unavailable.
-                        </p>
-                      ) : (
-                        <>
-                          <div>
-                            <p className="text-xs text-text-subtle">Code</p>
-                            <p className="text-text">
-                              {dealerQ.data.code ?? '-'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-text-subtle">Phone</p>
-                            <p className="text-text">{dealerQ.data.phone ?? '-'}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-text-subtle">Status</p>
-                            <p className="text-text">{dealerQ.data.status}</p>
-                          </div>
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-2">
-                      <CardTitle className="text-sm">
-                        Reports
-                        {records.length > 0 ? (
-                          <span className="ml-1.5 text-text-subtle">
-                            {records.length}
-                          </span>
-                        ) : null}
-                      </CardTitle>
-                      <button
-                        type="button"
-                        onClick={() => setUploadOpen(true)}
-                        aria-label="Upload report"
-                        className="rounded-sm p-1 text-text-muted hover:bg-surface-2 hover:text-text"
-                      >
-                        <FileUp width={15} height={15} strokeWidth={1.75} />
-                      </button>
-                    </CardHeader>
-                    <CardContent className="text-sm">
-                      {recordsQ.isLoading ? (
-                        <div className="flex justify-center py-3">
-                          <Spinner size={16} />
-                        </div>
-                      ) : records.length === 0 ? (
-                        <p className="text-xs text-text-muted">
-                          No reports sent yet.
-                        </p>
-                      ) : (
-                        <ul className="space-y-2">
-                          {records.map((r) => (
-                            <li
-                              key={r.id}
-                              className="flex items-start gap-2"
-                            >
-                              <FileText
-                                width={14}
-                                height={14}
-                                strokeWidth={1.75}
-                                className="mt-0.5 shrink-0 text-text-muted"
-                              />
-                              <div className="min-w-0">
-                                <p className="truncate text-text">
-                                  {r.title}
-                                </p>
-                                {r.periodLabel ? (
-                                  <p className="truncate text-xs text-text-subtle">
-                                    {r.periodLabel}
-                                  </p>
-                                ) : null}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <MediaGalleryCard conversationId={conversation.id} />
+              {isLg ? (
+                contextOpen ? (
+                  <aside className="w-72 shrink-0 space-y-3 overflow-y-auto overscroll-contain border-l border-border bg-surface p-3">
+                    {detailsCards}
                   </aside>
-                </>
-              ) : null}
+                ) : null
+              ) : (
+                <Drawer
+                  open={mobileContextOpen}
+                  onClose={() => setMobileContextOpen(false)}
+                  title="Details"
+                  width="sm"
+                >
+                  <div className="space-y-3">{detailsCards}</div>
+                </Drawer>
+              )}
             </div>
 
             {dealerId ? (

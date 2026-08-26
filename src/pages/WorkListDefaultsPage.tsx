@@ -16,11 +16,14 @@ import {
   CardHeader,
   CardSubtitle,
   CardTitle,
+  Checkbox,
   Dialog,
   EmptyState,
   FieldError,
   Input,
   Label,
+  MobileCardList,
+  ReadonlyField,
   Select,
   Skeleton,
   Table,
@@ -175,86 +178,170 @@ export function WorkListDefaultsPage() {
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <Table>
-                  <THead>
-                    <TRow>
-                      <TH className="w-12">Sr</TH>
-                      <TH>Label</TH>
-                      <TH>Distribution</TH>
-                      <TH className="text-right">Points</TH>
-                      <TH>Status</TH>
-                      <TH className="text-right">Actions</TH>
-                    </TRow>
-                  </THead>
-                  <TBody>
-                    {g.items.map((it) => (
-                      <TRow key={it.code} className={it.active ? undefined : 'opacity-60'}>
-                        <TD className="tabular-nums text-text-muted">{it.srNo}</TD>
-                        <TD>
-                          <div className="font-medium">{it.labelEn}</div>
-                          <div className="text-xs text-text-muted">{it.labelHi}</div>
-                          <div className="text-xs text-text-subtle">
-                            <code>{it.code}</code>
-                          </div>
-                        </TD>
-                        <TD className="text-text-muted">
-                          <div>
-                            {distributionLabel(it.distribution)}
-                            {it.unit ? (
-                              <span className="text-text-subtle"> · {unitLabel(it.unit)}</span>
-                            ) : null}
-                          </div>
-                          <Badge intent={pricingModeIntent(it.pricingMode)} className="mt-1">
-                            {pricingModeLabel(it.pricingMode)}
-                          </Badge>
-                        </TD>
-                        <TD className="text-right tabular-nums">{fmtPoints(it.points)}</TD>
-                        <TD>
-                          <Badge intent={it.active ? 'success' : 'neutral'}>
-                            {it.active ? 'Active' : 'Inactive'}
-                          </Badge>
-                        </TD>
-                        <TD className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setEditing(it)}
-                              leftIcon={
-                                <Pencil width={14} height={14} strokeWidth={1.75} />
-                              }
-                            >
-                              Edit
-                            </Button>
-                            {it.active ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                loading={del.isPending && del.variables === it.code}
-                                onClick={() => softDelete(it)}
-                              >
-                                Deactivate
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                loading={
-                                  update.isPending &&
-                                  update.variables?.code === it.code &&
-                                  update.variables?.active === true
-                                }
-                                onClick={() => reactivate(it)}
-                              >
-                                Reactivate
-                              </Button>
-                            )}
-                          </div>
-                        </TD>
+                {/* Desktop table (≥ md). Everything in here is unchanged; only
+                    the wrapper is new. Below md the same six columns need
+                    ~730px in a ~328px card, and `main` is `overflow-x-hidden`,
+                    so the Actions column — the ONLY place Edit and Deactivate
+                    exist — was clipped ~400px off the right edge rather than
+                    scrolled to. The card stack under it is the phone shape. */}
+                <div className="hidden md:block">
+                  <Table>
+                    <THead>
+                      <TRow>
+                        <TH className="w-12">Sr</TH>
+                        <TH>Label</TH>
+                        <TH>Distribution</TH>
+                        <TH className="text-right">Points</TH>
+                        <TH>Status</TH>
+                        <TH className="text-right">Actions</TH>
                       </TRow>
-                    ))}
-                  </TBody>
-                </Table>
+                    </THead>
+                    <TBody>
+                      {g.items.map((it) => (
+                        <TRow key={it.code} className={it.active ? undefined : 'opacity-60'}>
+                          <TD className="tabular-nums text-text-muted">{it.srNo}</TD>
+                          <TD>
+                            <div className="font-medium">{it.labelEn}</div>
+                            <div className="text-xs text-text-muted">{it.labelHi}</div>
+                            <div className="text-xs text-text-subtle">
+                              <code>{it.code}</code>
+                            </div>
+                          </TD>
+                          <TD className="text-text-muted">
+                            <div>
+                              {distributionLabel(it.distribution)}
+                              {it.unit ? (
+                                <span className="text-text-subtle"> · {unitLabel(it.unit)}</span>
+                              ) : null}
+                            </div>
+                            <Badge intent={pricingModeIntent(it.pricingMode)} className="mt-1">
+                              {pricingModeLabel(it.pricingMode)}
+                            </Badge>
+                          </TD>
+                          <TD className="text-right tabular-nums">{fmtPoints(it.points)}</TD>
+                          <TD>
+                            <Badge intent={it.active ? 'success' : 'neutral'}>
+                              {it.active ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </TD>
+                          <TD className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setEditing(it)}
+                                leftIcon={
+                                  <Pencil width={14} height={14} strokeWidth={1.75} />
+                                }
+                              >
+                                Edit
+                              </Button>
+                              {it.active ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  loading={del.isPending && del.variables === it.code}
+                                  onClick={() => softDelete(it)}
+                                >
+                                  Deactivate
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  loading={
+                                    update.isPending &&
+                                    update.variables?.code === it.code &&
+                                    update.variables?.active === true
+                                  }
+                                  onClick={() => reactivate(it)}
+                                >
+                                  Reactivate
+                                </Button>
+                              )}
+                            </div>
+                          </TD>
+                        </TRow>
+                      ))}
+                    </TBody>
+                  </Table>
+                </div>
+
+                {/* Mobile card-stack (< md). Same six columns, restacked so
+                    Edit and Deactivate/Reactivate are full-width buttons a
+                    thumb can reach. `break-all` on the code because a work slug
+                    ("clean-forecourt-canopy-monthly") is one unbreakable token
+                    and `break-words` will not split it at its hyphens. */}
+                <MobileCardList
+                  className="p-3"
+                  cards={g.items.map((it) => ({
+                    key: it.code,
+                    tone: it.active ? 'default' : 'muted',
+                    primary: (
+                      <span className="block font-medium text-text">{it.labelEn}</span>
+                    ),
+                    primaryRight: (
+                      <span className="tabular-nums font-semibold">
+                        {fmtPoints(it.points)}
+                      </span>
+                    ),
+                    secondary: (
+                      <span className="block">
+                        {it.labelHi}
+                        <code className="mt-0.5 block break-all text-xs text-text-subtle">
+                          {it.code}
+                        </code>
+                      </span>
+                    ),
+                    meta: (
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        Sr {it.srNo} · {distributionLabel(it.distribution)}
+                        {it.unit ? ` · ${unitLabel(it.unit)}` : ''}
+                        <Badge intent={pricingModeIntent(it.pricingMode)}>
+                          {pricingModeLabel(it.pricingMode)}
+                        </Badge>
+                        <Badge intent={it.active ? 'success' : 'neutral'}>
+                          {it.active ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </span>
+                    ),
+                    actions: (
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setEditing(it)}
+                          leftIcon={<Pencil width={14} height={14} strokeWidth={1.75} />}
+                        >
+                          Edit
+                        </Button>
+                        {it.active ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            loading={del.isPending && del.variables === it.code}
+                            onClick={() => softDelete(it)}
+                          >
+                            Deactivate
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            loading={
+                              update.isPending &&
+                              update.variables?.code === it.code &&
+                              update.variables?.active === true
+                            }
+                            onClick={() => reactivate(it)}
+                          >
+                            Reactivate
+                          </Button>
+                        )}
+                      </div>
+                    ),
+                  }))}
+                />
               </CardContent>
             </Card>
           ))}
@@ -553,14 +640,10 @@ function EditWorkItemDialog({
           derivedPoints={derivedPoints}
         />
 
-        <label className="flex items-center gap-2 text-sm text-text">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-border-strong accent-brand"
-            {...register('active')}
-          />
-          Active (dealers can be awarded this work)
-        </label>
+        <Checkbox
+          label="Active (dealers can be awarded this work)"
+          {...register('active')}
+        />
       </form>
     </Dialog>
   );
@@ -688,13 +771,9 @@ function FormFieldsShared({
             </div>
             <div>
               <Label htmlFor="wi-derivedPoints">Points (auto-derived)</Label>
-              <div
-                id="wi-derivedPoints"
-                aria-live="polite"
-                className="flex h-9 items-center rounded-sm border border-border bg-surface-2 px-3 text-sm font-medium tabular-nums text-text"
-              >
+              <ReadonlyField id="wi-derivedPoints" aria-live="polite">
                 {fmtPoints(derivedPoints)}
-              </div>
+              </ReadonlyField>
               <p className="mt-1 text-xs text-text-subtle">
                 Computed from time, skill, effort &amp; responsibility.
               </p>
@@ -797,14 +876,10 @@ function FormFieldsShared({
         </div>
       ) : null}
 
-      <label className="flex items-center gap-2 text-sm text-text">
-        <input
-          type="checkbox"
-          className="h-4 w-4 rounded border-border-strong accent-brand"
-          {...register('requiresApproval')}
-        />
-        Requires manager approval before doing (informational)
-      </label>
+      <Checkbox
+        label="Requires manager approval before doing (informational)"
+        {...register('requiresApproval')}
+      />
     </>
   );
 }

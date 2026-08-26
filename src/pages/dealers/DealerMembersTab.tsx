@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardSubtitle,
   CardTitle,
+  Copyable,
   Dialog,
   EmptyState,
   FieldError,
@@ -102,20 +103,25 @@ export function DealerMembersTab({ dealer }: Props) {
 
   return (
     <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>Team / Members</CardTitle>
-          <CardSubtitle>
-            Each member has their own app login and private chat with support.
-          </CardSubtitle>
-        </div>
-        <Button
-          size="sm"
-          onClick={() => setAddOpen(true)}
-          leftIcon={<UserPlus width={14} height={14} strokeWidth={1.75} />}
-        >
-          Add member
-        </Button>
+      {/* The button goes in `action`, not beside the title. As a second child
+          of a `justify-between` row that cannot wrap, a `whitespace-nowrap`
+          Button refuses to shrink below ~130px and squeezes this card's long
+          subtitle into ~135px — six lines of text beside one button. */}
+      <CardHeader
+        action={
+          <Button
+            size="sm"
+            onClick={() => setAddOpen(true)}
+            leftIcon={<UserPlus width={14} height={14} strokeWidth={1.75} />}
+          >
+            Add member
+          </Button>
+        }
+      >
+        <CardTitle>Team / Members</CardTitle>
+        <CardSubtitle>
+          Each member has their own app login and private chat with support.
+        </CardSubtitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -223,9 +229,33 @@ export function DealerMembersTab({ dealer }: Props) {
                   ) : (
                     <Badge intent="neutral">Suspended</Badge>
                   ),
+                // Never truncate an identity string the admin has to read out
+                // or transcribe. At ~270px in a 14px mono face `truncate` cut
+                // this login address at about twenty characters, and the tab
+                // offers no expand and no detail view behind it — so on a phone
+                // the full address could not be obtained at all. `Copyable`
+                // wraps it in full and copies it through three rungs before it
+                // ever admits defeat.
+                //
+                // `select-text` is the last of those rungs actually working:
+                // the native shell swallows `contextmenu` everywhere outside
+                // `input, textarea, [contenteditable], .select-text`, matched
+                // with `closest()`, so without the class here "long-press it
+                // and choose Copy" is advice the shell will not honour.
                 secondary: (
-                  <span className="block truncate font-mono">{u.email}</span>
+                  <Copyable
+                    value={u.email}
+                    mode="inline"
+                    mono
+                    className="select-text"
+                  />
                 ),
+                // A disabled action states its reason on screen; `title` is
+                // invisible to a finger.
+                meta:
+                  u.status !== 'ACTIVE'
+                    ? 'Reactivate this member to start a chat.'
+                    : undefined,
                 actions: (
                   <div className="grid grid-cols-2 gap-2">
                     <Button
@@ -233,11 +263,6 @@ export function DealerMembersTab({ dealer }: Props) {
                       size="sm"
                       onClick={() => messageMember(u)}
                       disabled={u.status !== 'ACTIVE'}
-                      title={
-                        u.status !== 'ACTIVE'
-                          ? 'Reactivate this member to start a chat'
-                          : undefined
-                      }
                       loading={startConv.isPending && startConv.variables === u.id}
                       leftIcon={
                         <MessageSquare width={14} height={14} strokeWidth={1.75} />
@@ -340,15 +365,53 @@ function AddMemberDialog({
     });
   }
 
+  /**
+   * Three rungs, because `navigator.clipboard` is absent outside a secure
+   * context and rejects in some WebViews. The last one is why this is not a
+   * one-liner: `#root` sets `user-select: none`, so "copy it manually" is only
+   * honest advice when the value is inside an `<input>` — which this one is, so
+   * the field is selected and the admin is told so rather than being sent after
+   * text they cannot highlight.
+   */
   async function copyPassword() {
-    try {
-      await navigator.clipboard.writeText(getValues('password'));
+    const markCopied = () => {
       setCopiedPw(true);
       toast.success('Password copied');
       window.setTimeout(() => setCopiedPw(false), 1500);
-    } catch {
-      toast.error('Could not copy — copy manually.');
+    };
+
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(getValues('password'));
+        markCopied();
+        return;
+      } catch {
+        // Permission refused, or not a secure context. Fall through.
+      }
     }
+
+    const field = document.getElementById(
+      'member-password',
+    ) as HTMLInputElement | null;
+    if (field) {
+      field.focus({ preventScroll: true });
+      field.setSelectionRange(0, field.value.length);
+      try {
+        if (document.execCommand('copy')) {
+          markCopied();
+          return;
+        }
+      } catch {
+        // Ignored: the message below is the same either way.
+      }
+    }
+
+    toast.info(
+      field
+        ? 'This device would not let the app use the clipboard. The password is selected — long-press it and choose Copy.'
+        : 'This device would not let the app use the clipboard.',
+      { duration: 8000 },
+    );
   }
 
   const submit = handleSubmit(async (values) => {
@@ -388,7 +451,10 @@ function AddMemberDialog({
       }
     >
       <form onSubmit={submit} className="grid gap-3" noValidate>
-        <div className="grid gap-3 sm:grid-cols-2">
+        {/* md, not sm: 640px is not a phone breakpoint in this app, and at
+            640-767px this form is still inside the mobile bottom sheet, where
+            two-up gives two ~150px controls. */}
+        <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label htmlFor="member-role" required>
               Role

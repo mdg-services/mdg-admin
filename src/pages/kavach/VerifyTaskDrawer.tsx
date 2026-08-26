@@ -14,6 +14,7 @@ import {
   Undo2,
   UserCheck,
   X,
+  ZoomIn,
 } from 'lucide-react';
 import * as React from 'react';
 
@@ -22,6 +23,7 @@ import {
   Button,
   Callout,
   Drawer,
+  IconButton,
   ImageLightbox,
   Input,
   Label,
@@ -523,19 +525,37 @@ export function VerifyTaskDrawer({
                 proofUrlQ.isLoading ? (
                   <Skeleton className="mt-2 h-48 w-full" />
                 ) : proofUrlQ.data ? (
-                  <button
-                    type="button"
-                    onClick={() => setLightboxOpen(true)}
-                    className="mt-2 block w-full"
-                    aria-label="Open the photo full size"
-                  >
-                    <img
-                      src={proofUrlQ.data.url}
-                      alt={`Evidence for ${row.labelEn}`}
-                      draggable={false}
-                      className="max-h-72 w-full rounded-sm border border-border object-contain"
-                    />
-                  </button>
+                  // This screen says "do not rule on this until you have seen
+                  // it", and on a phone the preview is 288px tall: 5mm of
+                  // handwriting on an A4 register lands about 8px high. The
+                  // picture is only readable in the lightbox, which zooms — so
+                  // the way in has to be stated, not left to a hover cue that
+                  // touch never renders.
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setLightboxOpen(true)}
+                      className="mt-2 block w-full"
+                      aria-label="Open the photo full size, where it can be zoomed"
+                    >
+                      <img
+                        src={proofUrlQ.data.url}
+                        alt={`Evidence for ${row.labelEn}`}
+                        draggable={false}
+                        className="max-h-72 w-full rounded-sm border border-border object-contain"
+                      />
+                    </button>
+                    <p className="mt-1 flex items-center gap-1.5 text-xs text-text-muted md:hidden">
+                      <ZoomIn
+                        width={14}
+                        height={14}
+                        strokeWidth={1.75}
+                        className="shrink-0"
+                      />
+                      Tap the photo to open it full size, then pinch or
+                      double-tap to read the writing.
+                    </p>
+                  </>
                 ) : (
                   <Callout
                     intent="warning"
@@ -697,18 +717,20 @@ export function VerifyTaskDrawer({
                     />
                     <span className="truncate">{file.name}</span>
                   </span>
-                  <button
-                    type="button"
+                  {/* Was a 30×30 target, and it is the only way to swap a photo
+                      taken of the wrong page. `IconButton` is a real 44px
+                      square below md and returns to the old density at md. */}
+                  <IconButton
+                    size="sm"
                     onClick={() => {
                       setFile(null);
                       if (fileInputRef.current) fileInputRef.current.value = '';
                     }}
                     disabled={submitting}
                     aria-label="Remove photo"
-                    className="rounded-sm p-2 text-text-muted hover:bg-surface-2 hover:text-text"
                   >
                     <X width={14} height={14} strokeWidth={1.75} />
-                  </button>
+                  </IconButton>
                 </div>
               ) : (
                 <button
@@ -748,13 +770,17 @@ export function VerifyTaskDrawer({
                 </p>
               </div>
             ) : (
+              // A ~20px underlined link sitting under a `py-5` dashed drop
+              // zone: a thumb aiming for it landed on the file picker instead.
+              // Full width and 44px tall below md puts real distance between
+              // the two; `md:` restores the inline link it is on desktop.
               <button
                 type="button"
                 onClick={() => {
                   setOverrideOpen(true);
                   window.setTimeout(() => overrideRef.current?.focus(), 0);
                 }}
-                className="text-sm text-text-muted underline underline-offset-2 hover:text-text"
+                className="flex min-h-11 w-full items-center justify-center text-sm text-text-muted underline underline-offset-2 hover:text-text md:min-h-0 md:w-auto md:justify-start"
               >
                 Close this without the {evidenceMode === 'PHOTO' ? 'photo' : 'evidence'}
               </button>

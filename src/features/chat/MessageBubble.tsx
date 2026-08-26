@@ -170,7 +170,10 @@ export const MessageBubble = React.memo(function MessageBubble({
       ) : null}
       <div
         className={cn(
-          'group relative max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm',
+          // 75% of a 328px list at 360px leaves ~222px of text box — about 30
+          // characters, so messages wrap two lines earlier than they need to.
+          // Desktop keeps its 75%.
+          'group relative max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm md:max-w-[75%]',
           own
             ? 'rounded-br-md bg-brand text-text-inverse'
             : adminSide
@@ -206,8 +209,13 @@ export const MessageBubble = React.memo(function MessageBubble({
               onOpenMenu(message, { x: rect.left, y: rect.bottom + 2 });
             }}
             className={cn(
-              'absolute right-1 top-1 rounded-full p-0.5 opacity-0 transition-opacity',
-              'focus-visible:opacity-100 group-hover:opacity-100',
+              // `hidden md:block` and not just an opacity gate: a 0-opacity
+              // button is still a live ~18px target, so a stray tap on the
+              // corner of any bubble silently opened this menu. Touch reaches
+              // the same menu through the 450ms long-press on the bubble (see
+              // the hint chip in MessageList).
+              'absolute right-1 top-1 hidden rounded-full p-0.5 transition-opacity md:block',
+              'md:opacity-0 md:focus-visible:opacity-100 md:group-hover:opacity-100',
               own
                 ? 'bg-brand-hover text-text-inverse'
                 : adminSide
@@ -287,7 +295,12 @@ export const MessageBubble = React.memo(function MessageBubble({
               onClick={() => onOpenReactions?.(message)}
               aria-label={`${g.emoji} ${g.count}, see who reacted`}
               className={cn(
-                'flex items-center gap-0.5 rounded-full border bg-surface px-1.5 py-0.5 text-[13px] leading-none shadow-sm',
+                // ~28×19 painted, and the only route to the who-reacted list.
+                // It cannot grow — a 44px chip would swamp the bubble — so
+                // `.tap-target` grows the hit area instead. Adjacent halos
+                // overlap here and that is harmless: every chip on a message
+                // opens the same dialog.
+                'tap-target flex items-center gap-0.5 rounded-full border bg-surface px-1.5 py-0.5 text-[13px] leading-none shadow-sm',
                 g.mine ? 'border-brand' : 'border-border',
               )}
             >

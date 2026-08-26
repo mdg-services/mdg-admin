@@ -9,6 +9,7 @@ import {
   Drawer,
   EmptyState,
   Input,
+  KeyValueList,
   Label,
   Select,
   Skeleton,
@@ -29,6 +30,7 @@ import type {
   AssistRecordingSegmentView,
   AssistSessionDetail,
   AssistTurn,
+  AssistTurnTrace,
 } from '@dk/shared';
 
 import {
@@ -86,6 +88,8 @@ export function SessionDrawer({ sessionId, onClose }: SessionDrawerProps) {
   const [activeSegment, setActiveSegment] =
     React.useState<AssistRecordingSegmentView | null>(null);
 
+  const followup = useFollowupDraft(sessionId, detail);
+
   // A closed drawer must not leave the last call's highlight behind.
   React.useEffect(() => {
     if (!sessionId) setActiveSegment(null);
@@ -110,9 +114,28 @@ export function SessionDrawer({ sessionId, onClose }: SessionDrawerProps) {
       title={title}
       description={description}
       footer={
-        <Button variant="secondary" onClick={onClose}>
-          Close
-        </Button>
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+          {/* The one write this panel does, promoted into the pinned footer on
+              a phone. Below md the note `Textarea` opens the keyboard, the
+              layout viewport shrinks under it, and the real Save ends up
+              somewhere below the fold — while the only button permanently on
+              screen was Close, which discards what was just typed. The footer
+              is an `ActionRow below="stack"`, so the last child in the DOM is
+              the one on top under the thumb. */}
+          {detail ? (
+            <Button
+              className="md:hidden"
+              disabled={!followup.dirty}
+              loading={followup.saving}
+              onClick={() => void followup.onSave()}
+            >
+              Save follow-up
+            </Button>
+          ) : null}
+        </>
       }
     >
       {detailQ.isLoading ? (
@@ -145,11 +168,21 @@ export function SessionDrawer({ sessionId, onClose }: SessionDrawerProps) {
           </Section>
 
           <Section title="Who they are">
-            <LeadPanel detail={detail} />
+            <LeadPanel detail={detail} followup={followup} />
           </Section>
 
           {detail.recording.length > 0 ? (
-            <Section title="Recording">
+            // Pinned to the bottom of the sheet below md. Play-along was
+            // unusable otherwise: the player is the third block down, so while
+            // the controls were on screen the `ring-2 ring-brand` line being
+            // spoken had scrolled off above — and scrolling up to read it took
+            // the pause button away. `md:static` restores the desktop flow
+            // exactly.
+            <Section
+              title="Recording"
+              className="sticky bottom-0 z-[var(--z-sticky)] -mx-4 border-t border-border bg-surface px-4 pb-1 pt-2 md:static md:mx-0 md:border-t-0 md:px-0 md:pb-0 md:pt-0"
+              titleClassName="sr-only md:not-sr-only md:mb-2"
+            >
               <CallPlayer
                 segments={detail.recording}
                 onActiveSegmentChange={setActiveSegment}
@@ -174,10 +207,28 @@ export function SessionDrawer({ sessionId, onClose }: SessionDrawerProps) {
 
 /* ─────────────────────────────── Layout ──────────────────────────────────── */
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  className,
+  titleClassName,
+  children,
+}: {
+  title: string;
+  className?: string;
+  /** For the one section that pins itself: `sr-only md:not-sr-only` keeps the
+   *  heading for a screen reader while giving the 24px back to the transcript
+   *  it is sitting on top of. */
+  titleClassName?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <section>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+    <section className={className}>
+      <h3
+        className={cn(
+          'mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted',
+          titleClassName,
+        )}
+      >
         {title}
       </h3>
       {children}
@@ -251,7 +302,7 @@ function HeaderStrip({
               className="flex items-start gap-1.5 text-xs text-warning"
             >
               <Flag width={12} height={12} strokeWidth={2} className="mt-0.5 shrink-0" />
-              <span>{flagReasonText(f)}</span>
+              <span className="min-w-0 break-words">{flagReasonText(f)}</span>
             </li>
           ))}
         </ul>
@@ -306,16 +357,33 @@ function Transcript({
 }
 
 function TurnBubble({ turn, active }: { turn: AssistTurn; active: boolean }) {
+  const ref = React.useRef<HTMLLIElement>(null);
+
+  /* Follow the player. The ring says which line is being spoken, but nothing
+     used to bring it back into view, so on a 640px screen the highlight spent
+     most of the call scrolled off above the sheet. `block: 'nearest'` moves the
+     drawer body by the least it can — enough to show the line, never enough to
+     jump the reader somewhere else. */
+  React.useEffect(() => {
+    if (!active) return;
+    const el = ref.current;
+    if (!el) return;
+    const reduced =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
+  }, [active]);
+
   if (turn.role === 'system') {
     return (
-      <li className="text-center text-xs text-text-subtle">
+      <li ref={ref} className="text-center text-xs text-text-subtle">
         {turn.text} · {clockOf(turn.at)}
       </li>
     );
   }
   const visitor = turn.role === 'visitor';
   return (
-    <li className={cn('flex', visitor ? 'justify-start' : 'justify-end')}>
+    <li ref={ref} className={cn('flex', visitor ? 'justify-start' : 'justify-end')}>
       <div
         className={cn(
           'max-w-[85%] rounded-lg border p-2.5',
@@ -335,20 +403,30 @@ function TurnBubble({ turn, active }: { turn: AssistTurn; active: boolean }) {
               we did not answer this — {guardStageText(turn.guardStage)}
             </Badge>
             {turn.guardNote ? (
-              <p className="mt-1 text-xs text-text-muted">{turn.guardNote}</p>
+              <p className="mt-1 break-words text-xs text-text-muted">{turn.guardNote}</p>
             ) : null}
           </div>
         ) : null}
 
         {turn.citations && turn.citations.length > 0 ? (
-          <ul className="mt-1.5 flex flex-wrap gap-1">
+          <ul className="mt-1.5 flex min-w-0 flex-wrap gap-1">
             {turn.citations.map((c) => (
+              // The chip prints the section's HUMAN title, not its id. The
+              // whole point of showing a super-admin a citation is "which part
+              // of which guideline did this answer come from", and that
+              // sentence used to live in a `title` — invisible on touch. The id
+              // and the match score stay on the tooltip and in the debug panel,
+              // where a developer is already looking.
+              // `min-w-0 max-w-full break-words`: `c.section`/`c.sectionTitle`
+              // are server-supplied free text, and one long name made the whole
+              // drawer body scroll sideways rather than wrapping in the chip.
               <li
                 key={c.chunkId}
-                title={`${c.sectionTitle} · match ${c.score.toFixed(2)}`}
-                className="rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] text-text-muted"
+                title={`${c.section} · match ${c.score.toFixed(2)}`}
+                className="min-w-0 max-w-full break-words rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] text-text-muted"
               >
-                {docLabel(c.docId)} · {c.section} · {pageLabel(c.pageFrom, c.pageTo)}
+                {docLabel(c.docId)} · {c.sectionTitle || c.section} ·{' '}
+                {pageLabel(c.pageFrom, c.pageTo)}
               </li>
             ))}
           </ul>
@@ -365,39 +443,56 @@ function TurnBubble({ turn, active }: { turn: AssistTurn; active: boolean }) {
 
 /* ─────────────────────────────── Lead panel ──────────────────────────────── */
 
+export interface FollowupDraft {
+  status: AssistFollowupStatus;
+  setStatus: (next: AssistFollowupStatus) => void;
+  note: string;
+  setNote: (next: string) => void;
+  dirty: boolean;
+  saving: boolean;
+  onSave: () => Promise<void>;
+}
+
 /**
- * The name, place and number the visitor volunteered, and what we have done
- * about it.
+ * The follow-up being edited, held one level above the panel that shows it.
  *
- * This is the ONE place on the whole console that prints a mobile number. It is
- * printed here because ringing it is the job; it is printed nowhere else —
- * not in the drawer title, not in a toast, not in a query string — because
- * every one of those places is somewhere the number gets read, screenshotted or
- * pasted by someone who did not need it.
+ * It lives up here for one reason: on a phone the button that saves it has to
+ * be in the drawer's pinned footer, and the footer is a sibling of the body —
+ * it cannot reach into `LeadPanel`'s state. Both the inline button and the
+ * footer button now drive the same draft.
+ *
+ * Seeded once per conversation opened, keyed on the id rather than on the
+ * object: the detail is replaced on every refetch and on every save, and
+ * re-seeding from those would wipe a note being typed. Closing the drawer
+ * clears the key, so reopening starts from what the server holds.
  */
-function LeadPanel({ detail }: { detail: AssistSessionDetail }) {
+function useFollowupDraft(
+  sessionId: string | null,
+  detail: AssistSessionDetail | undefined,
+): FollowupDraft {
   const toast = useToast();
   const save = useUpdateAssistFollowup();
-  const [status, setStatus] = React.useState<AssistFollowupStatus>(
-    detail.followupStatus,
-  );
-  const [note, setNote] = React.useState(detail.followupNote ?? '');
+  const [status, setStatus] = React.useState<AssistFollowupStatus>('new');
+  const [note, setNote] = React.useState('');
 
-  // Seed once per conversation opened. Keyed on the id, not on the object: the
-  // detail is replaced on every refetch and on every save, and re-seeding from
-  // those would wipe a note being typed.
   const seededRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (seededRef.current === detail.id) return;
+    if (!sessionId) {
+      seededRef.current = null;
+      return;
+    }
+    if (!detail || seededRef.current === detail.id) return;
     seededRef.current = detail.id;
     setStatus(detail.followupStatus);
     setNote(detail.followupNote ?? '');
-  }, [detail.id, detail.followupStatus, detail.followupNote]);
+  }, [sessionId, detail]);
 
-  const dirty = status !== detail.followupStatus || note !== (detail.followupNote ?? '');
-  const lead = detail.lead;
+  const dirty =
+    !!detail &&
+    (status !== detail.followupStatus || note !== (detail.followupNote ?? ''));
 
-  async function onSave() {
+  const onSave = React.useCallback(async () => {
+    if (!detail) return;
     try {
       await save.mutateAsync({
         id: detail.id,
@@ -409,7 +504,37 @@ function LeadPanel({ detail }: { detail: AssistSessionDetail }) {
         err instanceof ApiError ? err.message : 'Could not save the follow-up',
       );
     }
-  }
+  }, [detail, note, save, status, toast]);
+
+  return {
+    status,
+    setStatus,
+    note,
+    setNote,
+    dirty,
+    saving: save.isPending,
+    onSave,
+  };
+}
+
+/**
+ * The name, place and number the visitor volunteered, and what we have done
+ * about it.
+ *
+ * This is the ONE place on the whole console that prints a mobile number. It is
+ * printed here because ringing it is the job; it is printed nowhere else —
+ * not in the drawer title, not in a toast, not in a query string — because
+ * every one of those places is somewhere the number gets read, screenshotted or
+ * pasted by someone who did not need it.
+ */
+function LeadPanel({
+  detail,
+  followup,
+}: {
+  detail: AssistSessionDetail;
+  followup: FollowupDraft;
+}) {
+  const lead = detail.lead;
 
   return (
     <div className="grid gap-3 rounded-md border border-border bg-surface p-3">
@@ -444,8 +569,8 @@ function LeadPanel({ detail }: { detail: AssistSessionDetail }) {
           <Label htmlFor="assist-followup">Follow-up</Label>
           <Select
             id="assist-followup"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as AssistFollowupStatus)}
+            value={followup.status}
+            onChange={(e) => followup.setStatus(e.target.value as AssistFollowupStatus)}
           >
             {ASSIST_FOLLOWUP_STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -460,21 +585,32 @@ function LeadPanel({ detail }: { detail: AssistSessionDetail }) {
             id="assist-note"
             rows={3}
             maxLength={1000}
-            value={note}
+            value={followup.note}
             placeholder="What happened when we rang — kept short, the team reads this on a phone."
-            onChange={(e) => setNote(e.target.value)}
+            onChange={(e) => followup.setNote(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Button onClick={() => void onSave()} loading={save.isPending} disabled={!dirty}>
+      {/* Hidden below md, where the footer carries it instead — two live Save
+          buttons for one draft is one too many. */}
+      <div className="hidden items-center gap-3 md:flex">
+        <Button
+          onClick={() => void followup.onSave()}
+          loading={followup.saving}
+          disabled={!followup.dirty}
+        >
           Save follow-up
         </Button>
-        {!dirty ? (
+        {!followup.dirty ? (
           <span className="text-sm text-text-muted">No unsaved changes.</span>
         ) : null}
       </div>
+      <p className="text-sm text-text-muted md:hidden">
+        {followup.dirty
+          ? 'Unsaved. “Save follow-up” is pinned at the bottom of the screen.'
+          : 'No unsaved changes.'}
+      </p>
     </div>
   );
 }
@@ -483,7 +619,10 @@ function Field({ label, value }: { label: string; value?: string }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs text-text-muted">{label}</dt>
-      <dd className="mt-0.5 truncate text-sm text-text">
+      {/* Wraps below md, truncates at md: in the three-column desktop row a
+          wrapped name sets the row height, but on a phone a clipped name in a
+          panel whose whole job is "who do I ring" is just a lost name. */}
+      <dd className="mt-0.5 break-words text-sm text-text md:truncate">
         {value || <span className="text-text-subtle">Not given</span>}
       </dd>
     </div>
@@ -492,17 +631,47 @@ function Field({ label, value }: { label: string; value?: string }) {
 
 /* ─────────────────────────────── Trace ───────────────────────────────────── */
 
+/** `heard 320ms · embed 41ms · …` — the stages that reported a number. */
+function timingsText(t: AssistTurnTrace): string {
+  const timings: Array<[string, number | undefined]> = [
+    ['heard', t.timings.sttMs],
+    ['embed', t.timings.embedMs],
+    ['search', t.timings.searchMs],
+    ['answer', t.timings.llmMs],
+    ['spoken', t.timings.ttsMs],
+    ['total', t.timings.totalMs],
+  ];
+  return timings
+    .filter(([, v]) => v !== undefined)
+    .map(([k, v]) => `${k} ${Math.round(v as number)}ms`)
+    .join(' · ');
+}
+
+function retrievedText(t: AssistTurnTrace): string {
+  if (t.retrieved.length === 0) return '—';
+  return t.retrieved.map((r) => `${r.chunkId} (${r.score.toFixed(2)})`).join(', ');
+}
+
 /**
  * The per-turn engineering detail, collapsed.
  *
  * ADR 0009 §9 is explicit that this exists to make the first weeks debuggable
  * and is expected to be switched off. The callout says so on the screen, so
  * nobody builds a habit around a panel that is going to disappear.
+ *
+ * Two shapes, for the usual reason: five columns of comma-joined chunk ids in
+ * the ~272px this panel gets at 360px lands every column at 40-60px, which
+ * scrolls but cannot be read. Below md each turn becomes a stacked block
+ * instead. The desktop table is left exactly as it was — it is a panel with a
+ * stated expiry date, and re-densifying it through the shared `Table` would be
+ * a visible change to the one viewport where it already works.
  */
 function TraceSection({ detail }: { detail: AssistSessionDetail }) {
   return (
     <details className="rounded-md border border-border bg-surface">
-      <summary className="cursor-pointer select-none px-3 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:py-2">
+      {/* `min-h-11` below md: 12px of line box plus 24px of padding is a 40px
+          target, and this summary is the only way into the panel. */}
+      <summary className="flex min-h-11 cursor-pointer select-none items-center px-3 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:min-h-0 md:py-2">
         Debugging detail ({detail.trace.length}{' '}
         {detail.trace.length === 1 ? 'turn' : 'turns'})
       </summary>
@@ -512,7 +681,8 @@ function TraceSection({ detail }: { detail: AssistSessionDetail }) {
           switched on. It gets turned off once the assistant is boring, and this
           panel goes with it — do not build a routine around it.
         </Callout>
-        <div className="w-full overflow-x-auto overscroll-x-contain">
+
+        <div className="hidden w-full overflow-x-auto overscroll-x-contain md:block">
           <table className="w-full border-collapse text-xs">
             <thead className="bg-surface-2 text-text-muted">
               <tr>
@@ -524,48 +694,77 @@ function TraceSection({ detail }: { detail: AssistSessionDetail }) {
               </tr>
             </thead>
             <tbody>
-              {detail.trace.map((t) => {
-                const timings: Array<[string, number | undefined]> = [
-                  ['heard', t.timings.sttMs],
-                  ['embed', t.timings.embedMs],
-                  ['search', t.timings.searchMs],
-                  ['answer', t.timings.llmMs],
-                  ['spoken', t.timings.ttsMs],
-                  ['total', t.timings.totalMs],
-                ];
-                return (
-                  <tr key={t.seq} className="border-t border-border align-top">
-                    <td className="px-2 py-2 tabular-nums text-text">
-                      #{t.seq}
-                      <span className="block text-text-subtle">{t.chatModel}</span>
-                      <span className="block text-text-subtle">{t.guardModel}</span>
-                    </td>
-                    <td className="px-2 py-2 text-text-muted">
-                      {timings
-                        .filter(([, v]) => v !== undefined)
-                        .map(([k, v]) => `${k} ${Math.round(v as number)}ms`)
-                        .join(' · ')}
-                    </td>
-                    <td className="px-2 py-2 text-text-muted">
-                      {t.retrieved.length === 0
-                        ? '—'
-                        : t.retrieved
-                            .map((r) => `${r.chunkId} (${r.score.toFixed(2)})`)
-                            .join(', ')}
-                    </td>
-                    <td className="px-2 py-2 text-text-muted">
-                      {t.rulesHit.length === 0 ? '—' : t.rulesHit.join(', ')}
-                    </td>
-                    <td className="px-2 py-2 text-right tabular-nums text-text-muted">
-                      {t.tokensIn ?? 0} in / {t.tokensOut ?? 0} out
-                    </td>
-                  </tr>
-                );
-              })}
+              {detail.trace.map((t) => (
+                <tr key={t.seq} className="border-t border-border align-top">
+                  <td className="px-2 py-2 tabular-nums text-text">
+                    #{t.seq}
+                    <span className="block text-text-subtle">{t.chatModel}</span>
+                    <span className="block text-text-subtle">{t.guardModel}</span>
+                  </td>
+                  <td className="px-2 py-2 text-text-muted">{timingsText(t)}</td>
+                  <td className="px-2 py-2 text-text-muted">{retrievedText(t)}</td>
+                  <td className="px-2 py-2 text-text-muted">
+                    {t.rulesHit.length === 0 ? '—' : t.rulesHit.join(', ')}
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums text-text-muted">
+                    {t.tokensIn ?? 0} in / {t.tokensOut ?? 0} out
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-text-subtle">
+
+        <div className="grid gap-3 md:hidden">
+          {detail.trace.map((t) => (
+            <div key={t.seq} className="rounded-md border border-border p-3">
+              <p className="mb-1 text-xs font-semibold tabular-nums text-text">
+                Turn #{t.seq}
+              </p>
+              <KeyValueList
+                items={[
+                  {
+                    key: 'models',
+                    label: 'Models',
+                    value: `${t.chatModel} · ${t.guardModel}`,
+                    mono: true,
+                    block: true,
+                  },
+                  {
+                    key: 'timings',
+                    label: 'Stage timings',
+                    value: timingsText(t),
+                    block: true,
+                  },
+                  {
+                    key: 'retrieved',
+                    label: 'Passages retrieved',
+                    value: retrievedText(t),
+                    mono: true,
+                    block: true,
+                  },
+                  {
+                    key: 'guards',
+                    label: 'Guards hit',
+                    value: t.rulesHit.length === 0 ? '—' : t.rulesHit.join(', '),
+                    block: true,
+                  },
+                  {
+                    key: 'tokens',
+                    label: 'Tokens',
+                    value: `${t.tokensIn ?? 0} in / ${t.tokensOut ?? 0} out`,
+                    numeric: true,
+                  },
+                ]}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* `break-words`: a WebView user-agent string is a run of tokens CSS
+            will not break on its own, and the drawer body picks up a sideways
+            scroll the moment one is wider than the panel. */}
+        <p className="mt-2 break-words text-xs text-text-subtle">
           Fingerprint {detail.fingerprint.slice(0, 12)}…
           {detail.ipPrefix ? ` · network ${detail.ipPrefix}` : null}
           {detail.userAgent ? ` · ${detail.userAgent}` : null}

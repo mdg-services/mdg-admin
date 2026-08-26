@@ -8,6 +8,7 @@ import {
   EmptyState,
   FieldError,
   Label,
+  StickyActionBar,
   Textarea,
   useToast,
 } from '@/components/ui';
@@ -113,7 +114,12 @@ export function CustomRequestTab({ dealer }: Props) {
   }
 
   return (
-    <div className="grid gap-4">
+    // `flex flex-col`, not `grid`: a grid item's sticky positioning is confined
+    // to its own grid area, which auto-sizes to the item — so the bar at the
+    // foot of this tab would never actually stick. A flex item is offset within
+    // the flex container's content box, which is the whole tab. The stacking
+    // and the 1rem gap are identical either way.
+    <div className="flex flex-col gap-4">
       <Card>
         <CardContent className="grid gap-3">
           <div>
@@ -127,6 +133,11 @@ export function CustomRequestTab({ dealer }: Props) {
             <Label htmlFor="customPayload" hint="JSON object">
               Payload
             </Label>
+            {/* Eight rows is ~190px. With the soft keyboard open the layout
+                viewport shrinks to roughly 340px on a 640px device, so the
+                field alone filled the screen. `h-40` caps it at 160px below md
+                and `md:h-auto` hands the height back to `rows` at md, so the
+                desktop field is exactly the eight rows it has always been. */}
             <Textarea
               id="customPayload"
               rows={8}
@@ -134,11 +145,15 @@ export function CustomRequestTab({ dealer }: Props) {
               value={payload}
               onChange={(e) => setPayload(e.target.value)}
               invalid={!!error}
-              className="font-mono"
+              className="h-40 font-mono md:h-auto"
             />
             <FieldError message={error ?? undefined} />
           </div>
-          <div className="flex justify-end">
+          {/* Desktop keeps Submit where it has always been. Below md it moves
+              to the sticky bar at the foot of the tab; `hidden` beats the row's
+              own `flex` (Tailwind emits `.hidden` last) and `md:flex` puts it
+              back. */}
+          <div className="hidden justify-end md:flex">
             <Button
               leftIcon={<Send width={16} height={16} strokeWidth={1.75} />}
               loading={runNow.isPending}
@@ -164,6 +179,27 @@ export function CustomRequestTab({ dealer }: Props) {
           />
         </CardContent>
       </Card>
+
+      {/* Submit used to sit in normal flow directly under the payload field.
+          Once the keyboard opened it was below the fold, so committing meant
+          dismissing the keyboard and scrolling. `StickyActionBar` pins it to
+          the page scroller instead — and carries its own bottom inset, which
+          matters here because this tab only renders inside `/dealers/:id`,
+          where the tab bar is hidden and nothing else is holding the safe
+          area off the gesture strip. */}
+      <StickyActionBar
+        className="md:hidden"
+        summary="The payload is merged on top of the stored config."
+        summaryOnMobile
+      >
+        <Button
+          leftIcon={<Send width={16} height={16} strokeWidth={1.75} />}
+          loading={runNow.isPending}
+          onClick={submit}
+        >
+          Submit request
+        </Button>
+      </StickyActionBar>
     </div>
   );
 }

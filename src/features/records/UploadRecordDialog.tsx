@@ -2,7 +2,9 @@ import { FileUp, Paperclip, X } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { Dialog } from '@/components/ui/Dialog';
+import { IconButton } from '@/components/ui/IconButton';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
@@ -175,18 +177,18 @@ export function UploadRecordDialog({
                 />
                 <span className="truncate">{file.name}</span>
               </span>
-              <button
-                type="button"
+              <IconButton
+                aria-label="Remove file"
+                size="xs"
                 onClick={() => {
                   setFile(null);
                   if (fileInputRef.current) fileInputRef.current.value = '';
                 }}
                 disabled={submitting}
-                aria-label="Remove file"
-                className="rounded-sm p-2 text-text-muted hover:bg-surface-2 hover:text-text"
+                className="text-text-muted"
               >
                 <X width={14} height={14} strokeWidth={1.75} />
-              </button>
+              </IconButton>
             </div>
           ) : (
             <button
@@ -263,15 +265,14 @@ export function UploadRecordDialog({
           />
         </div>
 
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-text">
-          <input
-            type="checkbox"
-            checked={announceInChat}
-            onChange={(e) => setAnnounceInChat(e.target.checked)}
-            className="h-4 w-4 rounded-sm border-border-strong accent-brand"
-          />
-          Announce in chat
-        </label>
+        {/* This decides whether the dealer is told the report exists at all,
+            and it is the last control above the sticky footer — a miss used to
+            land on Upload. `Checkbox` makes the whole row the target. */}
+        <Checkbox
+          label="Announce in chat"
+          checked={announceInChat}
+          onChange={(e) => setAnnounceInChat(e.target.checked)}
+        />
 
         {error ? (
           <p className="text-xs text-danger" role="alert">

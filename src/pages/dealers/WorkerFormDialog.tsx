@@ -124,8 +124,15 @@ export function WorkerFormDialog({ dealerId, open, onClose, employee }: Props) {
           </div>
           <div>
             <Label htmlFor="worker-phone">Phone (optional)</Label>
+            {/* `tel`, not `number`: a number field silently drops the leading
+                "+" and any spacing, and spins on a stray scroll. This is the
+                only free-text field in the area that was still handing an
+                Android admin the full QWERTY keyboard. */}
             <Input
               id="worker-phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
               placeholder="+91…"
               invalid={!!errors.phone}
               {...register('phone')}

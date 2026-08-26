@@ -7,7 +7,6 @@ import {
   Database,
   DownloadCloud,
   History,
-  Monitor,
   PencilLine,
   RefreshCw,
   Undo2,
@@ -21,9 +20,12 @@ import {
   Callout,
   Card,
   CardContent,
+  Checkbox,
   EmptyState,
+  MobileCardList,
   Skeleton,
   StatusChip,
+  StickyActionBar,
   useToast,
 } from '@/components/ui';
 import { useDsrStaleReports, useRegenerateStaleDsr } from '@/hooks/api/useDsr';
@@ -33,7 +35,6 @@ import {
   useIrasDay,
   useDealerCorrections,
 } from '@/hooks/api/useIrasEdits';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatYmd, isYmd } from '@/lib/format';
@@ -80,7 +81,6 @@ export function ShiftDataEditorPage() {
   const navigate = useNavigate();
   const toast = useToast();
 
-  const wideEnough = useMediaQuery('(min-width: 900px)');
   const dayQ = useIrasDay(dealerId, businessDate);
   const day = dayQ.data;
 
@@ -155,7 +155,7 @@ export function ShiftDataEditorPage() {
     );
   }
 
-  const readOnly = !wideEnough || day.dealer.archived;
+  const readOnly = day.dealer.archived;
   const affected = reportsAffected(day);
   const stale = staleQ.data?.reports ?? [];
 
@@ -190,22 +190,16 @@ export function ShiftDataEditorPage() {
   }
 
   return (
-    <div className="pb-28">
+    // No bottom spacer: the pending bar below is `sticky`, not `fixed`, so it
+    // takes its own space at the end of the column and nothing is buried under
+    // it. The old `pb-28` was a guess that was already short on a phone, where
+    // the bar stacks to three wrapped lines.
+    <div>
       <Header day={day} onCollect={() => runCollect()} collecting={collect.isPending} />
 
       {day.dealer.archived ? (
         <Callout intent="warning" className="mt-3">
           This dealer is archived. Their data is read-only.
-        </Callout>
-      ) : null}
-
-      {!wideEnough && !day.dealer.archived ? (
-        <Callout className="mt-3">
-          <span className="flex items-start gap-2">
-            <Monitor width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-            Correcting figures needs a wider screen. Open this day on a laptop to edit; you can
-            read everything here.
-          </span>
         </Callout>
       ) : null}
 
@@ -315,14 +309,12 @@ export function ShiftDataEditorPage() {
               Correct what the portal got wrong. Your corrections are what the report uses; the
               portal’s own values are kept and always visible.
             </p>
-            <label className="flex shrink-0 items-center gap-2 text-sm text-text-muted">
-              <input
-                type="checkbox"
-                checked={showAll}
-                onChange={(e) => setShowAll(e.target.checked)}
-              />
-              Show all portal columns
-            </label>
+            <Checkbox
+              checked={showAll}
+              onChange={(e) => setShowAll(e.target.checked)}
+              label="Show all portal columns"
+              labelClassName="shrink-0 text-text-muted"
+            />
           </div>
 
           {day.dsr.attached ? null : (
@@ -537,11 +529,26 @@ function Banners({ day, pending }: { day: IrasDayEditorView; pending: number }) 
               The rows they were made on are not in the latest collection, so they are{' '}
               <strong>not being used</strong>.
             </p>
-            <ul className="mt-1 grid gap-0.5 text-xs">
+            {/* One bordered block per orphan below md. Run together as bare
+                12px lines they wrap into a single paragraph at 296px, and this
+                banner exists precisely to say WHICH corrections are silently
+                not being applied. The compact inline list returns at md. */}
+            <ul className="mt-1 grid gap-2 text-xs md:gap-0.5">
               {day.orphaned.map((o) => (
-                <li key={o.id}>
-                  {o.code} · {o.rowLabel} · {o.field === '*' ? 'whole row' : o.field}:{' '}
-                  {o.portalValue ?? '—'} → {o.value ?? '—'} · {o.reason}
+                <li
+                  key={o.id}
+                  className="rounded-md border border-warning/40 px-2 py-1.5 md:border-0 md:px-0 md:py-0"
+                >
+                  <span className="block font-medium md:inline">
+                    {o.code} · {o.rowLabel}
+                  </span>
+                  <span className="block tabular-nums md:ml-1 md:inline">
+                    {o.field === '*' ? 'whole row' : o.field}: {o.portalValue ?? '—'} →{' '}
+                    {o.value ?? '—'}
+                  </span>
+                  <span className="mt-0.5 block break-words md:ml-1 md:mt-0 md:inline">
+                    · {o.reason}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -709,6 +716,22 @@ function AppliedNotice({
 
 /* ─────────────────────────── the sticky footer ─────────────────────────── */
 
+/**
+ * What is unsaved, and the three ways out of it.
+ *
+ * `StickyActionBar` in its default `sticky` mode rather than the viewport-fixed
+ * bar this was. Fixed at `bottom-0` painted straight over the mobile tab bar and
+ * dropped its own buttons into the Android gesture strip, and the page's
+ * compensating `pb-28` was already too short for the three lines this wraps to
+ * at 360px. Sticky needs neither: the tab bar is an in-flow flex child of the
+ * shell, so a sticky element inside `main` already rests above it, and the bar
+ * reserves its own height instead of the page guessing at it.
+ *
+ * `below="wrap"` so that three short labels stay one line on a phone instead of
+ * becoming three stacked 44px blocks — 148px of a 640px screen. That used to be
+ * a nested `ActionRow` with `md:contents` to dissolve the wrapper at md; the bar
+ * takes the layout as a prop now, so there is no wrapper to dissolve.
+ */
 function PendingBar({
   count,
   affected,
@@ -725,13 +748,15 @@ function PendingBar({
   onReview: () => void;
 }) {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface px-4 py-3 shadow-lg">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0 text-sm">
-          <p className="font-medium text-text">
+    <StickyActionBar
+      below="wrap"
+      summaryOnMobile
+      summary={
+        <>
+          <span className="block font-medium text-text">
             {count} change{count === 1 ? '' : 's'} pending · nothing has been saved
-          </p>
-          <p className="mt-0.5 text-text-muted">
+          </span>
+          <span className="mt-0.5 block">
             {affected.dates.length === 0
               ? 'No generated report is affected yet.'
               : `${affected.dates.length} report${
@@ -742,28 +767,27 @@ function PendingBar({
                   affected.sharedDates.length === 1 ? 'has' : 'have'
                 } already been shared with the dealer.`
               : ''}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          {canUndo ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
-              onClick={onUndo}
-            >
-              Undo
-            </Button>
-          ) : null}
-          <Button variant="secondary" size="sm" onClick={onDiscard}>
-            Discard all
-          </Button>
-          <Button size="sm" onClick={onReview}>
-            Review &amp; apply
-          </Button>
-        </div>
-      </div>
-    </div>
+          </span>
+        </>
+      }
+    >
+      {canUndo ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
+          onClick={onUndo}
+        >
+          Undo
+        </Button>
+      ) : null}
+      <Button variant="secondary" size="sm" onClick={onDiscard}>
+        Discard all
+      </Button>
+      <Button size="sm" onClick={onReview}>
+        Review &amp; apply
+      </Button>
+    </StickyActionBar>
   );
 }
 
@@ -800,23 +824,63 @@ function CorrectionHistory({ dealerId }: { dealerId: string }) {
             Nothing has been corrected by hand for this dealer.
           </p>
         ) : (
-          <ul className="mt-2 grid gap-1 text-xs text-text-muted">
-            {rows.map((c) => (
-              <li key={c.id} className="flex flex-wrap items-baseline gap-x-2">
-                <span className="font-medium text-text">{formatYmd(c.businessDate)}</span>
-                <span className="font-mono">{c.code}</span>
-                <span>{c.rowLabel}</span>
-                <span>{c.field === '*' ? (c.kind === 'ADDED_ROW' ? 'row added' : 'row left out') : c.field}</span>
-                {c.kind === 'FIELD' ? (
-                  <span className="tabular-nums">
-                    {c.portalValue ?? '—'} → {c.value ?? '—'}
+          <>
+            {/* Below md: one card per correction. As a bare 12px wrap-list at
+                296px each entry ran to four or five lines with nothing between
+                them, so consecutive corrections read as one ribbon — and this is
+                what gets opened when a dealer disputes a month. */}
+            <MobileCardList
+              className="mt-2"
+              cards={rows.map((c) => ({
+                key: c.id,
+                primary: (
+                  <span className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="font-medium text-text">{formatYmd(c.businessDate)}</span>
+                    <span className="font-mono text-xs text-text-muted">{c.code}</span>
                   </span>
-                ) : null}
-                <span className="text-text-subtle">· {c.reason}</span>
-                <span className="text-text-subtle">· {formatDateTime(c.at)}</span>
-              </li>
-            ))}
-          </ul>
+                ),
+                primaryRight:
+                  c.kind === 'FIELD' ? (
+                    <span className="text-sm tabular-nums text-text">
+                      {c.portalValue ?? '—'} → {c.value ?? '—'}
+                    </span>
+                  ) : undefined,
+                primaryRightWidth: 'clamp' as const,
+                secondary: (
+                  <span>
+                    {c.rowLabel} ·{' '}
+                    {c.field === '*'
+                      ? c.kind === 'ADDED_ROW'
+                        ? 'row added'
+                        : 'row left out'
+                      : c.field}
+                  </span>
+                ),
+                meta: (
+                  <span className="block break-words">
+                    {c.reason} · {formatDateTime(c.at)}
+                  </span>
+                ),
+              }))}
+            />
+            <ul className="mt-2 hidden gap-1 text-xs text-text-muted md:grid">
+              {rows.map((c) => (
+                <li key={c.id} className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-medium text-text">{formatYmd(c.businessDate)}</span>
+                  <span className="font-mono">{c.code}</span>
+                  <span>{c.rowLabel}</span>
+                  <span>{c.field === '*' ? (c.kind === 'ADDED_ROW' ? 'row added' : 'row left out') : c.field}</span>
+                  {c.kind === 'FIELD' ? (
+                    <span className="tabular-nums">
+                      {c.portalValue ?? '—'} → {c.value ?? '—'}
+                    </span>
+                  ) : null}
+                  <span className="text-text-subtle">· {c.reason}</span>
+                  <span className="text-text-subtle">· {formatDateTime(c.at)}</span>
+                </li>
+              ))}
+            </ul>
+          </>
         )
       ) : null}
     </div>

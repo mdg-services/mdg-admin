@@ -3,14 +3,17 @@ import * as React from 'react';
 import type { FieldErrors, Path, UseFormReturn } from 'react-hook-form';
 
 import {
+  ActionRow,
   Button,
   Card,
   CardContent,
   CardHeader,
   CardSubtitle,
   CardTitle,
+  ConfirmDialog,
   FieldError,
   Input,
+  KeyValueList,
   Label,
   Skeleton,
   useToast,
@@ -114,6 +117,7 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
 }: PortalCredentialsCardProps<TValues>) {
   const toast = useToast();
   const [editing, setEditing] = React.useState(false);
+  const [confirmingClear, setConfirmingClear] = React.useState(false);
 
   // `TValues extends BaseCredentialValues` guarantees both keys exist, but TS
   // cannot prove that to `Path<TValues>`, so the two names are cast once here
@@ -140,14 +144,14 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
     }
   });
 
+  /**
+   * Gated by `ConfirmDialog`, not `window.confirm`. Inside the Expo WebView the
+   * native prompt is only answered if the host implements `onJsConfirm`; where
+   * it does not, `confirm()` returns false straight away and Clear reads as a
+   * dead button — on the control that stops a service running.
+   */
   async function handleClear() {
-    if (
-      !window.confirm(
-        `Clear ${portal} credentials? The service will stop running until new credentials are set.`,
-      )
-    ) {
-      return;
-    }
+    setConfirmingClear(false);
     try {
       await onClear();
       toast.success(`${portal} credentials cleared`);
@@ -216,7 +220,11 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
               <FieldError message={errors.password?.message} />
             </div>
             {extraFields}
-            <div className="flex items-center gap-2">
+            {/* `row`, not the default `stack`: "Save credentials" + "Cancel" is
+                ~233px against the ~294px a card offers at 360px, so the row
+                fits as it is and stacking would only cost a line. Both buttons
+                already carry `Button`'s 44px floor below md. */}
+            <ActionRow below="row" align="start">
               <Button type="submit" loading={form.formState.isSubmitting || saving}>
                 Save credentials
               </Button>
@@ -234,30 +242,41 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
                   Cancel
                 </Button>
               ) : null}
-            </div>
+            </ActionRow>
           </form>
         ) : (
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
+          // Stacked below md so the summary gets the full card and the two
+          // buttons sit under it; at md every class restores the wrapping row
+          // this has always been.
+          <div className="flex flex-col items-stretch gap-3 md:flex-row md:flex-wrap md:items-start md:justify-between">
+            {/* min-w-0: a flex item defaults to `min-width: auto`, so a portal
+                username like MDGSERVICES15E@indianoil.in — which CSS will not
+                break at `@` or `.` — refused to shrink and forced this column
+                past the card. `main` is `overflow-x-hidden`, so the tail was
+                cut off rather than scrollable. */}
+            <div className="min-w-0">
               <p className="flex items-center gap-2 text-sm font-medium text-text">
                 <CheckCircle2
                   width={16}
                   height={16}
                   strokeWidth={1.75}
-                  className="text-green-600"
+                  className="shrink-0 text-green-600"
                 />
                 {portal} credentials set
               </p>
-              <dl className="mt-2 grid grid-cols-1 gap-1 text-sm">
-                {details.map((d) => (
-                  <div key={d.label} className="grid grid-cols-[7rem_1fr] gap-3">
-                    <dt className="text-text-muted">{d.label}</dt>
-                    <dd className={d.mono ? 'font-mono text-text' : 'text-text'}>
-                      {d.value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+              {/* `KeyValueList` rather than a `grid-cols-[7rem_1fr]` of its
+                  own: below md the label sits above the value and the value
+                  gets the whole card, and a `mono` value is `break-all`. */}
+              <KeyValueList
+                className="mt-2 select-text"
+                labelWidth="7rem"
+                items={details.map((d) => ({
+                  key: d.label,
+                  label: d.label,
+                  value: d.value,
+                  mono: d.mono,
+                }))}
+              />
               <div className="mt-3">
                 <RevealCredentialsRow
                   portalLabel={portal}
@@ -267,7 +286,7 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <Button
                 variant="secondary"
                 size="sm"
@@ -281,7 +300,7 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleClear}
+                onClick={() => setConfirmingClear(true)}
                 loading={clearing}
                 className="text-danger hover:bg-danger-soft"
               >
@@ -291,6 +310,17 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
           </div>
         )}
       </CardContent>
+
+      <ConfirmDialog
+        open={confirmingClear}
+        onCancel={() => setConfirmingClear(false)}
+        onConfirm={() => void handleClear()}
+        title={`Clear the ${portal} credentials?`}
+        confirmLabel="Clear credentials"
+        confirmVariant="danger"
+        loading={clearing}
+        description={`The stored ${portal} ID and password are removed. Every service that signs in with them stops running until a new pair is saved.`}
+      />
     </Card>
   );
 }

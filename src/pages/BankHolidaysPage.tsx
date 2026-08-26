@@ -17,12 +17,15 @@ import {
   CardContent,
   CardHeader,
   CardSubtitle,
+  Checkbox,
   Dialog,
   EmptyState,
+  IconButton,
   Input,
   Label,
   MobileCardList,
   Skeleton,
+  StickyActionBar,
   Table,
   TBody,
   TD,
@@ -128,6 +131,25 @@ export function BankHolidaysPage() {
     );
   }
 
+  /* Whether the local draft has drifted from what the server sent. Save used to
+     be the only clue that anything was unsaved, and on a phone it sits at the
+     top of a list 900-1800px long — so the admin edited names, scrolled away,
+     and had no way to tell. Both arrays are date-sorted (the server sends them
+     that way and `addRow` re-sorts), so a positional compare is enough. */
+  const dirty = React.useMemo(() => {
+    const saved = monthQ.data?.rows ?? [];
+    if (saved.length !== rows.length) return true;
+    return rows.some((r, i) => {
+      const was = saved[i];
+      return (
+        !was ||
+        was.date !== r.date ||
+        was.name !== r.name ||
+        was.enabled !== r.enabled
+      );
+    });
+  }, [rows, monthQ.data]);
+
   async function save() {
     // An enabled date with no name would silently vanish server-side — block it.
     if (rows.some((r) => r.enabled && !r.name.trim())) {
@@ -161,7 +183,11 @@ export function BankHolidaysPage() {
         title="Bank holidays"
         subtitle="Confirm the bank & national holidays the Credit & DOD engine treats as non-working days."
         actions={
+          // Below md this moves to the StickyActionBar at the foot of the page;
+          // `hidden` beats `Button`'s own `inline-flex` (Tailwind emits
+          // `.hidden` last), and `md:inline-flex` puts it back at md.
           <Button
+            className="hidden md:inline-flex"
             onClick={save}
             loading={confirm.isPending}
             disabled={monthQ.isLoading || !monthQ.data}
@@ -184,36 +210,49 @@ export function BankHolidaysPage() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
+        {/* `action`, not a second child. As a child, "Add holiday" was one more
+            item in a `justify-between` row that cannot wrap: 240px of month nav
+            + 120px of button needs 372px, the header has 296px at 360px, and
+            `main` is `overflow-x-hidden` — so the button was not scrolled off,
+            it was CUT off. And once a month has any rows the empty-state CTA
+            stops rendering, so that button was the only way to add a state or
+            bank holiday from a phone. */}
+        <CardHeader
+          action={
             <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setAddOpen(true)}
+              leftIcon={<Plus width={14} height={14} strokeWidth={1.75} />}
+            >
+              Add holiday
+            </Button>
+          }
+        >
+          <div className="flex items-center gap-2">
+            <IconButton
               variant="secondary"
               size="sm"
               onClick={() => shiftMonth(-1)}
               aria-label="Previous month"
             >
               <ChevronLeft width={16} height={16} strokeWidth={1.75} />
-            </Button>
-            <div className="min-w-[9rem] text-center text-base font-semibold text-text">
+            </IconButton>
+            {/* The 9rem floor is a desktop nicety — it stops the label jumping
+                between "May 2026" and "September 2026". Below md it is 144px
+                the two arrows would rather have. */}
+            <div className="min-w-0 flex-1 text-center text-base font-semibold text-text md:min-w-[9rem] md:flex-initial">
               {monthLabel}
             </div>
-            <Button
+            <IconButton
               variant="secondary"
               size="sm"
               onClick={() => shiftMonth(1)}
               aria-label="Next month"
             >
               <ChevronRight width={16} height={16} strokeWidth={1.75} />
-            </Button>
+            </IconButton>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setAddOpen(true)}
-            leftIcon={<Plus width={14} height={14} strokeWidth={1.75} />}
-          >
-            Add holiday
-          </Button>
         </CardHeader>
 
         <CardContent className="p-0">
@@ -329,20 +368,28 @@ export function BankHolidaysPage() {
                 className="p-3"
                 cards={rows.map((r) => ({
                   key: r.date,
+                  // `muted` is the phone counterpart of the desktop row's
+                  // `opacity-60`: without it a date that will NOT count read
+                  // exactly like one that will, apart from a checkbox state.
+                  tone: r.enabled ? 'default' : 'muted',
                   primary: (
                     <span className="font-medium text-text">
                       {formatHolidayDate(r.date, r.weekday)}
                     </span>
                   ),
+                  // `clamp`, because the default right rail is `shrink-0`: two
+                  // badges at max-content took ~215px of a 280px card and
+                  // squeezed "Sat, 15 Aug 2026" onto four lines.
+                  primaryRightWidth: 'clamp',
                   primaryRight: (
-                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    <>
                       <Badge intent={r.source === 'library' ? 'info' : 'neutral'}>
                         {r.source === 'library' ? 'Suggested' : 'Manual'}
                       </Badge>
                       {r.source === 'library' && !r.persisted ? (
                         <Badge intent="warning">Needs confirmation</Badge>
                       ) : null}
-                    </div>
+                    </>
                   ),
                   secondary: (
                     <Input
@@ -355,19 +402,21 @@ export function BankHolidaysPage() {
                   meta: r.type ? <span>{r.type}</span> : undefined,
                   actions: (
                     <div className="flex items-center justify-between gap-2">
-                      <label className="flex items-center gap-2 text-sm text-text">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border-strong accent-brand"
-                          checked={r.enabled}
-                          onChange={() => toggleEnabled(r.date)}
-                        />
-                        Counts as holiday
-                      </label>
+                      {/* This tick is what decides whether the date pushes a
+                          Credit & DOD due date. It was a 16px box in a 20px
+                          line; the whole label is now a 44px target. */}
+                      <Checkbox
+                        label="Counts as holiday"
+                        labelClassName="min-w-0 flex-1"
+                        checked={r.enabled}
+                        onChange={() => toggleEnabled(r.date)}
+                        aria-label={`Enable ${r.name || r.date}`}
+                      />
                       {r.source === 'manual' ? (
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="shrink-0"
                           onClick={() => removeRow(r.date)}
                           leftIcon={<Trash2 width={14} height={14} strokeWidth={1.75} />}
                         >
@@ -386,6 +435,24 @@ export function BankHolidaysPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Below md the Save that lives in the PageHeader is 900-1800px above the
+          edits it commits. The tab bar is an in-flow flex child, so a sticky
+          bar inside `main` already rests above it — no z-index, no 56px
+          arithmetic — and `StickyActionBar` carries its own bottom inset. */}
+      <StickyActionBar
+        visibility="below-md"
+        summary={dirty ? 'Unsaved changes' : 'No unsaved changes'}
+        summaryOnMobile
+      >
+        <Button
+          onClick={save}
+          loading={confirm.isPending}
+          disabled={monthQ.isLoading || !monthQ.data}
+        >
+          Save {monthLabel}
+        </Button>
+      </StickyActionBar>
 
       <AddHolidayDialog
         open={addOpen}

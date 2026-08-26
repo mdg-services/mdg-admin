@@ -244,13 +244,28 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
       <div className="grid gap-4">
         {/* Workers */}
         <div>
-          <Label>Warriors</Label>
+          {/* The count sits ABOVE the list, not under it. Below md the list is
+              a tall scroller, so a count printed after it is off the bottom of
+              the box the moment you start scrolling through a 25-warrior
+              roster — which is exactly when you want to know how many are
+              ticked. */}
+          <div className="mb-1 flex items-baseline justify-between gap-2">
+            <Label className="mb-0">Warriors</Label>
+            <span className="shrink-0 text-xs text-text-subtle">
+              {workerCount} selected
+            </span>
+          </div>
           {activeWorkers.length === 0 ? (
             <p className="text-sm text-text-muted">
               No active warriors. Add a warrior to the roster first.
             </p>
           ) : (
-            <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto rounded-sm border border-border p-2 sm:grid-cols-2">
+            // `max-h-40` is 160px — with 44px rows that is 3.5 warriors visible
+            // at a time on a 10-25 roster, and this is the first mandatory step
+            // of the whole award. 45dvh gives ~8-9. `overscroll-contain` stops a
+            // flick at either end from chaining into the Dialog body behind it,
+            // which read as the sheet jumping under the finger.
+            <div className="grid max-h-[45dvh] grid-cols-1 gap-1 overflow-y-auto overscroll-contain rounded-sm border border-border p-2 sm:grid-cols-2 md:max-h-40">
               {activeWorkers.map((w) => (
                 <label
                   key={w.id}
@@ -272,9 +287,6 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
               ))}
             </div>
           )}
-          <p className="mt-1 text-xs text-text-subtle">
-            {workerCount} selected
-          </p>
         </div>
 
         {/* Works */}
@@ -335,11 +347,16 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
 
                     {isPerUnit ? (
                       <div className="flex items-center gap-1">
+                        {/* No width class here. `cn` is clsx, not
+                            tailwind-merge, and `.w-full` is emitted after
+                            `.w-28`, so the `w-28` that used to sit here never
+                            won a single pixel — it only told the next reader
+                            something untrue. The field flexes beside its unit
+                            label, which is what it was doing anyway. */}
                         <Input
                           type="number"
                           min={0}
                           step="any"
-                          className="w-28"
                           placeholder={isRupee ? '₹ amount' : 'Qty'}
                           value={isRupee ? r.amountRupees : r.quantity}
                           onChange={(e) =>

@@ -5,6 +5,7 @@ import {
   Button,
   Callout,
   Dialog,
+  IconButton,
   Label,
   Textarea,
   useToast,
@@ -215,18 +216,21 @@ export function UploadDayPhotoDialog({
                 />
                 <span className="truncate">{file.name}</span>
               </span>
-              <button
-                type="button"
+              {/* The only way to swap a wrongly-picked photograph without
+                  cancelling the whole dialog, and it sat at ~30×30 next to a
+                  truncated filename — a mis-tap landed on nothing. */}
+              <IconButton
+                size="sm"
                 onClick={() => {
                   setFile(null);
                   if (fileInputRef.current) fileInputRef.current.value = '';
                 }}
                 disabled={submitting}
                 aria-label="Remove photo"
-                className="rounded-sm p-2 text-text-muted hover:bg-surface-2 hover:text-text"
+                className="-mr-1 text-text-muted hover:text-text"
               >
                 <X width={14} height={14} strokeWidth={1.75} />
-              </button>
+              </IconButton>
             </div>
           ) : (
             <button

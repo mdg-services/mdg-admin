@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardSubtitle,
   CardTitle,
+  KeyValueList,
   Skeleton,
   StatusChip,
 } from '@/components/ui';
@@ -66,24 +67,36 @@ export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
             </div>
           </CardHeader>
           <CardContent>
-            <dl className="grid grid-cols-1 gap-2 text-sm">
-              <Row
-                label="Code"
-                value={
-                  dealer.code ? (
-                    <span className="font-mono">{dealer.code}</span>
-                  ) : (
-                    'Not assigned yet'
-                  )
-                }
-              />
-              <Row label="Phone" value={dealer.phone ?? 'Not collected yet'} />
-              <Row
-                label="Status"
-                value={<StatusChip kind="dealer" value={dealer.status} />}
-              />
-              <Row label="Onboarded" value={formatDate(dealer.onboardingDate)} />
-            </dl>
+            {/* `select-text` because the shell's long-press allow-list is
+                matched with `closest()`: without it a dealer code cannot be
+                selected or copied on a phone at all (`#root` is
+                `user-select: none`). */}
+            <KeyValueList
+              className="select-text"
+              items={[
+                {
+                  key: 'code',
+                  label: 'Code',
+                  value: dealer.code ?? 'Not assigned yet',
+                  mono: !!dealer.code,
+                },
+                {
+                  key: 'phone',
+                  label: 'Phone',
+                  value: dealer.phone ?? 'Not collected yet',
+                },
+                {
+                  key: 'status',
+                  label: 'Status',
+                  value: <StatusChip kind="dealer" value={dealer.status} />,
+                },
+                {
+                  key: 'onboarded',
+                  label: 'Onboarded',
+                  value: formatDate(dealer.onboardingDate),
+                },
+              ]}
+            />
           </CardContent>
         </Card>
 
@@ -95,10 +108,27 @@ export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
             </div>
           </CardHeader>
           <CardContent>
-            <dl className="grid grid-cols-1 gap-2 text-sm">
-              <Row label="GST" value={dealer.gst ?? 'Not collected yet'} />
-              <Row label="PAN" value={dealer.pan ?? 'Not collected yet'} />
-            </dl>
+            {/* Both are transcribed verbatim into third-party portals, so they
+                are `mono` (which also brings `break-all` — a 15-character GSTIN
+                has no break opportunity of its own and would otherwise push the
+                row past the card, where `main`'s `overflow-x-hidden` cuts it). */}
+            <KeyValueList
+              className="select-text"
+              items={[
+                {
+                  key: 'gst',
+                  label: 'GST',
+                  value: dealer.gst ?? 'Not collected yet',
+                  mono: !!dealer.gst,
+                },
+                {
+                  key: 'pan',
+                  label: 'PAN',
+                  value: dealer.pan ?? 'Not collected yet',
+                  mono: !!dealer.pan,
+                },
+              ]}
+            />
           </CardContent>
         </Card>
 
@@ -110,17 +140,25 @@ export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
             </div>
           </CardHeader>
           <CardContent>
-            <dl className="grid grid-cols-1 gap-2 text-sm">
-              <Row
-                label="Received"
-                value={
-                  dealer.paymentReceivedAt
+            <KeyValueList
+              items={[
+                {
+                  key: 'received',
+                  label: 'Received',
+                  value: dealer.paymentReceivedAt
                     ? formatDateTime(dealer.paymentReceivedAt)
-                    : 'Not yet'
-                }
-              />
-              <Row label="Note" value={dealer.paymentNote ?? 'No note'} />
-            </dl>
+                    : 'Not yet',
+                },
+                {
+                  key: 'note',
+                  label: 'Note',
+                  value: dealer.paymentNote ?? 'No note',
+                  // A free-text note is the one field here that runs to a
+                  // sentence; `block` gives it the full width at every size.
+                  block: true,
+                },
+              ]}
+            />
           </CardContent>
         </Card>
 
@@ -168,15 +206,6 @@ export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
   );
 }
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[140px_1fr] gap-3">
-      <dt className="text-text-muted">{label}</dt>
-      <dd className="text-text">{value}</dd>
-    </div>
-  );
-}
-
 function AuditAccordion({ dealerId }: { dealerId: string }) {
   const [open, setOpen] = React.useState(false);
   const { data, isLoading } = useDealerAuditQuery(open ? dealerId : undefined, {
@@ -220,17 +249,24 @@ function AuditAccordion({ dealerId }: { dealerId: string }) {
           ) : data && data.items.length > 0 ? (
             <ul className="divide-y divide-border">
               {data.items.map((log) => (
-                <li
-                  key={log.id}
-                  className="flex items-start justify-between gap-3 py-2 text-sm"
-                >
-                  <div>
-                    <p className="font-medium text-text">{log.action}</p>
-                    <p className="text-xs text-text-muted">by {log.actorId}</p>
+                // The actor is a raw 24-character ObjectId — hex, so CSS finds
+                // no break opportunity in it at all. Beside a timestamp in a
+                // ~262px row it *is* the row's min-content, and it pushed the
+                // stamp into three lines of two characters. Below md the stamp
+                // takes its own line and the id is allowed to break; at md the
+                // two-column row is exactly what it was.
+                <li key={log.id} className="py-2 text-sm">
+                  <div className="flex flex-col gap-0.5 md:flex-row md:items-start md:justify-between md:gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-text">{log.action}</p>
+                      <p className="break-all text-xs text-text-muted">
+                        by {log.actorId}
+                      </p>
+                    </div>
+                    <span className="shrink-0 whitespace-nowrap text-xs text-text-muted">
+                      {formatDateTime(log.at)}
+                    </span>
                   </div>
-                  <span className="text-xs text-text-muted">
-                    {formatDateTime(log.at)}
-                  </span>
                 </li>
               ))}
             </ul>

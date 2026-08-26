@@ -9,6 +9,7 @@ import {
   CardContent,
   Dialog,
   EmptyState,
+  FilterBar,
   Input,
   MobileCardList,
   Pagination,
@@ -97,6 +98,9 @@ function roleLabel(role?: string | null): string {
   return role;
 }
 
+/** The five filter keys this page owns, so counting and clearing stay in step. */
+const FILTER_KEYS = ['actorId', 'entity', 'action', 'from', 'to'] as const;
+
 export function ActivityPage() {
   const [search, setSearch] = useSearchParams();
   const [selected, setSelected] = React.useState<AuditRow | null>(null);
@@ -135,6 +139,86 @@ export function ActivityPage() {
     setSearch(next, { replace: true });
   }
 
+  function clearFilters() {
+    const next = new URLSearchParams(search);
+    for (const k of FILTER_KEYS) next.delete(k);
+    next.delete('page');
+    setSearch(next, { replace: true });
+  }
+
+  const activeFilterCount = FILTER_KEYS.filter((k) => search.get(k)).length;
+
+  /* One copy of the controls, rendered into whichever shell is mounted. */
+  const filterFields = (
+    <>
+      <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+        Actor
+        <Select
+          value={actorId}
+          onChange={(e) => setFilter('actorId', e.target.value)}
+        >
+          <option value="">All actors</option>
+          {(actorsQ.data ?? []).map((a) => (
+            <option key={a.actorId} value={a.actorId}>
+              {(a.actorName || a.actorEmail || a.actorId) +
+                (a.count ? ` (${a.count})` : '')}
+            </option>
+          ))}
+        </Select>
+      </label>
+
+      <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+        Entity
+        <Select
+          value={entity}
+          onChange={(e) => setFilter('entity', e.target.value)}
+        >
+          <option value="">All entities</option>
+          {AUDIT_ENTITIES.map((en) => (
+            <option key={en} value={en}>
+              {en}
+            </option>
+          ))}
+        </Select>
+      </label>
+
+      <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+        Action
+        <Select
+          value={action}
+          onChange={(e) => setFilter('action', e.target.value)}
+        >
+          <option value="">All actions</option>
+          {[...AUDIT_ACTIONS].sort().map((a) => (
+            <option key={a} value={a}>
+              {humanize(a)}
+            </option>
+          ))}
+        </Select>
+      </label>
+
+      <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+        From
+        <Input
+          type="date"
+          value={fromDate}
+          max={toDate || undefined}
+          onChange={(e) => setFilter('from', e.target.value)}
+        />
+      </label>
+
+      <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+        To
+        <Input
+          type="date"
+          value={toDate}
+          min={fromDate || undefined}
+          onChange={(e) => setFilter('to', e.target.value)}
+        />
+      </label>
+    </>
+  );
+
   return (
     <div>
       <PageHeader
@@ -142,75 +226,21 @@ export function ActivityPage() {
         subtitle="Audit trail of every action taken across the portal."
       />
 
-      <Card className="mb-4">
-        <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
-            Actor
-            <Select
-              value={actorId}
-              onChange={(e) => setFilter('actorId', e.target.value)}
-            >
-              <option value="">All actors</option>
-              {(actorsQ.data ?? []).map((a) => (
-                <option key={a.actorId} value={a.actorId}>
-                  {(a.actorName || a.actorEmail || a.actorId) +
-                    (a.count ? ` (${a.count})` : '')}
-                </option>
-              ))}
-            </Select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
-            Entity
-            <Select
-              value={entity}
-              onChange={(e) => setFilter('entity', e.target.value)}
-            >
-              <option value="">All entities</option>
-              {AUDIT_ENTITIES.map((en) => (
-                <option key={en} value={en}>
-                  {en}
-                </option>
-              ))}
-            </Select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
-            Action
-            <Select
-              value={action}
-              onChange={(e) => setFilter('action', e.target.value)}
-            >
-              <option value="">All actions</option>
-              {[...AUDIT_ACTIONS].sort().map((a) => (
-                <option key={a} value={a}>
-                  {humanize(a)}
-                </option>
-              ))}
-            </Select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
-            From
-            <Input
-              type="date"
-              value={fromDate}
-              max={toDate || undefined}
-              onChange={(e) => setFilter('from', e.target.value)}
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
-            To
-            <Input
-              type="date"
-              value={toDate}
-              min={fromDate || undefined}
-              onChange={(e) => setFilter('to', e.target.value)}
-            />
-          </label>
-        </CardContent>
-      </Card>
+      {/* Five stacked label+control pairs cost ~360px of a 640px screen before
+          one audit row is visible, so below md they collapse into `FilterBar`'s
+          one 44px trigger and a Sheet. `contentClassName` carries this page's
+          own `sm:2 / lg:5` ladder verbatim into the md+ card — `columnsAtMd` is
+          a single count, and neither 2 nor 5 reproduces it without regressing a
+          real width. Exactly one branch mounts; the filter state lives in the
+          URL, which is what makes that safe. */}
+      <FilterBar
+        className="mb-4"
+        contentClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"
+        activeCount={activeFilterCount}
+        onClear={clearFilters}
+      >
+        {filterFields}
+      </FilterBar>
 
       <Card>
         <CardContent className="p-0">
@@ -415,17 +445,33 @@ function JsonBlock({ label, value }: { label: string; value: unknown }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs font-medium text-text-subtle">{label}</span>
-      <pre className="max-h-64 overflow-auto rounded-md border border-border bg-surface-2 p-3 text-xs text-text">
+      {/* `.scroll-pane` (overscroll-behavior: contain): this is a scroller
+          nested inside the Dialog's own scrolling body, and without it a flick
+          that reached the end of the payload chained straight into the sheet
+          and dragged it off the screen. `whitespace-pre-wrap break-all` so a
+          long S3 key or id wraps instead of turning a 296px box into a
+          two-axis scroller with no visible bounds. */}
+      <pre className="scroll-pane max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border bg-surface-2 p-3 text-xs text-text md:whitespace-pre md:break-normal">
         {JSON.stringify(value, null, 2)}
       </pre>
     </div>
   );
 }
 
+/**
+ * The placeholder has to promise the shape that is coming. Below md that is a
+ * card stack, not a grid: 24 bars in two columns read as a two-column table
+ * this breakpoint never renders.
+ */
 function ListSkeleton() {
   return (
     <div className="p-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
+      <div className="grid gap-2 md:hidden">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-20" />
+        ))}
+      </div>
+      <div className="hidden gap-3 md:grid md:grid-cols-6">
         {Array.from({ length: 24 }).map((_, i) => (
           <Skeleton key={i} className="h-8" />
         ))}

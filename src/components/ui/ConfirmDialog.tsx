@@ -32,6 +32,13 @@ export interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   confirmVariant?: 'primary' | 'danger';
+  /**
+   * Panel width at md+, passed to `Dialog`. `'sm'` is right for a one-sentence
+   * "are you sure?"; pass `'md'` when you are replacing a hand-rolled confirm
+   * that was already `max-w-lg`, so the migration is a no-op at ≥ md — three
+   * dialogs in this app narrowed by adopting the primitive before this existed.
+   */
+  size?: 'sm' | 'md' | 'lg';
   /** Spinner on the confirm button; both buttons go inert while it is true. */
   loading?: boolean;
 }
@@ -45,6 +52,7 @@ export function ConfirmDialog({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   confirmVariant = 'primary',
+  size = 'sm',
   loading = false,
 }: ConfirmDialogProps) {
   return (
@@ -55,7 +63,7 @@ export function ConfirmDialog({
       // settles; the caller closes it from its own success/failure handler.
       onClose={loading ? () => {} : onCancel}
       title={title}
-      size="sm"
+      size={size}
       footer={
         // Dialog's own footer stacks these full-width below md and lays them
         // out as the right-aligned row it has always been at md, so there is

@@ -45,8 +45,44 @@ export interface IrasEditGridProps {
   readOnly: boolean;
 }
 
+/** One of the portal's columns, as this grid needs it. */
+interface ColumnDef {
+  field: string;
+  headerName: string;
+}
+
 /**
- * One report's rows, editable like a spreadsheet.
+ * Which of the two shapes a piece of the grid is being drawn in.
+ *
+ * `'grid'` is the spreadsheet at `≥ md`; `'card'` is the phone's stacked form.
+ * It is a prop rather than a media query because BOTH trees are in the document
+ * and CSS picks the one that shows — so every part has to know which of the two
+ * it is, and neither may reach into the other with a `md:` class.
+ */
+type CellShape = 'grid' | 'card';
+
+/**
+ * One row of the report, in whichever shape is being drawn.
+ *
+ * The three kinds of row — a portal row, a hand-added row from an earlier
+ * commit, and one added in this session — used to have their markup written out
+ * three times inside the table body. Adding a second shape would have made that
+ * six. So each row is reduced to two render functions, and the table and the
+ * card list are then two thin loops over the same list.
+ */
+interface GridRowModel {
+  key: string;
+  /** Tint and strike for the whole row / card. */
+  toneClassName?: string;
+  /** Applied to every value cell — the strike-through on an excluded row. */
+  valueClassName?: string;
+  /** The row's identity: label, product, badges, and its actions menu. */
+  gutter: (shape: CellShape) => React.ReactNode;
+  cell: (col: ColumnDef, shape: CellShape) => React.ReactNode;
+}
+
+/**
+ * One report's rows, editable like a spreadsheet — and, on a phone, like a form.
  *
  * Interaction model, and why it is not quite Excel's: a single click opens the
  * cell's editor, rather than selecting it and waiting for a second click or a
@@ -54,6 +90,22 @@ export interface IrasEditGridProps {
  * spreadsheet power user, so a mode they can be in without knowing it — selected
  * but not editing — costs more than it buys. Tab, Enter and the arrow keys still
  * commit and move, so a row of figures can be typed without touching the mouse.
+ *
+ * WHY THERE ARE TWO SHAPES
+ * ------------------------
+ * A table cannot work below `md` at any column count. The row-identity gutter
+ * alone is `w-48` (192px) of a 296px card, and every data cell is `min-w-[7rem]`
+ * plus `px-3`, i.e. ≥136px — so even the default six-column receipts view is
+ * about 1,008px inside 296px, and "show all portal columns" is ~4,500px. `main`
+ * is `overflow-x-hidden`, so that width is not scrolled, it is CUT OFF. And the
+ * identity column scrolls away with everything else, which is exactly the
+ * context that makes a correction safe.
+ *
+ * So below md each row becomes a card: the gutter is its heading and the row's
+ * fields stack under it, label over input, at the full width of the card. The
+ * editors themselves are the same `Cell` and `NewRowCell` in both shapes, so the
+ * pending-change machinery, validation, hints and identity warnings all come
+ * along and cannot drift apart.
  *
  * Every column comes from the portal's own metadata, so a report the pipeline
  * learns to collect tomorrow renders here with no code change. What each column
@@ -86,7 +138,7 @@ export function IrasEditGrid({
   const pendingAdded = pending.state.addedRows.filter((a) => a.code === code);
 
   /** Columns to show: the portal's own, in its order, filtered by the policy. */
-  const columns = React.useMemo(() => {
+  const columns = React.useMemo<ColumnDef[]>(() => {
     const declared = dataset?.columns ?? [];
     const fromPolicy = irasFieldPolicies(code).map((f) => ({
       field: f.field,
@@ -158,7 +210,7 @@ export function IrasEditGrid({
   const totalRows = portalRows.length + committedAdded.length + pendingAdded.length;
   if (totalRows === 0) {
     return (
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-border px-3 py-4 text-sm text-text-muted">
+      <div className="flex flex-col gap-3 rounded-md border border-dashed border-border px-3 py-4 text-sm text-text-muted md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-2">
         <span>The portal returned no rows for this report.</span>
         {readOnly ? null : (
           <AddRowButtons
@@ -173,162 +225,164 @@ export function IrasEditGrid({
     );
   }
 
+  const rowModels: GridRowModel[] = [
+    ...portalRows.map((row, index): GridRowModel => {
+      const rowKey = keys[index]!;
+      const excluded =
+        (excludedByCommit(rowKey) && !pending.isRestorePending({ code, rowKey })) ||
+        pending.isExcludePending({ code, rowKey });
+      const product = productFor(row);
+      return {
+        key: rowKey,
+        toneClassName: excluded ? 'opacity-60' : undefined,
+        valueClassName: excluded ? 'line-through' : undefined,
+        gutter: (shape) => (
+          <RowGutter
+            shape={shape}
+            label={irasRowLabel(code, row)}
+            product={product}
+            excluded={excluded}
+            corrections={mine.filter((c) => c.rowKey === rowKey).length}
+            readOnly={readOnly}
+            onExclude={() => pending.toggleExclude({ code, rowKey })}
+            onRestore={() => pending.toggleRestore({ code, rowKey })}
+            onRevertRow={() => pending.revertRow({ code, rowKey })}
+            canRestore={excludedByCommit(rowKey)}
+            dayVerdict={code === 'REC' ? recRowDayVerdict(row, window) : undefined}
+          />
+        ),
+        cell: (col, shape) => (
+          <Cell
+            shape={shape}
+            code={code}
+            rowKey={rowKey}
+            field={col.field}
+            portalValue={row[col.field] ?? ''}
+            committed={committedCell(rowKey, col.field)}
+            pending={pending}
+            readOnly={readOnly || excluded}
+            previousReading={
+              code === 'TOT' && col.field === 'TOT_READING'
+                ? previousTotReadings[String(row.NOZZLE_NO ?? '').trim()]
+                : undefined
+            }
+          />
+        ),
+      };
+    }),
+
+    // Rows added by hand on an earlier commit.
+    ...committedAdded.map((c): GridRowModel => {
+      const dropping = pending.state.deleteAdded.some(
+        (t) => t.code === code && t.rowKey === c.rowKey,
+      );
+      return {
+        key: c.rowKey,
+        toneClassName: cn('bg-info-soft', dropping && 'line-through opacity-60'),
+        gutter: (shape) => (
+          <HandRowGutter
+            shape={shape}
+            label={c.rowLabel}
+            badge={<Badge intent="info">Added by hand</Badge>}
+            product={productFor(c.row ?? {})}
+            readOnly={readOnly}
+            actionLabel={dropping ? 'Keep this row' : 'Delete this row'}
+            onAction={() => pending.deleteCommittedAddedRow({ code, rowKey: c.rowKey })}
+          />
+        ),
+        cell: (col, shape) => (
+          <Cell
+            shape={shape}
+            code={code}
+            rowKey={c.rowKey}
+            field={col.field}
+            portalValue={c.row?.[col.field] ?? ''}
+            committed={undefined}
+            pending={pending}
+            readOnly={readOnly || dropping}
+          />
+        ),
+      };
+    }),
+
+    // Rows added in this session, not yet applied.
+    ...pendingAdded.map((a): GridRowModel => ({
+      key: a.localId,
+      toneClassName: 'bg-info-soft',
+      gutter: (shape) => (
+        <HandRowGutter
+          shape={shape}
+          label={irasRowLabel(code, a.row)}
+          badge={<Badge intent="info">New row</Badge>}
+          product={productFor(a.row)}
+          readOnly={false}
+          actionLabel="Remove"
+          onAction={() => pending.dropAddedRow(a.localId)}
+        />
+      ),
+      cell: (col, shape) => (
+        <NewRowCell
+          shape={shape}
+          code={code}
+          field={col.field}
+          value={a.row[col.field] ?? ''}
+          onChange={(v) => pending.editAddedRow(a.localId, col.field, v)}
+        />
+      ),
+    })),
+  ];
+
   return (
     <div className="flex flex-col gap-2">
-      {/* The grid scrolls inside its own box — never the page body. */}
-      <div className="overflow-x-auto rounded-md border border-border">
+      {/* Phone (< md): one card per row, the identity as its heading and the
+          fields stacked under it. See the note on this component for why a
+          table has no working size here. */}
+      <ul className="grid gap-3 md:hidden">
+        {rowModels.map((r) => (
+          <li
+            key={r.key}
+            className={cn('rounded-md border border-border bg-surface p-3', r.toneClassName)}
+          >
+            {r.gutter('card')}
+            <dl className="mt-3 grid gap-3">
+              {columns.map((col) => (
+                <div key={col.field} className="min-w-0">
+                  <dt className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium uppercase tracking-wide text-text-muted">
+                    <span className="break-all">{col.headerName}</span>
+                    <FieldPolicyMark code={code} field={col.field} shape="card" />
+                  </dt>
+                  <dd className={cn('min-w-0', r.valueClassName)}>{r.cell(col, 'card')}</dd>
+                </div>
+              ))}
+            </dl>
+          </li>
+        ))}
+      </ul>
+
+      {/* Desktop (≥ md): the spreadsheet, unchanged. It scrolls inside its own
+          box — never the page body. */}
+      <div className="hidden overflow-x-auto rounded-md border border-border md:block">
         <Table>
           <THead>
             <TRow>
               <TH className="w-48 whitespace-nowrap">Row</TH>
-              {columns.map((col) => {
-                const policy = irasFieldPolicy(code, col.field);
-                return (
-                  <TH key={col.field} className="whitespace-nowrap">
-                    <span className="flex items-center gap-1.5">
-                      {col.headerName}
-                      {policy.usedByReport ? (
-                        <span
-                          title="Used by the report."
-                          aria-label="Used by the report"
-                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
-                        />
-                      ) : policy.affectsReportNotes ? (
-                        <span
-                          title="No figure on the report is calculated from this, but it decides the notes printed at the bottom of the report."
-                          className="text-[10px] font-normal uppercase tracking-wide text-text-subtle"
-                        >
-                          notes only
-                        </span>
-                      ) : (
-                        <span
-                          title="No figure on the report is calculated from this."
-                          className="text-[10px] font-normal uppercase tracking-wide text-text-subtle"
-                        >
-                          not used
-                        </span>
-                      )}
-                    </span>
-                  </TH>
-                );
-              })}
+              {columns.map((col) => (
+                <TH key={col.field} className="whitespace-nowrap">
+                  <span className="flex items-center gap-1.5">
+                    {col.headerName}
+                    <FieldPolicyMark code={code} field={col.field} shape="grid" />
+                  </span>
+                </TH>
+              ))}
             </TRow>
           </THead>
           <TBody>
-            {portalRows.map((row, index) => {
-              const rowKey = keys[index]!;
-              const excluded =
-                (excludedByCommit(rowKey) && !pending.isRestorePending({ code, rowKey })) ||
-                pending.isExcludePending({ code, rowKey });
-              const product = productFor(row);
-              return (
-                <TRow key={rowKey} className={cn(excluded && 'opacity-60')}>
-                  <TD className="align-top">
-                    <RowGutter
-                      label={irasRowLabel(code, row)}
-                      product={product}
-                      excluded={excluded}
-                      corrections={mine.filter((c) => c.rowKey === rowKey).length}
-                      readOnly={readOnly}
-                      onExclude={() => pending.toggleExclude({ code, rowKey })}
-                      onRestore={() => pending.toggleRestore({ code, rowKey })}
-                      onRevertRow={() => pending.revertRow({ code, rowKey })}
-                      canRestore={excludedByCommit(rowKey)}
-                      dayVerdict={code === 'REC' ? recRowDayVerdict(row, window) : undefined}
-                    />
-                  </TD>
-                  {columns.map((col) => (
-                    <TD key={col.field} className={cn('align-top', excluded && 'line-through')}>
-                      <Cell
-                        code={code}
-                        rowKey={rowKey}
-                        field={col.field}
-                        portalValue={row[col.field] ?? ''}
-                        committed={committedCell(rowKey, col.field)}
-                        pending={pending}
-                        readOnly={readOnly || excluded}
-                        previousReading={
-                          code === 'TOT' && col.field === 'TOT_READING'
-                            ? previousTotReadings[String(row.NOZZLE_NO ?? '').trim()]
-                            : undefined
-                        }
-                      />
-                    </TD>
-                  ))}
-                </TRow>
-              );
-            })}
-
-            {/* Rows added by hand on an earlier commit. */}
-            {committedAdded.map((c) => {
-              const dropping = pending.state.deleteAdded.some(
-                (t) => t.code === code && t.rowKey === c.rowKey,
-              );
-              return (
-                <TRow
-                  key={c.rowKey}
-                  className={cn('bg-info-soft', dropping && 'line-through opacity-60')}
-                >
-                  <TD className="align-top">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs font-medium text-text">{c.rowLabel}</span>
-                      <Badge intent="info">Added by hand</Badge>
-                      <ProductTag product={productFor(c.row ?? {})} />
-                      {readOnly ? null : (
-                        <button
-                          type="button"
-                          className="text-left text-xs font-semibold text-brand underline"
-                          onClick={() => pending.deleteCommittedAddedRow({ code, rowKey: c.rowKey })}
-                        >
-                          {dropping ? 'Keep this row' : 'Delete this row'}
-                        </button>
-                      )}
-                    </div>
-                  </TD>
-                  {columns.map((col) => (
-                    <TD key={col.field} className="align-top">
-                      <Cell
-                        code={code}
-                        rowKey={c.rowKey}
-                        field={col.field}
-                        portalValue={c.row?.[col.field] ?? ''}
-                        committed={undefined}
-                        pending={pending}
-                        readOnly={readOnly || dropping}
-                      />
-                    </TD>
-                  ))}
-                </TRow>
-              );
-            })}
-
-            {/* Rows added in this session, not yet applied. */}
-            {pendingAdded.map((a) => (
-              <TRow key={a.localId} className="bg-info-soft">
-                <TD className="align-top">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs font-medium text-text">
-                      {irasRowLabel(code, a.row)}
-                    </span>
-                    <Badge intent="info">New row</Badge>
-                    <ProductTag product={productFor(a.row)} />
-                    <button
-                      type="button"
-                      className="text-left text-xs font-semibold text-brand underline"
-                      onClick={() => pending.dropAddedRow(a.localId)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </TD>
+            {rowModels.map((r) => (
+              <TRow key={r.key} className={r.toneClassName}>
+                <TD className="align-top">{r.gutter('grid')}</TD>
                 {columns.map((col) => (
-                  <TD key={col.field} className="align-top">
-                    <NewRowCell
-                      code={code}
-                      field={col.field}
-                      value={a.row[col.field] ?? ''}
-                      onChange={(v) => pending.editAddedRow(a.localId, col.field, v)}
-                    />
+                  <TD key={col.field} className={cn('align-top', r.valueClassName)}>
+                    {r.cell(col, 'grid')}
                   </TD>
                 ))}
               </TRow>
@@ -352,6 +406,86 @@ export function IrasEditGrid({
   );
 }
 
+/**
+ * The keyboard a phone should open for this cell.
+ *
+ * `undefined` — the ordinary text keyboard — for everything that is not a plain
+ * number, which is most of the identity and info columns: a PRODCODE is `HS`, an
+ * invoice number carries letters, and a decant stamp is `dd-mm-yyyy`. A numeric
+ * pad on any of those is a field the operator cannot finish typing into, which
+ * is worse than three extra taps on a meter reading.
+ */
+function keyboardFor(policy: ReturnType<typeof irasFieldPolicy>): 'decimal' | undefined {
+  return policy.kind === 'number' && (policy.min ?? 0) >= 0 ? 'decimal' : undefined;
+}
+
+/* ─────────────────────────── what a column means ────────────────────────── */
+
+/**
+ * Whether the report reads this column, said in the shape the surface allows.
+ *
+ * In the grid it is the dot and the two grey words that have always been in the
+ * header, tooltip and all. On a phone `title` never fires — the shell swallows
+ * the long-press callout — so the same three states are spelled out as visible
+ * text instead. Colour and a 6px dot are not an encoding channel a finger can
+ * read.
+ */
+function FieldPolicyMark({
+  code,
+  field,
+  shape,
+}: {
+  code: IrasReportCode;
+  field: string;
+  shape: CellShape;
+}) {
+  const policy = irasFieldPolicy(code, field);
+
+  if (shape === 'card') {
+    if (policy.usedByReport) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-brand">
+          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-brand" />
+          Used by the report
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-text-subtle">
+        {policy.affectsReportNotes ? 'Report notes only' : 'Not used by the report'}
+      </span>
+    );
+  }
+
+  if (policy.usedByReport) {
+    return (
+      <span
+        title="Used by the report."
+        aria-label="Used by the report"
+        className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
+      />
+    );
+  }
+  if (policy.affectsReportNotes) {
+    return (
+      <span
+        title="No figure on the report is calculated from this, but it decides the notes printed at the bottom of the report."
+        className="text-[10px] font-normal uppercase tracking-wide text-text-subtle"
+      >
+        notes only
+      </span>
+    );
+  }
+  return (
+    <span
+      title="No figure on the report is calculated from this."
+      className="text-[10px] font-normal uppercase tracking-wide text-text-subtle"
+    >
+      not used
+    </span>
+  );
+}
+
 /* ──────────────────────────────── one cell ──────────────────────────────── */
 
 function Cell({
@@ -363,6 +497,7 @@ function Cell({
   pending,
   readOnly: readOnlyProp,
   previousReading,
+  shape,
 }: {
   code: IrasReportCode;
   rowKey: string;
@@ -372,6 +507,7 @@ function Cell({
   pending: PendingApi;
   readOnly: boolean;
   previousReading?: string;
+  shape: CellShape;
 }) {
   const policy = irasFieldPolicy(code, field);
   // A locked field is not editable by anyone — see `IrasFieldPolicy.locked`. The
@@ -379,6 +515,7 @@ function Cell({
   // was going to be rejected, which is a worse way to learn the same thing.
   const readOnly = readOnlyProp || policy.locked === true;
   const pendingCell = pending.pendingCell(code, rowKey, field);
+  const card = shape === 'card';
 
   // What is in force right now: a pending edit, else a committed correction, else
   // the portal's own value. A pending `null` is an explicit revert.
@@ -421,10 +558,11 @@ function Cell({
 
   if (editing) {
     return (
-      <div className="min-w-[7rem]">
+      <div className={card ? undefined : 'min-w-[7rem]'}>
         <input
           autoFocus
           value={draft}
+          inputMode={keyboardFor(policy)}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commitDraft}
           onKeyDown={(e) => {
@@ -441,33 +579,21 @@ function Cell({
           aria-label={`${field} for ${rowKey}`}
           aria-invalid={problem ? true : undefined}
           className={cn(
-            'w-full min-w-[7rem] rounded border bg-surface px-1.5 py-1 text-sm tabular-nums text-text outline-none',
+            // `text-base` below md: a 14px field is under iOS's 16px floor, so
+            // focusing it zooms the viewport — and pinch-zoom is disabled
+            // app-wide, so there is no way back out of that zoom.
+            'w-full rounded border bg-surface tabular-nums text-text outline-none text-base md:text-sm',
+            card ? 'min-h-11 px-2 py-2' : 'min-w-[7rem] px-1.5 py-1',
             problem ? 'border-danger' : 'border-brand',
           )}
         />
-        {problem ? <p className="mt-1 max-w-[16rem] text-[11px] text-danger">{problem}</p> : null}
-        {!problem && backwards ? (
-          <p className="mt-1 max-w-[16rem] text-[11px] text-warning">
-            Meters do not run backwards — yesterday this nozzle read{' '}
-            {Number(previousReading).toLocaleString('en-IN')}.
-          </p>
-        ) : null}
-        {!problem && !backwards && draft.trim() === '' && policy.dropsRowWhenBlank ? (
-          <p className="mt-1 max-w-[16rem] text-[11px] text-warning">
-            Leaving this empty removes the whole row from the report.
-          </p>
-        ) : null}
-        {!problem && !backwards && draft.trim() === '' && policy.blankReadsAsZero ? (
-          <p className="mt-1 max-w-[16rem] text-[11px] text-warning">
-            An empty value counts as zero — the row stays in the report.
-          </p>
-        ) : null}
-        {policy.hint ? (
-          <p className="mt-1 max-w-[16rem] text-[11px] text-text-subtle">{policy.hint}</p>
-        ) : null}
-        {policy.identityWarning ? (
-          <p className="mt-1 max-w-[18rem] text-[11px] text-danger">{policy.identityWarning}</p>
-        ) : null}
+        <CellNotes
+          policy={policy}
+          problem={problem}
+          backwards={backwards}
+          previousReading={previousReading}
+          value={draft}
+        />
       </div>
     );
   }
@@ -479,7 +605,7 @@ function Cell({
   // of place, which is exactly what broke the add-row controls — and it forced
   // every one of them to stopPropagation just to avoid opening the editor.
   return (
-    <div className="group min-w-[7rem]">
+    <div className={cn('group', card ? null : 'min-w-[7rem]')}>
       <button
         type="button"
         disabled={readOnly}
@@ -498,7 +624,13 @@ function Cell({
                   : 'No figure on the report is calculated from this.'
         }
         className={cn(
-          'block w-full rounded px-1.5 py-1 text-left text-sm tabular-nums',
+          'block w-full rounded text-left tabular-nums',
+          // In the card the value IS the tap target that opens the editor, so
+          // it carries the 44px floor and a border that says it is a field —
+          // dashed when the policy locks it, so a cell that cannot be typed
+          // into does not look like one that can.
+          card ? 'min-h-11 border px-2 py-2 text-base' : 'px-1.5 py-1 text-sm',
+          card && (readOnly ? 'border-dashed border-border' : 'border-border'),
           readOnly ? 'cursor-default' : 'hover:bg-surface-2',
           isPending && 'bg-info-soft font-semibold text-text',
           isCorrected && 'font-semibold text-text',
@@ -526,23 +658,61 @@ function Cell({
           </span>
         ) : null}
       </button>
+      {/*
+        Two rungs back out of a correction. In the grid they stay the hover-
+        revealed links they have always been. In the card they are real buttons,
+        always on screen: touch has no hover, and `focus-visible` fires only on
+        keyboard focus, so on a phone the ONLY per-cell revert was invisible and
+        the row menu's whole-row undo was the only way back — which throws away
+        the corrections on that row an operator wanted to keep.
+      */}
       {isCorrected && !readOnly ? (
-        <button
-          type="button"
-          onClick={() => pending.setCell(code, rowKey, field, null)}
-          className="mt-0.5 block px-1.5 text-left text-[11px] font-semibold text-brand underline opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
-        >
-          Use the portal’s value
-        </button>
+        card ? (
+          // Wrapped rather than given `justify-start px-0`: `cn` is plain clsx,
+          // so those would land beside `Button`'s own `justify-center px-3` and
+          // lose on stylesheet order. A natural-width button in a block is
+          // already left-aligned.
+          <div className="mt-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-brand"
+              onClick={() => pending.setCell(code, rowKey, field, null)}
+            >
+              Use the portal’s value
+            </Button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => pending.setCell(code, rowKey, field, null)}
+            className="mt-0.5 block px-1.5 text-left text-[11px] font-semibold text-brand underline opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
+          >
+            Use the portal’s value
+          </button>
+        )
       ) : null}
       {isPending ? (
-        <button
-          type="button"
-          onClick={() => pending.clearCell(code, rowKey, field)}
-          className="mt-0.5 block px-1.5 text-left text-[11px] font-semibold text-brand underline"
-        >
-          Undo this edit
-        </button>
+        card ? (
+          <div className="mt-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-brand"
+              onClick={() => pending.clearCell(code, rowKey, field)}
+            >
+              Undo this edit
+            </Button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => pending.clearCell(code, rowKey, field)}
+            className="mt-0.5 block px-1.5 text-left text-[11px] font-semibold text-brand underline"
+          >
+            Undo this edit
+          </button>
+        )
       ) : null}
     </div>
   );
@@ -554,40 +724,81 @@ function NewRowCell({
   field,
   value,
   onChange,
+  shape,
 }: {
   code: IrasReportCode;
   field: string;
   value: string;
   onChange: (v: string) => void;
+  shape: CellShape;
 }) {
   const problem = validateIrasCell(code, field, value);
   const policy = irasFieldPolicy(code, field);
+  const card = shape === 'card';
   return (
-    <div className="min-w-[7rem]">
+    <div className={card ? undefined : 'min-w-[7rem]'}>
       <input
         value={value}
+        inputMode={keyboardFor(policy)}
         onChange={(e) => onChange(e.target.value)}
         placeholder={policy.usedByReport ? 'required' : ''}
         aria-label={`${field} on the new row`}
         aria-invalid={problem ? true : undefined}
         className={cn(
-          'w-full min-w-[7rem] rounded border bg-surface px-1.5 py-1 text-sm tabular-nums text-text outline-none',
+          // 16px below md, for the same focus-zoom reason as the editor above.
+          'w-full rounded border bg-surface tabular-nums text-text outline-none text-base md:text-sm',
+          card ? 'min-h-11 px-2 py-2' : 'min-w-[7rem] px-1.5 py-1',
           problem ? 'border-danger' : 'border-border focus:border-brand',
         )}
       />
-      {problem ? <p className="mt-1 text-[11px] text-danger">{problem}</p> : null}
       {/*
         The same guidance the grid gives when editing an existing cell. It was
         missing here, which is the worst place to omit it: adding a delivery the
         outlet forgot is exactly when someone needs to be told that the decant
         date decides which day the litres count on.
       */}
-      {!problem && value.trim() === '' && policy.dropsRowWhenBlank ? (
+      <CellNotes policy={policy} problem={problem} backwards={false} value={value} />
+    </div>
+  );
+}
+
+/**
+ * Everything a field says about itself once there is something in it: the
+ * validation message, the backwards-meter check, what a blank does, the policy's
+ * own hint and its identity warning.
+ *
+ * Written once because it now has to read the same in both shapes, and because
+ * the new-row cell had already drifted from the in-place editor by two of the
+ * five lines the last time they were maintained separately.
+ */
+function CellNotes({
+  policy,
+  problem,
+  backwards,
+  previousReading,
+  value,
+}: {
+  policy: ReturnType<typeof irasFieldPolicy>;
+  problem: string | null;
+  backwards: boolean;
+  previousReading?: string;
+  value: string;
+}) {
+  return (
+    <>
+      {problem ? <p className="mt-1 max-w-[16rem] text-[11px] text-danger">{problem}</p> : null}
+      {!problem && backwards && previousReading !== undefined ? (
+        <p className="mt-1 max-w-[16rem] text-[11px] text-warning">
+          Meters do not run backwards — yesterday this nozzle read{' '}
+          {Number(previousReading).toLocaleString('en-IN')}.
+        </p>
+      ) : null}
+      {!problem && !backwards && value.trim() === '' && policy.dropsRowWhenBlank ? (
         <p className="mt-1 max-w-[16rem] text-[11px] text-warning">
           Leaving this empty removes the whole row from the report.
         </p>
       ) : null}
-      {!problem && value.trim() === '' && policy.blankReadsAsZero ? (
+      {!problem && !backwards && value.trim() === '' && policy.blankReadsAsZero ? (
         <p className="mt-1 max-w-[16rem] text-[11px] text-warning">
           An empty value counts as zero — the row stays in the report.
         </p>
@@ -598,7 +809,7 @@ function NewRowCell({
       {policy.identityWarning ? (
         <p className="mt-1 max-w-[18rem] text-[11px] text-danger">{policy.identityWarning}</p>
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -629,6 +840,7 @@ function RowGutter({
   onRestore,
   onRevertRow,
   dayVerdict,
+  shape,
 }: {
   label: string;
   product: EditGridProduct | undefined;
@@ -641,6 +853,7 @@ function RowGutter({
   onExclude: () => void;
   onRestore: () => void;
   onRevertRow: () => void;
+  shape: CellShape;
 }) {
   return (
     <div className="flex flex-col gap-1">
@@ -648,7 +861,14 @@ function RowGutter({
           of text: the trigger is a 36px tap target, so letting it flow inside the
           label pushed the product line onto a wrap. */}
       <div className="flex items-center justify-between gap-1">
-        <span className="min-w-0 text-xs font-medium text-text">{label}</span>
+        <span
+          className={cn(
+            'min-w-0 break-words font-medium text-text',
+            shape === 'card' ? 'text-sm' : 'text-xs',
+          )}
+        >
+          {label}
+        </span>
         {readOnly ? null : (
           // No `trigger` prop: Menu renders its OWN button, and passing a button
           // into it nests one inside the other. The HTML parser then hoists the
@@ -700,6 +920,61 @@ function RowGutter({
   );
 }
 
+/**
+ * The gutter for a row that exists only because somebody typed it — one saved on
+ * an earlier commit, or one added in this session.
+ *
+ * Its one action (drop the row, or keep it after all) is a bare underlined link
+ * in the grid, exactly as it was, and a real 44px button in the card: on a
+ * hand-added delivery that link is the only way to drop a tanker that is being
+ * counted twice, and a 16px underline is not a target a thumb can find.
+ */
+function HandRowGutter({
+  label,
+  badge,
+  product,
+  readOnly,
+  actionLabel,
+  onAction,
+  shape,
+}: {
+  label: string;
+  badge: React.ReactNode;
+  product: EditGridProduct | undefined;
+  readOnly: boolean;
+  actionLabel: string;
+  onAction: () => void;
+  shape: CellShape;
+}) {
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <span
+        className={cn(
+          'min-w-0 break-words font-medium text-text',
+          shape === 'card' ? 'text-sm' : 'text-xs',
+        )}
+      >
+        {label}
+      </span>
+      {badge}
+      <ProductTag product={product} />
+      {readOnly ? null : shape === 'card' ? (
+        <Button variant="ghost" size="sm" className="text-brand" onClick={onAction}>
+          {actionLabel}
+        </Button>
+      ) : (
+        <button
+          type="button"
+          className="text-left text-xs font-semibold text-brand underline"
+          onClick={onAction}
+        >
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /* ──────────────────────────────── add a row ─────────────────────────────── */
 
 /**
@@ -715,6 +990,10 @@ function RowGutter({
  * dealer has two or three products, so the choice fits on the row, and naming the
  * product on the button is what makes the pre-filled tank number defensible — the
  * operator picked HIGH SPEED DIESEL, so tank 2 is not a mystery default.
+ *
+ * Below md the buttons go full width and drop the noun — `Button` carries
+ * `whitespace-nowrap`, so "Add a delivery for HIGH SPEED DIESEL" cannot wrap and
+ * would run off a 296px card and be clipped by `main`'s `overflow-x-hidden`.
  */
 function AddRowButtons({
   code,
@@ -800,6 +1079,7 @@ function AddRowButtons({
       <Button
         variant="secondary"
         size="sm"
+        className="w-full md:w-auto"
         leftIcon={<Plus width={14} height={14} strokeWidth={2} />}
         onClick={() => pending.addRow(code, seed(products[0]))}
       >
@@ -809,16 +1089,20 @@ function AddRowButtons({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="grid w-full gap-2 md:flex md:w-auto md:flex-wrap md:items-center">
       {products.map((p) => (
         <Button
           key={p.key}
           variant="secondary"
           size="sm"
+          className="w-full md:w-auto"
           leftIcon={<Plus width={14} height={14} strokeWidth={2} />}
           onClick={() => pending.addRow(code, seed(p))}
         >
-          Add a {label} for {p.labelEn}
+          <span className="md:hidden">Add · {p.labelEn}</span>
+          <span className="hidden md:inline">
+            Add a {label} for {p.labelEn}
+          </span>
         </Button>
       ))}
     </div>

@@ -4,10 +4,12 @@ import { useForm } from 'react-hook-form';
 
 import {
   Button,
+  Checkbox,
   Dialog,
   FieldError,
   Input,
   Label,
+  ReadonlyField,
   Select,
 } from '@/components/ui';
 import {
@@ -227,13 +229,9 @@ export function CustomWorkItemDialog({ open, onClose, item, onSubmit }: Props) {
               </div>
               <div>
                 <Label htmlFor="cw-derivedPoints">Points (auto-derived)</Label>
-                <div
-                  id="cw-derivedPoints"
-                  aria-live="polite"
-                  className="flex h-9 items-center rounded-sm border border-border bg-surface-2 px-3 text-sm font-medium tabular-nums text-text"
-                >
+                <ReadonlyField id="cw-derivedPoints" aria-live="polite">
                   {fmtPoints(derivedPoints)}
-                </div>
+                </ReadonlyField>
                 <p className="mt-1 text-xs text-text-subtle">
                   Computed from time, skill, effort &amp; responsibility.
                 </p>
@@ -336,14 +334,10 @@ export function CustomWorkItemDialog({ open, onClose, item, onSubmit }: Props) {
           </div>
         ) : null}
 
-        <label className="flex items-center gap-2 text-sm text-text">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-border-strong accent-brand"
-            {...register('active')}
-          />
-          Active (workers can be awarded this work)
-        </label>
+        <Checkbox
+          label="Active (workers can be awarded this work)"
+          {...register('active')}
+        />
       </form>
     </Dialog>
   );

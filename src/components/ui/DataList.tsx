@@ -51,6 +51,14 @@ export interface DataListProps<T> {
   /** Footer buttons on the phone card. Not rendered when `onRowClick` is set —
    *  a tappable card is one button and buttons never nest. */
   cardActions?: (row: T) => React.ReactNode;
+  /**
+   * Dim one row without forking the component. A retired catalog task and an
+   * already-handled queue row both read as "still here, no longer live", and
+   * both tables carried that as `opacity-60` on the `<tr>` — which `DataList`
+   * had no way to express, so neither table could adopt it. Maps onto the
+   * table row's own dim at md+ and onto `MobileCard.tone` below it.
+   */
+  rowTone?: (row: T) => 'default' | 'muted';
   /** Shown instead of the list when there are no rows. */
   empty?: React.ReactNode;
   loading?: boolean;
@@ -115,6 +123,7 @@ export function DataList<T>({
   onRowClick,
   rowActions,
   cardActions,
+  rowTone,
   empty,
   loading = false,
   skeletonRows = DEFAULT_SKELETON_ROWS,
@@ -139,6 +148,7 @@ export function DataList<T>({
       rowKey={rowKey}
       onRowClick={onRowClick}
       rowActions={rowActions}
+      rowTone={rowTone}
       loading={loading}
       skeletonRows={skeletonRows}
       freezeFirstColumn={freezeFirstColumn}
@@ -155,6 +165,7 @@ export function DataList<T>({
       onRowClick={onRowClick}
       rowActions={rowActions}
       cardActions={cardActions}
+      rowTone={rowTone}
       loading={loading}
       skeletonRows={skeletonRows}
       className={className}
@@ -182,6 +193,7 @@ function TableShape<T>({
   rowKey,
   onRowClick,
   rowActions,
+  rowTone,
   loading,
   skeletonRows,
   freezeFirstColumn,
@@ -196,6 +208,7 @@ function TableShape<T>({
   | 'rowKey'
   | 'onRowClick'
   | 'rowActions'
+  | 'rowTone'
   | 'freezeFirstColumn'
   | 'stickyHeader'
   | 'maxHeight'
@@ -248,6 +261,7 @@ function TableShape<T>({
               <TRow
                 key={rowKey(row)}
                 clickable={Boolean(onRowClick)}
+                className={cn(rowTone?.(row) === 'muted' && 'opacity-60')}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
               >
                 {columns.map((col) => (
@@ -286,6 +300,7 @@ function CardShape<T>({
   onRowClick,
   rowActions,
   cardActions,
+  rowTone,
   loading,
   skeletonRows,
   className,
@@ -297,6 +312,7 @@ function CardShape<T>({
   | 'onRowClick'
   | 'rowActions'
   | 'cardActions'
+  | 'rowTone'
   | 'className'
 > & { loading: boolean; skeletonRows: number }) {
   if (loading) {
@@ -377,6 +393,7 @@ function CardShape<T>({
       meta: metaCols.length > 0 ? <SlotCells cols={metaCols} row={row} /> : undefined,
       kv: kv.length > 0 ? kv : undefined,
       actions: onRowClick ? undefined : cardActions?.(row),
+      tone: rowTone?.(row),
     };
   });
 

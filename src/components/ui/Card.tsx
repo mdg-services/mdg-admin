@@ -27,24 +27,37 @@ export interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
    *  row that cannot wrap, and a `whitespace-nowrap` Button in a 296px card
    *  then squeezes the title to nothing or runs off the edge. */
   action?: React.ReactNode;
+  /** How the title block lines up against `action` at md+. `'start'` (default)
+   *  is today's header. Props, not `className`: `cn` is clsx and Tailwind emits
+   *  `items-start` before `items-center`, so a call-site override only works by
+   *  accident of stylesheet order — which is the trap this repo keeps hitting. */
+  align?: 'start' | 'center';
+  /** `'default'` is the header's own `py-3`. `'comfortable'` is `py-4`, which
+   *  is what the hand-rolled `p-4` section headers this prop absorbed had. */
+  padding?: 'default' | 'comfortable';
 }
 
 /**
- * With no `action`, the emitted classes are exactly what they have always been,
- * so the seven call sites that pass an 18px icon as their second child are
- * untouched.
+ * With no `action`, `align` or `padding`, the emitted classes are exactly what
+ * they have always been, so the seven call sites that pass an 18px icon as
+ * their second child are untouched.
  */
 export function CardHeader({
   className,
   action,
+  align = 'start',
+  padding = 'default',
   children,
   ...rest
 }: CardHeaderProps) {
+  const pad = padding === 'comfortable' ? 'py-4' : 'py-3';
   if (action === undefined) {
     return (
       <div
         className={cn(
-          'flex items-start justify-between gap-3 border-b border-border px-4 py-3',
+          'flex justify-between gap-3 border-b border-border px-4',
+          pad,
+          align === 'center' ? 'items-center' : 'items-start',
           className,
         )}
         {...rest}
@@ -56,8 +69,10 @@ export function CardHeader({
   return (
     <div
       className={cn(
-        'flex flex-col items-stretch gap-2 border-b border-border px-4 py-3',
-        'md:flex-row md:items-start md:justify-between md:gap-3',
+        'flex flex-col items-stretch gap-2 border-b border-border px-4',
+        pad,
+        'md:flex-row md:justify-between md:gap-3',
+        align === 'center' ? 'md:items-center' : 'md:items-start',
         className,
       )}
       {...rest}

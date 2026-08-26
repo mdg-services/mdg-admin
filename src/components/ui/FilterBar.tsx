@@ -27,6 +27,16 @@ export interface FilterBarProps {
   activeCount?: number;
   onClear?: () => void;
   columnsAtMd?: ColumnsAtMd;
+  /**
+   * REPLACES the md+ `CardContent` classes outright, `columnsAtMd` included.
+   * Use it when the desktop card already has a column ladder a single count
+   * cannot express — `sm:grid-cols-2 lg:grid-cols-5` is the shape two pages in
+   * this app have, and neither `columnsAtMd={2}` nor `{5}` reproduces it
+   * without regressing a real width. It replaces rather than merges because
+   * `cn` is clsx: two `grid-cols-*` in one class list is decided by stylesheet
+   * order, not by which one you wrote last.
+   */
+  contentClassName?: string;
   /** Removable chips for what is set, shown under the trigger below md. The
    *  bar cannot derive them — `children` is opaque markup — so a caller that
    *  wants them renders them here. */
@@ -48,6 +58,16 @@ export interface FilterBarProps {
  * the desktop grid. (The consequence to know about: crossing 768px remounts the
  * controls, so filter state has to live in the caller — which it already does.)
  *
+ * TWO TRAPS THAT COST A PACKET EACH:
+ *  - Below md the children live inside `Sheet`, and `Sheet` returns null when
+ *    closed, so the controls UNMOUNT between openings. Anything debounced in
+ *    there loses its pending commit on close — a search typed and confirmed
+ *    with "Show results" inside the debounce searched for nothing. A debounced
+ *    field in a FilterBar must flush on unmount.
+ *  - A landscape phone is already ≥ md (852×393), so rotation swaps the branch
+ *    and remounts the controls. State in the caller survives that; state inside
+ *    a child does not.
+ *
  * @example
  * <FilterBar columnsAtMd={3} activeCount={active} onClear={() => setQuery({})}>
  *   <div><Label htmlFor="q">Search</Label><Input id="q" … /></div>
@@ -59,6 +79,7 @@ export function FilterBar({
   activeCount = 0,
   onClear,
   columnsAtMd = 3,
+  contentClassName,
   chips,
   className,
 }: FilterBarProps) {
@@ -68,7 +89,9 @@ export function FilterBar({
   if (isMd) {
     return (
       <Card className={className}>
-        <CardContent className={cn('grid gap-3', MD_COLUMNS[columnsAtMd])}>
+        <CardContent
+          className={contentClassName ?? cn('grid gap-3', MD_COLUMNS[columnsAtMd])}
+        >
           {children}
         </CardContent>
       </Card>
@@ -95,8 +118,11 @@ export function FilterBar({
           </Button>
         ) : null}
       </div>
+      {/* gap-2, not gap-1.5: chips are routinely `.tap-target`s, whose halo is
+          inset -12px, and two halos closer than 8px overlap so the later
+          sibling swallows the earlier one's edge. */}
       {chips != null ? (
-        <div className="flex flex-wrap gap-1.5">{chips}</div>
+        <div className="flex flex-wrap gap-2">{chips}</div>
       ) : null}
       <Sheet open={open} onClose={() => setOpen(false)} title="Filters">
         <div className="grid gap-3 px-4 py-2">{children}</div>

@@ -3,14 +3,22 @@ import {
   AlertTriangle,
   Check,
   CheckCircle2,
-  Download,
+  ChevronDown,
+  ChevronRight,
   FileText,
   HelpCircle,
   Share2,
 } from 'lucide-react';
 import * as React from 'react';
 
-import { Button, Dialog, useToast } from '@/components/ui';
+import {
+  Button,
+  Dialog,
+  DownloadButton,
+  filenameFromUrl,
+  ImageLightbox,
+  useToast,
+} from '@/components/ui';
 import { useShareCreditDodSnapshot } from '@/hooks/api/useCreditDod';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { ApiError } from '@/lib/api';
@@ -61,6 +69,7 @@ export function CreditDodReportCard({
   });
 
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [cardOpen, setCardOpen] = React.useState(false);
   const alreadyShared = !!snapshot.shared;
   const imageUrl = cardImageUrl ?? snapshot.artifacts.cardUrl;
 
@@ -101,31 +110,28 @@ export function CreditDodReportCard({
 
       {/* Card image on top, full width (capped), never overlapping. */}
       {imageUrl ? (
-        // Only linkable when there is an `attachment` URL to link TO: `download`
-        // is ignored cross-origin, so pointing this at the `inline` URL would
-        // navigate the tab away and tear down an open run dialog.
-        snapshot.artifacts.cardDownloadUrl ? (
-          <a
-            href={snapshot.artifacts.cardDownloadUrl}
-            download
-            title="Download the card image"
-            className="block"
-            style={{ maxWidth: 520 }}
-          >
-            <img
-              src={imageUrl}
-              alt="Credit & DOD card"
-              className="h-auto w-full rounded-md border border-border bg-surface-2"
-            />
-          </a>
-        ) : (
+        // A tap ENLARGES it. It used to fire a cross-origin `<a download>`,
+        // which is the opposite of what the gesture means and, in the shell,
+        // navigated the WebView off the SPA and tore down the open run dialog.
+        // At 360px this 520px card renders about 256px wide — inside main p-4,
+        // ul p-3, li, expanded div p-3 — so the figures the admin is checking
+        // before sharing are illegible, and pinch-zoom is off app-wide. The
+        // lightbox is the only route to reading it. The download still exists,
+        // in Source files below, where "Card image" is already listed.
+        <button
+          type="button"
+          onClick={() => setCardOpen(true)}
+          aria-label="Open the Credit & DOD card full size"
+          className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+          style={{ maxWidth: 520 }}
+        >
           <img
             src={imageUrl}
             alt="Credit & DOD card"
+            draggable={false}
             className="h-auto w-full rounded-md border border-border bg-surface-2"
-            style={{ maxWidth: 520 }}
           />
-        )
+        </button>
       ) : (
         <div
           className="flex h-40 w-full items-center justify-center rounded-md border border-dashed border-border bg-surface-2 px-4 text-center text-xs text-text-muted"
@@ -182,6 +188,7 @@ export function CreditDodReportCard({
           <DefRow
             label="Next review date"
             value={<NextReviewValue snapshot={snapshot} />}
+            hint={nextReviewHint(snapshot)}
           />
         ) : null}
       </dl>
@@ -324,6 +331,15 @@ export function CreditDodReportCard({
           chat.
         </p>
       </Dialog>
+
+      <ImageLightbox
+        open={cardOpen}
+        onClose={() => setCardOpen(false)}
+        src={imageUrl ?? ''}
+        alt="Credit & DOD card"
+        title="Credit & DOD card"
+        downloadUrl={snapshot.artifacts.cardDownloadUrl}
+      />
     </div>
   );
 }
@@ -341,27 +357,41 @@ function OpenLots({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
 
   return (
     <div className="rounded-md border border-border">
+      {/* `min-h-11 md:min-h-0` and a chevron. This is the only route to the FIFO
+          breakdown — the answer to the one question a dealer ever asks back —
+          and it was a ~36px row whose only affordance was `hover:bg-surface-2`,
+          which touch never paints. */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-surface-2"
+        aria-expanded={open}
+        className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-surface-2 md:min-h-0"
       >
-        <span className="font-medium text-text">
+        <span className="min-w-0 font-medium text-text">
           Why this amount? {dueLots.length} unpaid purchase
           {dueLots.length === 1 ? '' : 's'} from{' '}
           {oldest ? formatDmy(oldest.date) : '—'}
         </span>
-        <span className="shrink-0 text-xs text-text-muted">
+        <span className="flex shrink-0 items-center gap-1 text-xs text-text-muted">
           {open ? 'Hide' : `Show all ${lots.length}`}
+          {open ? (
+            <ChevronDown width={14} height={14} strokeWidth={1.75} aria-hidden />
+          ) : (
+            <ChevronRight width={14} height={14} strokeWidth={1.75} aria-hidden />
+          )}
         </span>
       </button>
       {open ? (
         <ul className="border-t border-border">
           {lots.map((lot, i) => (
+            // "Availed 12-08-2026 · due 26-08-2026" is ~220px against ~175px of
+            // room at 360px, so every row wrapped into a ragged two-liner with
+            // the amount floating at the top right of it. Stacked below md, the
+            // exact row it is today at md.
             <li
               key={`${lot.date}-${lot.deadline}-${i}`}
               className={
-                'flex items-baseline justify-between gap-3 border-b border-border px-3 py-1.5 text-xs last:border-b-0 ' +
+                'flex flex-col gap-0.5 border-b border-border px-3 py-1.5 text-xs last:border-b-0 md:flex-row md:items-baseline md:justify-between md:gap-3 ' +
                 (lot.date === oldest?.date ? 'bg-warning-soft' : '')
               }
             >
@@ -422,8 +452,8 @@ function OverdueNotice({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
   }
 
   return (
-    <Notice tone="danger">
-      Deadline missed. {inrFormat(od.amount)} has been past its deposit deadline
+    <Notice tone="danger" heading="Deadline missed.">
+      {inrFormat(od.amount)} has been past its deposit deadline
       since {since} — {od.estimatedFrom ? 'at least ' : ''}
       {dayCount}
       {od.deadlines > 1 ? <>, across {od.deadlines} separate deadlines</> : null}.
@@ -451,6 +481,20 @@ function OverdueNotice({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
  * report — and then train them to ignore the one that is real. `backdated` is
  * what separates them, exactly as it does in the capture's own drift warning.
  */
+/** The one sentence `NextReviewValue` cannot fit on the row. Shared with the
+ *  `title` it sets, so the tooltip and the mobile line cannot drift. */
+const BACKDATED_REVIEW_HINT =
+  'This is the review date the portal shows today. A back-dated report cannot say whether the limit was live on its own date, so no verdict was reached.';
+const UNREADABLE_REVIEW_HINT =
+  'The portal published this in a format we could not read — tell the MDG team.';
+
+function nextReviewHint(
+  snapshot: CreditDodSnapshotRecord,
+): string | undefined {
+  if (snapshot.creditReview) return undefined;
+  return snapshot.backdated ? BACKDATED_REVIEW_HINT : UNREADABLE_REVIEW_HINT;
+}
+
 function NextReviewValue({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
   if (snapshot.creditReview) {
     return (
@@ -461,7 +505,7 @@ function NextReviewValue({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
   }
   if (snapshot.backdated) {
     return (
-      <span title="This is the review date the portal shows today. A back-dated report cannot say whether the limit was live on its own date, so no verdict was reached.">
+      <span title={BACKDATED_REVIEW_HINT}>
         {snapshot.nextReviewDate ?? '-'}{' '}
         <span className="text-text-muted">(not judged — back-dated)</span>
       </span>
@@ -472,7 +516,7 @@ function NextReviewValue({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
   // report a portal change, and inventing a verdict from it is exactly what the
   // capture refused to do.
   return (
-    <span title="The portal published this in a format we could not read — tell the MDG team.">
+    <span title={UNREADABLE_REVIEW_HINT}>
       {snapshot.nextReviewDate} <span className="text-text-muted">(unreadable)</span>
     </span>
   );
@@ -498,8 +542,8 @@ function CreditLockNotice({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
   const days = Math.max(1, -review.daysUntil);
 
   return (
-    <Notice tone="danger">
-      Credit locked. The review date of {formatDmy(review.on)} passed {days} day
+    <Notice tone="danger" heading="Credit locked.">
+      The review date of {formatDmy(review.on)} passed {days} day
       {days === 1 ? '' : 's'} before the date these figures describe, so IndianOil
       has stopped the credit line — the dealer must pay upfront (cash and carry)
       until their sales officer has the limit reviewed and the account reopened.
@@ -577,12 +621,18 @@ function SourceFiles({
   isSuperAdmin: boolean;
 }) {
   const { artifacts } = snapshot;
-  const files: { href: string; label: string; hint: string }[] = [];
+  const files: {
+    href: string;
+    label: string;
+    hint: string;
+    kind: 'image' | 'file';
+  }[] = [];
   if (artifacts.padStatementUrl) {
     files.push({
       href: artifacts.padStatementUrl,
       label: 'PAD statement',
       hint: 'Every transaction in the window, as a readable statement',
+      kind: 'file',
     });
   }
   if (artifacts.cardDownloadUrl) {
@@ -590,6 +640,9 @@ function SourceFiles({
       href: artifacts.cardDownloadUrl,
       label: 'Card image',
       hint: 'The PNG the dealer receives',
+      // `image` routes it into the phone's gallery, which is where a card an
+      // admin may need to forward belongs.
+      kind: 'image',
     });
   }
   if (isSuperAdmin && artifacts.rawPadStatementUrl) {
@@ -597,6 +650,7 @@ function SourceFiles({
       href: artifacts.rawPadStatementUrl,
       label: 'Raw PAD response',
       hint: 'Untouched portal HTML — for debugging the parser',
+      kind: 'file',
     });
   }
   if (isSuperAdmin && artifacts.rawCreditMonitoringUrl) {
@@ -604,6 +658,7 @@ function SourceFiles({
       href: artifacts.rawCreditMonitoringUrl,
       label: 'Raw Credit Monitoring page',
       hint: 'Untouched portal HTML — for debugging the parser',
+      kind: 'file',
     });
   }
   if (files.length === 0) return null;
@@ -617,7 +672,7 @@ function SourceFiles({
         {files.map((f) => (
           <li
             key={f.label}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface-2 px-3 py-2"
+            className="flex flex-col items-stretch gap-2 rounded-md border border-border bg-surface-2 px-3 py-2 md:flex-row md:flex-wrap md:items-center md:justify-between"
           >
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 truncate text-sm font-medium text-text">
@@ -632,14 +687,19 @@ function SourceFiles({
               </p>
               <p className="text-xs text-text-muted">{f.hint}</p>
             </div>
-            <a
-              href={f.href}
-              download
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 text-sm font-semibold text-text hover:bg-surface-2"
-            >
-              <Download width={14} height={14} strokeWidth={1.75} />
-              Download
-            </a>
+            {/* These were cross-origin `<a href download>` anchors, and
+                `download` is ignored across origins — this file's own comment
+                above says so. In the shell the tap therefore either navigated
+                the WebView off the SPA (tearing down the open report) or did
+                nothing at all. The PAD statement is the evidence an admin
+                checks before sharing a report with a dealer. */}
+            <DownloadButton
+              url={f.href}
+              filename={filenameFromUrl(f.href, `${f.label}.html`)}
+              kind={f.kind}
+              label="Download"
+              className="w-full md:w-auto"
+            />
           </li>
         ))}
       </ul>
@@ -647,11 +707,26 @@ function SourceFiles({
   );
 }
 
+/**
+ * Every consequential sentence on this report goes through here — "Deadline
+ * missed", "Credit locked", the superseded-share warning — and it rendered at
+ * 12px. Inside the expanded history card at 360px that is about 256px of line
+ * width, so the 55-word deadline notice became roughly fourteen lines of small
+ * coloured text on coloured ground, exactly where the admin decides whether to
+ * chase a dealer. `text-sm md:text-xs` gives a phone 14px and leaves the
+ * desktop notice untouched.
+ *
+ * `heading` is the verdict as its own semibold line. "Deadline missed." buried
+ * as the first two words of a paragraph is a paragraph; on its own line it is
+ * something you can act on without reading the rest first.
+ */
 function Notice({
   tone,
+  heading,
   children,
 }: {
   tone: 'warning' | 'info' | 'danger';
+  heading?: string;
   children: React.ReactNode;
 }) {
   const cls =
@@ -662,7 +737,7 @@ function Notice({
         : 'border-info bg-info-soft text-info';
   return (
     <div
-      className={`flex items-start gap-2 rounded-md border p-2.5 text-xs font-medium ${cls}`}
+      className={`flex items-start gap-2 rounded-md border p-2.5 text-sm font-medium md:text-xs ${cls}`}
     >
       <AlertTriangle
         width={14}
@@ -671,18 +746,46 @@ function Notice({
         className="mt-0.5 shrink-0"
         aria-hidden
       />
-      <span>{children}</span>
+      <span className="min-w-0">
+        {heading ? (
+          <span className="block font-semibold">{heading}</span>
+        ) : null}
+        {children}
+      </span>
     </div>
   );
 }
 
-function DefRow({ label, value }: { label: string; value: React.ReactNode }) {
+/**
+ * `hint` is the sentence that used to live only in a `title` attribute.
+ *
+ * A phone has no hover and the long-press callout is switched off app-wide, so
+ * "the portal published this in a format we could not read — tell the MDG team"
+ * was invisible on the device most of these reports are read on; all the admin
+ * saw was a date followed by "(unreadable)". Below md it is a visible line under
+ * the value. At md the tooltip it has always had is still there, and the row is
+ * unchanged.
+ */
+function DefRow({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: React.ReactNode;
+  hint?: string;
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-border px-3 py-2 text-sm last:border-b-0">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border px-3 py-2 text-sm last:border-b-0 md:flex-nowrap md:gap-4">
       <dt className="text-text-muted">{label}</dt>
       <dd className="break-words text-right font-medium tabular-nums text-text">
         {value}
       </dd>
+      {hint ? (
+        <p className="mt-0.5 w-full text-xs font-normal text-text-muted md:hidden">
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -696,8 +799,12 @@ function MetaRow({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <span>{label}</span>
-      <span className="text-right text-text">{value}</span>
+      <span className="shrink-0">{label}</span>
+      {/* `min-w-0 break-words`, as its `DefRow` twin already had: "Window"
+          carries `12-08-2026 → 26-08-2026` and Risk category an arbitrary
+          portal string, either of which pushed past the row inside the nested
+          expanded card at 360px. */}
+      <span className="min-w-0 break-words text-right text-text">{value}</span>
     </div>
   );
 }
@@ -715,11 +822,21 @@ function ReconcileIndicator({
     receivable === null ? 'not reported' : inrFormat(receivable);
   // Nothing to compare against is not the same as agreement — saying
   // "Reconciles" here would promise a check that never happened.
+  // `items-start` + `shrink-0`: the label wraps to three lines at 360px, and
+  // flex's default `shrink: 1` was crushing the 14px glyph to a sliver against
+  // it. `Notice` already gets this right one component up.
   if (!checked) {
     return (
-      <p className="mt-0.5 flex items-center gap-1.5 font-medium text-warning">
-        <HelpCircle width={14} height={14} strokeWidth={1.75} />
-        Not cross-checked (SDMS gave no figure to compare against)
+      <p className="mt-0.5 flex items-start gap-1.5 font-medium text-warning">
+        <HelpCircle
+          width={14}
+          height={14}
+          strokeWidth={1.75}
+          className="mt-0.5 shrink-0"
+        />
+        <span className="min-w-0">
+          Not cross-checked (SDMS gave no figure to compare against)
+        </span>
       </p>
     );
   }
@@ -727,17 +844,29 @@ function ReconcileIndicator({
     <p
       className={
         reconciles
-          ? 'mt-0.5 flex items-center gap-1.5 font-medium text-green-600'
-          : 'mt-0.5 flex items-center gap-1.5 font-medium text-danger'
+          ? 'mt-0.5 flex items-start gap-1.5 font-medium text-green-600'
+          : 'mt-0.5 flex items-start gap-1.5 font-medium text-danger'
       }
     >
       {reconciles ? (
-        <CheckCircle2 width={14} height={14} strokeWidth={1.75} />
+        <CheckCircle2
+          width={14}
+          height={14}
+          strokeWidth={1.75}
+          className="mt-0.5 shrink-0"
+        />
       ) : (
-        <AlertCircle width={14} height={14} strokeWidth={1.75} />
+        <AlertCircle
+          width={14}
+          height={14}
+          strokeWidth={1.75}
+          className="mt-0.5 shrink-0"
+        />
       )}
-      {reconciles ? 'Reconciles' : 'Does not reconcile'} (SDMS receivable{' '}
-      {receivableText})
+      <span className="min-w-0">
+        {reconciles ? 'Reconciles' : 'Does not reconcile'} (SDMS receivable{' '}
+        {receivableText})
+      </span>
     </p>
   );
 }

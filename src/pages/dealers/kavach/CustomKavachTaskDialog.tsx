@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 
 import {
   Button,
+  Checkbox,
   Dialog,
   FieldError,
   Input,
@@ -234,14 +235,13 @@ export function CustomKavachTaskDialog({ open, onClose, item, onSubmit }: Props)
           </div>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-text">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-border-strong accent-brand"
-            {...register('active')}
-          />
-          Active (counts toward this dealer&apos;s score)
-        </label>
+        {/* Whether this task counts at all, in a 20px row with a 16px box.
+            `Checkbox` makes the whole label the target and floors it at 44px
+            below md; it forwards the ref `register` hands it. */}
+        <Checkbox
+          label="Active (counts toward this dealer's score)"
+          {...register('active')}
+        />
       </form>
     </Dialog>
   );

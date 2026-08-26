@@ -6,8 +6,10 @@ import {
   Send,
   ShieldCheck,
   Users,
+  X,
 } from 'lucide-react';
 import * as React from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -17,6 +19,7 @@ import {
   Card,
   CardContent,
   EmptyState,
+  FilterBar,
   Label,
   MobileCardList,
   Select,
@@ -103,6 +106,50 @@ const HANDLED_LABEL: Record<VerifyOutcome, string> = {
 /** How close to the end of the loaded rows before the next page is fetched. */
 const PREFETCH_MARGIN = 5;
 
+/**
+ * The filter, read off the URL.
+ *
+ * The dealer's own Kavach panel links here as `/kavach?dealerId=…` — "verify in
+ * the work queue" — and the parameter used to be dropped on the floor: the
+ * admin landed on the unfiltered global queue and had to find the dealer again,
+ * which on a phone means scrolling past a screenful of filter chrome to re-pick
+ * something they had already picked.
+ *
+ * Anything unrecognised is ignored rather than passed through, so a stale link
+ * or a hand-typed URL cannot put the list into a state the controls above it
+ * are unable to display.
+ */
+function filtersFromParams(params: URLSearchParams): KavachQueueFilters {
+  const filters: KavachQueueFilters = {};
+  const dealerId = params.get('dealerId');
+  if (dealerId) filters.dealerId = dealerId;
+  const code = params.get('code');
+  if (code) filters.code = code;
+  const status = params.get('status');
+  if (status && (STATUS_OPTIONS as string[]).includes(status)) {
+    filters.status = status as KavachItemStatus;
+  }
+  const verification = params.get('verification');
+  if (
+    verification &&
+    (KAVACH_VERIFICATION_MODES as readonly string[]).includes(verification)
+  ) {
+    filters.verification = verification as KavachVerificationMode;
+  }
+  if (params.get('awaitingReview') === '1') filters.awaitingReview = true;
+  return filters;
+}
+
+function paramsFromFilters(filters: KavachQueueFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filters.dealerId) params.set('dealerId', filters.dealerId);
+  if (filters.code) params.set('code', filters.code);
+  if (filters.status) params.set('status', filters.status);
+  if (filters.verification) params.set('verification', filters.verification);
+  if (filters.awaitingReview) params.set('awaitingReview', '1');
+  return params;
+}
+
 type GroupBy = 'task' | 'dealer';
 
 interface QueueGroup {
@@ -159,7 +206,12 @@ function groupRows(rows: KavachWorkQueueRow[], by: GroupBy): QueueGroup[] {
 }
 
 export function KavachWorkQueuePage() {
-  const [filters, setFilters] = React.useState<KavachQueueFilters>({});
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Seeded once from the URL; after that the URL follows the controls, not the
+  // other way round, so a re-render can never fight a half-typed selection.
+  const [filters, setFilters] = React.useState<KavachQueueFilters>(() =>
+    filtersFromParams(searchParams),
+  );
   const [groupBy, setGroupBy] = React.useState<GroupBy>('task');
   const [activeIndex, setActiveIndex] = React.useState<number | null>(null);
   const [handled, setHandled] = React.useState<Record<string, VerifyOutcome>>(
@@ -254,7 +306,20 @@ export function KavachWorkQueuePage() {
 
   function patchFilters(patch: Partial<KavachQueueFilters>) {
     setActiveIndex(null);
-    setFilters((prev) => ({ ...prev, ...patch }));
+    const next = { ...filters, ...patch };
+    setFilters(next);
+    // `replace`, not push. On a phone the hardware Back button is the only way
+    // off a screen, and pushing an entry per dropdown change would turn it into
+    // an undo stack the admin has to walk backwards through to leave the queue.
+    // The URL still carries the filter, so a reload — or the link from the
+    // dealer's panel — restores it.
+    setSearchParams(paramsFromFilters(next), { replace: true });
+  }
+
+  function clearFilters() {
+    setActiveIndex(null);
+    setFilters({});
+    setSearchParams(new URLSearchParams(), { replace: true });
   }
 
   function refresh() {
@@ -263,12 +328,52 @@ export function KavachWorkQueuePage() {
     void queueQ.refetch();
   }
 
-  const filtersActive =
-    !!filters.dealerId ||
-    !!filters.code ||
-    !!filters.status ||
-    !!filters.verification ||
-    !!filters.awaitingReview;
+  /**
+   * What is currently narrowing the list, in words, with a way to drop each one.
+   *
+   * Below md the filters live behind a single "Filters (n)" button, so without
+   * this the admin arriving from a dealer's panel would see a short queue and
+   * no statement anywhere on screen of why it is short. The chips render only
+   * in `FilterBar`'s mobile branch.
+   */
+  const activeChips: { key: string; label: string; onRemove: () => void }[] = [];
+  if (filters.dealerId) {
+    const chosen = dealerOptions.find((d) => d.dealerId === filters.dealerId);
+    activeChips.push({
+      key: 'dealerId',
+      label: chosen ? dealerCodeLabel(chosen.dealerCode) : 'One dealer',
+      onRemove: () => patchFilters({ dealerId: undefined }),
+    });
+  }
+  if (filters.code) {
+    activeChips.push({
+      key: 'code',
+      label: taskCatalog[filters.code] ?? filters.code,
+      onRemove: () => patchFilters({ code: undefined }),
+    });
+  }
+  if (filters.status) {
+    activeChips.push({
+      key: 'status',
+      label: ITEM_STATUS_LABEL[filters.status],
+      onRemove: () => patchFilters({ status: undefined }),
+    });
+  }
+  if (filters.verification) {
+    activeChips.push({
+      key: 'verification',
+      label: VERIFICATION_LABEL[filters.verification],
+      onRemove: () => patchFilters({ verification: undefined }),
+    });
+  }
+  if (filters.awaitingReview) {
+    activeChips.push({
+      key: 'awaitingReview',
+      label: 'Needs review',
+      onRemove: () => patchFilters({ awaitingReview: undefined }),
+    });
+  }
+  const filtersActive = activeChips.length > 0;
 
   const handledCount = Object.keys(handled).length;
 
@@ -319,123 +424,145 @@ export function KavachWorkQueuePage() {
         }
       />
 
-      <Card className="mb-4">
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <div>
-            <Label htmlFor="queue-dealer">Dealer</Label>
-            <Select
-              id="queue-dealer"
-              value={filters.dealerId ?? ''}
-              onChange={(e) =>
-                patchFilters({ dealerId: e.target.value || undefined })
+      {/* Five stacked filters cost roughly 350px of a 640px screen, so the first
+          row of the queue started below the fold on every phone. `FilterBar`
+          collapses them into one 44px "Filters (n)" button and a Sheet below md
+          and is the card it has always been at md.
+          `contentClassName` carries the ORIGINAL column ladder into the md+
+          card: `columnsAtMd` is a single count and either choice regresses a
+          real desktop width — 5 columns squeezes each Select to ~86px at 768px,
+          2 columns costs the ≥1024px layout three extra rows. */}
+      <FilterBar
+        className="mb-4"
+        contentClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"
+        activeCount={activeChips.length}
+        onClear={clearFilters}
+        chips={activeChips.map((chip) => (
+          <Button
+            key={chip.key}
+            variant="secondary"
+            size="sm"
+            onClick={chip.onRemove}
+            rightIcon={<X width={14} height={14} strokeWidth={1.75} />}
+          >
+            {chip.label}
+          </Button>
+        ))}
+      >
+        <div>
+          <Label htmlFor="queue-dealer">Dealer</Label>
+          <Select
+            id="queue-dealer"
+            value={filters.dealerId ?? ''}
+            onChange={(e) =>
+              patchFilters({ dealerId: e.target.value || undefined })
+            }
+          >
+            <option value="">All dealers</option>
+            {dealerOptions.map((d) => (
+              <option key={d.dealerId} value={d.dealerId}>
+                {dealerCodeLabel(d.dealerCode)}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label htmlFor="queue-task" hint="seen so far">
+            Task
+          </Label>
+          <Select
+            id="queue-task"
+            value={filters.code ?? ''}
+            onChange={(e) =>
+              patchFilters({ code: e.target.value || undefined })
+            }
+          >
+            <option value="">All tasks</option>
+            {taskOptions.map(([code, label]) => (
+              <option key={code} value={code}>
+                {label}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label htmlFor="queue-status">Status</Label>
+          <Select
+            id="queue-status"
+            value={filters.status ?? ''}
+            onChange={(e) =>
+              patchFilters({
+                status: (e.target.value || undefined) as
+                  | KavachItemStatus
+                  | undefined,
+              })
+            }
+          >
+            <option value="">Everything outstanding</option>
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {ITEM_STATUS_LABEL[s]}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label htmlFor="queue-verification">Verified by</Label>
+          <Select
+            id="queue-verification"
+            value={filters.verification ?? ''}
+            onChange={(e) =>
+              patchFilters({
+                verification: (e.target.value || undefined) as
+                  | KavachVerificationMode
+                  | undefined,
+              })
+            }
+          >
+            <option value="">Any</option>
+            {KAVACH_VERIFICATION_MODES.map((v) => (
+              <option key={v} value={v}>
+                {VERIFICATION_LABEL[v]}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label>Group by</Label>
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              className="flex-1"
+              variant={groupBy === 'task' ? 'primary' : 'secondary'}
+              onClick={() => {
+                setActiveIndex(null);
+                setGroupBy('task');
+              }}
+              leftIcon={
+                <LayoutList width={14} height={14} strokeWidth={1.75} />
               }
             >
-              <option value="">All dealers</option>
-              {dealerOptions.map((d) => (
-                <option key={d.dealerId} value={d.dealerId}>
-                  {dealerCodeLabel(d.dealerCode)}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="queue-task" hint="seen so far">
               Task
-            </Label>
-            <Select
-              id="queue-task"
-              value={filters.code ?? ''}
-              onChange={(e) =>
-                patchFilters({ code: e.target.value || undefined })
-              }
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1"
+              variant={groupBy === 'dealer' ? 'primary' : 'secondary'}
+              onClick={() => {
+                setActiveIndex(null);
+                setGroupBy('dealer');
+              }}
+              leftIcon={<Users width={14} height={14} strokeWidth={1.75} />}
             >
-              <option value="">All tasks</option>
-              {taskOptions.map(([code, label]) => (
-                <option key={code} value={code}>
-                  {label}
-                </option>
-              ))}
-            </Select>
+              Dealer
+            </Button>
           </div>
-
-          <div>
-            <Label htmlFor="queue-status">Status</Label>
-            <Select
-              id="queue-status"
-              value={filters.status ?? ''}
-              onChange={(e) =>
-                patchFilters({
-                  status: (e.target.value || undefined) as
-                    | KavachItemStatus
-                    | undefined,
-                })
-              }
-            >
-              <option value="">Everything outstanding</option>
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {ITEM_STATUS_LABEL[s]}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="queue-verification">Verified by</Label>
-            <Select
-              id="queue-verification"
-              value={filters.verification ?? ''}
-              onChange={(e) =>
-                patchFilters({
-                  verification: (e.target.value || undefined) as
-                    | KavachVerificationMode
-                    | undefined,
-                })
-              }
-            >
-              <option value="">Any</option>
-              {KAVACH_VERIFICATION_MODES.map((v) => (
-                <option key={v} value={v}>
-                  {VERIFICATION_LABEL[v]}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div>
-            <Label>Group by</Label>
-            <div className="flex gap-1">
-              <Button
-                size="sm"
-                className="flex-1"
-                variant={groupBy === 'task' ? 'primary' : 'secondary'}
-                onClick={() => {
-                  setActiveIndex(null);
-                  setGroupBy('task');
-                }}
-                leftIcon={
-                  <LayoutList width={14} height={14} strokeWidth={1.75} />
-                }
-              >
-                Task
-              </Button>
-              <Button
-                size="sm"
-                className="flex-1"
-                variant={groupBy === 'dealer' ? 'primary' : 'secondary'}
-                onClick={() => {
-                  setActiveIndex(null);
-                  setGroupBy('dealer');
-                }}
-                leftIcon={<Users width={14} height={14} strokeWidth={1.75} />}
-              >
-                Dealer
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </FilterBar>
 
       {dashboardQ.isError ? (
         <Callout
@@ -502,13 +629,7 @@ export function KavachWorkQueuePage() {
               }
               cta={
                 filtersActive ? (
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setActiveIndex(null);
-                      setFilters({});
-                    }}
-                  >
+                  <Button variant="secondary" onClick={clearFilters}>
                     Clear filters
                   </Button>
                 ) : null
@@ -518,7 +639,13 @@ export function KavachWorkQueuePage() {
             <div className="divide-y divide-border">
               {groups.map((group) => (
                 <section key={group.key}>
-                  <div className="flex flex-wrap items-baseline justify-between gap-2 bg-surface-2 px-4 py-2">
+                  {/* Sticky below md only. A phone shows about two cards at a
+                      time, so after one flick the admin is looking at bare
+                      dealer codes with no statement of WHICH task they are
+                      certifying — and "8 dealers · 30 pts each" is the sentence
+                      that makes the pass safe. `main` is the scroller and the
+                      tab bar is in-flow, so `top-0` needs no arithmetic. */}
+                  <div className="sticky top-0 z-[var(--z-sticky)] flex flex-wrap items-baseline justify-between gap-2 bg-surface-2 px-4 py-2 md:static md:z-auto">
                     <h2 className="text-sm font-semibold text-text">
                       {group.title}
                     </h2>
@@ -649,21 +776,51 @@ export function KavachWorkQueuePage() {
                     cards={group.rows.map((row) => {
                       const pending = kavachDaysPendingChip(row);
                       const mark = handled[row.itemId];
+                      // The desktop row carries a one-tap "ask the dealer for
+                      // evidence"; the phone card dropped it entirely. A card
+                      // cannot be one big button AND hold a button of its own,
+                      // so on the rows that can be chased the title becomes the
+                      // tap target and the ask sits in the card's footer — the
+                      // shape `DataList` uses for exactly this collision.
+                      const canAsk = !mark && askable(row);
+                      const open = () =>
+                        setActiveIndex(rowIndexOf(row.itemId));
+                      const title =
+                        groupBy === 'task'
+                          ? dealerCodeLabel(row.dealerCode)
+                          : row.labelEn;
                       return {
                         key: row.itemId,
-                        onClick: () => setActiveIndex(rowIndexOf(row.itemId)),
-                        primary: (
-                          <span
-                            className={cn(
-                              'block truncate font-medium text-text',
-                              mark && 'opacity-60',
-                            )}
+                        tone: mark ? ('muted' as const) : ('default' as const),
+                        onClick: canAsk ? undefined : open,
+                        primary: canAsk ? (
+                          <button
+                            type="button"
+                            onClick={open}
+                            className="flex min-h-11 w-full items-center text-left"
                           >
-                            {groupBy === 'task'
-                              ? dealerCodeLabel(row.dealerCode)
-                              : row.labelEn}
+                            <span className="block break-words font-medium text-text">
+                              {title}
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="block break-words font-medium text-text">
+                            {title}
                           </span>
                         ),
+                        actions: canAsk ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => setAskRow(row)}
+                            leftIcon={
+                              <Send width={14} height={14} strokeWidth={1.75} />
+                            }
+                          >
+                            Ask the dealer
+                          </Button>
+                        ) : undefined,
                         primaryRight: mark ? (
                           <Badge intent="success">{HANDLED_LABEL[mark]}</Badge>
                         ) : (

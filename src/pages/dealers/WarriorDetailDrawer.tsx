@@ -74,6 +74,20 @@ const LEDGER_ROW_CAP = 1000;
 /** Above this many days the chart aggregates; see `bucketDays`. */
 const MAX_CHART_COLUMNS = 62;
 
+/**
+ * How many columns the chart PLOTS on a phone, and the floor on a column's
+ * width once the reader asks for all of them.
+ *
+ * The arithmetic: this drawer is a bottom sheet below md, so at 360px the plot
+ * has ~294px (360 − 32 sheet padding − 2 border − 32 card padding). Sixty-two
+ * columns with a 2px gap is ~2.8px each, and each column is a real button — the
+ * only route to that day's figure. Fourteen gives ~19px, which a thumb can
+ * aim at; asking for the rest puts the plot in its own 14px-per-column strip.
+ * Both numbers are ignored at ≥ md, where the full window is plotted as today.
+ */
+const PHONE_CHART_COLUMNS = 14;
+const PHONE_MIN_COLUMN_PX = 14;
+
 /** How many rows the ranked lists show before the "show all" toggle. */
 const TOP_N = 8;
 
@@ -426,7 +440,6 @@ function OverviewTab({
 }) {
   const singleDay = stats.totalDays === 1;
   const bucketed = stats.totalDays > MAX_CHART_COLUMNS;
-
   /* The mini-ranking is context, not the leaderboard — a 40-worker roster would
      push everything below it off the panel. Show the head of the table and,
      when the warrior in front of us is not in it, their own row appended with
@@ -490,6 +503,11 @@ function OverviewTab({
         <CardContent>
           {singleDay ? (
             <Meter
+              // `Meter` used to truncate its label to make room for the value,
+              // and "Points on Sat, 12 Jul 2026" needs ~200px of the ~190px it
+              // gets at 360px — so the date, the only thing the label says, was
+              // the half that got cut. The label now wraps below md and keeps
+              // its `truncate` at md, so the whole string survives here.
               label={`Points on ${formatYmd(stats.days[0]?.date, { weekday: true })}`}
               value={stats.totalPoints}
               // The limit is the TARGET, not the bigger of the two. Stretching
@@ -515,6 +533,14 @@ function OverviewTab({
                 data={columns}
                 target={targetPerDay > 0 ? targetPerDay : undefined}
                 formatValue={(n) => `${fmtPoints(n)} pts${bucketed ? '/day' : ''}`}
+                // Both budgets are below-md only, and the chart resolves that
+                // itself: an unqualified `minColumnPx` would make the DESKTOP
+                // plot a sideways scroller at 62 columns, and an unqualified
+                // `defaultTableOpen` would open a table that this call site
+                // (unlike most) also renders at ≥ md.
+                maxColumns={PHONE_CHART_COLUMNS}
+                minColumnPxBelowMd={PHONE_MIN_COLUMN_PX}
+                tableOpenBelowMd
                 idleReadout={
                   stats.bestDay ? (
                     <>
@@ -527,9 +553,24 @@ function OverviewTab({
                       {/* On a bucketed chart no column shows that figure — each
                           one is a multi-day mean — so do not send the reader
                           hunting for it among the columns. */}
-                      {bucketed
-                        ? ' — no single column shows it; each column averages several days.'
-                        : ' — hover or tab through the columns for any day.'}
+                      {bucketed ? (
+                        ' — no single column shows it; each column averages several days.'
+                      ) : (
+                        // A phone has neither a hover nor a Tab key. The tap
+                        // path is real now (ColumnChart selects on
+                        // `pointerdown`), and the value table below is open by
+                        // default there — so say what actually works.
+                        <>
+                          <span className="md:hidden">
+                            {' '}
+                            — tap a column for any day, or read the table below.
+                          </span>
+                          <span className="hidden md:inline">
+                            {' '}
+                            — hover or tab through the columns for any day.
+                          </span>
+                        </>
+                      )}
                     </>
                   ) : (
                     'No points were earned in this window.'
@@ -1018,7 +1059,13 @@ function LedgerTab({
 function Fact({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="min-w-0">
-      <dt className="truncate text-xs text-text-muted">{label}</dt>
+      {/* Wraps below md, truncates at md. Two of these labels ("Longest run at
+          target", "Fuel & sales logged") measure within ~10px of their ~141px
+          cell at 360px, and a truncated stat label takes the whole meaning of
+          the number under it with it. `md:truncate` rather than a base
+          `truncate` undone by `whitespace-normal`: `cn` is clsx, so two
+          colliding utilities would be settled by stylesheet order, not by us. */}
+      <dt className="text-xs text-text-muted md:truncate">{label}</dt>
       <dd className="mt-0.5 text-lg font-semibold leading-tight text-text">{value}</dd>
       {hint ? <p className="text-xs text-text-subtle">{hint}</p> : null}
     </div>

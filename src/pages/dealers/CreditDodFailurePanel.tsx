@@ -1,5 +1,7 @@
-import { AlertTriangle, ExternalLink } from 'lucide-react';
+import { AlertTriangle, Maximize2 } from 'lucide-react';
+import * as React from 'react';
 
+import { Button, ImageLightbox } from '@/components/ui';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { describeCreditDodFailure } from '@/lib/creditDodFailure';
 import type { ServiceRunWithSteps } from '@/types/serviceRun';
@@ -34,6 +36,7 @@ export function CreditDodFailurePanel({
   const isSuperAdmin = useIsSuperAdmin();
   const viewUrl = buildArtifactViewUrl ?? buildArtifactUrl;
   const { phase, copy, message } = describeCreditDodFailure(run);
+  const [shotOpen, setShotOpen] = React.useState(false);
 
   const hint = isSuperAdmin ? copy.hint : copy.adminHint ?? copy.hint;
 
@@ -68,10 +71,14 @@ export function CreditDodFailurePanel({
 
           {isSuperAdmin && message ? (
             <details className="mt-2 text-xs">
-              <summary className="cursor-pointer select-none text-text-muted hover:text-text">
+              {/* A `<summary>` is a ~16px target by default. */}
+              <summary className="inline-flex min-h-11 cursor-pointer select-none items-center text-text-muted hover:text-text md:min-h-0">
                 Technical details
               </summary>
-              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-sm bg-surface-2 p-2 font-mono text-xs text-text-muted">
+              {/* `.scroll-pane` is `overscroll-behavior: contain`: this sits
+                  inside the run Dialog's own scroller, and without it reaching
+                  the end of the stack drags the sheet closed mid-read. */}
+              <pre className="scroll-pane mt-1 overflow-x-auto whitespace-pre-wrap rounded-sm bg-surface-2 p-2 font-mono text-xs text-text-muted">
                 {message}
               </pre>
             </details>
@@ -84,28 +91,42 @@ export function CreditDodFailurePanel({
           <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
             Screenshot at failure
           </p>
-          <a
-            href={viewUrl(shot.id)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block"
+          {/* This is a full desktop SDMS page rendered ~296px wide on a phone,
+              with pinch-zoom off app-wide. The only route to reading it was a
+              16px-tall `target="_blank"` link. Both the image and the button
+              now open the shared lightbox, which has real pinch and pan — and
+              the run dialog behind it survives, which a navigation would not. */}
+          <button
+            type="button"
+            onClick={() => setShotOpen(true)}
+            aria-label="Open the failure screenshot full size"
+            className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+            style={{ maxWidth: 480 }}
           >
             <img
               src={viewUrl(shot.id)}
               alt="SDMS page at the point of failure"
+              draggable={false}
               className="w-full rounded-md border border-border bg-surface"
-              style={{ maxWidth: 480 }}
             />
-          </a>
-          <a
-            href={viewUrl(shot.id)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-info hover:underline"
+          </button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-2 w-full md:w-auto"
+            onClick={() => setShotOpen(true)}
+            leftIcon={<Maximize2 width={14} height={14} strokeWidth={1.75} />}
           >
-            <ExternalLink width={12} height={12} strokeWidth={1.75} />
             Open full size
-          </a>
+          </Button>
+          <ImageLightbox
+            open={shotOpen}
+            onClose={() => setShotOpen(false)}
+            src={viewUrl(shot.id)}
+            alt="SDMS page at the point of failure"
+            title={shot.filename}
+            downloadUrl={buildArtifactUrl(shot.id)}
+          />
         </div>
       ) : null}
     </div>

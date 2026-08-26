@@ -125,7 +125,13 @@ export function MobileCardList({
                 {c.meta}
               </div>
             ) : null}
-            {c.actions != null ? <div className="mt-3">{c.actions}</div> : null}
+            {/* `actions` is dropped, not rendered, when the card is itself a
+                tap target. A button inside a button is invalid HTML and on
+                Android the inner one is unreachable, so the rule is enforced
+                here rather than left to every caller to remember. */}
+            {c.actions != null && !c.onClick ? (
+              <div className="mt-3">{c.actions}</div>
+            ) : null}
           </>
         );
         return (

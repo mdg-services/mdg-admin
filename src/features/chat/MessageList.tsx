@@ -1,6 +1,8 @@
+import { X } from 'lucide-react';
 import * as React from 'react';
 
 import { useToast } from '@/components/ui/Toast';
+import { useStickToBottom } from '@/hooks/useStickToBottom';
 import type { Message } from '@dk/shared';
 
 import { MessageActionsMenu, type MenuAnchor } from './MessageActionsMenu';
@@ -22,6 +24,22 @@ interface MessageListProps {
 
 /** How many older pages the jump-to-quote loop will fetch before giving up. */
 const MAX_JUMP_PAGES = 10;
+
+/**
+ * The long-press menu is the only touch route to reply / copy / download, and a
+ * press-and-hold advertises itself to nobody. Shown once per device, until the
+ * admin opens the menu (by any route) or taps it away.
+ */
+const LONG_PRESS_HINT_KEY = 'dk.chat.longPressHintSeen';
+
+function readLongPressHintSeen(): boolean {
+  try {
+    return window.localStorage.getItem(LONG_PRESS_HINT_KEY) === '1';
+  } catch {
+    // Private mode / storage disabled: show the hint, never crash the thread.
+    return false;
+  }
+}
 
 function startOfDay(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -54,8 +72,16 @@ export function MessageList({
   onOpenInfo,
 }: MessageListProps) {
   const toast = useToast();
-  const scrollRef = React.useRef<HTMLDivElement>(null);
-  const lastCountRef = React.useRef(0);
+
+  const [hintSeen, setHintSeen] = React.useState(readLongPressHintSeen);
+  const dismissHint = React.useCallback(() => {
+    setHintSeen(true);
+    try {
+      window.localStorage.setItem(LONG_PRESS_HINT_KEY, '1');
+    } catch {
+      /* storage unavailable — the hint just comes back next session */
+    }
+  }, []);
 
   // One menu instance for the whole list, opened from any bubble.
   const [menu, setMenu] = React.useState<{
@@ -63,8 +89,11 @@ export function MessageList({
     anchor: MenuAnchor;
   } | null>(null);
   const openMenu = React.useCallback(
-    (message: Message, anchor: MenuAnchor) => setMenu({ message, anchor }),
-    [],
+    (message: Message, anchor: MenuAnchor) => {
+      dismissHint();
+      setMenu({ message, anchor });
+    },
+    [dismissHint],
   );
   const closeMenu = React.useCallback(() => setMenu(null), []);
 
@@ -82,18 +111,11 @@ export function MessageList({
 
   // Pin to the bottom when new messages arrive — but only if the user is
   // already near it, so "Load earlier" prepends and jump-to-quote reading
-  // don't get yanked back down.
-  React.useLayoutEffect(() => {
-    if (ordered.length === lastCountRef.current) return;
-    const el = scrollRef.current;
-    if (el) {
-      const nearBottom =
-        el.scrollHeight - el.scrollTop - el.clientHeight < 200 ||
-        lastCountRef.current === 0;
-      if (nearBottom) el.scrollTop = el.scrollHeight;
-    }
-    lastCountRef.current = ordered.length;
-  }, [ordered.length]);
+  // don't get yanked back down. The hook also re-pins on a *size* change, which
+  // the old count-keyed effect could not see: `interactive-widget=resizes-content`
+  // shrinks the viewport when the keyboard opens, so the newest messages slid
+  // below the fold exactly while the admin was typing a reply to one of them.
+  const { ref: scrollRef } = useStickToBottom<HTMLDivElement>([ordered.length]);
 
   const flashTimerRef = React.useRef<number | null>(null);
   React.useEffect(() => {
@@ -120,7 +142,9 @@ export function MessageList({
       2000,
     );
     return true;
-  }, []);
+    // `scrollRef` comes from the hook rather than a local useRef, so the lint
+    // rule cannot see that it is stable; it is.
+  }, [scrollRef]);
 
   // Jump-to-quote: if the original isn't loaded yet, keep fetching older
   // pages (capped) until it appears, then scroll to it.
@@ -206,7 +230,7 @@ export function MessageList({
     <>
       <div
         ref={scrollRef}
-        className="flex h-full flex-col gap-2 overflow-y-auto px-4 py-3"
+        className="flex h-full flex-col gap-2 overflow-y-auto overscroll-contain px-4 py-3"
       >
         {hasEarlier ? (
           <div className="mb-1 flex justify-center">
@@ -214,13 +238,31 @@ export function MessageList({
               type="button"
               onClick={() => void onLoadEarlier?.()}
               disabled={loadingEarlier}
-              className="rounded-full border border-border bg-surface px-3 py-1 text-xs text-text-muted hover:bg-surface-2 disabled:opacity-60"
+              className="min-h-11 rounded-full border border-border bg-surface px-4 py-1 text-xs text-text-muted hover:bg-surface-2 disabled:opacity-60 md:min-h-0 md:px-3"
             >
               {loadingEarlier ? 'Loading…' : 'Load earlier'}
             </button>
           </div>
         ) : null}
         {items}
+        {!hintSeen && ordered.length > 0 ? (
+          <div className="flex justify-center md:hidden">
+            <button
+              type="button"
+              onClick={dismissHint}
+              className="flex min-h-11 items-center gap-2 rounded-full bg-surface-2 px-3 text-xs text-text-muted"
+            >
+              Press and hold a message for reply, copy and download
+              <X
+                width={13}
+                height={13}
+                strokeWidth={1.75}
+                className="shrink-0"
+                aria-hidden
+              />
+            </button>
+          </div>
+        ) : null}
       </div>
       {menu && onReply && onToggleReaction && onOpenInfo ? (
         <MessageActionsMenu

@@ -15,7 +15,7 @@ import {
   Button,
   Card,
   CardContent,
-  Dialog,
+  ConfirmDialog,
   EmptyState,
   MobileCardList,
   Skeleton,
@@ -305,12 +305,7 @@ export function DealerServicesTab({ dealer }: Props) {
                 <span className="inline-flex flex-wrap items-center gap-2 font-medium text-text">
                   {ds.serviceId}
                   {isStale(ds) ? (
-                    <Badge
-                      intent="warning"
-                      title="Hasn't run today — click Run now to refresh"
-                      aria-label="Hasn't run today — click Run now to refresh"
-                      className="gap-1"
-                    >
+                    <Badge intent="warning" className="gap-1">
                       <AlertCircle width={12} height={12} strokeWidth={1.75} />
                       stale
                     </Badge>
@@ -323,6 +318,15 @@ export function DealerServicesTab({ dealer }: Props) {
                   <Badge intent="neutral">{ds.cadence}</Badge>
                   <span>Last {formatDateTime(ds.lastRunAt)}</span>
                   <span>· Next {formatDateTime(ds.nextRunAt)}</span>
+                  {/* What "stale" means and what to do about it used to live
+                      only in the badge's `title`, which no touch gesture shows
+                      — so on a phone the word was unexplained. It goes on the
+                      card instead. */}
+                  {isStale(ds) ? (
+                    <span className="block w-full text-warning">
+                      Hasn&apos;t run today — press Run now to refresh it.
+                    </span>
+                  ) : null}
                 </span>
               ),
               actions: (
@@ -421,35 +425,29 @@ export function DealerServicesTab({ dealer }: Props) {
         onSubmit={onSaveEdit}
       />
 
-      <Dialog
+      {/* The shared `ConfirmDialog` rather than a fourth hand-rolled copy of the
+          same shape — the four had already drifted on button order and on
+          whether the destructive action was red. */}
+      <ConfirmDialog
         open={!!detachTarget}
-        onClose={() => setDetachTarget(null)}
+        onCancel={() => setDetachTarget(null)}
+        onConfirm={() => void confirmDetach()}
         title="Detach service"
+        // Matches the `max-w-lg` of the Dialog this replaced.
+        size="md"
+        confirmLabel="Detach"
+        confirmVariant="danger"
+        loading={remove.isPending}
         description={
-          detachTarget
-            ? `Stop running “${detachTarget.serviceId}” for this dealer?`
-            : undefined
-        }
-        footer={
           <>
-            <Button variant="secondary" onClick={() => setDetachTarget(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={confirmDetach}
-              loading={remove.isPending}
-            >
-              Detach
-            </Button>
+            {detachTarget
+              ? `Stop running “${detachTarget.serviceId}” for this dealer?`
+              : null}{' '}
+            This removes the plugin and its schedule from the dealer. Past run
+            history is kept. You can re-attach it later.
           </>
         }
-      >
-        <p className="text-sm text-text-muted">
-          This removes the plugin and its schedule from the dealer. Past run
-          history is kept. You can re-attach it later.
-        </p>
-      </Dialog>
+      />
     </Card>
   );
 }

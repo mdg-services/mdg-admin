@@ -1,4 +1,4 @@
-import { AlertCircle, Clock } from 'lucide-react';
+import { AlertCircle, ChevronRight, Clock } from 'lucide-react';
 import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -10,6 +10,7 @@ import {
   CardContent,
   Dialog,
   EmptyState,
+  FilterBar,
   Input,
   Label,
   Pagination,
@@ -64,6 +65,32 @@ export function RunHistoryPage() {
   }
 
   const grouped = data ? groupByDay(data.items) : [];
+  const activeFilters = [dealerId, serviceId, status, from, to].filter(
+    Boolean,
+  ).length;
+
+  /**
+   * A text filter that commits on blur alone never commits on Android: the
+   * on-screen keyboard's Done key does not reliably blur a WebView input, and
+   * the next control is a native `<select>` that opens its own overlay. So an
+   * admin typed a dealer id and the list simply never filtered. Enter now blurs
+   * (which commits through the existing handler), and `enterKeyHint` makes the
+   * key say what it does.
+   */
+  function commitOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
+  }
+
+  function clearFilters() {
+    const next = new URLSearchParams(search);
+    for (const key of ['dealerId', 'serviceId', 'status', 'from', 'to', 'page']) {
+      next.delete(key);
+    }
+    setSearch(next, { replace: true });
+  }
 
   return (
     <div>
@@ -72,62 +99,81 @@ export function RunHistoryPage() {
         subtitle="Timeline of every service execution."
       />
 
-      <Card className="mb-4">
-        <CardContent className="grid gap-3 md:grid-cols-5">
-          <div>
-            <Label htmlFor="dealerId">Dealer ID</Label>
-            <Input
-              id="dealerId"
-              placeholder="24-char hex"
-              defaultValue={dealerId ?? ''}
-              onBlur={(e) => update('dealerId', e.target.value || undefined)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="serviceId">Service ID</Label>
-            <Input
-              id="serviceId"
-              placeholder="plugin slug"
-              defaultValue={serviceId ?? ''}
-              onBlur={(e) => update('serviceId', e.target.value || undefined)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="status">Status</Label>
-            <Select
-              id="status"
-              value={status ?? ''}
-              onChange={(e) =>
-                update('status', e.target.value || undefined)
-              }
-            >
-              {STATUSES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="from">From</Label>
-            <Input
-              id="from"
-              type="date"
-              defaultValue={from ?? ''}
-              onChange={(e) => update('from', e.target.value || undefined)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="to">To</Label>
-            <Input
-              id="to"
-              type="date"
-              defaultValue={to ?? ''}
-              onChange={(e) => update('to', e.target.value || undefined)}
-            />
-          </div>
-        </CardContent>
-      </Card>
+      {/* Five stacked filters were ~330px of a 640px screen, so the first run
+          on the page started below the fold on every visit even though these
+          are used rarely. `FilterBar` is byte-identical at md and one 44px
+          button below it. */}
+      <FilterBar
+        className="mb-4"
+        columnsAtMd={5}
+        activeCount={activeFilters}
+        onClear={clearFilters}
+      >
+        <div>
+          <Label htmlFor="dealerId">Dealer ID</Label>
+          <Input
+            id="dealerId"
+            placeholder="24-char hex"
+            inputMode="text"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="search"
+            defaultValue={dealerId ?? ''}
+            onKeyDown={commitOnEnter}
+            onBlur={(e) => update('dealerId', e.target.value || undefined)}
+          />
+        </div>
+        <div>
+          <Label htmlFor="serviceId">Service ID</Label>
+          <Input
+            id="serviceId"
+            placeholder="plugin slug"
+            inputMode="text"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="search"
+            defaultValue={serviceId ?? ''}
+            onKeyDown={commitOnEnter}
+            onBlur={(e) => update('serviceId', e.target.value || undefined)}
+          />
+        </div>
+        <div>
+          <Label htmlFor="status">Status</Label>
+          <Select
+            id="status"
+            value={status ?? ''}
+            onChange={(e) =>
+              update('status', e.target.value || undefined)
+            }
+          >
+            {STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="from">From</Label>
+          <Input
+            id="from"
+            type="date"
+            defaultValue={from ?? ''}
+            onChange={(e) => update('from', e.target.value || undefined)}
+          />
+        </div>
+        <div>
+          <Label htmlFor="to">To</Label>
+          <Input
+            id="to"
+            type="date"
+            defaultValue={to ?? ''}
+            onChange={(e) => update('to', e.target.value || undefined)}
+          />
+        </div>
+      </FilterBar>
 
       {isLoading ? (
         <div className="grid gap-3">
@@ -165,43 +211,60 @@ export function RunHistoryPage() {
                   </div>
                   <ul className="divide-y divide-border">
                     {g.items.map((r) => (
-                      <li
-                        key={r.id}
-                        className="min-h-11 cursor-pointer px-4 py-2 text-sm hover:bg-surface-2 md:min-h-0"
-                        onClick={() => setOpen(r)}
-                      >
-                        {/* Desktop: single dense row (unchanged). */}
-                        <div className="hidden items-center gap-3 md:flex">
-                          <StatusChip kind="run" value={r.status} />
-                          <span className="min-w-0 flex-1 truncate font-medium text-text">
-                            {r.serviceId}
-                          </span>
-                          <span className="hidden text-xs text-text-muted md:inline">
-                            {r.dealerId.slice(-6)}
-                          </span>
-                          <span className="text-xs text-text-muted">
-                            {formatDateTime(r.startedAt)}
-                          </span>
-                          <span className="text-xs text-text-subtle">
-                            {formatDuration(r.durationMs)}
-                          </span>
-                        </div>
-                        {/* Mobile: two lines. */}
-                        <div className="flex flex-col gap-1 md:hidden">
-                          <div className="flex items-center gap-2">
+                      <li key={r.id}>
+                        {/* A real `<button>`, not a `<li onClick>`: the row had
+                            no role, no tabIndex and no keyboard handler, so it
+                            was invisible to assistive tech and to the WebView's
+                            own focus handling — and its only cue that it was
+                            tappable at all was `hover:bg-surface-2`, which touch
+                            never paints. The chevron is that cue. */}
+                        <button
+                          type="button"
+                          className="block min-h-11 w-full px-4 py-2 text-left text-sm hover:bg-surface-2 md:min-h-0"
+                          onClick={() => setOpen(r)}
+                        >
+                          {/* Desktop: single dense row (unchanged). */}
+                          <div className="hidden items-center gap-3 md:flex">
                             <StatusChip kind="run" value={r.status} />
                             <span className="min-w-0 flex-1 truncate font-medium text-text">
                               {r.serviceId}
                             </span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs text-text-muted">
-                            <span>{formatDateTime(r.startedAt)}</span>
-                            <span className="text-text-subtle">·</span>
-                            <span className="text-text-subtle">
+                            <span className="hidden text-xs text-text-muted md:inline">
+                              {r.dealerId.slice(-6)}
+                            </span>
+                            <span className="text-xs text-text-muted">
+                              {formatDateTime(r.startedAt)}
+                            </span>
+                            <span className="text-xs text-text-subtle">
                               {formatDuration(r.durationMs)}
                             </span>
                           </div>
-                        </div>
+                          {/* Mobile: two lines plus a chevron. */}
+                          <div className="flex items-center gap-2 md:hidden">
+                            <div className="flex min-w-0 flex-1 flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <StatusChip kind="run" value={r.status} />
+                                <span className="min-w-0 flex-1 truncate font-medium text-text">
+                                  {r.serviceId}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                                <span>{formatDateTime(r.startedAt)}</span>
+                                <span className="text-text-subtle">·</span>
+                                <span className="text-text-subtle">
+                                  {formatDuration(r.durationMs)}
+                                </span>
+                              </div>
+                            </div>
+                            <ChevronRight
+                              width={18}
+                              height={18}
+                              strokeWidth={1.75}
+                              aria-hidden
+                              className="shrink-0 text-text-subtle"
+                            />
+                          </div>
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -250,7 +313,10 @@ function RunDetail({ run }: { run: ServiceRun }) {
   const isSuperAdmin = useIsSuperAdmin();
   return (
     <div className="grid gap-3 text-sm">
-      <div className="grid grid-cols-2 gap-2">
+      {/* One column below md: two 150px columns inside the Dialog turned every
+          formatted datetime into a ragged two-liner, and a 24-char ObjectId
+          into an overflow. */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-2">
         <Field
           label="Service"
           value={isSuperAdmin ? run.serviceId : serviceLabel(run.serviceId)}
@@ -262,7 +328,9 @@ function RunDetail({ run }: { run: ServiceRun }) {
         <Field label="Started" value={formatDateTime(run.startedAt)} />
         <Field label="Finished" value={formatDateTime(run.finishedAt)} />
         <Field label="Duration" value={formatDuration(run.durationMs)} />
-        {isSuperAdmin ? <Field label="Dealer" value={run.dealerId} /> : null}
+        {isSuperAdmin ? (
+          <Field label="Dealer" value={run.dealerId} identifier />
+        ) : null}
       </div>
       {isSuperAdmin ? (
         <>
@@ -271,7 +339,7 @@ function RunDetail({ run }: { run: ServiceRun }) {
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Error
               </p>
-              <pre className="overflow-auto rounded-md bg-surface-2 p-3 text-xs">
+              <pre className="scroll-pane overflow-auto rounded-md bg-surface-2 p-3 text-xs">
                 {run.error.message}
                 {run.error.stack ? `\n${run.error.stack}` : ''}
               </pre>
@@ -281,7 +349,9 @@ function RunDetail({ run }: { run: ServiceRun }) {
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
               Output
             </p>
-            <pre className="max-h-72 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
+            {/* `.scroll-pane` — inside the Dialog's own scroller, reaching the
+                end of this dump otherwise starts dragging the sheet closed. */}
+            <pre className="scroll-pane max-h-72 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
               {JSON.stringify(run.output ?? null, null, 2)}
             </pre>
           </section>
@@ -299,19 +369,31 @@ function RunDetail({ run }: { run: ServiceRun }) {
   );
 }
 
+/** `identifier` is `break-all`: a 24-character hex ObjectId offers CSS no break
+ *  opportunity at all, so `break-words` alone leaves it overflowing. */
 function Field({
   label,
   value,
+  identifier = false,
 }: {
   label: string;
   value: React.ReactNode;
+  identifier?: boolean;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-xs uppercase tracking-wide text-text-subtle">
         {label}
       </p>
-      <p className="break-words text-text">{value}</p>
+      <p
+        className={
+          identifier
+            ? 'min-w-0 break-all font-mono text-text'
+            : 'min-w-0 break-words text-text'
+        }
+      >
+        {value}
+      </p>
     </div>
   );
 }

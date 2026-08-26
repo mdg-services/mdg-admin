@@ -96,7 +96,13 @@ function DensityTile({ product }: { product: TtLatestDensity }) {
       </span>
       <CardContent className="p-4 md:p-5" aria-hidden>
         <div className="flex items-start justify-between gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+          {/* `min-w-0` + a two-line clamp: for a provisional product the eyebrow
+              is `materialCode · description`, and SAP descriptions are long, so
+              with the badge group beside it holding its width the eyebrow got
+              ~138px of a 264px card and stacked to four lines of uppercase —
+              pushing the figure this tile exists to show off the fold. The full
+              text is still spoken: `heroSpokenLabel` above carries it. */}
+          <span className="line-clamp-2 min-w-0 text-xs font-semibold uppercase tracking-wide text-text-muted">
             {heroEyebrow(product)}
           </span>
           <span className="flex shrink-0 items-center gap-2">

@@ -1,10 +1,12 @@
-import { Download, Search, SearchX } from 'lucide-react';
+import { Search, SearchX } from 'lucide-react';
 import * as React from 'react';
 
 
 import {
   Button,
+  DownloadButton,
   Input,
+  KeyValueList,
   Table,
   TBody,
   TD,
@@ -12,7 +14,9 @@ import {
   THead,
   TRow,
 } from '@/components/ui';
+import type { KeyValueItem } from '@/components/ui';
 import { cn } from '@/lib/cn';
+import { irasFieldPolicy } from '@dk/shared';
 import type { IrasDataset } from '@dk/shared';
 
 /** Rows rendered before the "Show all" escape hatch kicks in. */
@@ -50,26 +54,29 @@ function datasetToCsv(dataset: IrasDataset, rows: readonly Record<string, string
   return [header, ...body].join('\r\n');
 }
 
-/**
- * Save a CSV from data already in the browser. The rows are all present in the
- * snapshot payload, so there is nothing to fetch — and a bare navigation to the
- * server's export route could not carry the bearer token anyway. The BOM keeps
- * Excel from mangling non-ASCII portal values.
- */
-function downloadCsv(filename: string, csv: string): void {
-  const url = URL.createObjectURL(
-    new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' }),
-  );
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.rel = 'noopener';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  // Revoking in the same tick cancels the download in Firefox and Safari, which
-  // read the blob asynchronously after the click returns.
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+/** The MIME type the export is offered as. The BOM keeps Excel from mangling
+ *  non-ASCII portal values. */
+const CSV_TYPE = 'text/csv;charset=utf-8;';
+
+/** How many of this report's columns a calculation reads — the card's opening set. */
+function usedByReportCount(dataset: IrasDataset): number {
+  const n = dataset.columns.filter(
+    (c) => irasFieldPolicy(dataset.code, c.field).usedByReport,
+  ).length;
+  // At least one: with none marked, `KeyValueList` would fall back to the first
+  // `collapseAfter` items and a zero would render an empty card.
+  return Math.max(n, 1);
+}
+
+/** One portal row as key/value items, the report's own columns marked primary. */
+function rowItems(dataset: IrasDataset, row: Record<string, string>): KeyValueItem[] {
+  return dataset.columns.map((col) => ({
+    key: col.field,
+    label: col.headerName,
+    value: row[col.field] || '—',
+    numeric: true,
+    primary: irasFieldPolicy(dataset.code, col.field).usedByReport,
+  }));
 }
 
 /**
@@ -129,20 +136,27 @@ export function DatasetTable({ dataset, filePrefix, className }: DatasetTablePro
               ? `${rows.length} of ${dataset.rows.length} rows`
               : `${dataset.rows.length} rows`}
           </span>
-          <Button
+          {/*
+            The rows are all in the snapshot payload already, so the file is
+            built here rather than fetched — a bare navigation to the server's
+            export route could not carry the bearer token. That means it exists
+            only as a blob, and a `blob:` URL cannot reach Android's download
+            manager: inside the shell this is a download that CANNOT succeed.
+            `DownloadButton` is what makes that honest — it says so in a toast
+            instead of being a tap that does nothing and reports nothing. The
+            real fix is a signed export URL on the backend.
+          */}
+          <DownloadButton
             variant="secondary"
             size="sm"
-            leftIcon={<Download width={14} height={14} strokeWidth={1.75} />}
-            onClick={() =>
-              downloadCsv(
-                `${filePrefix}_${dataset.code}.csv`,
-                datasetToCsv(dataset, rows),
-              )
+            label="Download CSV"
+            filename={`${filePrefix}_${dataset.code}.csv`}
+            contentType={CSV_TYPE}
+            blob={() =>
+              new Blob(['\ufeff', datasetToCsv(dataset, rows)], { type: CSV_TYPE })
             }
             disabled={rows.length === 0}
-          >
-            Download CSV
-          </Button>
+          />
         </div>
       </div>
 
@@ -158,17 +172,14 @@ export function DatasetTable({ dataset, filePrefix, className }: DatasetTablePro
           {/* Desktop (≥ md): the portal's own grid, scrolled inside its own box
               with the first column pinned so a wide report stays readable. */}
           <div className="hidden overflow-hidden rounded-md border border-border md:block">
-            <Table>
+            {/* `freezeFirstColumn` replaces the four hand-written sticky classes
+                this file used to carry — same rules, one place, and the header's
+                corner cell now beats the body's frozen cells on both axes. */}
+            <Table freezeFirstColumn>
               <THead>
                 <TRow>
-                  {dataset.columns.map((col, i) => (
-                    <TH
-                      key={col.field}
-                      className={cn(
-                        'whitespace-nowrap',
-                        i === 0 && 'sticky left-0 z-20 bg-surface-2',
-                      )}
-                    >
+                  {dataset.columns.map((col) => (
+                    <TH key={col.field} className="whitespace-nowrap">
                       {col.headerName}
                     </TH>
                   ))}
@@ -182,9 +193,7 @@ export function DatasetTable({ dataset, filePrefix, className }: DatasetTablePro
                         key={col.field}
                         className={cn(
                           'whitespace-nowrap tabular-nums',
-                          i === 0
-                            ? 'sticky left-0 z-10 bg-surface font-medium'
-                            : 'text-text-muted',
+                          i === 0 ? 'font-medium' : 'text-text-muted',
                         )}
                       >
                         {row[col.field] || '—'}
@@ -196,28 +205,25 @@ export function DatasetTable({ dataset, filePrefix, className }: DatasetTablePro
             </Table>
           </div>
 
-          {/* Mobile (< md): one key/value card per row. */}
+          {/*
+            Mobile (< md): one key/value card per row, opening on the columns the
+            report actually reads. A portal report carries its full column set —
+            up to 36 — so rendering every one of them made a single TOT row a
+            ~36-line card and a 13-row report ~470 lines of key/value inside a
+            95dvh sheet, with no way to narrow it. The same `usedByReport`
+            predicate the day editor uses decides what opens; `Show all N fields`
+            is there when the answer is not in the short list.
+          */}
           <ul className="grid gap-2 md:hidden">
             {visible.map((row, rowIndex) => (
               <li
                 key={rowIndex}
                 className="rounded-lg border border-border bg-surface p-3"
               >
-                <dl className="grid gap-1 text-sm">
-                  {dataset.columns.map((col) => (
-                    <div
-                      key={col.field}
-                      className="flex items-baseline justify-between gap-3"
-                    >
-                      <dt className="shrink-0 text-text-muted">
-                        {col.headerName}
-                      </dt>
-                      <dd className="min-w-0 break-words text-right font-medium tabular-nums text-text">
-                        {row[col.field] || '—'}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
+                <KeyValueList
+                  items={rowItems(dataset, row)}
+                  collapseAfter={usedByReportCount(dataset)}
+                />
               </li>
             ))}
           </ul>

@@ -11,6 +11,10 @@ touching a screen. It has three parts:
 
 Targets: **360×640, 390×844, 411×891** must all work. **≥768px must not change.**
 
+Status: Phase 0 built the primitives; nine per-area packets wired every screen to them and a
+reconcile pass folded the gaps they hit back into the primitives. The catalogue below is the
+current API. What is still open is at the end, under [Known limits](#known-limits).
+
 ---
 
 ## The six facts
@@ -82,7 +86,10 @@ export function useStickToBottom<T extends HTMLElement>(
 it was written for. Keying on item count alone misses every case where the scroller's *height*
 changes, which on a phone is the common one: `interactive-widget=resizes-content` shrinks the
 layout viewport when the keyboard opens and the newest messages slide below the fold.
-Watches a `ResizeObserver`, `visualViewport`, **and** your `deps`.
+Watches a `ResizeObserver`, `visualViewport`, **and** your `deps`. The `deps` branch is a
+`useLayoutEffect` — it is the one that fires when a thread first loads, and after paint means
+the reader sees the top of the page for a frame before it jumps. The two event branches stay
+passive.
 
 #### `useSafeBack` — `@/hooks/useSafeBack`
 ```ts
@@ -138,6 +145,10 @@ from the phone card. `primaryRightWidth="clamp"` when the right rail carries two
 badges. `visibility="all"` only when the breakpoint has already been decided in JS.
 Every text slot now carries `min-w-0 break-words`.
 
+`actions` is **dropped, not rendered**, on a card that also has `onClick`. A button inside a
+button is invalid HTML and on Android the inner one never fires, so the rule is enforced in the
+primitive rather than left to each caller. Give a card one or the other.
+
 #### `DataList` — new (this absorbed the proposed `ResponsiveTable`)
 ```ts
 export type DataColumnSlot = 'primary'|'primaryRight'|'secondary'|'meta'|'kv'|'hidden';
@@ -149,7 +160,8 @@ export interface DataColumn<T> {
 export interface DataListProps<T> {
   rows: readonly T[]; columns: readonly DataColumn<T>[]; rowKey: (row: T) => string;
   onRowClick?: (row: T) => void; rowActions?: (row: T) => React.ReactNode;
-  cardActions?: (row: T) => React.ReactNode; empty?: React.ReactNode; loading?: boolean;
+  cardActions?: (row: T) => React.ReactNode; rowTone?: (row: T) => 'default' | 'muted';
+  empty?: React.ReactNode; loading?: boolean;
   skeletonRows?: number; freezeFirstColumn?: boolean; stickyHeader?: boolean;
   maxHeight?: string; minWidth?: string; shape?: 'auto'|'table'|'cards'; className?: string;
 }
@@ -164,6 +176,10 @@ no column claims `'primary'`.
 
 Note: with both `onRowClick` and `rowActions`, the card's **title** is the tap target and the
 menu sits beside it — buttons do not nest. Whole-card tap survives whenever there is no menu.
+
+`rowTone` dims one row — a retired catalog task, an already-handled queue row. Both tables that
+needed it carried `opacity-60` on the `<tr>`, which `DataList` could not express, so neither
+could adopt it. It maps onto the table row's own dim at md+ and onto `MobileCard.tone` below.
 
 #### `KeyValueList` — new (this absorbed the proposed `KVRow` and `RecordCardForm`'s field list)
 ```ts
@@ -182,6 +198,11 @@ reliably reads at 360px: one stacked column below md, `break-words` on every val
 third of a 294px card on labels and leave ~142px for an email, which CSS will not break at `@`
 or `.`. `collapseAfter` is for a 36-field dataset row.
 Requires a `ToastProvider` ancestor when any item is `copyable` (the app root has one).
+A `copyable` item's `<dd>` carries `select-text` itself — no caller has to pass it down.
+
+Known limit: `dt` typography is fixed (`text-sm text-text-muted`). Three existing field lists
+render `text-xs uppercase tracking-wide text-text-subtle` labels, so they cannot adopt this
+without a desktop diff, and they stay as local helpers. See [Known limits](#known-limits).
 
 #### `ActionRow` — new
 ```ts
@@ -198,7 +219,9 @@ the DOM, where the tab order wants it, and first on screen, where the thumb is.
 ```ts
 export interface StickyActionBarProps {
   summary?: React.ReactNode; children: React.ReactNode; hidden?: boolean;
-  mode?: 'sticky'|'fixed'; summaryOnMobile?: boolean; className?: string;
+  mode?: 'sticky'|'fixed'; below?: 'stack'|'wrap';
+  surface?: 'bar'|'card'; visibility?: 'all'|'below-md';
+  summaryOnMobile?: boolean; className?: string;
 }
 ```
 **Use it when** a long editing screen's Save would otherwise sit at the natural end of 1,200px
@@ -208,11 +231,22 @@ sticky bar inside `main` already rests above it (fact 4) and needs no arithmetic
 and clears the live tab-bar height itself. **Both modes carry their own bottom inset**,
 because on a drill-in nothing else does (fact 5).
 
+- `below` is passed to the inner `ActionRow`. `'wrap'` for three short labels — stacked, Undo /
+  Discard all / Review & apply cost 148px of a 640px screen.
+- `surface="card"` draws the rounded `Card` chrome instead of the full-bleed `border-t` strip,
+  with `pt-4` / `md:pb-4` so it reproduces a `Card` + `CardContent` (`p-4`) exactly. It is for a
+  save bar that is a plain card at the top of a desktop page and only becomes a bar on a phone
+  — pair it with `className="order-last md:static md:order-none"`. Both work-list tabs were
+  hand-rolling this, each with its own spelling of the safe-area inset.
+- `visibility="below-md"` instead of `className="md:hidden"`, which only worked because the
+  root happens to have no display class of its own.
+
 #### `FilterBar` — new (this absorbed the proposed `FilterSheet`)
 ```ts
 export interface FilterBarProps {
   children: React.ReactNode; activeCount?: number; onClear?: () => void;
-  columnsAtMd?: 2|3|4|5; chips?: React.ReactNode; className?: string;
+  columnsAtMd?: 2|3|4|5; contentClassName?: string;
+  chips?: React.ReactNode; className?: string;
 }
 ```
 **Use it for** any page whose filters cost more than about one screen-third on a phone. At
@@ -221,30 +255,69 @@ one 44px "Filters (n)" button opening the shared `Sheet`. Exactly one branch mou
 **filter state must live in the caller** (it already does everywhere). `chips` is a slot, not
 derived — `children` is opaque markup and the bar cannot know what your filters are.
 
+`contentClassName` **replaces** the md+ grid classes outright, `columnsAtMd` included. Use it
+where the desktop card has a ladder a single count cannot express — `sm:grid-cols-2
+lg:grid-cols-5` is the shape both Activity and the Kavach work queue have, and neither 2 nor 5
+reproduces it without regressing a real width. It replaces rather than merges because `cn` is
+clsx: two `grid-cols-*` in one list is decided by stylesheet order, not by which you wrote last.
+
+**Two traps.** (1) Below md the children live inside `Sheet`, and `Sheet` returns null when
+closed — so the controls **unmount between openings** and anything debounced in there loses its
+pending commit. A search typed and confirmed with "Show results" inside the debounce searched
+for nothing. Flush on unmount. (2) A landscape phone is already ≥ md, so rotation swaps the
+branch and remounts the controls; state in the caller survives, state inside a child does not.
+
 #### `CardHeader action` — extended (this absorbed the proposed `SectionHeader`)
 ```ts
-export interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> { action?: React.ReactNode }
+export interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+  action?: React.ReactNode; align?: 'start'|'center'; padding?: 'default'|'comfortable';
+}
 ```
 **Use `action` instead of a second child** whenever the right-hand slot is a button. As a
 child it is just another item in a `justify-between` row that cannot wrap, and a
-`whitespace-nowrap` Button in a 296px card then squeezes the title to nothing. With `action`
-undefined the emitted classes are byte-identical to today.
+`whitespace-nowrap` Button in a 296px card then squeezes the title to nothing. With `action`,
+`align` and `padding` all left alone the emitted classes are byte-identical to today.
+
+`align="center"` and `padding="comfortable"` (`py-4`) exist because five call sites were passing
+`className="py-4 md:items-center"` and getting the right answer only by accident of emission
+order — `items-center` happens to be emitted after `items-start`, and `py-4` after `py-3`. They
+are the shape a hand-rolled `p-4` section header had.
 
 ---
 
 ### Controls
 
+#### `Button` — extended
+```ts
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary'|'secondary'|'ghost'|'danger'; size?: 'sm'|'md'; loading?: boolean;
+  leftIcon?: React.ReactNode; rightIcon?: React.ReactNode;
+  padding?: 'default'|'none'; align?: 'center'|'start';
+}
+```
+`padding="none"` and `align="start"` exist because neither can be reached from a call site: a
+`className="px-0"` is emitted **before** `px-3` and silently loses, and `justify-start` happens
+to win only because it is emitted after `justify-center`. Three call sites — `KeyValueList`'s
+own "Show all N fields" among them — shipped a dead `px-0`. Reach for `align="start"` for a
+disclosure or a left-aligned menu-ish row; the default is unchanged.
+
 #### `IconButton` — new
 ```ts
+export type IconButtonSize = 'xs' | 'sm' | 'md';
 export interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
   'aria-label': string; children: React.ReactNode;
-  variant?: ButtonVariant; size?: ButtonSize; loading?: boolean;
+  variant?: ButtonVariant; size?: IconButtonSize; loading?: boolean;
 }
 ```
 **Use it for every icon-only button.** `Button size="sm"` floors the *height* at 44px and says
 nothing about width, so an icon-only Button is 40×44. This is a real square: `h-11 w-11` below
-md, `md:h-8 md:w-8` (sm) / `md:h-9 md:w-9` (md). `aria-label` is required by the type —
-without it the control is announced as "button".
+md, `md:h-6 md:w-6` (xs) / `md:h-8 md:w-8` (sm) / `md:h-9 md:w-9` (md). `aria-label` is required
+by the type — without it the control is announced as "button".
+
+Pick `xs` for an inline glyph whose desktop paint is deliberately tiny — a cancel-reply X in a
+quote strip, a remove-file X on a chip, an upload glyph in a card header. Those were 16-23px
+squares built out of `p-1`, and converting them at `sm` grows them by ~10px on desktop for no
+mobile gain, since below md every size is the same 44px square.
 
 #### `.tap-target` — CSS utility in `index.css`
 **Use it instead of `IconButton` when** the *painted* size is load-bearing and cannot grow: a
@@ -252,15 +325,26 @@ reaction chip on a chat bubble, an inline "Retry" inside a sentence, a "+3 more"
 adds a `-12px` halo via `::after` and paints nothing; the halo disappears at `≥ md`.
 **Caveat:** adjacent halos overlap — keep ≥8px between two `.tap-target` siblings.
 
+**`.tap-halo`** is the same halo without `position: relative`. `.tap-target` is emitted after
+`.absolute`, so putting it on an absolutely positioned control (an overlay's remove/close X)
+silently unpins it. Use `.tap-halo` there — the element already establishes its own containing
+block.
+
 #### `Checkbox` — new
 ```ts
 export interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'|'size'> {
-  label?: React.ReactNode; hint?: React.ReactNode; labelClassName?: string;
+  label?: React.ReactNode; hint?: React.ReactNode;
+  align?: 'center'|'start'; labelClassName?: string;
 }
 ```
 **Use it for every checkbox.** The whole `<label>` is the target (`min-h-11 md:min-h-0`); the
 box is `h-5 w-5 md:h-4 md:w-4`. The ref is forwarded, so `{...register('active')}` works —
 `className` lands on the input, `labelClassName` on the label.
+
+`align="start"` puts the box beside the FIRST line of a label that runs to two — the identity
+warning in the shift-data review, the festival enable box. It is a prop and not a class because
+a call-site `items-start` loses to the base `items-center`; two packets hit that and gave up on
+the alignment.
 
 #### `SegmentedControl` — new
 ```ts
@@ -285,7 +369,12 @@ export interface CopyableProps {
 password, a login email, a dealer code. It renders a real `<input readOnly>` because
 `index.css` sets `user-select: none` on `#root` and only inputs are exempted: a value in a
 `<div>` **cannot be selected or long-press-copied on a phone at all**. `mode="inline"` is for
-a value inside prose and leans on `.selectable`.
+a value inside prose and marks the span **`select-text`** — Tailwind's own class, because the
+native shell's `contextmenu` allow-list is `closest('input, textarea, [contenteditable="true"],
+.select-text')`, matched by class NAME. `.selectable` restores `user-select` but NOT the
+long-press callout, which made the component's own "long-press it and choose Copy" untrue in
+the shell. `KeyValueList` applies `select-text` to a `copyable` value's `<dd>` for the same
+reason. **Wherever text must be selectable, write `select-text`.**
 The copy itself has three rungs and never fails silently: Clipboard API → `execCommand` →
 select the text and say so.
 
@@ -293,7 +382,7 @@ select the text and say so.
 ```ts
 export interface InfoBadgeProps {
   intent?: Intent; label: React.ReactNode; detail: React.ReactNode;
-  sheetTitle?: string; className?: string;
+  sheetTitle?: string; className?: string; badgeClassName?: string;
 }
 ```
 **Use it wherever a badge's real meaning currently lives in `title=`.** At `≥ md` it renders
@@ -301,18 +390,29 @@ today's `<Badge title={detail}>` unchanged; below md it is a tappable badge with
 that opens a `Sheet`. Pass `detail` as a plain string where you can — only a string can ride
 in `title`, so a rich node loses the desktop tooltip.
 
+**Not legal inside a tappable row.** Below md this is a real `<button>`, so putting one in a
+`MobileCard` with an `onClick`, or a `DataList` row with `onRowClick`, nests a button in a
+button — invalid, and on Android the inner one never fires. Lift the badge out of the tap
+target, as the Credit & DOD history card does.
+
+`className` lands on the `Badge` at md+ and on the wrapping `<button>` below md, so the same
+string means two different things at two widths. Anything that sizes or tints the pill goes in
+`badgeClassName`, which always reaches the `Badge`.
+
 #### `ConfirmDialog` — new
 ```ts
 export interface ConfirmDialogProps {
   open: boolean; onCancel: () => void; onConfirm: () => void; title: string;
   description?: React.ReactNode; confirmLabel?: string; cancelLabel?: string;
-  confirmVariant?: 'primary'|'danger'; loading?: boolean;
+  confirmVariant?: 'primary'|'danger'; size?: 'sm'|'md'|'lg'; loading?: boolean;
 }
 ```
 **Use it instead of `window.confirm()`, always, and instead of hand-rolling the shape.** Inside
 the WebView `confirm()` is an OS alert we do not own, and on Android it is answered only if the
 host implements `onJsConfirm` — otherwise it returns false and the destructive action silently
-does nothing. Backdrop and Escape go inert while `loading`.
+does nothing. Backdrop and Escape go inert while `loading`. `size` defaults to `'sm'` — pass `'md'` when you
+are replacing a hand-rolled confirm that was already `max-w-lg`, so the migration is a no-op at
+≥ md (three dialogs narrowed by adopting this before the prop existed).
 
 #### `ReadonlyField` — added to `Input.tsx`
 ```ts
@@ -403,10 +503,18 @@ is gone.
 
 #### `ColumnChart` — extended
 ```ts
-minColumnPx?: number;      // give every column this width and scroll the plot in its own strip
-maxColumns?: number;       // below md, plot only the newest N with a toggle
+minColumnPx?: number;        // give every column this width and scroll the plot in its own strip
+minColumnPxBelowMd?: number; // the same, below md only
+maxColumns?: number;         // below md, plot only the newest N with a toggle
 defaultTableOpen?: boolean;
+tableOpenBelowMd?: boolean;  // open the value table below md only
 ```
+**Use the `BelowMd` variants**, not a caller-side `isMd ? 14 : 0`. The chart already holds that
+media query, and two call sites were each opening a second subscription to answer a question it
+had already answered. They matter because the unqualified props are wrong on desktop: a
+62-column window with a 14px floor is a 990px strip inside a 700px drawer, and
+`defaultTableOpen` opens a `<details>` that a caller passing `tableCaption` also renders at md.
+
 Three behaviour changes you inherit: columns now respond to `onPointerDown` (there was **no**
 tap path — iOS does not focus a `<button>` on tap, so a day's value was unobtainable); the
 `<details>` value table renders below md whether or not you passed `tableCaption`; and the
@@ -422,6 +530,11 @@ export interface StatTileGridProps {
 Below md it is always 2 columns, or **1 when `wideValues`** — currency and litre figures do not
 fit 126px. Only the `md` count is yours to choose. `StatTile`'s value is now `break-words`, not
 `truncate`: truncating the one number the tile exists to show is worse than any alternative.
+
+`Meter`'s label (same file) is `break-words md:truncate`. A meter's label is often the only
+place the PERIOD is named — "Points on Sat, 12 Jul 2026" wants ~200px of the ~190px it gets at
+360px, and the half that got cut was the date, i.e. the whole content. A phone has the vertical
+room and not the horizontal one; a desktop row keeps its single line.
 
 #### `DateRangeFilter` — extended
 ```ts
@@ -481,12 +594,32 @@ wins, and you say so in the PR.
 
 ### 5. Never fix a primitive from a call site
 
-`cn` is `clsx`. Change the primitive, or add a prop or variant. Four known offenders to clean
-up by hand while you are in those files: `DealerKavachTab.tsx` (`h-9 w-auto` on a `Select`),
-`IrasShiftDataPane.tsx` and `DayMarkCalendar.tsx` (`px-2` on Buttons).
+`cn` is `clsx`. Change the primitive, or add a prop or variant.
 
-**`tailwind-merge` is deliberately not being added in this pass** — it would silently *shrink*
-those four targets by making the override win.
+**`tailwind-merge` is deliberately not being added** — it would silently *shrink* the targets
+listed below by making the override win, and several of them are 44px floors.
+
+#### Dead overrides — measured against the built stylesheet
+
+Equal specificity, so the class emitted LATER wins. These were checked by searching
+`dist/assets/index-*.css` for each selector's byte offset; re-run that check rather than
+guessing, and note that any `md:` class is inside a media query emitted after every unprefixed
+utility, so a `md:`-prefixed override always wins.
+
+| Written at a call site | Primitive's own class | Who wins | Effect |
+|---|---|---|---|
+| `p-0` on `CardContent` | `p-4` | **`p-4`** | ~15 call sites across the app ask for a flush card and get 16px of padding. Long-standing; the rendering you see today is `p-4`. Use the padding prop route, do not "fix" the class. |
+| `px-0` on `Button` | `px-3` | **`px-3`** | Use `padding="none"`. |
+| `h-5` / `h-7` / `text-[11px]` / `text-[10px]` on `Badge` | `h-[22px]`, `text-xs` | **`Badge`** | Nine call sites size a badge and none of them does anything. `md:h-5` DOES work. |
+| `items-start` on `Checkbox` / `CardHeader` | `items-center` / `items-start` | **`items-center`** | Use `align`. |
+| `justify-start` on `Button` | `justify-center` | **`justify-start`** | Works, but by accident. Use `align="start"`. |
+| `h-9` on `Select` | `h-11 md:h-9` | **`h-9`** | The fact-2 example: it shrinks a 44px target at every width. |
+| `w-auto` on a `w-full` control | `w-full` | **`w-full`** | |
+| `text-sm` on `Input`/`Select`/`Textarea` | `text-base md:text-sm` | **`text-sm`** | 14px at every width, under the iOS focus-zoom floor. Never re-add it; that includes an arbitrary `[&_input]:text-sm`, which is a (0,1,1) selector and beats `index.css`'s 16px element rule. |
+| `.tap-target` on an `.absolute` element | — | **`.tap-target`** | It sets `position: relative` and unpins the control. Use `.tap-halo`. |
+
+Leave a dead override in place where making it live would change desktop; delete it or route it
+through a prop where the intent is clear. Do not add new ones.
 
 ### 6. Card stack vs frozen-column table — the decision rule
 
@@ -540,9 +673,13 @@ Nested scrollers inside an overlay body (`<pre>`, a picker list, a code block) n
 
 **Use `dvh`, never `vh`.** `70vh` is the *large* viewport on mobile and overshoots a `92dvh`
 sheet. Four `vh` values survive on purpose: `Dialog`'s and `ImageLightbox`'s `md:max-h-[70vh]`,
-`Menu`'s desktop popover, and `WideReportViewer`'s desktop `h-[72vh]`. All four are inside a
-`md:` or an `isMd` branch, where `vh` and `dvh` are the same number — leave them; do not add a
-fifth.
+`Menu`'s desktop popover, and `WideReportViewer`'s desktop `h-[72vh]` (which `DsrReportPanel`
+passes through as `desktopHeightClass`). All four are inside a `md:` or an `isMd` branch, where
+`vh` and `dvh` are the same number — leave them; do not add a fifth.
+
+Two more exist and are neither sanctioned nor worth a change: the `h-[60vh]` loading
+`Skeleton` in `DsrReportView` and `DealerDsrTab`. They are grey blocks, they predate this
+programme, and a phone simply scrolls a slightly tall placeholder. Do not copy them.
 
 Z ladder, published on `:root`: `--z-sticky:10  --z-page-bar:30  --z-scrim:40  --z-overlay:50
 --z-nested-overlay:60  --z-toast:70`.
@@ -591,26 +728,61 @@ At 360×640, 390×844 and 411×891:
 
 ---
 
-## Known gaps at the end of Phase 0
+## Known limits
 
-These are real and not yet done. Do not assume them.
+Real, current, and deliberately not closed. Do not assume otherwise.
 
-- **`Tabs.tsx` has no edge fades.** The strip scrolls and auto-centres correctly — **do not
-  touch that logic**, the naive `scrollIntoView` fix was tried and reverted; read the comment
-  at the top of the file. What is missing is only the visual cue that it scrolls.
-- **No primitive has run on a device.** `ZoomableImage`'s gestures, `Table`'s scroll hint and
-  frozen column, and `StickyActionBar`'s `fixed` mode have only been type-checked, linted and
-  built. This repo has no test runner.
-- **No call site is wired to anything new.** That is each per-area packet's work.
-- **The CSV download inside the native shell** returns `{ ok: false, reason }` by design. It
-  needs a backend signed-URL export route or the control hidden in the shell with the reason
-  stated.
-- **The dev-only overflow assertion** (`scrollWidth > clientWidth` in `main.tsx`) is unwritten.
-  It is the cheapest way to catch what this audit found by hand.
-- **The pages added after the audit were never audited**: `KavachDashboardPage`,
-  `KavachWorkQueuePage`, `KavachDefaultsPage`, `DealerKavachTab`, `DealerKavachWorkListTab`,
-  `DealerPasswordVaultTab`, `DealerAppLoginCard`, `IrasCredentialsSection`,
-  `PortalCredentialsCard`, `RevealCredentialsRow`. `KavachDefaultsPage.tsx` in particular is
-  795 lines with a `<Table>`, zero `md:` classes and no card stack — the same shape as
-  blockers 2 and 3. `PortalCredentialsSection.tsx` no longer exists; its `window.confirm` moved
-  to `RevealCredentialsRow.tsx` and `PortalCredentialsCard.tsx`.
+### Not verified anywhere
+
+- **Nothing has run on a device.** This repo has no test runner and this session had no
+  emulator. `ZoomableImage`'s gestures, `Table`'s scroll hint and frozen column,
+  `StickyActionBar`'s `fixed` mode, and the Assist call player's re-tap recovery are
+  type-checked, linted and built — nothing more. The §14 checklist at 360 / 390 / 411 is still
+  owed on every screen.
+- **The dev-only overflow assertion** (`scrollWidth > clientWidth` in `main.tsx`) is still
+  unwritten. It is the cheapest way to catch mechanically what this programme found by hand.
+
+### Primitive gaps recorded rather than closed
+
+These were hit by a packet, judged, and left. Each says why, so the next person does not
+re-derive it.
+
+| Gap | Why it is still open |
+|---|---|
+| `KeyValueList` has no `labelVariant` | Three field lists (`RunHistoryPage`, `ServiceCatalogPage`, `RunsListInline`) render `text-xs uppercase tracking-wide text-text-subtle` labels above their values. Migrating them to the primitive's fixed `text-sm text-text-muted` `dt` would visibly change three desktop dialogs, which §4 forbids. They stay as three near-identical local `Field` helpers. A `labelVariant?: 'default'\|'caption'` would let them adopt it with no diff. |
+| `KeyValueList` has no grouping | Per-tank DSR readings and the Assist trace panel each wrap one list per sub-record in a hand-written heading + `<div>`. A `group` field on `KeyValueItem`, or sections, would remove that. |
+| `MobileCardList` has no sections | The per-domain grouping in `DealerWorkListTab` and `WorkListDefaultsPage` is one list per group inside a hand-written `<details>`. `visibility="all"` makes the nesting clean, but `sections?: { key; header; cards }[]` would remove it. |
+| No primitive for an **editable** row card | §6 prescribes "Card + `KeyValueList` per row" for an editable row, but `KeyValueList` takes values, not field slots, so `IrasEditGrid` hand-builds its `<ul>` of field cards. A `FieldCardList` — or a `KeyValueList` whose `value` may be a 44px editor slot — would be reused by any future editor. |
+| `SegmentedControl` has no `subtle` variant | Adopting it on the DSR/Credit "Today / Past date" tabs was mandated and is a **real ≥768px visual change**: the old `ModeTab` drew a raised `bg-surface` chip on a `bg-surface-2` track, the primitive draws a brand-filled pill on a bordered track. A `variant="subtle"` reproducing the track-and-chip look would make that swap desktop-neutral. |
+| `DownloadButton` has no `disabledReason` | A run artifact whose signed URL is still in flight renders a hand-rolled disabled `Button` plus a `md:hidden` sentence. The prop wants the same shape `DefRow hint` ended up with: visible text below md, `title` at md. |
+| `WideReportViewer` has no `figures` slot | Its own doc says it is "only half the answer" and must be paired with a native figure list, but nothing in the API makes that structural. Every future caller can forget the half that makes the artifact readable. |
+| `StickyActionBar` has no content-width cap | In `sticky` mode the bar spans the page column. A `contentClassName` (or `maxWidth`) would let a caller keep a centred `max-w-6xl` content column, which the shift-data editor's old fixed bar had. |
+| `Drawer`/`Dialog` `description` has no clamp | It renders in the sticky, non-scrolling header, so a 230-character paragraph eats ~110px of a `95dvh` sheet. Three call sites hand-moved their prose into the body. `line-clamp-2 md:line-clamp-none`, or a `descriptionInBody` prop, would fix it centrally. |
+| `Drawer` has no `mobileFooterExtra` | The Assist drawer gets a second footer child with `md:hidden`, which works only because `.md\:hidden` is emitted after `.inline-flex` — exactly the ordering dependence fact 2 says not to rely on. |
+| `Tabs.tsx` has no edge fades | The strip scrolls and auto-centres correctly — **do not touch that logic**; the naive `scrollIntoView` fix was tried and reverted, and the comment at the top of the file records it. Only the visual cue that it scrolls is missing. Two packets worked around it by shortening a label below md instead. |
+
+### Product decisions still open
+
+- **CSV download in the native shell** returns `{ ok: false, reason }` by design: the file is
+  assembled in the browser and a `blob:` URL cannot reach Android's download manager. Today the
+  operator gets a toast naming the reason. The real fix is a backend export route returning a
+  short-lived signed URL, which is outside this repo. Hiding the control in the shell is one
+  line if that is preferred.
+- **Two catalog searches, two shapes.** `DealerKavachWorkListTab`'s search box renders at every
+  width; `DealerWorkListTab`'s is `md:hidden`. Both are defensible — a landscape phone is
+  already ≥ md and silently loses a `md:hidden` filter, but a search visible at md is a control
+  desktop did not have. They are sibling tabs of the same page and should agree. **Unsettled.**
+- **The shift-data editor's pending bar** moved from viewport-fixed to `sticky`, so at ≥768px it
+  now spans the content column with `main`'s padding and pushes content instead of overlaying
+  it. That is what fact 4 exists to enable (no tab-bar arithmetic) and it deletes a `pb-28`
+  spacer that was already too short, but it IS a desktop change. `mode="fixed"` is a one-word
+  revert that then needs a measured content spacer.
+- **Four chevrons narrowed by 8px at md** (the shift-data day arrows, the TT-density month
+  arrows) by becoming real `IconButton` squares. They carried a `px-2` that never applied.
+- **`IrasEditGrid` mounts both shapes** and lets CSS pick, so a 13-row REC report builds 156
+  cells instead of 78. That is deliberate: a JS branch would remount on rotation and discard an
+  open cell editor's draft. Revisit only if low-end Android profiling says so.
+- **The DSR native figure list is `md:hidden`.** It would be useful on desktop too; adding a new
+  visible block at ≥768px is a product decision, not a mobile fix.
+- **`maximum-scale=1.0` stays.** Re-evaluated on its own, in the emulator, once every dense
+  surface has its own zoom or expand affordance. See `index.html`'s comment.

@@ -88,7 +88,17 @@ export function ServiceStateChip({
   entry: DealerServiceSummaryEntry | undefined;
   spec: RosterServiceSpec;
   loading?: boolean;
-  /** Off in the mobile stack, where four services share one line. */
+  /**
+   * The recency line under the badge — "today", "yesterday", "23 Aug", and the
+   * window a service marked.
+   *
+   * On by default, and the dealer list now leaves it on for its phone cards
+   * too. It used to be off there, on the grounds that five services shared one
+   * wrapped line — but "was this done today" is the only question that list
+   * exists to answer, and with the line suppressed the answer survived on a
+   * phone only inside a `title` tooltip that no touch gesture shows. The cards
+   * give each service its own row instead.
+   */
   showWhen?: boolean;
 }) {
   if (loading) {

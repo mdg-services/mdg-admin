@@ -5,23 +5,20 @@ import { useForm } from 'react-hook-form';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
+  ActionRow,
   Badge,
   Button,
   Card,
   CardContent,
+  DataList,
   Dialog,
   EmptyState,
   FieldError,
   Input,
   Label,
   Skeleton,
-  TBody,
-  TD,
-  TH,
-  THead,
-  TRow,
-  Table,
   useToast,
+  type DataColumn,
 } from '@/components/ui';
 import { useAdmins, useCreateAdmin, useUpdateAdmin } from '@/hooks/api/useAdmins';
 import { ApiError } from '@/lib/api';
@@ -30,6 +27,11 @@ import { generatePassword } from '@/lib/password';
 import { useAuthStore } from '@/store/auth';
 import type { User } from '@dk/shared';
 import { createAdminSchema, type CreateAdminInput } from '@dk/shared/schemas';
+
+/** Why Suspend is dead on your own row. It is the desktop `title` verbatim, and
+ *  on a phone it is printed on the card instead — a `title` is a hover tooltip
+ *  and no touch device ever fires one. */
+const SELF_ROW_NOTE = "You can't suspend your own account";
 
 export function AdminsPage() {
   const { data: admins, isLoading } = useAdmins();
@@ -52,6 +54,94 @@ export function AdminsPage() {
       toast.error(err instanceof ApiError ? err.message : 'Action failed');
     }
   }
+
+  /** True while THIS row's status mutation is in flight. */
+  const suspending = (a: User) =>
+    updateAdmin.isPending &&
+    updateAdmin.variables?.id === a.id &&
+    updateAdmin.variables?.status !== undefined;
+
+  const statusBadge = (a: User) =>
+    a.status === 'ACTIVE' ? (
+      <Badge intent="success">Active</Badge>
+    ) : (
+      <Badge intent="neutral">Suspended</Badge>
+    );
+
+  const columns: DataColumn<User>[] = [
+    {
+      id: 'name',
+      header: 'Name',
+      mobile: 'primary',
+      cell: (a) => (
+        <span className="font-medium">
+          {a.name}
+          {a.id === currentId ? (
+            <Badge intent="info" className="ml-2">
+              You
+            </Badge>
+          ) : null}
+        </span>
+      ),
+    },
+    {
+      id: 'email',
+      header: 'Email',
+      mobile: 'secondary',
+      // `break-all`, never `truncate`: this is the address the admin reads out
+      // or types into a password manager, and half of one is worse than two
+      // lines. 14px on the card, back to the table's 12px at md.
+      cell: (a) => (
+        <span className="break-all font-mono text-sm md:text-xs">{a.email}</span>
+      ),
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      mobile: 'primaryRight',
+      cell: statusBadge,
+    },
+    {
+      id: 'lastLogin',
+      header: 'Last login',
+      mobile: 'kv',
+      mobileLabel: 'Last login',
+      tdClassName: 'text-text-muted',
+      cell: (a) => formatDateTime(a.lastLoginAt),
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      align: 'right',
+      // The phone gets these as full-width buttons through `cardActions`
+      // instead. They are the only two actions this page has, and in the table
+      // they sit at x≈450-660 of a 660px row inside a 296px card — cut off by
+      // `main`'s `overflow-x-hidden`, not scrolled off it.
+      mobile: 'hidden',
+      cell: (a) => (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setResetFor(a)}
+            leftIcon={<KeyRound width={14} height={14} strokeWidth={1.75} />}
+          >
+            Reset password
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={a.id === currentId}
+            title={a.id === currentId ? SELF_ROW_NOTE : undefined}
+            onClick={() => toggleStatus(a)}
+            loading={suspending(a)}
+          >
+            {a.status === 'ACTIVE' ? 'Suspend' : 'Reactivate'}
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -92,73 +182,47 @@ export function AdminsPage() {
               }
             />
           ) : (
-            <Table>
-              <THead>
-                <TRow>
-                  <TH>Name</TH>
-                  <TH>Email</TH>
-                  <TH>Status</TH>
-                  <TH>Last login</TH>
-                  <TH className="text-right">Actions</TH>
-                </TRow>
-              </THead>
-              <TBody>
-                {admins.map((a) => {
-                  const isSelf = a.id === currentId;
-                  return (
-                    <TRow key={a.id}>
-                      <TD className="font-medium">
-                        {a.name}
-                        {isSelf ? (
-                          <Badge intent="info" className="ml-2">
-                            You
-                          </Badge>
-                        ) : null}
-                      </TD>
-                      <TD className="font-mono text-xs">{a.email}</TD>
-                      <TD>
-                        {a.status === 'ACTIVE' ? (
-                          <Badge intent="success">Active</Badge>
-                        ) : (
-                          <Badge intent="neutral">Suspended</Badge>
-                        )}
-                      </TD>
-                      <TD className="text-text-muted">{formatDateTime(a.lastLoginAt)}</TD>
-                      <TD className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setResetFor(a)}
-                            leftIcon={
-                              <KeyRound width={14} height={14} strokeWidth={1.75} />
-                            }
-                          >
-                            Reset password
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={isSelf}
-                            title={
-                              isSelf ? "You can't suspend your own account" : undefined
-                            }
-                            onClick={() => toggleStatus(a)}
-                            loading={
-                              updateAdmin.isPending &&
-                              updateAdmin.variables?.id === a.id &&
-                              updateAdmin.variables?.status !== undefined
-                            }
-                          >
-                            {a.status === 'ACTIVE' ? 'Suspend' : 'Reactivate'}
-                          </Button>
-                        </div>
-                      </TD>
-                    </TRow>
-                  );
-                })}
-              </TBody>
-            </Table>
+            /* One column definition, two shapes: the table at md+ is what it
+               has always been, and below md exactly one card stack mounts with
+               the two actions as real, full-width buttons. */
+            <DataList
+              rows={admins}
+              rowKey={(a) => a.id}
+              columns={columns}
+              cardActions={(a) => (
+                <div className="grid gap-2">
+                  <ActionRow below="wrap" align="start">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="min-w-[9rem] flex-1"
+                      onClick={() => setResetFor(a)}
+                      leftIcon={
+                        <KeyRound width={14} height={14} strokeWidth={1.75} />
+                      }
+                    >
+                      Reset password
+                    </Button>
+                    {a.id === currentId ? null : (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="min-w-[9rem] flex-1"
+                        onClick={() => toggleStatus(a)}
+                        loading={suspending(a)}
+                      >
+                        {a.status === 'ACTIVE' ? 'Suspend' : 'Reactivate'}
+                      </Button>
+                    )}
+                  </ActionRow>
+                  {/* The desktop row explains the missing action with a
+                      `title`, which no touch device ever renders. */}
+                  {a.id === currentId ? (
+                    <p className="text-xs text-text-subtle">{SELF_ROW_NOTE}</p>
+                  ) : null}
+                </div>
+              )}
+            />
           )}
         </CardContent>
       </Card>

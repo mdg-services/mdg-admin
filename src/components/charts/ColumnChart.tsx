@@ -78,12 +78,28 @@ export interface ColumnChartProps {
    */
   minColumnPx?: number;
   /**
+   * `minColumnPx`, but only below md — the common case, and the one every
+   * caller was writing by hand. A 62-column window given a 14px floor is a
+   * 990px strip, which is right on a phone and a needless sideways scroller in
+   * a 700px desktop drawer.
+   *
+   * It is a prop rather than a caller-side `isMd ? 14 : 0` because the chart
+   * already holds that media query: two call sites were each opening a second
+   * subscription to answer a question this component had already answered.
+   * Ignored when `minColumnPx` is set.
+   */
+  minColumnPxBelowMd?: number;
+  /**
    * Below md, plot only the newest N columns, with a toggle to see the rest.
    * The table underneath always lists the whole window regardless.
    */
   maxColumns?: number;
-  /** Open the value table on first render. */
+  /** Open the value table on first render, at every width. */
   defaultTableOpen?: boolean;
+  /** Open the value table on first render below md only — where the table is
+   *  the only way to read a value — leaving a desktop `<details>` closed as it
+   *  is today. Ignored when `defaultTableOpen` is set. */
+  tableOpenBelowMd?: boolean;
   className?: string;
 }
 
@@ -115,14 +131,21 @@ export function ColumnChart({
   idleReadout,
   tableCaption,
   tableValueHeader = 'Value',
-  minColumnPx = 0,
+  minColumnPx: minColumnPxProp = 0,
+  minColumnPxBelowMd = 0,
   maxColumns,
   defaultTableOpen = false,
+  tableOpenBelowMd = false,
   className,
 }: ColumnChartProps) {
   const [activeIdx, setActiveIdx] = React.useState<number | null>(null);
   const isMd = useMediaQuery('(min-width: 768px)');
   const [showAllColumns, setShowAllColumns] = React.useState(false);
+
+  // The below-md variants resolve here, against the media query the chart
+  // already owns, so no caller has to open a second subscription for it.
+  const minColumnPx = minColumnPxProp || (isMd ? 0 : minColumnPxBelowMd);
+  const tableOpen = defaultTableOpen || (!isMd && tableOpenBelowMd);
 
   const scaleMax = React.useMemo(() => {
     const peak = data.reduce((m, d) => Math.max(m, d.value), 0);
@@ -340,7 +363,7 @@ export function ColumnChart({
           `md:hidden` keeps ≥ md byte-identical for those callers: a chart that
           showed no table on a desktop yesterday still shows none today. */}
       <details
-        open={defaultTableOpen || undefined}
+        open={tableOpen || undefined}
         className={cn('text-xs', !tableCaption && 'md:hidden')}
       >
         {/* Block, not `inline-flex` — a flex `<summary>` loses its native

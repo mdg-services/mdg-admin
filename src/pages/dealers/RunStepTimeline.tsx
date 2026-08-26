@@ -105,6 +105,15 @@ export function RunStepTimeline({ steps, runStatus }: Props) {
                 </span>
               ) : null}
             </div>
+            {/* The sentence behind that `title`, on screen below md. A phone
+                never hovers, and the long-press callout is off app-wide, so
+                without this "no result" is two words with no meaning. */}
+            {!inFlight && step.status === 'start' ? (
+              <p className="mt-0.5 text-xs text-text-subtle md:hidden">
+                This step started but never reported a result before the run
+                ended.
+              </p>
+            ) : null}
 
             {step.message ? (
               <p className="mt-0.5 text-xs text-text-muted">{step.message}</p>
@@ -112,10 +121,14 @@ export function RunStepTimeline({ steps, runStatus }: Props) {
 
             {step.status === 'error' && step.error ? (
               <details className="mt-2 rounded-md border border-border bg-surface-2 p-2 text-xs">
-                <summary className="cursor-pointer select-none font-medium text-danger">
+                {/* A bare `<summary>` is a ~16px target. */}
+                <summary className="inline-flex min-h-11 cursor-pointer select-none items-center font-medium text-danger md:min-h-0">
                   Error details
                 </summary>
-                <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap font-mono text-xs text-text">
+                {/* `.scroll-pane` — this scroller lives inside the run Dialog's
+                    own body, and without `overscroll-contain` hitting the end of
+                    a stack trace drags the sheet closed. */}
+                <pre className="scroll-pane mt-2 max-h-56 overflow-auto whitespace-pre-wrap font-mono text-xs text-text">
                   {step.error.message}
                   {step.error.stack ? `\n\n${step.error.stack}` : ''}
                 </pre>
@@ -164,10 +177,10 @@ function StepMeta({
 
   return (
     <details className="mt-1.5 text-xs" open={status === 'error'}>
-      <summary className="cursor-pointer select-none text-text-subtle hover:text-text-muted">
+      <summary className="inline-flex min-h-11 cursor-pointer select-none items-center text-text-subtle hover:text-text-muted md:min-h-0">
         Details
       </summary>
-      <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 overflow-x-auto rounded-sm bg-surface-2 p-2 font-mono text-text-muted">
+      <dl className="scroll-pane mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 overflow-x-auto rounded-sm bg-surface-2 p-2 font-mono text-text-muted">
         {entries.map(([key, value]) => (
           <React.Fragment key={key}>
             <dt className="whitespace-nowrap text-text-subtle">{key}</dt>

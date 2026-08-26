@@ -13,6 +13,7 @@ import {
   Button,
   Card,
   CardContent,
+  CardHeader,
   Drawer,
   EmptyState,
   Input,
@@ -248,19 +249,25 @@ function HistoryCard({
   return (
     <Card>
       <CardContent className="p-0">
-        <div className="flex items-center justify-between gap-3 border-b border-border p-4">
-          <div>
-            <p className="text-base font-semibold text-text">Capture history</p>
-            <p className="text-sm text-text-muted">
-              Recent shift captures for this dealer.
-            </p>
-          </div>
-          {total > 0 ? (
-            <span className="shrink-0 text-xs tabular-nums text-text-subtle">
-              {items.length} of {total}
-            </span>
-          ) : null}
-        </div>
+        {/* `CardHeader action`: the count does not shrink, so in a
+            `justify-between` row that cannot wrap it took width off the
+            description at 296px. */}
+        <CardHeader
+          align="center"
+          padding="comfortable"
+          action={
+            total > 0 ? (
+              <span className="text-xs tabular-nums text-text-subtle">
+                {items.length} of {total}
+              </span>
+            ) : undefined
+          }
+        >
+          <p className="text-base font-semibold text-text">Capture history</p>
+          <p className="text-sm text-text-muted">
+            Recent shift captures for this dealer.
+          </p>
+        </CardHeader>
 
         {isLoading ? (
           <div className="grid gap-2 p-4">
@@ -350,8 +357,11 @@ function HistoryCard({
                 meta: (
                   <span className="flex flex-col gap-0.5">
                     <span>{formatDateTime(s.capturedAt)}</span>
+                    {/* From the portal/scraper, so it can carry an unbroken
+                        token; without this it runs past the card and `main`'s
+                        `overflow-x-hidden` clips it rather than scrolling. */}
                     {s.failureReason ? (
-                      <span className="text-danger">{s.failureReason}</span>
+                      <span className="break-words text-danger">{s.failureReason}</span>
                     ) : null}
                   </span>
                 ),

@@ -1,7 +1,7 @@
-import { AlertTriangle, Download } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Download } from 'lucide-react';
 import * as React from 'react';
 
-import { Button } from '@/components/ui';
+import { Button, KeyValueList } from '@/components/ui';
 import {
   useDsrSetupDraft,
   type DsrDiscoveredProduct,
@@ -124,6 +124,153 @@ interface Props {
   onConfigChange: (next: Record<string, unknown>) => void;
 }
 
+/**
+ * What the read found worth saying about one product, as data rather than as
+ * markup.
+ *
+ * The desktop line and the phone block are genuinely different shapes — one
+ * sentence versus one fact per line — so they cannot share a tree, but they
+ * MUST share the sentences, or the two drift and an operator sees a different
+ * warning depending on the width of their screen.
+ */
+interface ProductNote {
+  key: string;
+  tone: 'warning' | 'muted';
+  text: string;
+}
+
+function productNotes(p: DsrDiscoveredProduct): ProductNote[] {
+  const notes: ProductNote[] = [];
+  if (p.provisional) {
+    notes.push({
+      key: 'provisional',
+      tone: 'warning',
+      text: `unknown grade “${p.prodCodes.join('/')}”, check its name and leakage allowance`,
+    });
+  }
+  if (p.inspection?.assignment === 'BY_READING') {
+    notes.push({
+      key: 'by-reading',
+      tone: 'warning',
+      text: 'the report’s nozzle numbers did not fit today’s readings, so each was matched to the nozzle it can belong to',
+    });
+  }
+  if (p.inspection?.nozzlesWithoutBaseline?.length) {
+    notes.push({
+      key: 'no-baseline',
+      tone: 'warning',
+      text: `no inspection reading for nozzle ${p.inspection.nozzlesWithoutBaseline.join(', ')}`,
+    });
+  }
+  if (p.meterScale && Object.keys(p.meterScale).length > 0) {
+    notes.push({
+      key: 'meter-scale',
+      tone: 'warning',
+      text: `nozzle ${Object.entries(p.meterScale)
+        .map(([n, scale]) => `${n} (×${scale})`)
+        .join(', ')} report off-scale and are being corrected`,
+    });
+  }
+  if (p.tanks.length > 1) {
+    notes.push({
+      key: 'multi-tank',
+      tone: 'muted',
+      text: `stock is the sum of ${p.tanks.length} tanks (${p.tanks
+        .map(
+          (t) => `T${t.tankNo} ${t.stock === null ? '—' : Math.round(t.stock)} L`,
+        )
+        .join(', ')}); the report prints a dip, water dip and stock column for each, in this order`,
+    });
+  }
+  return notes;
+}
+
+/**
+ * Today's stock and meter readings, to check the inspection baselines against.
+ *
+ * A `<summary>` is a ~16px target, and this is the only route to the comparison
+ * data — so below md it is a `Button` with the 44px floor and a chevron, and the
+ * readings are a two-column key/value grid rather than the inline
+ * `15E: stock 12340 L · n1 123456 · n2 234567 …` ribbon, which at 360px on a
+ * six-nozzle outlet wrapped into something unparseable. At md the `<details>`
+ * disclosure is exactly what it was.
+ */
+function TodaysReadings({
+  products,
+}: {
+  products: DsrDiscoveredProduct[];
+}) {
+  const [open, setOpen] = React.useState(false);
+  const label = 'Today’s readings, to check the inspection figures against';
+
+  return (
+    <>
+      <details className="hidden text-xs text-text-muted md:block">
+        <summary className="cursor-pointer">{label}</summary>
+        <ul className="mt-1 grid gap-0.5 pl-3">
+          {products.map((p) => (
+            <li key={p.key}>
+              {p.key}: stock {p.currentStock ?? '—'} L
+              {Object.entries(p.currentMeterByNozzle).map(([n, r]) => (
+                <span key={n}> &middot; n{n} {Number.isFinite(r) ? r : '—'}</span>
+              ))}
+            </li>
+          ))}
+        </ul>
+      </details>
+
+      <div className="md:hidden">
+        <Button
+          variant="ghost"
+          size="sm"
+          padding="none"
+          align="start"
+          className="w-full justify-between"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          rightIcon={
+            open ? (
+              <ChevronDown width={16} height={16} strokeWidth={1.75} />
+            ) : (
+              <ChevronRight width={16} height={16} strokeWidth={1.75} />
+            )
+          }
+        >
+          {label}
+        </Button>
+        {open ? (
+          <div className="mt-2 grid gap-2">
+            {products.map((p) => (
+              <div
+                key={p.key}
+                className="rounded-md border border-border bg-surface p-3"
+              >
+                <p className="text-sm font-semibold text-text">{p.key}</p>
+                <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                  <dt className="text-text-muted">Stock</dt>
+                  <dd className="tabular-nums text-text">
+                    {p.currentStock ?? '—'} L
+                  </dd>
+                  {Object.entries(p.currentMeterByNozzle).map(([n, r]) => (
+                    <React.Fragment key={n}>
+                      <dt className="whitespace-nowrap text-text-muted">
+                        Nozzle {n}
+                      </dt>
+                      <dd className="tabular-nums text-text">
+                        {Number.isFinite(r) ? r : '—'}
+                      </dd>
+                    </React.Fragment>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
 export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
   const draft = useDsrSetupDraft(dealerId);
   const [applied, setApplied] = React.useState<DsrSetupDraft | null>(null);
@@ -155,7 +302,10 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
 
   return (
     <div className="grid gap-2 rounded-md border border-border bg-surface-2 p-3">
-      <div className="flex items-start justify-between gap-3">
+      {/* Stacked below md: a `shrink-0` 125px button beside this three-sentence
+          paragraph leaves it ~160px, i.e. about nine lines of small grey text
+          in a column beside a button. */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between md:gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-text">Read this outlet&rsquo;s setup from the portal</p>
           <p className="mt-0.5 text-xs text-text-muted">
@@ -169,7 +319,7 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
           size="sm"
           onClick={handleRead}
           loading={draft.isFetching}
-          className="shrink-0"
+          className="w-full shrink-0 md:w-auto"
         >
           <Download className="mr-1.5 h-3.5 w-3.5" />
           Read layout
@@ -200,7 +350,8 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
               : '; no inspection report captured yet, so the baselines are blank'}
             .
           </p>
-          <ul className="grid gap-1">
+          {/* Desktop (≥ md): the inline run-on line this has always been. */}
+          <ul className="hidden gap-1 md:grid">
             {applied.products.map((p) => (
               <li key={p.key} className="text-xs text-text">
                 <span className="font-semibold">{p.key}</span>{' '}
@@ -208,69 +359,94 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
                   ({p.labelEn}) &middot; tank {p.tankNos.join(', ')} &middot; nozzle{' '}
                   {p.nozzleNos.join(', ')}
                 </span>
-                {p.provisional && (
-                  <span className="ml-1 text-warning">
-                    &mdash; unknown grade &ldquo;{p.prodCodes.join('/')}&rdquo;, check its name and
-                    leakage allowance
+                {productNotes(p).map((n) => (
+                  <span
+                    key={n.key}
+                    className={
+                      n.tone === 'warning'
+                        ? 'ml-1 text-warning'
+                        : 'ml-1 text-text-muted'
+                    }
+                  >
+                    &mdash; {n.text}
                   </span>
-                )}
-                {p.inspection?.assignment === 'BY_READING' && (
-                  <span className="ml-1 text-warning">
-                    &mdash; the report&rsquo;s nozzle numbers did not fit today&rsquo;s readings, so
-                    each was matched to the nozzle it can belong to
-                  </span>
-                )}
-                {p.inspection?.nozzlesWithoutBaseline?.length ? (
-                  <span className="ml-1 text-warning">
-                    &mdash; no inspection reading for nozzle{' '}
-                    {p.inspection.nozzlesWithoutBaseline.join(', ')}
-                  </span>
-                ) : null}
-                {p.meterScale && Object.keys(p.meterScale).length > 0 && (
-                  <span className="ml-1 text-warning">
-                    &mdash; nozzle{' '}
-                    {Object.entries(p.meterScale)
-                      .map(([n, s]) => `${n} (\u00d7${s})`)
-                      .join(', ')}{' '}
-                    report off-scale and are being corrected
-                  </span>
-                )}
-                {p.tanks.length > 1 && (
-                  <span className="ml-1 text-text-muted">
-                    &mdash; stock is the sum of {p.tanks.length} tanks (
-                    {p.tanks
-                      .map((t) => `T${t.tankNo} ${t.stock === null ? '—' : Math.round(t.stock)} L`)
-                      .join(', ')}
-                    ); the report prints a dip, water dip and stock column for each, in this
-                    order
-                  </span>
-                )}
+                ))}
               </li>
             ))}
           </ul>
+
+          {/* Below md: one block per product.
+              This screen exists to catch a mistyped nozzle before it silently
+              drops a pump's litres out of a dealer's sales for months (see the
+              header comment). As one inline paragraph a product ran to 14+ lines
+              of 12px text at 360px, with warnings in amber and facts in grey
+              interleaved mid-sentence — a wall, and a wrong nozzle number is
+              invisible in a wall. Same data, one fact per line. */}
+          <ul className="grid gap-2 md:hidden">
+            {applied.products.map((p) => {
+              const notes = productNotes(p);
+              return (
+                <li
+                  key={p.key}
+                  className="rounded-md border border-border bg-surface p-3"
+                >
+                  <p className="break-words text-sm font-semibold text-text">
+                    {p.key}{' '}
+                    <span className="font-normal text-text-muted">
+                      ({p.labelEn})
+                    </span>
+                  </p>
+                  <KeyValueList
+                    className="mt-2"
+                    items={[
+                      {
+                        key: 'tank',
+                        label: p.tankNos.length === 1 ? 'Tank' : 'Tanks',
+                        value: p.tankNos.join(', '),
+                      },
+                      {
+                        key: 'nozzle',
+                        label: p.nozzleNos.length === 1 ? 'Nozzle' : 'Nozzles',
+                        value: p.nozzleNos.join(', '),
+                      },
+                    ]}
+                  />
+                  {notes.length > 0 ? (
+                    <ul className="mt-2 grid gap-1.5">
+                      {notes.map((n) => (
+                        <li
+                          key={n.key}
+                          className={
+                            n.tone === 'warning'
+                              ? 'flex items-start gap-1.5 text-sm text-warning'
+                              : 'flex items-start gap-1.5 text-sm text-text-muted'
+                          }
+                        >
+                          {n.tone === 'warning' ? (
+                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          ) : null}
+                          <span className="min-w-0 break-words">{n.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+
           {applied.products.some((p) => Object.keys(p.currentMeterByNozzle).length > 0) && (
-            <details className="text-xs text-text-muted">
-              <summary className="cursor-pointer">
-                Today&rsquo;s readings, to check the inspection figures against
-              </summary>
-              <ul className="mt-1 grid gap-0.5 pl-3">
-                {applied.products.map((p) => (
-                  <li key={p.key}>
-                    {p.key}: stock {p.currentStock ?? '—'} L
-                    {Object.entries(p.currentMeterByNozzle).map(([n, r]) => (
-                      <span key={n}> &middot; n{n} {Number.isFinite(r) ? r : '—'}</span>
-                    ))}
-                  </li>
-                ))}
-              </ul>
-            </details>
+            <TodaysReadings products={applied.products} />
           )}
           {applied.warnings.length > 0 && (
             <ul className="grid gap-1">
               {applied.warnings.map((w) => (
-                <li key={w} className="flex items-start gap-1.5 text-xs text-warning">
+                <li
+                  key={w}
+                  className="flex items-start gap-1.5 text-sm text-warning md:text-xs"
+                >
                   <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                  <span>{w}</span>
+                  <span className="min-w-0 break-words">{w}</span>
                 </li>
               ))}
             </ul>

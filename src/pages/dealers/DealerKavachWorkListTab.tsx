@@ -25,6 +25,7 @@ import {
   Input,
   MobileCardList,
   Skeleton,
+  StickyActionBar,
   Table,
   TBody,
   TD,
@@ -41,7 +42,6 @@ import {
 import { useKavachCatalogQuery } from '@/hooks/api/useKavachCatalog';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { ApiError } from '@/lib/api';
-import { cn } from '@/lib/cn';
 import {
   CADENCE_BUCKET_LABEL,
   CADENCE_BUCKET_ORDER,
@@ -279,6 +279,27 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
     );
   }, [effQ.data, catalogQ.data, hiddenCodes]);
 
+  /**
+   * A phone shows the catalog as ~45 cards of ~250px — about 11,000px of
+   * scrolling, under a bar that never leaves the screen — where a desktop row
+   * is ~90px. Rather than paginate a list whose whole point is that you sweep
+   * it, this narrows it: type "extinguisher" and the one row you came for is
+   * the only one left. It filters the desktop table too, which is why it is
+   * not a mobile-only control — a filter the admin cannot see is a filter that
+   * hides rows for no visible reason after a phone is turned landscape.
+   */
+  const [search, setSearch] = React.useState('');
+  const visibleCatalogRows = React.useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return catalogRows;
+    return catalogRows.filter(
+      (r) =>
+        r.labelEn.toLowerCase().includes(needle) ||
+        r.labelHi.toLowerCase().includes(needle) ||
+        r.code.toLowerCase().includes(needle),
+    );
+  }, [catalogRows, search]);
+
   const hasUnknownHidden = catalogRows.some((r) => !r.known);
   const hasUnknownDefault = catalogRows.some((r) => !r.baseKnown && overrides[r.code]);
 
@@ -399,16 +420,30 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
     <div className="flex flex-col gap-4">
       {/* Summary + save bar. On mobile it renders last and sticks to the bottom
           so Save stays reachable through a long hide/show pass; on desktop it
-          keeps its place at the top. */}
-      <Card className="sticky bottom-0 z-10 order-last md:static md:order-none">
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm">
-            <div className="flex items-center gap-2">
+          keeps its place at the top, as the card it has always been.
+
+          `StickyActionBar surface="card"` and not a hand-rolled sticky `Card`:
+          this tab only ever renders inside `/dealers/:id`, a drill-in — the tab
+          bar is hidden there and nothing else in the app carries the bottom
+          safe-area inset, so without it Save sits in the Android gesture strip
+          where the swipe goes to the system and not to the button. The bar owns
+          that inset, and `card` reproduces the `p-4` surface exactly, so md is
+          unchanged. The explanatory paragraph stays desktop-only: carrying it
+          made the bar ~170px, a quarter of a 640px screen, permanently over the
+          list it is meant to serve. */}
+      <StickyActionBar
+        surface="card"
+        below="wrap"
+        className="order-last md:static md:order-none"
+        summaryOnMobile
+        summary={
+          <>
+            <span className="flex flex-wrap items-center gap-2">
               <ShieldCheck
                 width={16}
                 height={16}
                 strokeWidth={1.75}
-                className="text-brand"
+                className="shrink-0 text-brand"
               />
               <span className="font-medium text-text">
                 This dealer is scored on {effectiveCount} task
@@ -420,33 +455,32 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                 </Badge>
               ) : null}
               {dirty ? <Badge intent="warning">Unsaved changes</Badge> : null}
-            </div>
-            <p className="mt-1 text-text-muted">
+            </span>
+            <span className="mt-1 hidden text-text-muted md:block">
               Hide catalog tasks this outlet does not have, add dealer-only ones,
               and depart from the global points or cadence where you must.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={discard}
-              disabled={!dirty || updateWL.isPending}
-            >
-              Discard
-            </Button>
-            <Button
-              size="sm"
-              onClick={save}
-              loading={updateWL.isPending}
-              disabled={!dirty}
-              leftIcon={<Save width={14} height={14} strokeWidth={1.75} />}
-            >
-              Save changes
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            </span>
+          </>
+        }
+      >
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={discard}
+          disabled={!dirty || updateWL.isPending}
+        >
+          Discard
+        </Button>
+        <Button
+          size="sm"
+          onClick={save}
+          loading={updateWL.isPending}
+          disabled={!dirty}
+          leftIcon={<Save width={14} height={14} strokeWidth={1.75} />}
+        >
+          Save changes
+        </Button>
+      </StickyActionBar>
 
       {hasUnknownDefault ? (
         <Callout intent="info">
@@ -458,7 +492,19 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
 
       {/* Global catalog: hide/show + per-dealer overrides */}
       <Card>
-        <CardHeader>
+        <CardHeader
+          action={
+            <Input
+              type="search"
+              inputMode="search"
+              aria-label="Search catalog tasks"
+              placeholder="Search tasks"
+              className="md:w-56"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          }
+        >
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <ShieldCheck width={16} height={16} strokeWidth={1.75} />
@@ -480,6 +526,10 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
               title="No catalog tasks"
               description="The global Kavach catalog is empty."
             />
+          ) : visibleCatalogRows.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-text-muted">
+              No catalog task matches “{search.trim()}”.
+            </p>
           ) : (
             <>
               {/* Desktop table (≥ md) */}
@@ -495,7 +545,7 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                     </TRow>
                   </THead>
                   <TBody>
-                    {catalogRows.map((r) => {
+                    {visibleCatalogRows.map((r) => {
                       const hidden = hiddenSet.has(r.code);
                       const ov = overrides[r.code];
                       const points = ov?.points ?? r.basePoints;
@@ -540,12 +590,19 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                             </div>
                           </TD>
                           <TD className="text-right">
+                            {/* The width lives on a wrapper, not on the field.
+                                `cn` is plain clsx and Tailwind emits `w-24`
+                                before `w-full`, so the `w-24` that used to sit
+                                here never won — the field rendered full-bleed
+                                and the column it was meant to fit was decided
+                                by the browser. */}
+                            <div className="ml-auto w-24">
                             <Input
                               aria-label={`Cadence in days for ${r.labelEn}`}
                               type="number"
                               min={1}
                               max={3650}
-                              className="ml-auto h-8 w-24 text-right"
+                              className="text-right"
                               disabled={isSos || hidden || !r.known}
                               value={isSos ? '' : (cadence ?? '')}
                               onChange={(e) =>
@@ -558,6 +615,7 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                                 )
                               }
                             />
+                            </div>
                             {ov?.cadenceDays !== undefined ? (
                               <div className="mt-1 text-xs text-warning">
                                 default{' '}
@@ -566,12 +624,13 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                             ) : null}
                           </TD>
                           <TD className="text-right">
+                            <div className="ml-auto w-20">
                             <Input
                               aria-label={`Points for ${r.labelEn}`}
                               type="number"
                               min={1}
                               max={500}
-                              className="ml-auto h-8 w-20 text-right"
+                              className="text-right"
                               disabled={hidden || !r.known}
                               value={points}
                               onChange={(e) =>
@@ -584,6 +643,7 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                                 )
                               }
                             />
+                            </div>
                             {ov?.points !== undefined ? (
                               <div className="mt-1 text-xs text-warning">
                                 default {r.baseKnown ? r.basePoints : '?'}
@@ -638,7 +698,7 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
               {/* Mobile card-stack (< md) */}
               <MobileCardList
                 className="p-3"
-                cards={catalogRows.map((r) => {
+                cards={visibleCatalogRows.map((r) => {
                   const hidden = hiddenSet.has(r.code);
                   const ov = overrides[r.code];
                   const points = ov?.points ?? r.basePoints;
@@ -647,13 +707,12 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                   const isSos = r.trigger === 'SOS';
                   return {
                     key: r.code,
+                    tone: hidden ? ('muted' as const) : ('default' as const),
                     primary: (
-                      <span
-                        className={cn(
-                          'block truncate font-medium text-text',
-                          hidden && 'opacity-60',
-                        )}
-                      >
+                      // Not `truncate`: a task label is the only thing that
+                      // says which row you are re-pointing, and there is no
+                      // second place on the phone to read it.
+                      <span className="block break-words font-medium text-text">
                         {r.labelEn}
                       </span>
                     ),
@@ -674,13 +733,18 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                     actions: (
                       <div className="grid gap-2">
                         <div className="grid grid-cols-2 gap-2">
+                          {/* `h-9` used to sit on these fields and did nothing:
+                              `cn` is clsx, and `Input`'s own `h-11 md:h-9` is
+                              emitted after it. The class is gone rather than
+                              silently ignored. */}
                           <label className="text-xs text-text-muted">
                             Points
                             <Input
                               type="number"
+                              inputMode="numeric"
                               min={1}
                               max={500}
-                              className="mt-1 h-9"
+                              className="mt-1"
                               disabled={hidden || !r.known}
                               value={points}
                               onChange={(e) =>
@@ -693,14 +757,24 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                                 )
                               }
                             />
+                            {/* The desktop cell prints what the row departed
+                                from; without it here the global default is
+                                unrecoverable on a phone — the field shows the
+                                override and nothing says what it replaced. */}
+                            {ov?.points !== undefined ? (
+                              <span className="mt-1 block text-warning">
+                                default {r.baseKnown ? r.basePoints : '?'}
+                              </span>
+                            ) : null}
                           </label>
                           <label className="text-xs text-text-muted">
                             Cadence (days)
                             <Input
                               type="number"
+                              inputMode="numeric"
                               min={1}
                               max={3650}
-                              className="mt-1 h-9"
+                              className="mt-1"
                               disabled={isSos || hidden || !r.known}
                               value={isSos ? '' : (cadence ?? '')}
                               onChange={(e) =>
@@ -713,6 +787,12 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                                 )
                               }
                             />
+                            {ov?.cadenceDays !== undefined ? (
+                              <span className="mt-1 block text-warning">
+                                default{' '}
+                                {r.baseKnown ? (r.baseCadenceDays ?? '—') : '?'}
+                              </span>
+                            ) : null}
                           </label>
                         </div>
                         {ov ? (
@@ -725,7 +805,11 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                               <RotateCcw width={14} height={14} strokeWidth={1.75} />
                             }
                           >
-                            Use the global default
+                            {/* `Button` is `whitespace-nowrap`, so `w-full` does
+                                not save a label that is wider than the card —
+                                it just runs off it. Short enough to fit at
+                                360px with the icon. */}
+                            Use default
                             {r.baseKnown ? ` (${r.basePoints} pts)` : ''}
                           </Button>
                         ) : null}
@@ -756,7 +840,22 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
 
       {/* Dealer-only tasks */}
       <Card>
-        <CardHeader className="flex-col gap-3 sm:flex-row">
+        {/* `CardHeader`'s own `action` slot, not a second child and not the
+            `sm:flex-row` this used to carry: `sm` is 640px, so the row it was
+            asking for arrived at a width no phone in the target set reaches,
+            and a `whitespace-nowrap` "Add task" beside the title squeezed the
+            title instead. */}
+        <CardHeader
+          action={
+            <Button
+              size="sm"
+              onClick={openAddCustom}
+              leftIcon={<Plus width={14} height={14} strokeWidth={1.75} />}
+            >
+              Add task
+            </Button>
+          }
+        >
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Sparkles width={16} height={16} strokeWidth={1.75} />
@@ -767,14 +866,6 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
               verified exactly like catalog tasks.
             </CardSubtitle>
           </div>
-          <Button
-            size="sm"
-            className="shrink-0"
-            onClick={openAddCustom}
-            leftIcon={<Plus width={14} height={14} strokeWidth={1.75} />}
-          >
-            Add task
-          </Button>
         </CardHeader>
         <CardContent className="p-0">
           {customItems.length === 0 ? (
@@ -880,10 +971,11 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                 cards={customItems.map((c) => ({
                   key: c._localId,
                   primary: (
-                    <span className="block truncate font-medium text-text">
+                    <span className="block break-words font-medium text-text">
                       {c.labelEn}
                     </span>
                   ),
+                  primaryRightWidth: 'clamp' as const,
                   primaryRight: (
                     <span className="flex items-center gap-1.5">
                       <span className="tabular-nums font-semibold">{c.points}</span>

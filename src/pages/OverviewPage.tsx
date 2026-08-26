@@ -8,7 +8,7 @@ import {
   Clock,
   Plug,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -62,7 +62,11 @@ function HolidayConfirmBanner() {
           {data.totalCount} national holiday{data.totalCount === 1 ? '' : 's'} need
           confirmation
         </p>
-        <p className="truncate text-xs text-text-muted">
+        {/* Not `truncate`: this line is the only place the pending months are
+            named, and at 360px it had ~176px to say them in — "Confirm August,
+            Sep…". The banner is a Link, so the extra height only makes the
+            target bigger. */}
+        <p className="text-xs text-text-muted">
           Confirm {months} so the Credit &amp; DOD due dates roll forward correctly.
         </p>
       </div>
@@ -204,14 +208,19 @@ function Kpi({
       <CardContent>
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm text-text-muted">{label}</span>
+          {/* The icon is decorative (`aria-hidden`) and costs 30px of a ~124px
+              KPI card at 360px, which is what wrapped "Active services" and
+              "Success rate" onto two lines and left the five cards ragged. The
+              value carries the meaning. */}
           <span
-            className={
+            className={cn(
+              'hidden md:inline',
               tone === 'success'
                 ? 'text-success'
                 : tone === 'danger'
                   ? 'text-danger'
-                  : 'text-text-subtle'
-            }
+                  : 'text-text-subtle',
+            )}
             aria-hidden
           >
             {icon}
@@ -250,6 +259,7 @@ function RecentFailures({
 }: {
   runs: ServiceRun[];
 }) {
+  const navigate = useNavigate();
   const failures = runs.filter((r) => r.status === 'FAILED').slice(0, 8);
   if (failures.length === 0) {
     return (
@@ -300,6 +310,12 @@ function RecentFailures({
         className="p-3"
         cards={failures.map((r) => ({
           key: r.id,
+          // The whole card navigates. It used to be dead space around a 45x16px
+          // inline `Link` set in `text-xs` — the only reachable thing on it. A
+          // card with `onClick` renders as one `min-h-11 w-full` button, so the
+          // dealer id below has to be plain text: an <a> inside a <button> is
+          // a nested control.
+          onClick: () => navigate(`/dealers/${r.dealerId}`),
           primary: (
             <span className="block truncate font-medium text-text">
               {r.serviceId}
@@ -308,13 +324,7 @@ function RecentFailures({
           primaryRight: <StatusChip kind="run" value={r.status} />,
           meta: (
             <span>
-              {formatDateTime(r.startedAt)} ·{' '}
-              <Link
-                to={`/dealers/${r.dealerId}`}
-                className="text-brand hover:underline"
-              >
-                {r.dealerId.slice(-6)}
-              </Link>
+              {formatDateTime(r.startedAt)} · {r.dealerId.slice(-6)}
             </span>
           ),
         }))}
@@ -338,24 +348,49 @@ function UpcomingRuns({
       />
     );
   }
+  const shown = runs.slice(0, 8);
   return (
-    <ul className="divide-y divide-border">
-      {runs.slice(0, 8).map((r) => (
-        <li
-          key={r.id}
-          className="flex items-center justify-between gap-3 py-2 text-sm"
-        >
-          <span className="font-medium text-text">
-            {isSuperAdmin ? r.serviceId : serviceLabel(r.serviceId)}
-          </span>
-          <span className="text-text-muted">
-            {formatDateTime(r.startedAt)}
-          </span>
-          <span className="text-xs text-text-subtle">
-            {formatDuration(r.durationMs)}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <>
+      {/* Desktop list (≥ md) — three unconstrained spans on one line. At 360px
+          that row has 296px and a raw serviceId ("water-ingress-testing") plus
+          a timestamp already overflows it, wrapping mid-value into a block
+          where it is not possible to tell which value belongs to which run. */}
+      <ul className="hidden divide-y divide-border md:block">
+        {shown.map((r) => (
+          <li
+            key={r.id}
+            className="flex items-center justify-between gap-3 py-2 text-sm"
+          >
+            <span className="font-medium text-text">
+              {isSuperAdmin ? r.serviceId : serviceLabel(r.serviceId)}
+            </span>
+            <span className="text-text-muted">
+              {formatDateTime(r.startedAt)}
+            </span>
+            <span className="text-xs text-text-subtle">
+              {formatDuration(r.durationMs)}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {/* Mobile card-stack (< md) */}
+      <MobileCardList
+        cards={shown.map((r) => ({
+          key: r.id,
+          primary: (
+            <span className="font-medium text-text">
+              {isSuperAdmin ? r.serviceId : serviceLabel(r.serviceId)}
+            </span>
+          ),
+          primaryRight: (
+            <span className="text-xs text-text-subtle">
+              {formatDuration(r.durationMs)}
+            </span>
+          ),
+          meta: <span>Next run {formatDateTime(r.startedAt)}</span>,
+        }))}
+      />
+    </>
   );
 }

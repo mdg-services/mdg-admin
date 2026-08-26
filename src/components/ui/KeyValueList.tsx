@@ -112,7 +112,11 @@ export function KeyValueList({
                 'min-w-0 break-words text-sm text-text',
                 item.mono && 'break-all font-mono',
                 item.numeric && 'tabular-nums md:text-right',
-                item.copyable && 'selectable',
+                // `select-text` is what the native shell's long-press allow-list
+                // matches on, so a copyable value gets both selection and the
+                // callout without every caller remembering to pass the class
+                // down through `className` (which lands on the whole list).
+                item.copyable && 'select-text',
               )}
             >
               {item.copyable && isCopyable(item.value) ? (
@@ -132,7 +136,11 @@ export function KeyValueList({
         <Button
           variant="ghost"
           size="sm"
-          className="mt-2 px-0"
+          // `padding="none"`, not `className="px-0"` — which is what this said
+          // and which never applied, because `.px-0` is emitted before `.px-3`.
+          // The toggle is meant to line up with the labels above it.
+          padding="none"
+          className="mt-2"
           onClick={() => setExpanded(true)}
         >
           Show all {items.length} fields
@@ -142,7 +150,8 @@ export function KeyValueList({
         <Button
           variant="ghost"
           size="sm"
-          className="mt-2 px-0"
+          padding="none"
+          className="mt-2"
           onClick={() => setExpanded(false)}
         >
           Show fewer

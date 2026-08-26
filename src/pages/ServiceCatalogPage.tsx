@@ -60,11 +60,16 @@ export function ServiceCatalogPage() {
               <Card className="h-full transition-colors hover:bg-surface-2">
                 <CardContent>
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-base font-semibold text-text">
+                    {/* `min-w-0` so a long service name shrinks instead of
+                        pushing the cadence Badge — a hard 22px box — until its
+                        own label wraps inside it and clips. */}
+                    <div className="min-w-0">
+                      <p className="break-words text-base font-semibold text-text">
                         {s.name}
                       </p>
-                      <p className="text-xs text-text-subtle">{s.id}</p>
+                      <p className="break-all text-xs text-text-subtle">
+                        {s.id}
+                      </p>
                     </div>
                     <Badge intent={statusIntent('cadence', s.cadence)}>
                       {s.cadence}
@@ -100,8 +105,11 @@ export function ServiceCatalogPage() {
       >
         {selected ? (
           <div className="grid gap-3">
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <Field label="ID" value={selected.id} />
+            {/* One column below md: each of the two 150px columns is narrower
+                than a plugin slug, and a slug without hyphens has no break
+                opportunity at all. */}
+            <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2 md:gap-2">
+              <Field label="ID" value={selected.id} identifier />
               <Field
                 label="Default cadence"
                 value={
@@ -119,7 +127,10 @@ export function ServiceCatalogPage() {
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
                   Config schema
                 </p>
-                <pre className="max-h-96 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
+                {/* `.scroll-pane` — this 384px dual-axis scroller sits inside
+                    the Drawer's own body, and without `overscroll-contain`
+                    reaching its bottom starts dragging the sheet closed. */}
+                <pre className="scroll-pane max-h-96 overflow-auto rounded-md bg-surface-2 p-3 text-xs">
                   {JSON.stringify(selected.defaultConfigSchema, null, 2)}
                 </pre>
               </section>
@@ -131,19 +142,31 @@ export function ServiceCatalogPage() {
   );
 }
 
+/** `identifier` is `break-all`: a plugin slug is one unbreakable token unless it
+ *  happens to carry hyphens, and this Drawer is 360px wide on a phone. */
 function Field({
   label,
   value,
+  identifier = false,
 }: {
   label: string;
   value: React.ReactNode;
+  identifier?: boolean;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-xs uppercase tracking-wide text-text-subtle">
         {label}
       </p>
-      <p className="text-text">{value}</p>
+      <p
+        className={
+          identifier
+            ? 'min-w-0 break-all font-mono text-text'
+            : 'min-w-0 break-words text-text'
+        }
+      >
+        {value}
+      </p>
     </div>
   );
 }

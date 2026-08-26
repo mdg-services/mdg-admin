@@ -157,7 +157,11 @@ export function EditServiceDialog({
       open={open}
       onClose={onClose}
       title="Edit service"
-      description="Only the fields you change are sent, so an untouched cadence keeps its current next run."
+      // The rule this states is worth stating, but `Dialog`'s `description`
+      // sits in the sticky header and never scrolls, so it costs ~60px of a
+      // 360px sheet for the whole session. It reads below the summary block
+      // instead, where it scrolls away once it has been read.
+      description="Change the schedule or the config."
       size="lg"
       footer={
         <>
@@ -189,6 +193,11 @@ export function EditServiceDialog({
             </div>
             <StatusChip kind="dealerService" value={service.status} />
           </div>
+
+          <p className="text-sm text-text-muted">
+            Only the fields you change are sent, so an untouched cadence keeps
+            its current next run.
+          </p>
 
           {isError ? (
             <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning">

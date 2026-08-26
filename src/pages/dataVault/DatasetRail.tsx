@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import * as React from 'react';
 import { Link } from 'react-router-dom';
 
 import { cn } from '@/lib/cn';
@@ -51,6 +52,38 @@ export function DatasetRail({
   orientation = 'vertical',
 }: DatasetRailProps) {
   const horizontal = orientation === 'horizontal';
+  const listRef = React.useRef<HTMLUListElement | null>(null);
+  const activeRef = React.useRef<HTMLLIElement | null>(null);
+
+  /**
+   * Bring the open dataset into view, the way `Tabs` does.
+   *
+   * Six pills — IRAS shift data, PAD ledger, Credit & DOD, Daily Sales Report,
+   * Inspection Reports, TT Density — come to roughly 900px of strip in the
+   * 328px a 360px phone has. So `?vault=tt-density` opened showing pill one,
+   * with the pill it had just been asked for three screens to the right, and
+   * with the scrollbar hidden on touch there was nothing on screen to say the
+   * other five existed.
+   *
+   * `scrollLeft` is written by hand rather than calling `scrollIntoView`, for
+   * the reason recorded at the top of `Tabs.tsx`: `scrollIntoView` walks every
+   * scrollable ancestor on both axes, and here that includes the page.
+   */
+  React.useEffect(() => {
+    const list = listRef.current;
+    const active = activeRef.current;
+    if (!list || !active) return;
+    const listBox = list.getBoundingClientRect();
+    const activeBox = active.getBoundingClientRect();
+    const delta =
+      activeBox.left + activeBox.width / 2 - (listBox.left + listBox.width / 2);
+    // The browser clamps to [0, scrollWidth - clientWidth], so the first and
+    // last pills rest against the ends instead of being centred.
+    if (Math.abs(delta) > 1) list.scrollLeft += delta;
+    // Keyed on the active id alone: `datasets` is rebuilt on every render, and
+    // re-centring that often would fight a manual scroll.
+  }, [activeId]);
+
   return (
     <nav
       aria-label="Vault datasets"
@@ -61,48 +94,68 @@ export function DatasetRail({
           Datasets
         </p>
       )}
-      <ul
-        className={cn(
-          'flex snap-x snap-proximity items-center gap-1 overflow-x-auto overscroll-x-contain scrollbar-thin',
-          horizontal
-            ? 'border-b border-border pb-2'
-            : 'lg:flex-col lg:items-stretch lg:gap-0.5 lg:overflow-x-visible',
-        )}
-      >
-        {datasets.map((dataset) => {
-          const active = dataset.id === activeId;
-          const { Icon } = dataset;
-          return (
-            <li
-              key={dataset.id}
-              className={cn('shrink-0 snap-start', horizontal ? null : 'lg:w-full lg:shrink')}
-            >
-              <Link
-                to={{ search: hrefFor(dataset.id) }}
-                aria-current={active ? 'page' : undefined}
-                title={dataset.description}
-                className={cn(
-                  'flex min-h-11 items-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
-                  horizontal ? 'min-h-9 py-2' : 'lg:min-h-0 lg:py-2',
-                  active
-                    ? 'bg-brand-soft text-brand'
-                    : 'text-text-muted hover:bg-surface-2 hover:text-text',
-                )}
+      {/*
+        The fade is a sibling of the scroller, not a child: `right-0` inside a
+        scroller resolves against its full scroll width, so it would sit at the
+        far end of the pills rather than at the visible edge. `md:hidden`
+        because a mouse has a scrollbar and a trackpad; this cue is for a finger.
+      */}
+      <div className={horizontal ? 'relative' : undefined}>
+        <ul
+          ref={listRef}
+          className={cn(
+            'flex snap-x snap-proximity items-center gap-1 overflow-x-auto overscroll-x-contain scrollbar-thin',
+            horizontal
+              ? 'border-b border-border pb-2'
+              : 'lg:flex-col lg:items-stretch lg:gap-0.5 lg:overflow-x-visible',
+          )}
+        >
+          {datasets.map((dataset) => {
+            const active = dataset.id === activeId;
+            const { Icon } = dataset;
+            return (
+              <li
+                key={dataset.id}
+                ref={active ? activeRef : undefined}
+                className={cn('shrink-0 snap-start', horizontal ? null : 'lg:w-full lg:shrink')}
               >
-                <Icon
-                  width={16}
-                  height={16}
-                  strokeWidth={1.75}
-                  className="shrink-0"
-                  aria-hidden
-                />
-                <span className="truncate">{dataset.label}</span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+                <Link
+                  to={{ search: hrefFor(dataset.id) }}
+                  aria-current={active ? 'page' : undefined}
+                  title={dataset.description}
+                  className={cn(
+                    'flex min-h-11 items-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+                    // The horizontal branch used to clamp every pill to 36px at
+                    // ALL widths, overriding the 44px base — and this strip is the
+                    // primary navigation between all six per-dealer datasets on a
+                    // phone. 44px below md, the old 36px back from md up.
+                    horizontal ? 'min-h-11 py-2 md:min-h-9' : 'lg:min-h-0 lg:py-2',
+                    active
+                      ? 'bg-brand-soft text-brand'
+                      : 'text-text-muted hover:bg-surface-2 hover:text-text',
+                  )}
+                >
+                  <Icon
+                    width={16}
+                    height={16}
+                    strokeWidth={1.75}
+                    className="shrink-0"
+                    aria-hidden
+                  />
+                  <span className="truncate">{dataset.label}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+        {horizontal ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-bg to-transparent md:hidden"
+          />
+        ) : null}
+      </div>
     </nav>
   );
 }

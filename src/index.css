@@ -164,13 +164,20 @@
   .tap-target {
     position: relative;
   }
-  .tap-target::after {
+  /* The same halo WITHOUT `position: relative`. `.tap-target` is emitted after
+     `.absolute`, so putting it on an absolutely positioned control silently
+     unpins it — which is exactly the case an overlay close/remove button is.
+     Use .tap-halo there; the element already establishes its own containing
+     block, so the halo has something to be absolute against. */
+  .tap-target::after,
+  .tap-halo::after {
     content: '';
     position: absolute;
     inset: -12px;
   }
   @media (min-width: 768px) {
-    .tap-target::after {
+    .tap-target::after,
+    .tap-halo::after {
       display: none;
     }
   }
@@ -178,8 +185,20 @@
      the native feel, and only inputs are exempted — so a value shown in a
      <div> cannot be selected, long-pressed or copied at all. Any string the
      admin might have to read out or transcribe (a one-time password, a dealer
-     code, a run id) needs this, or a real <input readOnly>. */
-  .selectable {
+     code, a run id) needs this, or a real <input readOnly>.
+
+     USE `select-text`, NOT `.selectable`. Inside the native shell, restoring
+     `user-select` is only half the job: HARDENING_JS swallows `contextmenu`
+     everywhere except `closest('input, textarea, [contenteditable="true"],
+     .select-text')`. That selector is a literal allow-list, so a span marked
+     `.selectable` gets selection but still no long-press Copy — which made the
+     app's own "select the text and copy manually" advice untrue. Tailwind's
+     `select-text` is the class the shell looks for; it is given the callout
+     here because Tailwind's own utility only sets `user-select`.
+     `.selectable` stays as an alias so nothing breaks, but new code uses
+     `select-text`. */
+  .selectable,
+  .select-text {
     -webkit-user-select: text;
     user-select: text;
     -webkit-touch-callout: default;

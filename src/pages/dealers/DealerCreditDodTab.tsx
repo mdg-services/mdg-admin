@@ -19,8 +19,11 @@ import {
   Card,
   CardContent,
   EmptyState,
+  InfoBadge,
   Input,
   Label,
+  MobileCardList,
+  SegmentedControl,
   Skeleton,
   Table,
   TBody,
@@ -243,20 +246,26 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
           <CreditDodHelpCta />
         </div>
 
-        <div className="flex gap-1 rounded-md bg-surface-2 p-1 sm:w-fit">
-          <ModeTab
-            active={mode === 'today'}
-            onClick={() => setMode('today')}
-            icon={<RefreshCw width={15} height={15} strokeWidth={1.75} />}
-            label="Today"
-          />
-          <ModeTab
-            active={mode === 'backdated'}
-            onClick={() => setMode('backdated')}
-            icon={<CalendarClock width={15} height={15} strokeWidth={1.75} />}
-            label="Past date"
-          />
-        </div>
+        {/* Was a hand-rolled 32px pill pair 4px apart — the gate to back-dated
+            generation, on a target a thumb cannot reliably hit. The shared
+            control is 44px below md and the compact row again at md. */}
+        <SegmentedControl
+          aria-label="Report date"
+          value={mode}
+          onChange={setMode}
+          options={[
+            {
+              value: 'today',
+              label: 'Today',
+              icon: <RefreshCw width={15} height={15} strokeWidth={1.75} />,
+            },
+            {
+              value: 'backdated',
+              label: 'Past date',
+              icon: <CalendarClock width={15} height={15} strokeWidth={1.75} />,
+            },
+          ]}
+        />
 
         {mode === 'today' ? (
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -265,6 +274,7 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
               ledger, and produces today&apos;s card.
             </p>
             <Button
+              className="w-full md:w-auto"
               onClick={() => void generate()}
               loading={busy}
               disabled={!creditDodDs || outOfQuota}
@@ -278,7 +288,12 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
               Reconstruct the card as of any past date. This runs without
               touching the live ledger.
             </p>
-            <div className="flex items-end gap-2">
+            {/* 176px of date input + 8px + ~110px of button is 294px against
+                the ~296px a Card offers at 360px — flush before Android's own
+                date control adds its intrinsic width, and `main` is
+                `overflow-x-hidden`, so Generate's right edge was CLIPPED rather
+                than scrollable. Stacked below md; the same row at md. */}
+            <div className="flex w-full flex-col items-stretch gap-2 md:w-auto md:flex-row md:items-end">
               <div>
                 <Label htmlFor="cd-asof">As-of date</Label>
                 <Input
@@ -288,10 +303,11 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
                   max={maxDate}
                   onChange={(e) => setDate(e.target.value)}
                   disabled={busy || !creditDodDs}
-                  className="w-44"
+                  className="w-full md:w-44"
                 />
               </div>
               <Button
+                className="w-full md:w-auto"
                 onClick={generateBackdated}
                 loading={busy}
                 disabled={!creditDodDs || outOfQuota}
@@ -323,35 +339,6 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
   );
 }
 
-function ModeTab({
-  active,
-  onClick,
-  icon,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={
-        'inline-flex h-8 items-center gap-1.5 rounded px-3 text-sm font-medium transition-colors ' +
-        (active
-          ? 'bg-surface text-text shadow-sm'
-          : 'text-text-muted hover:text-text')
-      }
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
 function LedgerCard({ dealerId }: { dealerId: string }) {
   const {
     data,
@@ -369,8 +356,11 @@ function LedgerCard({ dealerId }: { dealerId: string }) {
   return (
     <Card>
       <CardContent className="p-0">
-        <div className="flex items-center justify-between gap-3 border-b border-border p-4">
-          <div>
+        {/* `flex-wrap`, as the Report history header two components down already
+            has. Without it the transaction-count Badge — a hard 22px box — was
+            squeezed at 360px until its own label wrapped inside it and clipped. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
+          <div className="min-w-0">
             <p className="text-base font-semibold text-text">
               Maintained PAD ledger
             </p>
@@ -407,46 +397,101 @@ function LedgerCard({ dealerId }: { dealerId: string }) {
           />
         ) : (
           <>
-            <Table>
-              <THead>
-                <TRow>
-                  <TH>Date</TH>
-                  <TH>Description</TH>
-                  <TH>Type</TH>
-                  <TH>Terminal</TH>
-                  <TH className="text-right">Debit</TH>
-                  <TH className="text-right">Credit</TH>
-                  <TH className="text-right">Balance</TH>
-                </TRow>
-              </THead>
-              <TBody>
-                {rows.map((r) => (
-                  <TRow key={r.seq}>
-                    <TD className="whitespace-nowrap text-text-muted">
-                      {formatDmy(r.date)}
-                    </TD>
-                    <TD className="font-medium">{r.doc || '-'}</TD>
-                    <TD className="text-text-muted">{r.txnType || '-'}</TD>
-                    <TD className="text-text-muted">{r.terminal || '-'}</TD>
-                    <TD className="whitespace-nowrap text-right tabular-nums">
-                      {money(r.debit)}
-                    </TD>
-                    <TD className="whitespace-nowrap text-right tabular-nums">
-                      {money(r.credit)}
-                    </TD>
-                    <TD
-                      className={
-                        'whitespace-nowrap text-right font-medium tabular-nums ' +
-                        (r.balance < 0 ? 'text-green-600' : 'text-text')
-                      }
-                    >
-                      {inrFormat(r.balance)}
-                    </TD>
+            {/* Desktop table (≥ md) */}
+            <div className="hidden md:block">
+              <Table>
+                <THead>
+                  <TRow>
+                    <TH>Date</TH>
+                    <TH>Description</TH>
+                    <TH>Type</TH>
+                    <TH>Terminal</TH>
+                    <TH className="text-right">Debit</TH>
+                    <TH className="text-right">Credit</TH>
+                    <TH className="text-right">Balance</TH>
                   </TRow>
-                ))}
-              </TBody>
-            </Table>
-            <div className="flex items-center justify-between gap-3 border-t border-border p-3">
+                </THead>
+                <TBody>
+                  {rows.map((r) => (
+                    <TRow key={r.seq}>
+                      <TD className="whitespace-nowrap text-text-muted">
+                        {formatDmy(r.date)}
+                      </TD>
+                      <TD className="font-medium">{r.doc || '-'}</TD>
+                      <TD className="text-text-muted">{r.txnType || '-'}</TD>
+                      <TD className="text-text-muted">{r.terminal || '-'}</TD>
+                      <TD className="whitespace-nowrap text-right tabular-nums">
+                        {money(r.debit)}
+                      </TD>
+                      <TD className="whitespace-nowrap text-right tabular-nums">
+                        {money(r.credit)}
+                      </TD>
+                      <TD
+                        className={
+                          'whitespace-nowrap text-right font-medium tabular-nums ' +
+                          (r.balance < 0 ? 'text-green-600' : 'text-text')
+                        }
+                      >
+                        {inrFormat(r.balance)}
+                      </TD>
+                    </TRow>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+
+            {/* Mobile card-stack (< md). This was the one table in the area with
+                no phone form at all: about two and a half of its seven columns
+                fit at 360px, so Balance — the running figure the whole ledger
+                exists to show — sat off the right edge of a nested scroller
+                with no sticky Date column to say which transaction you had
+                reached. A card, not a frozen-column table: a ledger row is read
+                one at a time, not compared across. */}
+            <MobileCardList
+              className="p-3"
+              cards={rows.map((r) => ({
+                key: String(r.seq),
+                primary: (
+                  <span className="block break-words font-medium text-text">
+                    {r.doc || 'No document reference'}
+                  </span>
+                ),
+                primaryRight: (
+                  <span
+                    className={
+                      'whitespace-nowrap text-sm font-semibold tabular-nums ' +
+                      (r.balance < 0 ? 'text-green-600' : 'text-text')
+                    }
+                  >
+                    {inrFormat(r.balance)}
+                  </span>
+                ),
+                secondary: (
+                  <span className="text-xs">{formatDmy(r.date)}</span>
+                ),
+                kv: [
+                  { label: 'Debit', value: money(r.debit), numeric: true },
+                  { label: 'Credit', value: money(r.credit), numeric: true },
+                  // "Balance" repeated as a labelled row: the figure in the
+                  // right rail above is a headline, and a negative one means
+                  // the dealer is in credit — which a bare red/green number
+                  // does not say.
+                  {
+                    label: r.balance < 0 ? 'Balance (in credit)' : 'Balance owed',
+                    value: inrFormat(Math.abs(r.balance)),
+                    numeric: true,
+                  },
+                ],
+                meta: (
+                  <span>
+                    {[r.txnType, r.terminal].filter(Boolean).join(' · ') ||
+                      'No type or terminal recorded'}
+                  </span>
+                ),
+              }))}
+            />
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-3">
               <span className="text-xs text-text-subtle">
                 Showing {rows.length.toLocaleString('en-IN')} of{' '}
                 {total.toLocaleString('en-IN')}
@@ -484,11 +529,16 @@ function LateEntriesBadge({
 }) {
   const { backdatedRows, supersededSharedAt } = snapshot;
   if (!supersededSharedAt && backdatedRows === 0) return null;
+  // The badge is one word; everything it means was in `title`, and a phone has
+  // no hover. `InfoBadge` keeps the desktop tooltip byte for byte and, below
+  // md, opens the same sentence in a sheet.
   return (
-    <Badge
+    <InfoBadge
       className={className}
       intent={supersededSharedAt ? 'warning' : 'neutral'}
-      title={
+      label="Late entries"
+      sheetTitle="Late entries"
+      detail={
         supersededSharedAt
           ? `The report shared on ${formatDateTime(
               supersededSharedAt,
@@ -497,9 +547,7 @@ function LateEntriesBadge({
               backdatedRows === 1 ? '' : 's'
             } the portal published after their own date.`
       }
-    >
-      Late entries
-    </Badge>
+    />
   );
 }
 
@@ -521,10 +569,16 @@ function OverdueBadge({
   if (!od) return null;
   const dayCount = `${od.days} day${od.days === 1 ? '' : 's'}`;
   return (
-    <Badge
+    <InfoBadge
       className={className}
       intent={od.withinPortalLag ? 'warning' : 'danger'}
-      title={
+      label={
+        od.withinPortalLag
+          ? `Past deadline · ${dayCount}`
+          : `Overdue ${dayCount}`
+      }
+      sheetTitle="Past its deposit deadline"
+      detail={
         od.withinPortalLag
           ? `${inrFormat(od.amount)} was due on ${formatDmy(
               od.since,
@@ -535,9 +589,7 @@ function OverdueBadge({
               od.deadlines
             } deadline${od.deadlines === 1 ? '' : 's'}.`
       }
-    >
-      {od.withinPortalLag ? `Past deadline · ${dayCount}` : `Overdue ${dayCount}`}
-    </Badge>
+    />
   );
 }
 
@@ -560,15 +612,45 @@ function CreditLockBadge({
   if (!review?.lapsed) return null;
   const days = Math.max(1, -review.daysUntil);
   return (
-    <Badge
+    <InfoBadge
       className={className}
       intent="danger"
-      title={`The credit review date of ${formatDmy(review.on)} passed ${days} day${
+      label="Credit locked"
+      sheetTitle="Credit locked"
+      detail={`The credit review date of ${formatDmy(review.on)} passed ${days} day${
         days === 1 ? '' : 's'
       } before the date these figures describe. IndianOil has stopped the credit line — the dealer buys cash and carry until their sales officer reopens the account.`}
-    >
-      Credit locked
-    </Badge>
+    />
+  );
+}
+
+/**
+ * The desktop table's Reconciles column, in a shape a phone can read.
+ *
+ * On desktop this is a bare tick / cross / question mark whose meaning lives in
+ * an `aria-label` — invisible to a sighted touch user, since nothing on a phone
+ * ever hovers it. Here the word is on screen beside the glyph, which is also
+ * the second encoding channel a colour-only signal needs.
+ */
+function ReconcileChip({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
+  if (!snapshot.reconcileChecked) {
+    return (
+      <span className="inline-flex h-[22px] shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-warning-soft px-2 text-xs font-medium text-warning">
+        <HelpCircle width={12} height={12} strokeWidth={2} aria-hidden />
+        Unchecked
+      </span>
+    );
+  }
+  return snapshot.reconciles ? (
+    <span className="inline-flex h-[22px] shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-success-soft px-2 text-xs font-medium text-success">
+      <CheckCircle2 width={12} height={12} strokeWidth={2} aria-hidden />
+      Reconciles
+    </span>
+  ) : (
+    <span className="inline-flex h-[22px] shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-danger-soft px-2 text-xs font-medium text-danger">
+      <XCircle width={12} height={12} strokeWidth={2} aria-hidden />
+      Mismatch
+    </span>
   );
 }
 
@@ -781,7 +863,17 @@ function SnapshotHistoryCard({ dealerId }: { dealerId: string }) {
               </Table>
             </div>
 
-            {/* Mobile card-stack (< md) */}
+            {/* Mobile card-stack (< md).
+                Three things changed here. The headline carried `truncate` while
+                holding the two figures that decide everything — "₹12,34,567 ·
+                was due 12-08-2026" needs ~215px and had ~165px — so the due
+                date, and on a large overdue amount the amount itself, were cut
+                off. The badges moved OUT of the tap target: below md an
+                `InfoBadge` is a real button, and a button inside a button is
+                both invalid and a tap the wrong control wins. And the Reconciles
+                column the desktop table shows is back, with a word beside the
+                glyph, so "can I trust this one?" is answerable without opening
+                every row. */}
             <ul className="grid gap-2 p-3 md:hidden">
               {snapshots.map((s) => {
                 const isOpen = expanded === s.id;
@@ -793,47 +885,63 @@ function SnapshotHistoryCard({ dealerId }: { dealerId: string }) {
                     <button
                       type="button"
                       onClick={() => setExpanded(isOpen ? null : s.id)}
-                      className="flex w-full items-start justify-between gap-3 p-3 text-left"
+                      aria-expanded={isOpen}
+                      className="flex min-h-11 w-full items-start justify-between gap-3 p-3 text-left"
                     >
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-text">
+                        <span className="block break-words text-base font-semibold tabular-nums text-text">
                           {s.overdue ? (
                             <span className="text-danger">
-                              {inrFormat(s.overdue.amount)} · was due{' '}
-                              {formatDmy(s.overdue.since)}
+                              {inrFormat(s.overdue.amount)}
                             </span>
                           ) : (
-                            <>
-                              {inrFormat(s.dueAmount)}
-                              {s.dueDate ? ` · by ${formatDmy(s.dueDate)}` : ''}
-                            </>
+                            inrFormat(s.dueAmount)
                           )}
                         </span>
-                        <span className="mt-0.5 block text-xs text-text-subtle">
+                        <span className="mt-0.5 block break-words text-sm">
+                          {s.overdue ? (
+                            <span className="text-danger">
+                              was due {formatDmy(s.overdue.since)}
+                            </span>
+                          ) : s.dueDate ? (
+                            <span className="text-text-muted">
+                              by {formatDmy(s.dueDate)}
+                            </span>
+                          ) : (
+                            <span className="text-text-subtle">
+                              no due date
+                            </span>
+                          )}
+                        </span>
+                        <span className="mt-0.5 block break-words text-xs text-text-subtle">
                           {formatDateTime(s.capturedAt)}
                           {s.backdated && s.asOf
                             ? ` · as of ${formatDmy(s.asOf)}`
                             : ''}
                         </span>
-                        <span className="mt-1.5 flex flex-wrap items-center gap-1.5 empty:hidden">
-                          <OverdueBadge snapshot={s} />
-                          <CreditLockBadge snapshot={s} />
-                          <LateEntriesBadge snapshot={s} />
-                        </span>
                       </span>
-                      <span className="flex shrink-0 items-center gap-1.5">
-                        {s.shared ? (
-                          <Badge intent="success">Shared</Badge>
-                        ) : (
-                          <Badge intent="info">Not shared</Badge>
-                        )}
+                      <span className="shrink-0 text-text-muted">
                         {isOpen ? (
-                          <ChevronDown width={16} height={16} strokeWidth={1.75} />
+                          <ChevronDown width={20} height={20} strokeWidth={1.75} />
                         ) : (
-                          <ChevronRight width={16} height={16} strokeWidth={1.75} />
+                          <ChevronRight width={20} height={20} strokeWidth={1.75} />
                         )}
                       </span>
                     </button>
+                    {/* `gap-2`, not `gap-1.5`: below md an `InfoBadge` carries
+                        a `.tap-target` halo inset -12px, and two of them closer
+                        than 8px let the wrong one take the tap. */}
+                    <div className="flex flex-wrap items-center gap-2 px-3 pb-3">
+                      {s.shared ? (
+                        <Badge intent="success">Shared</Badge>
+                      ) : (
+                        <Badge intent="info">Not shared</Badge>
+                      )}
+                      <ReconcileChip snapshot={s} />
+                      <OverdueBadge snapshot={s} />
+                      <CreditLockBadge snapshot={s} />
+                      <LateEntriesBadge snapshot={s} />
+                    </div>
                     {isOpen ? (
                       <div className="border-t border-border bg-surface-2 p-3">
                         <CreditDodReportCard snapshot={s} runId={s.runId} />

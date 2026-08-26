@@ -28,8 +28,9 @@ import { useToast } from './Toast';
  * callout come back, at full width, with the value never truncated.
  *
  * `mode="inline"` is for a value inside a sentence — a run id, a dealer code —
- * where a field would be absurd. It leans on `.selectable`, which hands the
- * same three CSS properties back to one span.
+ * where a field would be absurd. It marks the span `select-text`, which hands
+ * the same three CSS properties back to that one span AND is the exact class
+ * the native shell's long-press allow-list looks for.
  *
  * THE COPY ITSELF NEVER SILENTLY FAILS
  * ------------------------------------
@@ -48,7 +49,7 @@ export interface CopyableProps {
   /**
    * 'field'  — a readOnly `<input>` plus a copy button. Use it for secrets and
    *            for any value the admin must read in full or transcribe.
-   * 'inline' — a `.selectable` span plus a copy button, for use inside prose.
+   * 'inline' — a `select-text` span plus a copy button, for use inside prose.
    */
   mode?: 'field' | 'inline';
   toastLabel?: string;
@@ -169,10 +170,14 @@ export function Copyable({
         <span
           ref={textRef}
           // `break-all`, not `truncate`: this is an identifier, and half of one
-          // is worse than a wrapped one. `.selectable` is what makes a
-          // long-press work at all — see the note at the top of the file.
+          // is worse than a wrapped one. `select-text` and not `.selectable`:
+          // the shell's contextmenu allow-list is matched by class NAME, so
+          // only this exact class gets the long-press callout back — without it
+          // the component's own last-resort message ("long-press it and choose
+          // Copy") is advice the platform will not honour. Carried here so no
+          // caller has to remember it.
           className={cn(
-            'selectable min-w-0 break-all',
+            'select-text min-w-0 break-all',
             mono && 'font-mono text-[0.95em]',
           )}
         >

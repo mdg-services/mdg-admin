@@ -3,6 +3,7 @@ import * as React from 'react';
 
 
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { Textarea } from '@/components/ui/Textarea';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
@@ -167,6 +168,13 @@ export function Composer({
 
   async function startRecording() {
     setError(null);
+    if (!recorder.supported) {
+      // The reason used to live only in `title`, which never fires on touch —
+      // so on a phone the mic was a greyed-out button with no explanation
+      // anywhere. Keep the control tappable and answer in visible text.
+      setError('Voice notes are not supported in this browser.');
+      return;
+    }
     const ok = await recorder.start();
     if (!ok) {
       // Mic blocked (permission denied / unsupported). Inside the native shell
@@ -210,7 +218,15 @@ export function Composer({
   }
 
   return (
-    <div className="border-t border-border bg-surface px-3 py-2">
+    /*
+     * The bottom-most element on screen in a thread, and in a thread the mobile
+     * tab bar — the one thing that carries `.safe-bottom` — is hidden. So this
+     * row owns its own bottom inset or the mic and Send sit inside the iPhone
+     * home-indicator strip. It looked safe until now only because the page was
+     * rendering 32px shorter than the space it occupies (InboxPage's `h-full`
+     * against `main`'s content box), an accident the height fix removes.
+     */
+    <div className="border-t border-border bg-surface px-3 py-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] md:pb-2">
       {replyingTo ? (
         <div className="mb-2 flex items-center gap-2 rounded-md border-l-[3px] border-brand bg-surface-2 px-2.5 py-1.5">
           <div className="min-w-0 flex-1">
@@ -228,14 +244,17 @@ export function Composer({
               className="h-9 w-9 shrink-0 rounded-md object-cover"
             />
           ) : null}
-          <button
-            type="button"
-            onClick={onCancelReply}
+          <IconButton
             aria-label="Cancel reply"
-            className="shrink-0 rounded-sm p-1 text-text-muted hover:bg-surface hover:text-text"
+            // `xs`: this was a 22px `p-1` glyph inside a quote strip, and `sm`
+            // would grow it to 32px on desktop for no mobile gain — below md
+            // every size is the same 44px square.
+            size="xs"
+            onClick={onCancelReply}
+            className="text-text-muted"
           >
             <X width={14} height={14} strokeWidth={1.75} />
-          </button>
+          </IconButton>
         </div>
       ) : null}
       {files.length > 0 ? (
@@ -251,11 +270,16 @@ export function Composer({
                   alt={s.file.name}
                   className="h-full w-full object-cover"
                 />
+                {/* The paint has to stay small — it sits on a 64px thumbnail —
+                    so the hit area grows instead, the way `.tap-target` does it.
+                    Not `.tap-target` itself: that utility sets
+                    `position: relative` and is emitted after `.absolute`, so it
+                    would unpin this X from the thumbnail's corner. */}
                 <button
                   type="button"
                   onClick={() => removeFile(s.id)}
                   aria-label={`Remove ${s.file.name}`}
-                  className="absolute right-0.5 top-0.5 rounded-full bg-black/55 p-0.5 text-white hover:bg-black/75"
+                  className="tap-halo absolute right-0.5 top-0.5 rounded-full bg-black/55 p-0.5 text-white hover:bg-black/75"
                 >
                   <X width={12} height={12} strokeWidth={2} />
                 </button>
@@ -263,7 +287,7 @@ export function Composer({
             ) : (
               <span
                 key={s.id}
-                className="inline-flex max-w-xs items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-1 text-xs text-text"
+                className="inline-flex min-h-11 max-w-xs items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-1 text-xs text-text md:min-h-0"
               >
                 <Paperclip width={12} height={12} strokeWidth={1.75} />
                 <span className="truncate">{s.file.name}</span>
@@ -271,7 +295,7 @@ export function Composer({
                   type="button"
                   onClick={() => removeFile(s.id)}
                   aria-label={`Remove ${s.file.name}`}
-                  className="rounded-sm text-text-muted hover:text-text"
+                  className="tap-target rounded-sm p-1 text-text-muted hover:text-text md:p-0"
                 >
                   <X width={12} height={12} strokeWidth={1.75} />
                 </button>
@@ -309,6 +333,19 @@ export function Composer({
             Send
           </Button>
         </div>
+      ) : disabled && !isMd ? (
+        /*
+         * A resolved chat's only explanation used to be the placeholder, inside
+         * a field about 180px wide at 360px — the admin read "This chat is
+         * resol…" beside a mic that was simply grey. Below md the row is
+         * replaced by the sentence itself, pointing at the Reopen button that
+         * is already in the thread header.
+         */
+        <p className="px-1 py-2 text-sm text-text-muted">
+          This chat is resolved. Tap{' '}
+          <span className="font-medium text-text">Reopen</span> at the top to
+          reply.
+        </p>
       ) : (
         <div className="flex items-end gap-2">
           <input
@@ -339,7 +376,7 @@ export function Composer({
             rows={1}
             placeholder={placeholder}
             disabled={busy}
-            className="min-h-[36px] resize-none"
+            className="min-h-[36px] min-w-0 resize-none"
           />
           {hasContent ? (
             <Button
@@ -355,9 +392,8 @@ export function Composer({
             <button
               type="button"
               onClick={startRecording}
-              disabled={busy || !recorder.supported}
+              disabled={busy}
               aria-label="Record voice message"
-              title={recorder.supported ? 'Record voice message' : 'Recording not supported'}
               className={cn(
                 'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted md:h-9 md:w-9',
                 'hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-60',

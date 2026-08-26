@@ -2,11 +2,14 @@ import { AlertCircle, DownloadCloud, Gauge, ImageOff, Plug, Truck } from 'lucide
 import * as React from 'react';
 
 import {
+  ActionRow,
   Badge,
   Button,
   Callout,
   Card,
   CardContent,
+  CardHeader,
+  Drawer,
   EmptyState,
   ImageLightbox,
   Skeleton,
@@ -19,8 +22,10 @@ import {
   useTtRegisterDayPhotoUrl,
   useTtRegisterDays,
 } from '@/hooks/api/useTtDensity';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, formatYmd, istTodayYmd } from '@/lib/format';
+import { isNativeShell, requestNativeDownload } from '@/lib/nativeBridge';
 import {
   TT_REGISTER_ADMIN_BACKDATE_DAYS,
   dealerCodeLabel,
@@ -87,6 +92,11 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
   const [openInvoice, setOpenInvoice] = React.useState<TtInvoiceSummary | null>(null);
   const [uploadOpen, setUploadOpen] = React.useState(false);
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
+  // The picked day's panel only sits BESIDE the calendar at xl (1280px). Below
+  // md it would land ~380px under the fold, so a tap on a day would produce no
+  // visible change at all — and that tap is the only way into filing a photo.
+  // Below md the panel becomes a bottom sheet instead.
+  const isMd = useMediaQuery('(min-width: 768px)');
 
   // "Fetch invoices now" answers 202 and then drives a browser for about a
   // minute. Without this the pane would only ever re-read the figures that were
@@ -135,6 +145,32 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
   }
 
   const fetching = collect.isPending || runWatch.busy;
+
+  /**
+   * Hand the register page to whatever the phone uses for photographs.
+   *
+   * Zoom inside the lightbox rescues most of these, but a register page is a
+   * grid of handwritten digits and sometimes the operator wants it beside
+   * another app, or rotated. Only offered inside the shell: in a desktop
+   * browser the picture is already big and there is nothing to hand it to.
+   */
+  async function openPhotoExternally(): Promise<void> {
+    const urls = photoQ.data;
+    if (!urls) return;
+    const result = await requestNativeDownload({
+      id: `tt-reg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      url: urls.downloadUrl,
+      filename: urls.filename,
+      contentType: urls.contentType,
+      kind: 'image',
+    });
+    if (result.ok) return;
+    toast.error(
+      result.timedOut
+        ? 'This version of the app cannot open a photo outside the admin. Pinch to zoom instead.'
+        : result.error || 'Could not open the photo',
+    );
+  }
 
   const fetchButton = (
     <Button
@@ -190,6 +226,22 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
   const failed = summary.lastOutcome === 'FAILED' || !!summary.lastFailure;
   const neverFetched = !summary.lastRunAt;
   const selectedMark = selectedYmd ? marks[selectedYmd] : undefined;
+
+  const dayPanel = (
+    <SelectedDayPanel
+      selectedYmd={selectedYmd}
+      mark={selectedMark}
+      todayYmd={today}
+      minYmd={minYmd}
+      earliestMarkableYmd={earliestMarkableYmd}
+      dealerCode={dealer.code}
+      photoUrl={photoQ.data?.viewUrl ?? null}
+      photoLoading={photoQ.isLoading}
+      showDate={isMd}
+      onUpload={() => setUploadOpen(true)}
+      onFullSize={() => setLightboxOpen(true)}
+    />
+  );
 
   return (
     <div className="grid gap-4">
@@ -272,24 +324,31 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
       ) : (
         <Card>
           <CardContent className="p-0">
-            <div className="flex items-center justify-between gap-3 border-b border-border p-4">
-              <div>
-                <p className="text-base font-semibold text-text">Tanker invoices</p>
-                {/* The summary carries a fixed-length recent list, not the whole
-                    history, so this counts what is actually below it — the badge
-                    beside it prints the true total and would make any wider
-                    claim visibly false. */}
-                <p className="text-sm text-text-muted">
-                  {summary.recent.length === 1
-                    ? 'The last delivery.'
-                    : `The last ${summary.recent.length} deliveries, newest first.`}
-                </p>
-              </div>
-              <Badge intent="neutral" className="tabular-nums">
-                {summary.invoiceCount.toLocaleString('en-IN')}{' '}
-                {summary.invoiceCount === 1 ? 'invoice' : 'invoices'}
-              </Badge>
-            </div>
+            {/* `CardHeader action` rather than a second child in a
+                `justify-between` row that cannot wrap: the count badge is
+                `whitespace-nowrap` and does not shrink, so at 296px it squeezed
+                the sentence beside it into six lines. */}
+            <CardHeader
+              align="center"
+              padding="comfortable"
+              action={
+                <Badge intent="neutral" className="tabular-nums">
+                  {summary.invoiceCount.toLocaleString('en-IN')}{' '}
+                  {summary.invoiceCount === 1 ? 'invoice' : 'invoices'}
+                </Badge>
+              }
+            >
+              <p className="text-base font-semibold text-text">Tanker invoices</p>
+              {/* The summary carries a fixed-length recent list, not the whole
+                  history, so this counts what is actually below it — the badge
+                  beside it prints the true total and would make any wider
+                  claim visibly false. */}
+              <p className="text-sm text-text-muted">
+                {summary.recent.length === 1
+                  ? 'The last delivery.'
+                  : `The last ${summary.recent.length} deliveries, newest first.`}
+              </p>
+            </CardHeader>
 
             {summary.recent.length === 0 ? (
               <EmptyState
@@ -329,7 +388,13 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
               }
             />
           ) : (
-            <div className="grid gap-4 xl:grid-cols-[352px_minmax(0,1fr)] xl:items-start xl:gap-6">
+            <div
+              className={
+                isMd
+                  ? 'grid gap-4 xl:grid-cols-[352px_minmax(0,1fr)] xl:items-start xl:gap-6'
+                  : undefined
+              }
+            >
               <div>
                 <DayMarkCalendar
                   year={shown.year}
@@ -354,22 +419,35 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
                 ) : null}
               </div>
 
-              <SelectedDayPanel
-                selectedYmd={selectedYmd}
-                mark={selectedMark}
-                todayYmd={today}
-                minYmd={minYmd}
-                earliestMarkableYmd={earliestMarkableYmd}
-                dealerCode={dealer.code}
-                photoUrl={photoQ.data?.viewUrl ?? null}
-                photoLoading={photoQ.isLoading}
-                onUpload={() => setUploadOpen(true)}
-                onFullSize={() => setLightboxOpen(true)}
-              />
+              {/* At md+ the panel sits in the column beside (or under) the
+                  calendar, exactly as before. Below md it moves into the sheet
+                  further down — the branch is in JS, not CSS, so the panel and
+                  its two upload buttons are never in the document twice. */}
+              {isMd ? dayPanel : null}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* The picked day, as a bottom sheet, below md only. Opening it IS the
+          feedback for the tap: stacked under a ~380px calendar the panel was
+          off-screen, so tapping a day looked like it did nothing. */}
+      {isMd ? null : (
+        <Drawer
+          open={!!selectedYmd}
+          onClose={() => setSelectedYmd(null)}
+          width="md"
+          title={selectedYmd ? formatYmd(selectedYmd, { weekday: true }) : undefined}
+          description={`Density register · ${dealerCodeLabel(dealer.code)}`}
+          footer={
+            <Button variant="ghost" onClick={() => setSelectedYmd(null)}>
+              Close
+            </Button>
+          }
+        >
+          {dayPanel}
+        </Drawer>
+      )}
 
       <InvoicePdfDrawer
         dealerId={dealer.id}
@@ -396,6 +474,7 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
         alt={selectedYmd ? `Register page for ${formatYmd(selectedYmd)}` : 'Register page'}
         title={selectedYmd ? `Register page — ${formatYmd(selectedYmd)}` : undefined}
         downloadUrl={photoQ.data?.downloadUrl}
+        {...(isNativeShell() ? { onOpenExternally: () => void openPhotoExternally() } : {})}
       />
     </div>
   );
@@ -411,6 +490,7 @@ function SelectedDayPanel({
   dealerCode,
   photoUrl,
   photoLoading,
+  showDate,
   onUpload,
   onFullSize,
 }: {
@@ -422,6 +502,8 @@ function SelectedDayPanel({
   dealerCode: string;
   photoUrl: string | null;
   photoLoading: boolean;
+  /** False inside the bottom sheet, whose own title already carries the date. */
+  showDate: boolean;
   onUpload: () => void;
   onFullSize: () => void;
 }) {
@@ -451,9 +533,11 @@ function SelectedDayPanel({
   if (!mark) {
     return (
       <div>
-        <p className="text-sm font-medium text-text">
-          {formatYmd(selectedYmd, { weekday: true })}
-        </p>
+        {showDate ? (
+          <p className="text-sm font-medium text-text">
+            {formatYmd(selectedYmd, { weekday: true })}
+          </p>
+        ) : null}
         <div className="mt-2 flex flex-col items-center gap-2 rounded-md border border-dashed border-border px-6 py-10 text-center">
           <ImageOff
             width={24}
@@ -465,7 +549,7 @@ function SelectedDayPanel({
           <p className="text-sm text-text-muted">No photo for this day</p>
         </div>
         {canMark ? (
-          <Button className="mt-3 w-full sm:w-auto" onClick={onUpload}>
+          <Button className="mt-3 w-full md:w-auto" onClick={onUpload}>
             Upload on the dealer&apos;s behalf
           </Button>
         ) : (
@@ -480,9 +564,11 @@ function SelectedDayPanel({
 
   return (
     <div>
-      <p className="text-sm font-medium text-text">
-        {formatYmd(selectedYmd, { weekday: true })}
-      </p>
+      {showDate ? (
+        <p className="text-sm font-medium text-text">
+          {formatYmd(selectedYmd, { weekday: true })}
+        </p>
+      ) : null}
       {photoLoading ? (
         <Skeleton className="mt-2 h-40 w-full rounded-md" />
       ) : photoUrl ? (
@@ -492,11 +578,15 @@ function SelectedDayPanel({
           className="mt-2 block w-full overflow-hidden rounded-md border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
           aria-label="See the register photo full size"
         >
+          {/* `object-contain`, not `object-cover`: this is a photograph of a
+              register PAGE, and cover crops a portrait page to a 160px band
+              across its middle — the operator cannot tell from the thumbnail
+              whether the right day was photographed. */}
           <img
             src={photoUrl}
             alt={`Register page for ${formatYmd(selectedYmd)}`}
             draggable={false}
-            className="h-40 w-full object-cover"
+            className="h-40 w-full bg-surface-2 object-contain"
           />
         </button>
       ) : (
@@ -512,7 +602,10 @@ function SelectedDayPanel({
         {mark.source === 'ADMIN' ? <Badge intent="info">Added by MDG</Badge> : null}
       </p>
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      {/* `wrap`, not `stack`: two short labels fit one line even at 360px, and
+          `stack` is `flex-col-reverse`, which would swap the pair round at md
+          against the order they have always been in. */}
+      <ActionRow below="wrap" align="start" className="mt-3">
         <Button variant="secondary" onClick={onFullSize} disabled={!photoUrl}>
           See full size
         </Button>
@@ -521,7 +614,7 @@ function SelectedDayPanel({
             Replace photo
           </Button>
         ) : null}
-      </div>
+      </ActionRow>
     </div>
   );
 }
