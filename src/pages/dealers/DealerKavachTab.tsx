@@ -38,6 +38,7 @@ import {
   CADENCE_BUCKET_ORDER,
   operationalIntent,
   scoreDisclosureParts,
+  workQueueRowFromItem,
 } from '@/lib/kavach';
 import {
   dealerCodeLabel,
@@ -45,6 +46,8 @@ import {
   type KavachCadenceBucket,
   type KavachItem,
 } from '@dk/shared';
+
+import { VerifyTaskDrawer } from '../kavach/VerifyTaskDrawer';
 
 import { InitiateKavachForm } from './kavach/InitiateKavachForm';
 import { KavachItemRow } from './kavach/KavachItemRow';
@@ -71,6 +74,7 @@ export function DealerKavachTab({ dealer }: Props) {
   const toast = useToast();
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [enableDealerFacingOpen, setEnableDealerFacingOpen] = React.useState(false);
+  const [verifying, setVerifying] = React.useState<KavachItem | null>(null);
 
   const programmeQ = useKavachProgrammeQuery(dealer.id);
   const itemsQ = useKavachItemsQuery(dealer.id);
@@ -161,6 +165,7 @@ export function DealerKavachTab({ dealer }: Props) {
   const score = programme.score;
   const pct = Math.round(score.overallPct);
   const disclosure = scoreDisclosureParts({
+    scored: score.scored,
     overallPct: score.overallPct,
     notYetVerifiedCount: score.notYetVerifiedCount,
     heldCount: score.heldCount,
@@ -199,7 +204,12 @@ export function DealerKavachTab({ dealer }: Props) {
                       · {part}
                     </span>
                   ))}
-                  <Badge intent={operationalIntent(pct)}>operational</Badge>
+                  {/* A green "operational" chip beside "Not scored yet" would
+                      re-assert exactly the judgement the headline just declined
+                      to make. */}
+                  {score.scored ? (
+                    <Badge intent={operationalIntent(pct)}>operational</Badge>
+                  ) : null}
                   {isPaused ? <Badge intent="warning">Paused</Badge> : null}
                 </div>
                 <p className="text-sm text-text-muted">
@@ -208,7 +218,9 @@ export function DealerKavachTab({ dealer }: Props) {
                   {programme.outlet.monthYear}
                 </p>
                 <p className="text-xs text-text-subtle">
-                  {score.validPoints} / {score.totalPoints} points compliant
+                  {score.scored
+                    ? `${score.validPoints} / ${score.totalPoints} points compliant`
+                    : 'Nothing verified yet, so there is nothing to score against'}
                   {score.notYetVerifiedCount > 0
                     ? ` · ${score.notYetVerifiedPoints} points sitting behind ${score.notYetVerifiedCount} task${
                         score.notYetVerifiedCount === 1 ? '' : 's'
@@ -369,8 +381,9 @@ export function DealerKavachTab({ dealer }: Props) {
 
       <Callout intent="info">
         Tasks are added, hidden or re-pointed for this outlet on its{' '}
-        <span className="font-medium">Kavach work list</span> tab. Verifying them
-        happens in the work queue — this panel shows where the dealer stands.{' '}
+        <span className="font-medium">Kavach tasks</span> tab. Verify a single
+        task from its row here, or open the work queue to work through many
+        across every dealer in one pass.{' '}
         {/* The pause button's consequence used to live only in a `title`, which
             no touch gesture reveals. Said once here rather than on all 45 rows. */}
         Pausing a task takes it out of this dealer&apos;s score and out of the
@@ -458,6 +471,7 @@ export function DealerKavachTab({ dealer }: Props) {
                                 : 'SOS flagged',
                             )
                           }
+                          onVerify={(i) => setVerifying(i)}
                         />
                       ))}
                     </div>
@@ -511,6 +525,28 @@ export function DealerKavachTab({ dealer }: Props) {
           <p>You can switch it off again at any time.</p>
         </div>
       </Dialog>
+
+      {/*
+        The same drawer the cross-dealer queue opens, adapted from the item in
+        hand. `hasNext` is false: there is no queue order to advance through
+        here, and offering "Save & next" without one would move an admin to a
+        task they never chose.
+      */}
+      <VerifyTaskDrawer
+        open={verifying !== null}
+        row={verifying ? workQueueRowFromItem(verifying, dealer.code) : null}
+        hasNext={false}
+        onNext={() => undefined}
+        onClose={() => setVerifying(null)}
+        onHandled={() => {
+          // The panel's list and the header score both move on a verify, so
+          // refetch rather than patch: the score is recomputed server-side and
+          // guessing it here is how a screen starts disagreeing with its own data.
+          void itemsQ.refetch();
+          void programmeQ.refetch();
+          setVerifying(null);
+        }}
+      />
     </div>
   );
 }

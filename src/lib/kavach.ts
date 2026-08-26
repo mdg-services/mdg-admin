@@ -12,10 +12,12 @@ import type {
   KavachCadenceBucket,
   KavachDomain,
   KavachEvidenceMode,
+  KavachItem,
   KavachItemStatus,
   KavachRequestState,
   KavachTier,
   KavachVerificationMode,
+  KavachWorkQueueRow,
 } from '@dk/shared';
 import { KAVACH_COMPLIANT_STATUSES, KAVACH_PENDING_STATUSES } from '@dk/shared';
 
@@ -278,11 +280,16 @@ export function operationalIntent(pct: number): Intent {
  * that prints the score prints this string instead.
  */
 export function scoreDisclosureParts(input: {
+  scored: boolean;
   overallPct: number;
   notYetVerifiedCount: number;
   heldCount: number;
 }): string[] {
-  const parts = [`${Math.round(input.overallPct)}%`];
+  // No denominator, no percentage. This used to lead with the score's `100`
+  // fallback, which rendered a fresh outlet as "100% · 40 never checked" beside
+  // "0 / 0 points compliant" — a perfect mark, the admission that nothing had
+  // been examined, and the arithmetic proving it, all on one line.
+  const parts = [input.scored ? `${Math.round(input.overallPct)}%` : 'Not scored yet'];
   if (input.notYetVerifiedCount > 0) {
     parts.push(`${input.notYetVerifiedCount} never checked`);
   }
@@ -292,6 +299,7 @@ export function scoreDisclosureParts(input: {
 
 /** The same disclosure as one line, for anywhere a single string is needed. */
 export function scoreDisclosure(input: {
+  scored: boolean;
   overallPct: number;
   notYetVerifiedCount: number;
   heldCount: number;
@@ -302,4 +310,56 @@ export function scoreDisclosure(input: {
 /** A local key for an unsaved overlay row (custom tasks have no code yet). */
 export function makeLocalId(): string {
   return `local-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * A `KavachItem` seen as a work-queue row, so the per-dealer panel can open the
+ * SAME verify drawer the cross-dealer queue uses.
+ *
+ * An adapter rather than a second drawer. Verifying a task involves a required
+ * evidence mode, a business date that is not today, an override that demands a
+ * written reason, and a send-back whose wording reaches the dealer — four rules
+ * that must not exist in two places and drift. The queue remains the fast way to
+ * work through many; this is the door for the one task an admin is already
+ * looking at.
+ */
+export function workQueueRowFromItem(
+  item: KavachItem,
+  dealerCode: string,
+  now = new Date(),
+): KavachWorkQueueRow {
+  const expiresAt = item.expiresAt ? new Date(item.expiresAt) : null;
+  const DAY = 86_400_000;
+  // Whole days, floored, matching the server's own day-grained figure — an
+  // hours-based one would read differently depending on when the page loaded.
+  const daysPending = expiresAt
+    ? Math.floor((startOfIstDay(now) - startOfIstDay(expiresAt)) / DAY)
+    : 0;
+
+  return {
+    itemId: item.id,
+    dealerId: item.dealerId,
+    dealerCode,
+    code: item.templateCode,
+    labelEn: item.labelEn,
+    labelHi: item.labelHi,
+    points: item.points,
+    tier: item.tier,
+    cadenceBucket: item.cadenceBucket,
+    status: item.status,
+    verification: item.verification,
+    evidence: item.evidence,
+    expiresAt: item.expiresAt,
+    daysPending,
+    requestState: item.request.state,
+    submittedAt: item.request.submission?.at,
+    lastVerifiedAt: item.lastVerifiedAt,
+  };
+}
+
+/** Epoch ms at 00:00 Asia/Kolkata for an instant. */
+function startOfIstDay(d: Date | number): number {
+  const IST = 5.5 * 60 * 60 * 1000;
+  const t = typeof d === 'number' ? d : d.getTime();
+  return Math.floor((t + IST) / 86_400_000) * 86_400_000 - IST;
 }

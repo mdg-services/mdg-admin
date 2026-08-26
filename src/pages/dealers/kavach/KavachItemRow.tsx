@@ -1,4 +1,4 @@
-import { Flag, FlagOff, Pause, Play } from 'lucide-react';
+import { ClipboardCheck, Flag, FlagOff, Pause, Play } from 'lucide-react';
 
 import { Badge, Button, InfoBadge } from '@/components/ui';
 import { formatDate } from '@/lib/format';
@@ -17,16 +17,24 @@ import {
 import type { KavachActorKind, KavachItem } from '@dk/shared';
 
 /**
- * One task on the dealer's Kavach panel. Standing state only — certifying a
- * task happens in the cross-dealer work queue, where an admin closes many in
- * one pass. The two controls left here are the ones that belong to this dealer's
- * SETUP: whether a task applies at all, and whether an SOS item is flagged.
+ * One task on the dealer's Kavach panel.
+ *
+ * Verify is here as well as in the cross-dealer queue, and the two are not
+ * redundant. The queue is for working through many tasks in one pass; this is
+ * the door for the one task an admin is already looking at, on the dealer they
+ * are already on — being sent to another screen to close a task in front of you
+ * is the kind of friction that gets a screen quietly abandoned.
+ *
+ * Both open the SAME drawer, so the evidence rules, the business date and the
+ * send-back wording exist once.
  */
 interface Props {
   item: KavachItem;
   busy?: boolean;
   onTogglePause: (item: KavachItem) => void;
   onToggleSos: (item: KavachItem) => void;
+  /** Opens the shared verify drawer on this task. */
+  onVerify: (item: KavachItem) => void;
 }
 
 /** The dealer's relationship is with MDG, so no individual admin is ever named. */
@@ -36,7 +44,7 @@ function verifierLabel(kind?: KavachActorKind): string {
   return 'MDG';
 }
 
-export function KavachItemRow({ item, busy, onTogglePause, onToggleSos }: Props) {
+export function KavachItemRow({ item, busy, onTogglePause, onToggleSos, onVerify }: Props) {
   const isSos = item.trigger === 'SOS';
   const sosFlagged = item.status === 'SOS_FLAGGED';
   const requestLive = item.request.state !== 'NONE';
@@ -121,6 +129,19 @@ export function KavachItemRow({ item, busy, onTogglePause, onToggleSos }: Props)
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-1">
+        {/* An SOS task has no clock and is closed by flagging, not verifying;
+            a paused one is out of scope entirely and the API refuses it. */}
+        {!isSos && !item.paused ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={busy}
+            onClick={() => onVerify(item)}
+            leftIcon={<ClipboardCheck width={14} height={14} strokeWidth={1.75} />}
+          >
+            Verify
+          </Button>
+        ) : null}
         {isSos ? (
           <Button
             variant="secondary"

@@ -53,7 +53,10 @@ export function KavachDashboardPage() {
   const { data, isLoading, isError, error } = useKavachDashboardQuery();
 
   const rows = data ?? [];
-  const atRisk = rows.filter((r) => r.overallPct < RISK_THRESHOLD).length;
+  // Only dealers with a real percentage can be "at risk". An unscored one is
+  // not doing badly; nobody has looked at it, and the staleness badge is what
+  // says so.
+  const atRisk = rows.filter((r) => r.scored && r.overallPct < RISK_THRESHOLD).length;
   const stale = rows.filter(
     (r) => r.daysSinceLastVerified === null || r.daysSinceLastVerified >= STALE_DAYS,
   ).length;
@@ -137,9 +140,13 @@ export function KavachDashboardPage() {
                       {r.dealerCode || '—'}
                     </TD>
                     <TD>
-                      <Badge intent={operationalIntent(r.overallPct)}>
-                        {Math.round(r.overallPct)}%
-                      </Badge>
+                      {r.scored ? (
+                        <Badge intent={operationalIntent(r.overallPct)}>
+                          {Math.round(r.overallPct)}%
+                        </Badge>
+                      ) : (
+                        <span className="text-text-subtle">Not scored yet</span>
+                      )}
                     </TD>
                     <TD className="text-right">
                       {r.expiredCount > 0 ? (
@@ -204,10 +211,12 @@ export function KavachDashboardPage() {
                     {dealerCodeLabel(r.dealerCode)}
                   </span>
                 ),
-                primaryRight: (
+                primaryRight: r.scored ? (
                   <Badge intent={operationalIntent(r.overallPct)}>
                     {Math.round(r.overallPct)}%
                   </Badge>
+                ) : (
+                  <span className="text-xs text-text-subtle">Not scored yet</span>
                 ),
                 secondary: (
                   <span className="flex flex-wrap items-center gap-1.5">
