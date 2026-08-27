@@ -141,7 +141,26 @@ export function KavachDefaultsPage() {
         }
       />
 
-      <Callout className="mb-4" intent="warning">
+      {/* The same 231 characters on every visit, and at 360px they are ~120px
+          of an already crowded first screen — 40% of it once the page header is
+          counted — so the catalog itself started below the fold. Folded into
+          one 44px line below md; the sentence has not gone anywhere and the
+          save controls that actually need it still carry it, in the create and
+          edit dialogs and above the danger zone.
+
+          Written twice rather than as one node inside a `<details>` carrying a
+          `md:` rule: a `<details>` body is hidden by the browser's own
+          machinery, which no class can reopen, so a desktop reader would get
+          the summary and never the paragraph. */}
+      <details className="mb-4 rounded-md border border-warning bg-warning-soft px-3 text-xs text-warning md:hidden">
+        {/* Block, not flex: a flex <summary> loses its native disclosure
+            triangle, which is the only cue the line opens at all. */}
+        <summary className="min-h-11 cursor-pointer select-none py-3 font-semibold">
+          What editing these does to live scores
+        </summary>
+        <p className="pb-3">{CONSEQUENCE}</p>
+      </details>
+      <Callout className="mb-4 hidden md:flex" intent="warning">
         {CONSEQUENCE}
       </Callout>
 

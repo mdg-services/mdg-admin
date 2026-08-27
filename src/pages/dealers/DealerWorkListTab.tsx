@@ -40,6 +40,7 @@ import {
 } from '@/hooks/api/useDealerWorkList';
 import { useStaffWorkCatalogQuery } from '@/hooks/api/useStaffWorkCatalog';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import {
   distributionLabel,
@@ -135,6 +136,11 @@ function normalize(h: string[], c: EditableCustomItem[]): string {
 export function DealerWorkListTab({ dealer }: Props) {
   const toast = useToast();
   const isSuperAdmin = useIsSuperAdmin();
+  // Decided in JS, not with a `md:` class: both uses below are about whether an
+  // element is RENDERED. A bar that is merely display:none still holds its slot
+  // in the `order-last` column, and a hidden `CardHeader` action still leaves
+  // the header's gap behind it.
+  const isMd = useMediaQuery('(min-width: 768px)');
 
   const effQ = useEffectiveWorkItems(dealer.id);
   const wlQ = useDealerWorkListQuery(dealer.id);
@@ -368,15 +374,31 @@ export function DealerWorkListTab({ dealer }: Props) {
           differently. `card` emits the same `p-4` surface at md, so the desktop
           card is unchanged. The explanatory line stays desktop-only: carrying it
           on a bar pinned for the whole session cost a quarter of a 640px screen
-          over the list the bar exists to serve. */}
+          over the list the bar exists to serve.
+
+          BELOW MD IT ONLY EXISTS WHILE THERE IS SOMETHING TO SAVE. Both buttons
+          are disabled until the list is edited, so a clean tab was spending
+          114px — a sixth of the screen — on two dead controls and a sentence,
+          pinned over the rows for the whole visit. The count it carried moves
+          to the line just below, in the flow. When the bar does appear,
+          `summaryPlacement="beside"` puts its one word on the buttons' own line
+          rather than above them. At md nothing about it moves. */}
+      {isMd || dirty ? (
       <StickyActionBar
         surface="card"
         below="wrap"
         className="order-last md:static md:order-none"
         summaryOnMobile
+        summaryPlacement="beside"
         summary={
           <>
-            <span className="flex flex-wrap items-center gap-2">
+            {/* One short line on a phone: `beside` gives the summary only what
+                the two nowrap buttons leave, and a sentence that wraps to four
+                lines in ~130px is taller than stacking it was. */}
+            <span className="font-medium text-text md:hidden">
+              Unsaved changes
+            </span>
+            <span className="hidden flex-wrap items-center gap-2 md:flex">
               <ListChecks
                 width={16}
                 height={16}
@@ -413,6 +435,24 @@ export function DealerWorkListTab({ dealer }: Props) {
           Save changes
         </Button>
       </StickyActionBar>
+      ) : null}
+
+      {/* What the bar says at md, as an ordinary line, while there is nothing
+          to save. */}
+      {!dirty ? (
+        <p className="flex flex-wrap items-center gap-2 text-sm text-text-muted md:hidden">
+          <ListChecks
+            width={16}
+            height={16}
+            strokeWidth={1.75}
+            className="shrink-0 text-brand"
+          />
+          <span className="font-medium text-text">
+            This dealer will see {effectiveCount} work
+            {effectiveCount === 1 ? '' : 's'}
+          </span>
+        </p>
+      ) : null}
 
       {/* Default catalog: hide/show */}
       <Card>
@@ -583,8 +623,19 @@ export function DealerWorkListTab({ dealer }: Props) {
                                     <span className="tabular-nums text-text-muted">
                                       {r.known ? fmtPoints(r.points) : '—'}
                                     </span>
+                                    {/* Both states are a bordered chip. As a
+                                        `ghost` the "Shown" state had no border
+                                        and no background, so on the rows that
+                                        are shown — nearly all of a ~45-work
+                                        catalog — the control read as a status
+                                        label and only looked tappable once it
+                                        had been switched to "Hidden". Icon,
+                                        word and icon tint carry the state; the
+                                        tint sits on the glyph because `cn` is
+                                        clsx and a second `text-*` on the button
+                                        would be settled by stylesheet order. */}
                                     <Button
-                                      variant={hidden ? 'secondary' : 'ghost'}
+                                      variant="secondary"
                                       size="sm"
                                       aria-label={
                                         hidden
@@ -600,12 +651,14 @@ export function DealerWorkListTab({ dealer }: Props) {
                                             width={14}
                                             height={14}
                                             strokeWidth={1.75}
+                                            className="text-warning"
                                           />
                                         ) : (
                                           <Eye
                                             width={14}
                                             height={14}
                                             strokeWidth={1.75}
+                                            className="text-text-muted"
                                           />
                                         )
                                       }
@@ -647,15 +700,23 @@ export function DealerWorkListTab({ dealer }: Props) {
             `whitespace-nowrap` "Add custom work" beside the title squeezed the
             title instead. The slot already stacks below md and puts the button
             back on the right at md. */}
+        {/* While there are no custom works the empty state below carries its
+            own "Add custom work", so a header button here put two identical
+            primary buttons about 400px apart with nothing to say which one was
+            live. One card, one primary: the header action arrives once the list
+            has something in it. It stays at md, where the two are on screen
+            together and read as a header control beside a body one. */}
         <CardHeader
           action={
-            <Button
-              size="sm"
-              onClick={openAddCustom}
-              leftIcon={<Plus width={14} height={14} strokeWidth={1.75} />}
-            >
-              Add custom work
-            </Button>
+            customItems.length > 0 || isMd ? (
+              <Button
+                size="sm"
+                onClick={openAddCustom}
+                leftIcon={<Plus width={14} height={14} strokeWidth={1.75} />}
+              >
+                Add custom work
+              </Button>
+            ) : undefined
           }
         >
           <div>

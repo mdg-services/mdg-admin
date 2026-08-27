@@ -34,6 +34,19 @@ export interface TabsProps {
    * `md:static` and the rest of the `md:` resets restore today's desktop strip.
    */
   sticky?: boolean;
+  /**
+   * The active tab when it is NOT one of `items` — a tab that lives only in the
+   * overflow menu. It renders as a selected chip pinned to the end of the strip,
+   * next to `trailing`, and is ignored when `items` already contains `value`.
+   *
+   * Without it the strip is simply SILENT on four of the dealer tabs: nothing
+   * is underlined anywhere, so the one piece of chrome whose whole job is to say
+   * where you are says nothing, and the screen looks like it failed to load a
+   * selection rather than like it put one in a menu. Pinned rather than scrolled
+   * into the strip because it is the answer to "where am I" — it has to be on
+   * screen without scrolling for it, and beside the menu that opened it.
+   */
+  pinnedActive?: TabItem;
 }
 
 export function Tabs({
@@ -43,6 +56,7 @@ export function Tabs({
   className,
   trailing,
   sticky = false,
+  pinnedActive,
 }: TabsProps) {
   const listRef = React.useRef<HTMLDivElement | null>(null);
   const activeRef = React.useRef<HTMLButtonElement | null>(null);
@@ -73,6 +87,11 @@ export function Tabs({
     // render, and re-centring that often would fight a manual scroll.
   }, [value]);
 
+  const pinned =
+    pinnedActive && !items.some((item) => item.id === value)
+      ? pinnedActive
+      : undefined;
+
   return (
     // The 1px rule lives on this static wrapper rather than on the scroller, so
     // the scroller has nothing to overflow vertically. `overflow-x-auto` on its
@@ -81,10 +100,8 @@ export function Tabs({
     // 2px active underline that the tabs used to pull down over the rule with
     // `-mb-px` and the content ended up exactly 1px taller than the box — a
     // real, draggable one-pixel vertical scroll (and something for the old
-    // scrollIntoView to chase). The negative margin now sits on the scroller,
-    // where it still lands the underline on the rule but costs no overflow, and
-    // `overflow-y-hidden` states the intent instead of leaving it to that
-    // computed-value rule.
+    // scrollIntoView to chase). `overflow-y-hidden` states the intent instead
+    // of leaving it to that computed-value rule.
     <div
       className={cn(
         'flex items-center border-b border-border',
@@ -96,8 +113,15 @@ export function Tabs({
       <div
         ref={listRef}
         role="tablist"
+        // `mb-0` below md, `md:-mb-px` from md up. The negative margin pulls the
+        // 2px active underline down onto the wrapper's 1px rule, which is the
+        // desktop look and stays; but on a phone this strip is STICKY, and the
+        // pixel it hangs past the bar's own painted box is a pixel of blue drawn
+        // over whatever text is scrolling underneath — it struck a line through
+        // "Not collected yet". Below md the underline therefore sits fully
+        // inside the painted band, immediately above the rule instead of on it.
         className={cn(
-          '-mb-px flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden',
+          'mb-0 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden md:-mb-px',
           'overscroll-x-contain scrollbar-thin snap-x snap-proximity',
         )}
       >
@@ -123,8 +147,23 @@ export function Tabs({
           );
         })}
       </div>
-      {trailing ? (
-        <div className="relative flex shrink-0 items-center">{trailing}</div>
+      {/* The chip shares `trailing`'s container rather than getting one of its
+          own, because a caller's edge fade is positioned inside that container
+          (`right-full`) — given its own box, the chip would be the thing the
+          fade washes out. It carries the scroller's own bottom margin so its
+          underline lines up with a real tab's at both widths. */}
+      {pinned || trailing ? (
+        <div className="relative flex shrink-0 items-center">
+          {pinned ? (
+            <span
+              aria-current="true"
+              className="mb-0 max-w-[8rem] truncate border-b-2 border-brand px-3 py-3 text-sm font-medium text-text md:-mb-px md:py-2"
+            >
+              {pinned.label}
+            </span>
+          ) : null}
+          {trailing}
+        </div>
       ) : null}
     </div>
   );

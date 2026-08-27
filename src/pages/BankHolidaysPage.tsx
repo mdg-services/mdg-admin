@@ -16,8 +16,8 @@ import {
   Card,
   CardContent,
   CardHeader,
-  CardSubtitle,
   Checkbox,
+  ClampedText,
   Dialog,
   EmptyState,
   IconButton,
@@ -405,7 +405,17 @@ export function BankHolidaysPage() {
                       aria-label={`Name for ${r.date}`}
                     />
                   ),
-                  meta: r.type ? <span>{r.type}</span> : undefined,
+                  // A manually added date carries `type: 'manual'`, which is
+                  // word-for-word the badge already sitting on the same row —
+                  // so every manual holiday printed "Manual" twice, once in a
+                  // badge and once in grey underneath it. Only show the type
+                  // where it says something the badge does not ('public',
+                  // 'bank'). The desktop table has its own Source and Type
+                  // columns and is untouched.
+                  meta:
+                    r.type && r.type.toLowerCase() !== r.source.toLowerCase() ? (
+                      <span>{r.type}</span>
+                    ) : undefined,
                   actions: (
                     <div className="flex items-center justify-between gap-2">
                       {/* This tick is what decides whether the date pushes a
@@ -482,28 +492,29 @@ export function BankHolidaysPage() {
  * versus Remove is the one that stops a suggested holiday being deleted by
  * mistake, so it has to stay reachable rather than be clamped away. From md up
  * the whole paragraph is printed as it always has been and the toggle is gone.
+ *
+ * `ClampedText` rather than the hand-rolled clamp this used to be: it measures
+ * the overflow, so "Show more" no longer sits under a paragraph that already
+ * fits — a permanent toggle that does nothing is one the admin stops reading.
+ * Its `<p className="text-sm text-text-muted">` is the same element
+ * `CardSubtitle` drew, and at md it is unclamped with no toggle, which is what
+ * `md:line-clamp-none` plus `md:hidden` rendered before.
  */
 function HowItWorksNote() {
-  const [open, setOpen] = React.useState(false);
   return (
     <Card className="mb-4">
       <CardContent className="py-3">
-        <CardSubtitle className={open ? undefined : 'line-clamp-2 md:line-clamp-none'}>
+        <ClampedText
+          className="text-sm text-text-muted"
+          moreLabel="Show more"
+          lessLabel="Show less"
+        >
           Enabled dates push the Credit &amp; DOD payment deadline to the next
           working day — just like Sundays and 2nd &amp; 4th Saturdays. Library
           suggestions are national holidays; add state or bank-specific
           holidays manually. To exclude a suggested national holiday, uncheck
           its Enabled box and save (Remove is for manually-added dates).
-        </CardSubtitle>
-        <Button
-          className="md:hidden"
-          variant="ghost"
-          size="sm"
-          padding="none"
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? 'Show less' : 'Show more'}
-        </Button>
+        </ClampedText>
       </CardContent>
     </Card>
   );

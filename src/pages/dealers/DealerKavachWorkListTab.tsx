@@ -42,6 +42,7 @@ import {
 } from '@/hooks/api/useDealerKavachList';
 import { useKavachCatalogQuery } from '@/hooks/api/useKavachCatalog';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import {
   CADENCE_BUCKET_LABEL,
@@ -154,6 +155,11 @@ function normalize(
 export function DealerKavachWorkListTab({ dealer }: Props) {
   const toast = useToast();
   const isSuperAdmin = useIsSuperAdmin();
+  // Two things below are decided in JS rather than with a `md:` class, because
+  // both are about whether an element is RENDERED at all: a bar that is only
+  // display:none still occupies its slot in the `order-last` column, and a
+  // `CardHeader` action that is hidden still leaves the header's 8px gap.
+  const isMd = useMediaQuery('(min-width: 768px)');
 
   const effQ = useEffectiveKavachItems(dealer.id);
   const wlQ = useDealerKavachListQuery(dealer.id);
@@ -431,15 +437,33 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
           that inset, and `card` reproduces the `p-4` surface exactly, so md is
           unchanged. The explanatory paragraph stays desktop-only: carrying it
           made the bar ~170px, a quarter of a 640px screen, permanently over the
-          list it is meant to serve. */}
+          list it is meant to serve.
+
+          BELOW MD IT ONLY EXISTS WHILE THERE IS SOMETHING TO SAVE. Both its
+          buttons are disabled until the list is edited, so a clean tab was
+          spending 114px — a sixth of the screen — on two dead controls and a
+          sentence, permanently pinned over the rows. The task count it carried
+          moves to the line just below, in the flow, where it costs one line and
+          scrolls away. When it does appear, `summaryPlacement="beside"` puts
+          the one word it needs on the buttons' own line instead of above them.
+          At md the bar is the card it has always been, in its usual place, with
+          every word. */}
+      {isMd || dirty ? (
       <StickyActionBar
         surface="card"
         below="wrap"
         className="order-last md:static md:order-none"
         summaryOnMobile
+        summaryPlacement="beside"
         summary={
           <>
-            <span className="flex flex-wrap items-center gap-2">
+            {/* The phone summary is one short line, because `beside` gives it
+                only what the two nowrap buttons leave: a sentence that wraps to
+                four lines in ~130px is taller than stacking it was. */}
+            <span className="font-medium text-text md:hidden">
+              Unsaved changes
+            </span>
+            <span className="hidden flex-wrap items-center gap-2 md:flex">
               <ShieldCheck
                 width={16}
                 height={16}
@@ -482,6 +506,29 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
           Save changes
         </Button>
       </StickyActionBar>
+      ) : null}
+
+      {/* What the bar says at md, as an ordinary line, while there is nothing
+          to save. */}
+      {!dirty ? (
+        <p className="flex flex-wrap items-center gap-2 text-sm text-text-muted md:hidden">
+          <ShieldCheck
+            width={16}
+            height={16}
+            strokeWidth={1.75}
+            className="shrink-0 text-brand"
+          />
+          <span className="font-medium text-text">
+            This dealer is scored on {effectiveCount} task
+            {effectiveCount === 1 ? '' : 's'}
+          </span>
+          {overrideCount > 0 ? (
+            <Badge intent="info">
+              {overrideCount} override{overrideCount === 1 ? '' : 's'}
+            </Badge>
+          ) : null}
+        </p>
+      ) : null}
 
       {hasUnknownDefault ? (
         <Callout intent="info">
@@ -730,9 +777,20 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                     // "Shown" alone does not say what a tap does. The whole
                     // card also dims when hidden (`tone`), so the state reads
                     // from across the list and not only from this one pill.
+                    //
+                    // BOTH states are `secondary`, i.e. both are a bordered
+                    // chip. As a `ghost` the "Shown" state had no border and
+                    // no background at all, so on the rows that are shown —
+                    // nearly all ~85 of them — the control read as a status
+                    // label and only became visibly tappable once it had been
+                    // switched to "Hidden". The state is carried by the icon,
+                    // the word and the icon's tint instead; the tint sits on
+                    // the glyph rather than going through `className`, because
+                    // `cn` is clsx and a second `text-*` on the button would be
+                    // settled by stylesheet order, not by being written last.
                     primaryRight: (
                       <Button
-                        variant={hidden ? 'secondary' : 'ghost'}
+                        variant="secondary"
                         size="sm"
                         aria-label={
                           hidden ? 'Hidden — tap to show' : 'Shown — tap to hide'
@@ -740,9 +798,19 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                         onClick={() => toggleHidden(r.code, !hidden)}
                         leftIcon={
                           hidden ? (
-                            <EyeOff width={14} height={14} strokeWidth={1.75} />
+                            <EyeOff
+                              width={14}
+                              height={14}
+                              strokeWidth={1.75}
+                              className="text-warning"
+                            />
                           ) : (
-                            <Eye width={14} height={14} strokeWidth={1.75} />
+                            <Eye
+                              width={14}
+                              height={14}
+                              strokeWidth={1.75}
+                              className="text-text-muted"
+                            />
                           )
                         }
                       >
@@ -886,15 +954,24 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
             asking for arrived at a width no phone in the target set reaches,
             and a `whitespace-nowrap` "Add task" beside the title squeezed the
             title instead. */}
+        {/* While there are no dealer-only tasks the empty state below carries
+            its own "Add task", so a header button here made two identical
+            primary buttons about 400px apart with nothing to say which one was
+            live. One card, one primary: the header action appears once the list
+            has something in it and the empty state is no longer speaking. It
+            stays at md, where both are on screen together and the pair reads as
+            a header control beside a body one rather than as a duplicate. */}
         <CardHeader
           action={
-            <Button
-              size="sm"
-              onClick={openAddCustom}
-              leftIcon={<Plus width={14} height={14} strokeWidth={1.75} />}
-            >
-              Add task
-            </Button>
+            customItems.length > 0 || isMd ? (
+              <Button
+                size="sm"
+                onClick={openAddCustom}
+                leftIcon={<Plus width={14} height={14} strokeWidth={1.75} />}
+              >
+                Add task
+              </Button>
+            ) : undefined
           }
         >
           <div>

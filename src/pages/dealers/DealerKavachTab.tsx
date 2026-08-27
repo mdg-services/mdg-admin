@@ -17,6 +17,7 @@ import {
   Callout,
   Card,
   CardContent,
+  ClampedText,
   Dialog,
   EmptyState,
   Select,
@@ -61,6 +62,25 @@ const REMINDER_HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => ({
   value: h,
   label: `${String(h).padStart(2, '0')}:00 IST`,
 }));
+
+/**
+ * What this tab is for, and what pausing does.
+ *
+ * Held as one node because it is rendered twice — as a folded disclosure below
+ * md and as the open Callout at md — and two copies of a paragraph is how the
+ * two widths start saying different things. The pause consequence used to live
+ * only in a `title`, which no touch gesture reveals, so it is said once here
+ * rather than on all 45 rows.
+ */
+const TASKS_TAB_NOTE = (
+  <>
+    Tasks are added, hidden or re-pointed for this outlet on its{' '}
+    <span className="font-medium">Kavach tasks</span> tab. Verify a single task
+    from its row here, or open the work queue to work through many across every
+    dealer in one pass. Pausing a task takes it out of this dealer&apos;s score
+    and out of the work queue until it is resumed.
+  </>
+);
 
 /**
  * The dealer's Kavach panel: SETUP and STANDING, not a working queue.
@@ -211,8 +231,18 @@ export function DealerKavachTab({ dealer }: Props) {
                   <span className="text-2xl font-semibold tracking-tight text-text md:text-3xl">
                     {disclosure[0]}
                   </span>
+                  {/* Each of these is a flex item carrying its OWN leading
+                      "· ", so at 360px the row wraps and the line under the
+                      score starts "· 40 never checked" — a separator with
+                      nothing before it, which reads as a figure that failed to
+                      render. Below md they move to a line of their own (see
+                      just under this row) where the separators sit between the
+                      parts instead of in front of them. */}
                   {disclosure.slice(1).map((part) => (
-                    <span key={part} className="text-sm font-medium text-text-muted">
+                    <span
+                      key={part}
+                      className="hidden text-sm font-medium text-text-muted md:inline"
+                    >
                       · {part}
                     </span>
                   ))}
@@ -224,6 +254,15 @@ export function DealerKavachTab({ dealer }: Props) {
                   ) : null}
                   {isPaused ? <Badge intent="warning">Paused</Badge> : null}
                 </div>
+                {/* The phone half of the line above. One string, with a
+                    non-breaking space gluing every separator to the word in
+                    front of it, so however this wraps no line can begin with a
+                    middot. */}
+                {disclosure.length > 1 ? (
+                  <p className="text-sm font-medium text-text-muted md:hidden">
+                    {disclosure.slice(1).join('\u00a0· ')}
+                  </p>
+                ) : null}
                 <p className="text-sm text-text-muted">
                   <span className="font-mono">{dealerCodeLabel(dealer.code)}</span>
                   {' · baseline '}
@@ -234,7 +273,7 @@ export function DealerKavachTab({ dealer }: Props) {
                     ? `${score.validPoints} / ${score.totalPoints} points compliant`
                     : 'Nothing verified yet, so there is nothing to score against'}
                   {score.notYetVerifiedCount > 0
-                    ? ` · ${score.notYetVerifiedPoints} points sitting behind ${score.notYetVerifiedCount} task${
+                    ? `\u00a0· ${score.notYetVerifiedPoints} points sitting behind ${score.notYetVerifiedCount} task${
                         score.notYetVerifiedCount === 1 ? '' : 's'
                       } nobody has checked`
                     : ''}
@@ -365,8 +404,11 @@ export function DealerKavachTab({ dealer }: Props) {
                 {/* `max-w-2xl` is 672px and does nothing at 360px, so the "off"
                     copy — 253 characters — ran to eight lines and pushed "Turn
                     messages on" below the fold on the card whose whole purpose
-                    is that button. Two lines on a phone; every word from md. */}
-                <p className="mt-1 line-clamp-2 text-sm text-text-muted md:line-clamp-none md:max-w-2xl">
+                    is that button. Two lines on a phone, with the rest a tap
+                    away: the clause this copy exists for ("…so their first
+                    message is not a figure about work nobody has done yet") is
+                    in the half a bare clamp threw away. Every word from md. */}
+                <ClampedText className="mt-1 text-sm text-text-muted md:max-w-2xl">
                   {dealerFacing
                     ? `This dealer receives their daily Kavach list and can be shown their score card.${
                         programme.dealerFacingEnabledAt
@@ -374,7 +416,7 @@ export function DealerKavachTab({ dealer }: Props) {
                           : ''
                       }`
                     : 'While this is off the dealer receives nothing at all — no daily message, no score card. Leave it off until MDG has actually verified this outlet, so their first message is not a figure about work nobody has done yet.'}
-                </p>
+                </ClampedText>
               </div>
             </div>
             <div className="shrink-0">
@@ -403,15 +445,28 @@ export function DealerKavachTab({ dealer }: Props) {
         </CardContent>
       </Card>
 
-      <Callout intent="info">
-        Tasks are added, hidden or re-pointed for this outlet on its{' '}
-        <span className="font-medium">Kavach tasks</span> tab. Verify a single
-        task from its row here, or open the work queue to work through many
-        across every dealer in one pass.{' '}
-        {/* The pause button's consequence used to live only in a `title`, which
-            no touch gesture reveals. Said once here rather than on all 45 rows. */}
-        Pausing a task takes it out of this dealer&apos;s score and out of the
-        work queue until it is resumed.
+      {/* This paragraph never changes and never goes away, and by the time it
+          has been read once it is costing ~90px of a 740px screen on every
+          later visit — with the score card and the messages card above it, the
+          first actual task started around y=700. So below md it folds into a
+          one-line disclosure the admin opens when they want it, and from md up
+          it is the Callout it has always been.
+
+          Written twice rather than as one node inside a `<details>` with a
+          `md:` display rule: `<details>` hides its body with the browser's own
+          content-visibility, which no `md:` class can reopen, so a desktop
+          reader would get a collapsed summary instead of the paragraph. The
+          copy lives in `TASKS_TAB_NOTE` so the two cannot drift. */}
+      <details className="rounded-md border border-info bg-info-soft px-3 text-xs text-info md:hidden">
+        {/* Block, not flex: a flex <summary> loses its native disclosure
+            triangle, and that triangle is the only cue the line opens. */}
+        <summary className="min-h-11 cursor-pointer select-none py-3 font-medium">
+          How this tab works
+        </summary>
+        <p className="pb-3">{TASKS_TAB_NOTE}</p>
+      </details>
+      <Callout intent="info" className="hidden md:flex">
+        {TASKS_TAB_NOTE}
       </Callout>
 
       {/* Items grouped by bucket */}

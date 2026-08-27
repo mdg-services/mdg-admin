@@ -44,6 +44,7 @@ import {
   useUpdateDealerService,
 } from '@/hooks/api/useDealerServices';
 import { useServicesQuery } from '@/hooks/api/useServices';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import { retryImport } from '@/lib/retryImport';
@@ -112,6 +113,8 @@ export function DealerServicesTab({ dealer }: Props) {
   React.useEffect(() => {
     if (!anyConfigDialogOpen) setSheetShown(false);
   }, [anyConfigDialogOpen]);
+
+  const isMd = useMediaQuery('(min-width: 768px)');
 
   const { data, isLoading } = useDealerServicesQuery(dealer.id);
   // The plugin catalog, warmed here rather than inside the dialogs.
@@ -224,25 +227,44 @@ export function DealerServicesTab({ dealer }: Props) {
     }
   }
 
+  const hasServices = !!data && data.length > 0;
+
+  /* One call to action at a time on a phone. With nothing attached, the empty
+     state's own "Attach service" button is the point of the screen — and the
+     header was drawing a second one, a different size and a different blue, two
+     rows above it. Below md the header's copy drops out and the empty state
+     carries it; from md up the header keeps its action, because there the two
+     sit far enough apart to read as a toolbar and a suggestion rather than as
+     the same button twice.
+
+     A media query rather than `hidden md:inline-flex`, because `CardHeader`
+     wraps `action` in a slot of its own: a display:none button still leaves
+     that slot in the header's `gap-2` column and pads the header by 8px for
+     nothing. */
+  const headerAction =
+    hasServices || isLoading || isMd ? (
+      <Button
+        size="sm"
+        leftIcon={<Plus width={16} height={16} strokeWidth={1.75} />}
+        onClick={() => setAttachOpen(true)}
+      >
+        Attach service
+      </Button>
+    ) : undefined;
+
   return (
     <Card>
       {/* `CardHeader` rather than a hand-rolled `p-4` row: the header already
           knows how to put its action under the title below md and back on the
           right at md, which the wrapped flex row it replaces did not. */}
-      <CardHeader
-        padding="comfortable"
-        action={
-          <Button
-            size="sm"
-            leftIcon={<Plus width={16} height={16} strokeWidth={1.75} />}
-            onClick={() => setAttachOpen(true)}
-          >
-            Attach service
-          </Button>
-        }
-      >
-        <CardTitle>Attached services</CardTitle>
-        <CardSubtitle>Plugins running for this dealer.</CardSubtitle>
+      <CardHeader padding="comfortable" action={headerAction}>
+        {/* Wrapped, not two loose children: with no `action` the header is a
+            `justify-between` row, and an unwrapped title and subtitle would
+            fly to opposite ends of it. */}
+        <div>
+          <CardTitle>Attached services</CardTitle>
+          <CardSubtitle>Plugins running for this dealer.</CardSubtitle>
+        </div>
       </CardHeader>
       {/* The body is a table or a card stack, so it runs to the card's edges.
           A `className="p-0"` here would lose to the default padding — `cn` is

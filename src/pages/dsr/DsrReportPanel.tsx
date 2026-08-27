@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   Check,
   CheckCircle2,
+  ChevronRight,
   ExternalLink,
   FileWarning,
   History,
@@ -26,6 +27,7 @@ import {
   type KeyValueItem,
 } from '@/components/ui';
 import { useShareDsr, type DsrReportView } from '@/hooks/api/useDsr';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatLitres } from '@/lib/format';
@@ -120,27 +122,7 @@ export function DsrReportPanel({
           stronger caveat than "this figure was missing a nozzle". */}
       <DsrStaleNotice report={report} />
 
-      {report.warnings.length > 0 ? (
-        <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning">
-          <AlertTriangle
-            width={16}
-            height={16}
-            strokeWidth={1.75}
-            className="mt-0.5 shrink-0"
-          />
-          <div className="min-w-0">
-            <p className="font-medium">
-              This report has {report.warnings.length} data-quality note
-              {report.warnings.length === 1 ? '' : 's'}
-            </p>
-            <ul className="mt-0.5 list-disc space-y-0.5 pl-4">
-              {report.warnings.map((w, i) => (
-                <li key={i}>{w}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      ) : null}
+      <DsrWarningsBanner warnings={report.warnings} />
 
       {/* The deliverable itself — the hero. */}
       <Card className="order-2 overflow-hidden md:order-none">
@@ -253,6 +235,68 @@ export function DsrReportPanel({
 
       {/* The dealer deliverable: the two shareable cards + the share action. */}
       <DsrShareSection report={report} className="order-3 md:order-none" />
+    </div>
+  );
+}
+
+/**
+ * The report's data-quality notes.
+ *
+ * Not a plain `<ul>`, because of how these notes are written: each one is
+ * per-product and starts `MS: `, `HSD: `, `XP95: `, so a four-grade dealer with
+ * ONE underlying problem gets four notes carrying the same three sentences,
+ * differing only in the grade and the litres. On a 360px screen that is roughly
+ * 240px of repeated prose standing between the top of the DSR tab and the first
+ * figure on it. Below md the first note is shown in full and the rest wait
+ * behind a toggle — the heading still states the real count, so nothing is
+ * hidden without saying so.
+ *
+ * The branch is taken in JS rather than with a `md:` class so the toggle does
+ * not exist at all from md up: a desktop shows every note, exactly as before.
+ */
+function DsrWarningsBanner({ warnings }: { warnings: string[] }) {
+  const isMd = useMediaQuery('(min-width: 768px)');
+  const [showAll, setShowAll] = React.useState(false);
+  if (warnings.length === 0) return null;
+
+  const collapsible = !isMd && warnings.length > 1;
+  const shown = collapsible && !showAll ? warnings.slice(0, 1) : warnings;
+  const rest = warnings.length - 1;
+
+  return (
+    <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning">
+      <AlertTriangle
+        width={16}
+        height={16}
+        strokeWidth={1.75}
+        className="mt-0.5 shrink-0"
+      />
+      <div className="min-w-0">
+        <p className="font-medium">
+          This report has {warnings.length} data-quality note
+          {warnings.length === 1 ? '' : 's'}
+        </p>
+        <ul className="mt-0.5 list-disc space-y-0.5 pl-4">
+          {shown.map((w, i) => (
+            <li key={i}>{w}</li>
+          ))}
+        </ul>
+        {collapsible ? (
+          // Underlined rather than coloured: this sits on an amber ground in
+          // amber text, and `text-brand` on `bg-warning-soft` is the one pairing
+          // in the palette that stops looking like a link in sunlight.
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            aria-expanded={showAll}
+            className="inline-flex min-h-11 items-center font-medium underline underline-offset-2"
+          >
+            {showAll
+              ? 'Show fewer notes'
+              : `Show the other ${rest} note${rest === 1 ? '' : 's'}`}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -582,13 +626,36 @@ function DsrShareSection({
   const [confirmOpen, setConfirmOpen] = React.useState(false);
 
   const alreadyShared = !!report.shared;
-  const cards: { url?: string; label: string; alt: string }[] = [
-    { url: report.variationCardUrl, label: 'Stock variation', alt: 'DSR stock-variation card' },
-    { url: report.salesCardUrl, label: 'Daily sales', alt: 'DSR daily-sales card' },
+  const cards: {
+    url?: string;
+    label: string;
+    alt: string;
+    /** What the mobile tile says it opens. */
+    tapLabel: string;
+    tapNote: string;
+  }[] = [
+    {
+      url: report.variationCardUrl,
+      label: 'Stock variation',
+      alt: 'DSR stock-variation card',
+      tapLabel: 'Open the stock-variation card',
+      tapNote: 'The card the dealer receives, with real zoom.',
+    },
+    {
+      url: report.salesCardUrl,
+      label: 'Daily sales',
+      alt: 'DSR daily-sales card',
+      tapLabel: 'Open the day book',
+      tapNote: 'The eight-column daily-sales card, with real zoom.',
+    },
   ];
   const haveImages = cards.some((c) => c.url);
-  // The card the admin is about to send renders ~280px wide here, and pinch
-  // zoom is off app-wide. Tapping it used to be a `target="_blank"` the shell
+  // Branched in JS, not with `md:hidden`: a CSS branch keeps both trees mounted,
+  // and the inline one holds two <img> that a phone would then fetch for a card
+  // it is never shown. These artifacts are hundreds of KB on a 2G connection.
+  const isMd = useMediaQuery('(min-width: 768px)');
+  // Pinch zoom is off app-wide, so a card shown at column width cannot be read
+  // closely at either size. Tapping one used to be a `target="_blank"` the shell
   // hands to the OS — i.e. it left the report mid-review. The lightbox keeps
   // the review in the app and gives the artwork real zoom.
   const [viewing, setViewing] = React.useState<{
@@ -619,22 +686,57 @@ function DsrShareSection({
       <Card>
         <CardContent className="grid gap-3 md:gap-4">
           <div className="grid gap-3 md:grid-cols-2">
-            {cards.map(({ url, label, alt }) =>
+            {cards.map(({ url, label, alt, tapLabel, tapNote }) =>
               url ? (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => setViewing({ url, label, alt })}
-                  aria-label={`Open the ${label.toLowerCase()} card full size`}
-                  className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
-                >
-                  <img
-                    src={url}
-                    alt={alt}
-                    draggable={false}
-                    className="h-auto w-full rounded-md border border-border bg-surface-2"
-                  />
-                </button>
+                isMd ? (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setViewing({ url, label, alt })}
+                    aria-label={`Open the ${label.toLowerCase()} card full size`}
+                    className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+                  >
+                    <img
+                      src={url}
+                      alt={alt}
+                      draggable={false}
+                      className="h-auto w-full rounded-md border border-border bg-surface-2"
+                    />
+                  </button>
+                ) : (
+                  // A LABELLED TILE, NOT A THUMBNAIL. These cards are rendered
+                  // at a desktop width and were being drawn ~310px wide here, so
+                  // the day book's eight columns of type landed at 2-3 CSS px —
+                  // grey mush, with pinch-zoom off app-wide and no way to tell
+                  // from it whether the figures are right. The renderer has a
+                  // phone stylesheet now, so a freshly generated card is fine,
+                  // but every card already in the vault is not, and an
+                  // unreadable preview is worse than none: it invites an
+                  // approve-without-reading. The tile says what it opens and the
+                  // lightbox behind it is where the card can actually be read.
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setViewing({ url, label, alt })}
+                    className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-border bg-surface p-3 text-left hover:bg-surface-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-text">
+                        {tapLabel}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-text-subtle">
+                        {tapNote}
+                      </span>
+                    </span>
+                    <ChevronRight
+                      width={18}
+                      height={18}
+                      strokeWidth={1.75}
+                      aria-hidden
+                      className="shrink-0 text-text-subtle"
+                    />
+                  </button>
+                )
               ) : (
                 <div
                   key={label}

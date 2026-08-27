@@ -485,6 +485,51 @@ export function InboxPage() {
   }
 
   /*
+   * The one action the ticket's status calls for, named once so the glyph in
+   * the header and the row in the kebab sheet cannot drift apart.
+   *
+   * Below md this is drawn as a bare 44px square, not the icon-and-word pill it
+   * used to be. That pill was 98px, and with the back chevron (44px) and the
+   * kebab (44px) either side of it the title was left 131px of the 202px
+   * "Shiv Kumar Singh · Owner" needs — so the name truncated mid-word and the
+   * role, which is the half that says WHO you are talking to, never survived at
+   * all. The word is not lost: it is the first row of the sheet the kebab
+   * opens, where it has a whole line to itself.
+   */
+  const statusAction: {
+    label: string;
+    icon: (size: number) => React.ReactNode;
+    variant: 'primary' | 'secondary';
+    pending: boolean;
+    run: () => void;
+  } | null =
+    conversation?.status === 'OPEN'
+      ? {
+          label: 'Pick up',
+          icon: (s) => <UserPlus width={s} height={s} strokeWidth={1.75} />,
+          variant: 'primary',
+          pending: assignConv.isPending,
+          run: handlePickUp,
+        }
+      : conversation?.status === 'ASSIGNED'
+        ? {
+            label: 'Resolve',
+            icon: (s) => <CheckCircle2 width={s} height={s} strokeWidth={1.75} />,
+            variant: 'primary',
+            pending: resolveConv.isPending,
+            run: () => setResolveOpen(true),
+          }
+        : conversation?.status === 'RESOLVED'
+          ? {
+              label: 'Reopen',
+              icon: (s) => <RotateCcw width={s} height={s} strokeWidth={1.75} />,
+              variant: 'secondary',
+              pending: reopenConv.isPending,
+              run: handleReopen,
+            }
+          : null;
+
+  /*
    * The details panel's contents, rendered into one of two shells below.
    *
    * At ≥ lg it is the inline column it has always been. Below lg it used to be
@@ -642,13 +687,20 @@ export function InboxPage() {
     </>
   ) : null;
 
-  // `main` is `p-4 md:p-6`, and in a thread AppShell adds the bottom safe-area
-  // inset to it as well (the tab bar, which normally carries it, is hidden).
-  // This page cancels that padding with a negative margin — but `h-full`
-  // resolves against main's CONTENT box, so the page rendered 32px (plus the
-  // inset) shorter than the space it occupies, leaving a dead strip of page
-  // background under the composer. Spell the height out, and add the inset back
-  // only in a thread, which is the only case where main is carrying it.
+  // `main` is padded by `--app-gutter`, and in a thread AppShell adds the
+  // bottom safe-area inset to it as well (the tab bar, which normally carries
+  // it, is hidden). This page cancels that padding with a negative margin — but
+  // `h-full` resolves against main's CONTENT box, so the page rendered a gutter
+  // on each side shorter than the space it occupies, leaving a dead strip of
+  // page background under the composer. Spell the height out, and add the inset
+  // back only in a thread, which is the only case where main is carrying it.
+  //
+  // The two gutters have to be READ, not written as a number: this was `2rem`
+  // from when the padding was a flat `p-4`, and `--app-gutter` is 0.75rem on a
+  // phone. The page therefore came out 8px TALLER than its scroller, so a list
+  // that fits still had 8px of travel — enough that the "Resolved / + New" bar
+  // and the chip strip jiggled under any scroll gesture, and enough to push the
+  // composer's last pixels into the gesture strip.
   const threadOpen = searchParams.has('c');
 
   return (
@@ -656,8 +708,8 @@ export function InboxPage() {
       className={cn(
         '-m-[var(--app-gutter)] flex md:h-full',
         threadOpen
-          ? 'h-[calc(100%+2rem+env(safe-area-inset-bottom))]'
-          : 'h-[calc(100%+2rem)]',
+          ? 'h-[calc(100%+2*var(--app-gutter)+env(safe-area-inset-bottom))]'
+          : 'h-[calc(100%+2*var(--app-gutter))]',
       )}
     >
       {/* Left rail */}
@@ -950,50 +1002,23 @@ export function InboxPage() {
                 </div>
                 </div>
               </div>
-              {/* Mobile action cluster: one primary by status and a kebab
-                  holding the rest (Details / Take over / Upload report). Four
-                  controls — back chevron, status button, Details, kebab — took
-                  ~232px of a 360px header and left the member's name ~110px, so
-                  Details moved into the sheet the kebab already opens. */}
+              {/* Mobile action cluster: the status action as one glyph, and a
+                  kebab holding the rest (the same action in words, Details,
+                  Take over, Upload report). Four controls — back chevron,
+                  status button, Details, kebab — took ~232px of a 360px header
+                  and left the member's name ~110px, so Details moved into the
+                  sheet the kebab already opens and the status pill dropped its
+                  word. */}
               <div className="flex items-center gap-1 md:hidden">
-                {conversation.status === 'OPEN' ? (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={handlePickUp}
-                    loading={assignConv.isPending}
-                    leftIcon={
-                      <UserPlus width={14} height={14} strokeWidth={1.75} />
-                    }
+                {statusAction ? (
+                  <IconButton
+                    aria-label={statusAction.label}
+                    variant={statusAction.variant}
+                    onClick={statusAction.run}
+                    loading={statusAction.pending}
                   >
-                    Pick up
-                  </Button>
-                ) : null}
-                {conversation.status === 'ASSIGNED' ? (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={() => setResolveOpen(true)}
-                    loading={resolveConv.isPending}
-                    leftIcon={
-                      <CheckCircle2 width={14} height={14} strokeWidth={1.75} />
-                    }
-                  >
-                    Resolve
-                  </Button>
-                ) : null}
-                {conversation.status === 'RESOLVED' ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleReopen}
-                    loading={reopenConv.isPending}
-                    leftIcon={
-                      <RotateCcw width={14} height={14} strokeWidth={1.75} />
-                    }
-                  >
-                    Reopen
-                  </Button>
+                    {statusAction.icon(18)}
+                  </IconButton>
                 ) : null}
                 <button
                   type="button"
@@ -1201,6 +1226,19 @@ export function InboxPage() {
               onClose={() => setThreadMenuOpen(false)}
               title="Actions"
             >
+              {/* First, because it is the same control as the glyph in the
+                  header — this row is where that glyph's word went. */}
+              {statusAction ? (
+                <SheetItem
+                  icon={statusAction.icon(20)}
+                  onClick={() => {
+                    setThreadMenuOpen(false);
+                    statusAction.run();
+                  }}
+                >
+                  {statusAction.label}
+                </SheetItem>
+              ) : null}
               <SheetItem
                 icon={<Info width={20} height={20} strokeWidth={1.75} />}
                 onClick={() => {

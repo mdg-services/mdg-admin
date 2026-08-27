@@ -670,12 +670,27 @@ export function KavachWorkQueuePage() {
                       paints a gutter, and a sticky offset resolves against the
                       scrollport INSET BY THAT PADDING — so `top-0` parked this
                       heading one gutter down and let rows scroll through the
-                      band above it. */}
-                  <div className="sticky stick-top z-[var(--z-sticky)] flex flex-wrap items-baseline justify-between gap-2 bg-surface-2 px-3 py-2 md:static md:z-auto md:px-4">
-                    <h2 className="text-sm font-semibold text-text">
+                      band above it.
+
+                      ONE HEIGHT, ALWAYS TWO LINES, below md. The heading is a
+                      wrapping row, so "Stock board / 8 dealers · 30 pts each"
+                      is 52px and "Held / 1 dealer · 30 pts each" is 36px — and
+                      the sticky one is pushed out by the next group's, which
+                      means the two bands meet mid-scroll at two different
+                      heights and the join reads as a drawing error rather than
+                      as one heading replacing another. One fixed shape plus a
+                      rule along its bottom edge makes the handover legible:
+                      same height, same line, one leaving as the other arrives.
+                      Both lines truncate, which is what fixes the height
+                      without a hard-coded one — a longer task name can no longer add a
+                      third line — and the rows underneath carry the detail.
+                      From md up the heading is static and is exactly the
+                      wrapping row it always was. */}
+                  <div className="sticky stick-top z-[var(--z-sticky)] border-b border-border bg-surface-2 px-3 py-2 md:static md:z-auto md:flex md:flex-wrap md:items-baseline md:justify-between md:gap-2 md:border-b-0 md:px-4">
+                    <h2 className="truncate text-sm font-semibold text-text md:overflow-visible md:whitespace-normal">
                       {group.title}
                     </h2>
-                    <span className="text-xs text-text-muted">
+                    <span className="block truncate text-xs text-text-muted md:overflow-visible md:whitespace-normal">
                       {group.subtitle}
                     </span>
                   </div>
@@ -815,6 +830,28 @@ export function KavachWorkQueuePage() {
                         groupBy === 'task'
                           ? dealerCodeLabel(row.dealerCode)
                           : row.labelEn;
+                      // The pending chip and the status badge can be the same
+                      // sentence in two different cases: a task nobody has
+                      // looked at reports "never checked" on the right and
+                      // "Never checked" as a pill directly underneath it, on
+                      // every one of ~50 rows. The right-hand chip is the one
+                      // that also carries "3 days late" and "due today", so it
+                      // stays and the badge stands down when it would only
+                      // repeat it.
+                      const statusLabel = ITEM_STATUS_LABEL[row.status];
+                      const statusEchoesChip =
+                        !mark &&
+                        statusLabel.toLowerCase() === pending.text.toLowerCase();
+                      const showStatus = !statusEchoesChip;
+                      const showRequest = row.requestState !== 'NONE';
+                      // As separate flex items each carrying its own leading
+                      // "· ", a wrapped meta line began with a separator. The
+                      // middot belongs to the part before it instead.
+                      const metaParts = [
+                        `${row.points} pts`,
+                        `${EVIDENCE_LABEL[row.evidence]} required`,
+                        VERIFICATION_LABEL[row.verification],
+                      ];
                       return {
                         key: row.itemId,
                         tone: mark ? ('muted' as const) : ('default' as const),
@@ -852,31 +889,33 @@ export function KavachWorkQueuePage() {
                         ) : (
                           <Badge intent={pending.intent}>{pending.text}</Badge>
                         ),
-                        secondary: (
-                          <span className="flex flex-wrap items-center gap-1.5">
-                            <Badge intent={itemStatusIntent(row.status)}>
-                              {ITEM_STATUS_LABEL[row.status]}
-                            </Badge>
-                            {row.requestState !== 'NONE' ? (
-                              <Badge
-                                intent={requestStateIntent(
-                                  row.requestState,
-                                )}
-                              >
-                                {REQUEST_STATE_LABEL[row.requestState]}
-                              </Badge>
-                            ) : null}
-                          </span>
-                        ),
+                        secondary:
+                          showStatus || showRequest ? (
+                            <span className="flex flex-wrap items-center gap-1.5">
+                              {showStatus ? (
+                                <Badge intent={itemStatusIntent(row.status)}>
+                                  {statusLabel}
+                                </Badge>
+                              ) : null}
+                              {showRequest ? (
+                                <Badge
+                                  intent={requestStateIntent(
+                                    row.requestState,
+                                  )}
+                                >
+                                  {REQUEST_STATE_LABEL[row.requestState]}
+                                </Badge>
+                              ) : null}
+                            </span>
+                          ) : undefined,
                         meta: (
                           <span className="flex flex-wrap items-center gap-x-2">
-                            <span>{row.points} pts</span>
-                            <span>
-                              · {EVIDENCE_LABEL[row.evidence]} required
-                            </span>
-                            <span>
-                              · {VERIFICATION_LABEL[row.verification]}
-                            </span>
+                            {metaParts.map((part, i) => (
+                              <span key={part}>
+                                {part}
+                                {i < metaParts.length - 1 ? ' ·' : ''}
+                              </span>
+                            ))}
                           </span>
                         ),
                       };

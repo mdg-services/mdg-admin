@@ -531,6 +531,22 @@ export function FestivalPage() {
           visibility="below-md"
           summary={saveSummary}
           summaryOnMobile
+          // `elevated`: the default bar is the same white as the cards and stops
+          // at the same gutter, so the Settings card's own side borders ran
+          // straight past it and the Festival select it covers looked sliced off
+          // at the bottom rather than hidden behind something.
+          elevated
+          /* And the negative bottom margin is what keeps it pinned all the way
+             down. `stick-bottom` is `bottom: -12px` — the bar is meant to span
+             `main`'s 12px bottom padding — but a sticky box is constrained to
+             its containing block's padding box, and this bar is the last child
+             of the page, so at the very end of the scroll it simply stopped at
+             its static position and let a 12px strip of page background show
+             through underneath. The constraint rectangle is reduced by the
+             box's own margins, so a negative one gives it back exactly the
+             gutter it needs. `md:mb-0` for symmetry only: the bar is
+             `md:hidden`. */
+          className="-mb-[var(--app-gutter)] md:mb-0"
         >
           <Button
             onClick={() => void onSave()}

@@ -48,6 +48,11 @@ export function KavachItemRow({ item, busy, onTogglePause, onToggleSos, onVerify
   const isSos = item.trigger === 'SOS';
   const sosFlagged = item.status === 'SOS_FLAGGED';
   const requestLive = item.request.state !== 'NONE';
+  // The status pill above already reads "Never checked" whenever this is true,
+  // so the meta line below would print the same two words a second time on the
+  // same row. A PAUSED task shows the "paused" pill instead of its status, and
+  // there this line is the only place the absence is stated, so it stays.
+  const statusSaysNeverChecked = !item.paused && item.status === 'NOT_YET_VERIFIED';
 
   return (
     // `px-3` below md: this row is already inside the page gutter and a card
@@ -132,7 +137,9 @@ export function KavachItemRow({ item, busy, onTogglePause, onToggleSos, onVerify
               {formatDate(item.lastVerifiedAt)}
             </span>
           ) : (
-            <span>never checked</span>
+            <span className={statusSaysNeverChecked ? 'hidden md:inline' : undefined}>
+              never checked
+            </span>
           )}
           {item.expiresAt ? (
             <span className="hidden md:inline">

@@ -1,4 +1,4 @@
-import { Mic, Paperclip, Send, Trash2, X } from 'lucide-react';
+import { Mic, Paperclip, RotateCcw, Send, Trash2, X } from 'lucide-react';
 import * as React from 'react';
 
 
@@ -343,6 +343,16 @@ export function Composer({
          */
         <p className="px-1 py-2 text-sm text-text-muted">
           This chat is resolved. Tap{' '}
+          {/* Below md the thread header draws Reopen as a bare glyph — its word
+              lives in the kebab sheet — so naming it alone would send the admin
+              hunting for a word that is not on screen. Show the glyph too. */}
+          <RotateCcw
+            width={14}
+            height={14}
+            strokeWidth={1.75}
+            aria-hidden
+            className="inline align-text-bottom text-text"
+          />{' '}
           <span className="font-medium text-text">Reopen</span> at the top to
           reply.
         </p>
@@ -376,7 +386,13 @@ export function Composer({
             rows={1}
             placeholder={placeholder}
             disabled={busy}
-            className="min-h-[36px] min-w-0 resize-none"
+            // The auto-grow effect above writes an inline `height` off
+            // `scrollHeight`, which for one row of `text-base` comes out at
+            // 40px — four short of the floor, in the one row where the attach
+            // and mic buttons beside it are already 44px squares. `min-height`
+            // beats an inline `height`, so the floor holds without fighting the
+            // effect. `md:` restores the 36px the desktop row has always drawn.
+            className="min-h-11 md:min-h-[36px] min-w-0 resize-none"
           />
           {hasContent ? (
             // The word "Send" costs ~84px of a 360px row. With the attach

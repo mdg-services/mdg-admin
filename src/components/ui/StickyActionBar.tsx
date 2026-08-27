@@ -45,6 +45,34 @@ export interface StickyActionBarProps {
    *  in `className` winning against the root's own display class. */
   visibility?: 'all' | 'below-md';
   summaryOnMobile?: boolean;
+  /**
+   * Below md, lift the pinned bar off the page: its own surface, an upward
+   * shadow, and the full width of the screen.
+   *
+   * Opt-in because it only makes sense for `mode="sticky"` + `surface="bar"`,
+   * and it is ignored otherwise. The default bar is the same white as the cards
+   * and stops at the same gutter, so a card's side borders run straight past it
+   * and the row it happens to be covering reads as a card someone sliced in
+   * half — the bar looks like part of the list rather than like the thing
+   * pinned over it. Bleeding to the screen edges is what breaks that line;
+   * the surface and shadow say which of the two is on top.
+   */
+  elevated?: boolean;
+  /**
+   * Where the summary sits below md. `'above'` (default) gives it its own line
+   * over the buttons; `'beside'` puts it on the same line, which is worth ~50px
+   * of a 640px screen — a bar carrying a sentence and two buttons was 114px
+   * tall, 15% of the screen, permanently over the list it serves.
+   *
+   * `'beside'` only pays off with a SHORT mobile summary: the buttons keep their
+   * width (they are `whitespace-nowrap`) and the summary gets what is left, so a
+   * sentence that wraps to four lines in ~140px is taller than stacking it was.
+   * Pair it with `below="wrap"` or `below="row"`; the default `'stack'` puts the
+   * buttons in a column, which is the shape this is trying to get rid of.
+   * Ignored without `summaryOnMobile` and a `summary`. At md both placements are
+   * the same row this bar has always drawn.
+   */
+  summaryPlacement?: 'above' | 'beside';
   className?: string;
 }
 
@@ -80,9 +108,20 @@ export function StickyActionBar({
   surface = 'bar',
   visibility = 'all',
   summaryOnMobile = false,
+  elevated = false,
+  summaryPlacement = 'above',
   className,
 }: StickyActionBarProps) {
   const insets = useSafeInsets();
+  // A `card` that bleeds to the screen edges is no longer a card, and a `fixed`
+  // bar already spans the viewport, so the lift only applies to the one shape
+  // it was drawn for.
+  const lift = elevated && mode === 'sticky' && surface === 'bar';
+  // With no summary on screen there is nothing to sit beside, and a lone
+  // `shrink-0` ActionRow in a `justify-between` row would land at the left
+  // instead of filling the line the way the stacked default does.
+  const beside =
+    summaryPlacement === 'beside' && summaryOnMobile && summary != null;
   // When the tab bar is up it is the thing standing on the gesture strip, so
   // the bar only needs its own padding. At md+ both numbers are 0 and this
   // resolves to the same 12px `md:pb-3` the sticky mode writes as a class.
@@ -94,12 +133,24 @@ export function StickyActionBar({
   return (
     <div
       className={cn(
-        'bg-surface px-3 md:px-4',
+        // The bleed has to be the gutter token, not a hard-coded `-mx-3`: the
+        // two numbers drifting apart is an overhang, and `main` is
+        // `overflow-x-hidden`, so the overhang is clipped rather than
+        // scrollable. Written as one branch rather than as extra classes on top
+        // of the default because `cn` is clsx — a second `bg-*` or `px-*` in the
+        // list is decided by stylesheet order, not by which one was written
+        // last. The `md:` half restores today's bar exactly.
+        lift
+          ? '-mx-[var(--app-gutter)] bg-surface-2 px-[var(--app-gutter)] shadow-[0_-6px_16px_rgba(15,23,42,0.10)] md:mx-0 md:bg-surface md:px-4 md:shadow-none'
+          : 'bg-surface px-3 md:px-4',
         // `card` matches the `Card` + `CardContent` (`p-4`) it replaces exactly,
         // so adopting it is a no-op at md; `bar` keeps the strip's own py-3.
         surface === 'card'
           ? 'rounded-md border border-border pt-4 shadow-sm'
-          : 'border-t border-border pt-3',
+          : cn(
+              'border-t pt-3',
+              lift ? 'border-border-strong md:border-border' : 'border-border',
+            ),
         mode === 'sticky'
           ? cn(
               // `stick-bottom`, not `bottom-0`: a sticky offset resolves against
@@ -123,18 +174,33 @@ export function StickyActionBar({
           : undefined
       }
     >
-      <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-between md:gap-3">
+      <div
+        className={cn(
+          'flex gap-2 md:flex-row md:items-center md:justify-between md:gap-3',
+          beside
+            ? 'flex-row items-center justify-between'
+            : 'flex-col items-stretch',
+        )}
+      >
         {summary != null ? (
           <div
             className={cn(
               'min-w-0 break-words text-sm text-text-muted',
+              // `flex-1` only where the buttons sit alongside: they are
+              // `whitespace-nowrap` and never give width up, so the summary has
+              // to be the item that takes what is left and wraps inside it.
+              beside && 'flex-1',
               summaryOnMobile ? 'block' : 'hidden md:block',
             )}
           >
             {summary}
           </div>
         ) : null}
-        <ActionRow below={below} align="end" className="md:shrink-0">
+        <ActionRow
+          below={below}
+          align="end"
+          className={cn('md:shrink-0', beside && 'shrink-0')}
+        >
           {children}
         </ActionRow>
       </div>

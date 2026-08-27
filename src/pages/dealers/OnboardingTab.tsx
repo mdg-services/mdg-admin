@@ -223,14 +223,28 @@ function StepCard({
                 </span>
               </button>
             ) : (
-              <div className="flex items-center justify-between gap-2">
+              /* `min-h-7` is the step dot's own height below md. The body under
+                 this row is pulled back out to the card's gutter (see below),
+                 so it passes *beside* the dot rather than under it — and a
+                 title row shorter than the dot would put the first line of the
+                 description against the bottom of the circle. Matching the two
+                 heights is what keeps them apart. */
+              <div className="flex min-h-7 items-center justify-between gap-2 md:min-h-0">
                 <div className="text-sm font-semibold text-text">{def.title}</div>
                 <StepBadge isDone={isDone} isCurrent={isCurrent} />
               </div>
             )}
 
             {showBody ? (
-              <>
+              /* Below md the body climbs back out of the step-number column.
+                 Only the title has to line up with the dot; the body under it
+                 was inheriting the same indent, so on a 360px screen it began
+                 64px in — 12px page gutter, 12px card, and 40px of step column
+                 (a 28px dot and its 12px gap) — before whatever it contained
+                 added its own. `-ml-10` is exactly that 40px back, and
+                 `md:ml-0` leaves the desktop indent, where there is room for
+                 it, untouched. */
+              <div className="-ml-10 md:ml-0">
                 <p className="mt-1 text-sm text-text-muted">{def.description}</p>
                 {isDone && entry?.completedAt ? (
                   <p className="mt-2 text-xs text-text-subtle">
@@ -279,7 +293,7 @@ function StepCard({
                     />
                   </div>
                 ) : null}
-              </>
+              </div>
             ) : null}
           </div>
         </div>
@@ -389,7 +403,13 @@ function ComposeMessageBlock({
   }
 
   return (
-    <div className="grid gap-2 rounded-md border border-border bg-surface-2/40 p-3">
+    /* No box of its own below md. This panel sits inside the step card, and the
+       only thing it wraps is a textarea that already draws its own border —
+       card border, panel border, field border, three boxes for one field, with
+       the panel's own 12px on top. Together with the step indent above, the
+       welcome message was starting past 90px of a 360px screen. From md up this
+       is the tinted, bordered block it has always been. */
+    <div className="grid gap-2 md:rounded-md md:border md:border-border md:bg-surface-2/40 md:p-3">
       <div className="flex items-center justify-between gap-2">
         <Label htmlFor="compose-message" className="m-0">
           Message to send

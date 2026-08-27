@@ -203,50 +203,80 @@ export function KavachDashboardPage() {
             {/* Mobile card-stack (< md) */}
             <MobileCardList
               variant="rows"
-              cards={rows.map((r) => ({
-                key: r.programmeId,
-                onClick: () => navigate(`/dealers/${r.dealerId}?tab=kavach`),
-                primary: (
-                  <span className="block truncate font-medium text-text">
-                    {dealerCodeLabel(r.dealerCode)}
-                  </span>
-                ),
-                primaryRight: r.scored ? (
-                  <Badge intent={operationalIntent(r.overallPct)}>
-                    {Math.round(r.overallPct)}%
-                  </Badge>
-                ) : (
-                  <span className="text-xs text-text-subtle">Not scored yet</span>
-                ),
-                secondary: (
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-mono">{r.dealerCode || '—'}</span>
-                    <Badge intent={stalenessIntent(r.daysSinceLastVerified, STALE_DAYS)}>
-                      {staleLabel(r.daysSinceLastVerified)}
+              cards={rows.map((r) => {
+                /**
+                 * The meta line, as PARTS rather than as five spans each
+                 * carrying its own leading "· ".
+                 *
+                 * Those spans are flex items, so at 360px the line wrapped and
+                 * a row started "· Needs review 0 · -" — a separator with
+                 * nothing in front of it and a bare dash where a date should
+                 * be, which reads as a row that failed to finish drawing. The
+                 * separator now belongs to the part BEFORE it (so no wrapped
+                 * line can begin with one), and an absent evaluation says so in
+                 * words instead of with a dash.
+                 */
+                const metaParts: { text: string; tint?: string }[] = [
+                  {
+                    text: `Expired ${r.expiredCount}`,
+                    tint: r.expiredCount > 0 ? 'text-danger' : undefined,
+                  },
+                  {
+                    text: `Expiring ${r.expiringSoonCount}`,
+                    tint: r.expiringSoonCount > 0 ? 'text-warning' : undefined,
+                  },
+                  { text: `Never checked ${r.notYetVerifiedCount}` },
+                  {
+                    text: `Needs review ${r.awaitingReviewCount}`,
+                    tint: r.awaitingReviewCount > 0 ? 'text-brand' : undefined,
+                  },
+                  {
+                    text: r.lastEvaluatedAt
+                      ? `Scored ${formatDateTime(r.lastEvaluatedAt)}`
+                      : 'Never scored',
+                  },
+                ];
+                return {
+                  key: r.programmeId,
+                  onClick: () => navigate(`/dealers/${r.dealerId}?tab=kavach`),
+                  primary: (
+                    <span className="block truncate font-medium text-text">
+                      {dealerCodeLabel(r.dealerCode)}
+                    </span>
+                  ),
+                  primaryRight: r.scored ? (
+                    <Badge intent={operationalIntent(r.overallPct)}>
+                      {Math.round(r.overallPct)}%
                     </Badge>
-                    {r.dealerFacingEnabled ? null : (
-                      <span className="text-text-subtle">Messages off</span>
-                    )}
-                  </span>
-                ),
-                meta: (
-                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <span className={r.expiredCount > 0 ? 'text-danger' : undefined}>
-                      Expired {r.expiredCount}
+                  ) : (
+                    <span className="text-xs text-text-subtle">Not scored yet</span>
+                  ),
+                  // The dealer code is the row's heading, so printing it again
+                  // in mono directly underneath said the same word twice on
+                  // every row and pushed the one thing this line is for — how
+                  // long since we looked — onto the next line.
+                  secondary: (
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <Badge intent={stalenessIntent(r.daysSinceLastVerified, STALE_DAYS)}>
+                        {staleLabel(r.daysSinceLastVerified)}
+                      </Badge>
+                      {r.dealerFacingEnabled ? null : (
+                        <span className="text-text-subtle">Messages off</span>
+                      )}
                     </span>
-                    <span
-                      className={r.expiringSoonCount > 0 ? 'text-warning' : undefined}
-                    >
-                      · Expiring {r.expiringSoonCount}
+                  ),
+                  meta: (
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      {metaParts.map((part, i) => (
+                        <span key={part.text} className={part.tint}>
+                          {part.text}
+                          {i < metaParts.length - 1 ? ' ·' : ''}
+                        </span>
+                      ))}
                     </span>
-                    <span>· Never checked {r.notYetVerifiedCount}</span>
-                    <span className={r.awaitingReviewCount > 0 ? 'text-brand' : undefined}>
-                      · Needs review {r.awaitingReviewCount}
-                    </span>
-                    <span>· {formatDateTime(r.lastEvaluatedAt)}</span>
-                  </span>
-                ),
-              }))}
+                  ),
+                };
+              })}
             />
             </>
           )}

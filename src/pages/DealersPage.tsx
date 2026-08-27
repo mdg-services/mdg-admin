@@ -29,6 +29,7 @@ import {
   useDealersQuery,
 } from '@/hooks/api/useDealers';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import {
@@ -60,6 +61,7 @@ export function DealersPage() {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
 
   const isSuperAdmin = useIsSuperAdmin();
+  const isMd = useMediaQuery('(min-width: 768px)');
   const searchTerm = search.get('q') ?? '';
   const status = (search.get('status') as DealerStatus | null) ?? undefined;
   const page = Number(search.get('page') ?? '1');
@@ -162,9 +164,22 @@ export function DealersPage() {
               strokeWidth={1.75}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle"
             />
+            {/* The box has ~264px inside it below md once the gutter, the
+                card's padding and the magnifier's `pl-9` are paid for, and a
+                placeholder does not ellipsize — it is simply cut. So the long
+                form ended at "Search by name, phone, code, G" and PAN, the
+                last searchable field, was never named at all. The short form
+                drops "Search by", which the magnifier beside it already says,
+                and keeps every field. From md up the placeholder is the
+                sentence it has always been. */}
             <Input
               type="search"
-              placeholder="Search by name, phone, code, GST, PAN"
+              aria-label="Search dealers"
+              placeholder={
+                isMd
+                  ? 'Search by name, phone, code, GST, PAN'
+                  : 'Name, phone, code, GST, PAN'
+              }
               className="pl-9"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}

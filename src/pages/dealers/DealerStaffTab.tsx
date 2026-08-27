@@ -344,6 +344,13 @@ export function DealerStaffTab({ dealer }: Props) {
     }
   }
 
+  /* True only when the roster card is showing its "No warriors on record"
+     empty state below md — a loaded, error-free, genuinely empty roster on a
+     phone. That is the one moment the header's own "Add warrior" would be the
+     second copy of the button the empty state is already offering. */
+  const rosterEmptyState =
+    !isMd && !overviewQ.isLoading && !overviewQ.isError && roster.length === 0;
+
   const draft = draftQ.data;
   const draftHasEntries = !!draft && draft.lineItems.length > 0;
   const batches = batchesQ.data ?? [];
@@ -582,13 +589,22 @@ export function DealerStaffTab({ dealer }: Props) {
                 />
                 Include inactive
               </label>
-              <Button
-                size="sm"
-                onClick={openAddWorker}
-                leftIcon={<UserPlus width={14} height={14} strokeWidth={1.75} />}
-              >
-                Add warrior
-              </Button>
+              {/* An empty roster puts "Add warrior" in the empty state, which is
+                  the point of the card at that moment — so the header does not
+                  draw a second one, a different size and a different blue, two
+                  rows above it. Only below md: at md the two are far enough
+                  apart to read as a toolbar and a suggestion. The checkbox
+                  stays either way, because the empty state's own copy tells the
+                  reader to tick it. */}
+              {rosterEmptyState ? null : (
+                <Button
+                  size="sm"
+                  onClick={openAddWorker}
+                  leftIcon={<UserPlus width={14} height={14} strokeWidth={1.75} />}
+                >
+                  Add warrior
+                </Button>
+              )}
             </div>
           }
         >

@@ -314,7 +314,15 @@ function GroupCard({
                 )}
               >
                 {u.name}
-                {u.title ? (
+                {/* `title` is a display label for a dealer member and is almost
+                    always the word the role badge on this same row already
+                    carries — "Owner", "Manager" — so the card read
+                    "Ramesh Owner   [Owner]". A 328px row cannot spend width on
+                    saying it twice; the badge is the one that survives, because
+                    it is also the column heading on the desktop table. It still
+                    prints when it genuinely differs (a hand-typed "Accounts").
+                    The table above keeps both, unchanged. */}
+                {u.title && u.title.toLowerCase() !== ROLE_LABEL[u.role].toLowerCase() ? (
                   <span className="ml-2 text-xs font-normal text-text-subtle">
                     {u.title}
                   </span>

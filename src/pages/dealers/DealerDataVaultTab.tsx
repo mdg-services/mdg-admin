@@ -154,7 +154,14 @@ export function DealerDataVaultTab({ dealer }: Props) {
         // `w-full md:w-40`, not a bare `w-40`: `cn` is clsx, and Tailwind emits
         // `.w-full` AFTER `.w-40`, so the bare override silently lost and the
         // field took the whole row.
-        className="w-full md:w-40"
+        //
+        // `flex-1 min-w-0` below md so it SHARES that row with "Collect now"
+        // instead of pushing it onto a third line. Three stacked lines of
+        // collect chrome is 52px of the ~670px a dealer's Data Vault spent
+        // before its first figure. `md:flex-initial` is `flex: 0 1 auto` — the
+        // value a flex item has when nobody sets one — so from md up the field
+        // is the 10rem box it has always been.
+        className="min-w-0 flex-1 md:w-40 md:flex-initial"
       />
       <Button
         variant="secondary"

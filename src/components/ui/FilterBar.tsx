@@ -101,9 +101,14 @@ export function FilterBar({
   return (
     <div className={cn('grid gap-2', className)}>
       <div className="flex items-center gap-2">
+        {/* No `justify-between`: the trigger has exactly two children, so
+            spreading them parks the icon at the far left and the word "Filters"
+            at the far right with ~244px of nothing in between — a button that
+            reads as half-drawn rather than as one control. `Button`'s own
+            `justify-center` keeps the label beside its icon. */}
         <Button
           variant="secondary"
-          className="min-h-11 flex-auto justify-between"
+          className="min-h-11 flex-auto"
           leftIcon={
             <SlidersHorizontal width={16} height={16} strokeWidth={1.75} />
           }

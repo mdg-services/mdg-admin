@@ -38,6 +38,7 @@ import {
   useUpdateDealerUser,
 } from '@/hooks/api/useDealerUsers';
 import { useStartConversation } from '@/hooks/api/useStartConversation';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { generatePassword } from '@/lib/password';
 import type { Dealer, User } from '@dk/shared';
@@ -77,7 +78,9 @@ export function DealerMembersTab({ dealer }: Props) {
   const startConv = useStartConversation();
   const navigate = useNavigate();
   const toast = useToast();
+  const isMd = useMediaQuery('(min-width: 768px)');
   const [addOpen, setAddOpen] = React.useState(false);
+  const hasMembers = !!users && users.length > 0;
 
   async function messageMember(u: User) {
     try {
@@ -107,22 +110,39 @@ export function DealerMembersTab({ dealer }: Props) {
       {/* The button goes in `action`, not beside the title. As a second child
           of a `justify-between` row that cannot wrap, a `whitespace-nowrap`
           Button refuses to shrink below ~130px and squeezes this card's long
-          subtitle into ~135px — six lines of text beside one button. */}
+          subtitle into ~135px — six lines of text beside one button.
+
+          With no members yet, the empty state's own "Add member" is the point of
+          the card, and the header was drawing a second one — a different size,
+          a different blue — two rows above it. Below md only one of the two
+          survives; from md up the header keeps its action, where a toolbar
+          button and a suggestion sit far enough apart to read as two different
+          offers rather than as the same button twice. A media query rather than
+          `hidden md:inline-flex`, because `CardHeader` gives `action` a slot of
+          its own and a display:none button still costs the header its 8px
+          column gap. */}
       <CardHeader
         action={
-          <Button
-            size="sm"
-            onClick={() => setAddOpen(true)}
-            leftIcon={<UserPlus width={14} height={14} strokeWidth={1.75} />}
-          >
-            Add member
-          </Button>
+          hasMembers || isLoading || isMd ? (
+            <Button
+              size="sm"
+              onClick={() => setAddOpen(true)}
+              leftIcon={<UserPlus width={14} height={14} strokeWidth={1.75} />}
+            >
+              Add member
+            </Button>
+          ) : undefined
         }
       >
-        <CardTitle>Team / Members</CardTitle>
-        <CardSubtitle>
-          Each member has their own app login and private chat with support.
-        </CardSubtitle>
+        {/* Wrapped, not two loose children: with no `action` the header is a
+            `justify-between` row, and an unwrapped title and subtitle would fly
+            to opposite ends of it. */}
+        <div>
+          <CardTitle>Team / Members</CardTitle>
+          <CardSubtitle>
+            Each member has their own app login and private chat with support.
+          </CardSubtitle>
+        </div>
       </CardHeader>
       {/* The body is the members list, so it runs to the card's own edges —
           the skeleton and the empty state carry their own padding. */}

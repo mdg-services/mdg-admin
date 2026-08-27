@@ -9,6 +9,7 @@ export * from './SegmentedControl';
 export * from './Card';
 export * from './Badge';
 export * from './Callout';
+export * from './ClampedText';
 export * from './InfoBadge';
 export * from './Copyable';
 export * from './DownloadButton';

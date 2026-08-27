@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { ClampedText } from '@/components/ui';
 import { cn } from '@/lib/cn';
 
 import { Breadcrumbs, type Crumb } from './Breadcrumbs';
@@ -53,9 +54,16 @@ export function PageHeader({
         {subtitle ? (
           // Some subtitles run to 158 characters — five lines, ~100px of a
           // 522px screen, before any data. Two lines below md; unchanged above.
-          <p className="mt-1 line-clamp-2 text-sm text-text-muted md:line-clamp-none">
+          //
+          // `ClampedText` and not a bare `line-clamp-2`, because the cut lands
+          // mid-sentence and the half it drops is routinely the half that
+          // carries the point: /kavach stopped at "A task is certified by an MDG
+          // admin —" and lost "never by the dealer", which is the opposite
+          // reading of the same sentence. The toggle only appears when the text
+          // really is longer than two lines.
+          <ClampedText className="mt-1 text-sm text-text-muted">
             {subtitle}
-          </p>
+          </ClampedText>
         ) : null}
       </div>
       {actions ? (

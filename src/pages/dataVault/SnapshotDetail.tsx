@@ -17,6 +17,7 @@ import {
   CardContent,
   StatusChip,
 } from '@/components/ui';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatYmd } from '@/lib/format';
 import { IRAS_REPORT_CODES, dealerCodeLabel } from '@dk/shared';
@@ -198,6 +199,9 @@ export function SnapshotDetail({
  * one decision, so it is stated in plain terms rather than dumped as fields.
  */
 function ShiftAnchorCard({ shift }: { shift: IrasShiftAnchor }) {
+  const isMd = useMediaQuery('(min-width: 768px)');
+  const [whyOpen, setWhyOpen] = React.useState(false);
+
   // Candidates are stored as `dd-MM-yyyy HH:mm:ss` while `selectedShiftTime` is
   // the bare `HH:mm:ss`, so comparing them directly never matches and the chosen
   // shift ends up listed under "other shifts the portal offered" as well.
@@ -207,22 +211,68 @@ function ShiftAnchorCard({ shift }: { shift: IrasShiftAnchor }) {
     (t) => t !== selectedKey && t !== shift.selectedShiftTime,
   );
 
+  const clock = (
+    <Clock
+      width={16}
+      height={16}
+      strokeWidth={1.75}
+      className="shrink-0 text-brand"
+    />
+  );
+  const explainer = (
+    <p className="mt-1 text-sm text-text-muted">
+      Every row below belongs to one closing shift. It was picked from the shifts
+      IRAS offered from the search floor onwards.
+    </p>
+  );
+
   return (
     <Card>
       <CardContent>
-        <div className="flex items-center gap-2">
-          <Clock
-            width={16}
-            height={16}
-            strokeWidth={1.75}
-            className="shrink-0 text-brand"
-          />
-          <p className="text-sm font-semibold text-text">Why this shift</p>
-        </div>
-        <p className="mt-1 text-sm text-text-muted">
-          Every row below belongs to one closing shift. It was picked from the
-          shifts IRAS offered from the search floor onwards.
-        </p>
+        {/* THE EXPLAINER IS PERMANENT; THE FIGURES ARE WHY ANYONE IS HERE.
+            Those two sentences are the same on every capture ever collected, and
+            at 328px they run to three lines directly above the three shift times
+            — part of why the first figure in a dealer's Data Vault sat about
+            670px down. Below md the heading becomes the disclosure that reveals
+            them, so the sentence is still one tap away and the times come up a
+            screenful. From md the card is the paragraph-then-figures block it
+            has always been. */}
+        {isMd ? (
+          <>
+            <div className="flex items-center gap-2">
+              {clock}
+              <p className="text-sm font-semibold text-text">Why this shift</p>
+            </div>
+            {explainer}
+          </>
+        ) : (
+          <>
+            {/* `-my-1` so the 44px touch target eats into the card's own
+                padding instead of adding 24px back to what this is saving. */}
+            <button
+              type="button"
+              onClick={() => setWhyOpen((v) => !v)}
+              aria-expanded={whyOpen}
+              className="-my-1 flex min-h-11 w-full items-center gap-2 text-left"
+            >
+              {clock}
+              <span className="text-sm font-semibold text-text">
+                Why this shift
+              </span>
+              <ChevronDown
+                width={16}
+                height={16}
+                strokeWidth={1.75}
+                aria-hidden
+                className={cn(
+                  'ml-auto shrink-0 text-text-subtle transition-transform',
+                  whyOpen && 'rotate-180',
+                )}
+              />
+            </button>
+            {whyOpen ? explainer : null}
+          </>
+        )}
 
         {/* Three across at every width, not stacked below `sm`. Each box holds
             one `HH:MM:SS`, so three of them fit a 360px screen — stacked they

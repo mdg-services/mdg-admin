@@ -1,4 +1,4 @@
-import { AlertCircle, ChevronRight, Clock } from 'lucide-react';
+import { AlertCircle, ChevronRight, Clock, FilterX } from 'lucide-react';
 import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -157,11 +157,31 @@ export function RunHistoryPage() {
           description={(error as Error).message}
         />
       ) : !data || data.items.length === 0 ? (
-        <EmptyState
-          icon={<Clock width={28} height={28} strokeWidth={1.75} />}
-          title="No runs yet"
-          description="Once services run, their results show up here."
-        />
+        /* An empty page and an empty FILTER are different answers, and the old
+           copy only ever gave the first: an admin who had just narrowed to a
+           dealer and a date was told the system had never run anything, while
+           the bar directly above them still read "Filters (4)". The count is
+           already computed for that bar, so branch on it — and give the way
+           back out, because on a phone the filters live behind a sheet the
+           admin has to reopen to discover what they set. */
+        activeFilters > 0 ? (
+          <EmptyState
+            icon={<FilterX width={28} height={28} strokeWidth={1.75} />}
+            title="No runs match these filters"
+            description="Nothing ran under this combination. Widen the dates, or clear the filters to see every run."
+            cta={
+              <Button variant="secondary" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={<Clock width={28} height={28} strokeWidth={1.75} />}
+            title="No runs yet"
+            description="Once services run, their results show up here."
+          />
+        )
       ) : (
         <>
           <div className="grid gap-3 md:gap-4">
