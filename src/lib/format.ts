@@ -199,6 +199,24 @@ export function inrFormat(n?: number | null): string {
 }
 
 /**
+ * Rupees to the whole, e.g. `-412034.7` → `"-₹4,12,035"`.
+ *
+ * Separate from {@link inrFormat} because paise on a lakh-scale figure is noise
+ * an admin has to read past, and because the sign belongs OUTSIDE the symbol:
+ * `Intl` renders a negative as `-₹4,12,035` in some locales and `₹-4,12,035` in
+ * others, and a column of figures that disagrees with itself about where the
+ * minus goes is hard to scan.
+ *
+ * ASCII `-` rather than a typographic minus, deliberately: {@link formatLitres}
+ * uses ASCII, and these two sit in the same table row. A row reading `−₹4,120`
+ * beside `-1,240 L` looks like two different kinds of negative.
+ */
+export function formatInrWhole(n?: number | null): string {
+  if (n === undefined || n === null || !Number.isFinite(n)) return '-';
+  return `${n < 0 ? '-' : ''}₹${Math.round(Math.abs(n)).toLocaleString('en-IN')}`;
+}
+
+/**
  * Litres with Indian digit grouping, e.g. `1234.5` → `"1,234.5 L"`. Pass
  * `{ sign: true }` to prefix a `+` on positive values — used where the sign is
  * the point (a stock variation that is short vs over).

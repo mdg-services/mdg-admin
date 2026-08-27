@@ -81,6 +81,13 @@ const DsrReportView = React.lazy(
     })),
   ),
 );
+const DsrPnlView = React.lazy(
+  retryImport(() =>
+    import('@/pages/dsr/DsrPnlView').then((m) => ({
+      default: m.DsrPnlView,
+    })),
+  ),
+);
 const DsrVaultPage = React.lazy(
   retryImport(() =>
     import('@/pages/DsrVaultPage').then((m) => ({ default: m.DsrVaultPage })),
@@ -282,6 +289,17 @@ export default function App() {
             element={
               <LazyPage>
                 <DsrReportView />
+              </LazyPage>
+            }
+          />
+          {/* What the fuel earned, priced per delivery. Sits under the DSR
+              because it is the same ledger read for money instead of litres —
+              and, like the report, it never reaches a dealer token. */}
+          <Route
+            path="dsr/dealers/:dealerId/pnl"
+            element={
+              <LazyPage>
+                <DsrPnlView />
               </LazyPage>
             }
           />

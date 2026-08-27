@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, ApiError } from '@/lib/api';
+import type { PnlProductInput } from '@/lib/fuelPnl';
 import type {
   DsrReportDigest,
   DsrReportStale,
@@ -39,6 +40,24 @@ export interface DsrOverviewDealerRow {
   enabled: boolean;
   /** `null` for a dealer configured for DSR but never generated. */
   latest: DsrOverviewLatest | null;
+}
+
+/**
+ * `GET /dsr/dealers/:dealerId/pnl` — litres for a window, plus the configuration
+ * constants that produced them. Mirrors `DsrPnlData` on the server.
+ */
+export interface DsrPnlResponse {
+  dealerId: string;
+  outletCode: string | null;
+  from: string;
+  to: string;
+  config: {
+    sinceDate: string;
+    receiptBasis: 'DECANTED' | 'INVOICE';
+    testingPerActivePumpLitres: number;
+    testingMinDeltaLitres: number;
+  };
+  products: PnlProductInput[];
 }
 
 /** `GET /dsr/overview`. */
@@ -175,6 +194,8 @@ export const dsrKeys = {
   stale: (dealerId: string | undefined) => ['dsr', 'stale', dealerId] as const,
   setupDraft: (dealerId: string | undefined) =>
     ['dsr', 'setup-draft', dealerId] as const,
+  pnl: (dealerId: string | undefined, from: string, to: string) =>
+    ['dsr', 'pnl', dealerId, from, to] as const,
 };
 
 /** A missing report (404) is a normal state here, and a client error never
@@ -281,6 +302,33 @@ export function useDsrLatest(dealerId: string | undefined) {
     enabled: !!dealerId,
     retry: retryUnlessClientError,
     staleTime: 30_000,
+  });
+}
+
+/**
+ * One dealer's litres for a window — what the fuel P&L screen prices.
+ *
+ * Deliberately returns no rupee figure: nothing we collect publishes a rate, so
+ * the multiplication happens in the browser with the rates on screen beside it.
+ */
+export function useDsrPnl(
+  dealerId: string | undefined,
+  from: string,
+  to: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: dsrKeys.pnl(dealerId, from, to),
+    queryFn: () => api.get<DsrPnlResponse>(`/dsr/dealers/${dealerId}/pnl`, { from, to }),
+    enabled: !!dealerId && enabled,
+    retry: retryUnlessClientError,
+    staleTime: 30_000,
+    // Every window change is a new key, so without this the whole page — the
+    // period picker included — is replaced by skeletons on each change, and on a
+    // phone the admin's own control vanishes from under their finger. Keeping
+    // the previous window's figures up while the next loads is what the rest of
+    // this admin does for the same reason.
+    placeholderData: (prev) => prev,
   });
 }
 
