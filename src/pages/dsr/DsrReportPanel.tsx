@@ -327,6 +327,20 @@ function measured(value: number | null, render: (n: number) => string): string {
   return value === null ? 'not measured' : render(value);
 }
 
+/**
+ * A tank reading as whole centimetres, which is how the report prints it.
+ *
+ * IRAS hands back a float, and a raw one reached this panel: the admin read
+ * `56.497299999999996 cm` beside a day book that printed `56` for the same tank.
+ * Two answers for one figure is the fault this codebase keeps having to fix —
+ * the screen a person checks against has to say what the deliverable says.
+ * `renderDigestHtml`'s own `L()` rounds; so does this, and the two must not
+ * drift apart.
+ */
+function cm(n: number): string {
+  return `${Math.round(n)} cm`;
+}
+
 function ProductFigures({
   product,
   businessDate,
@@ -358,13 +372,13 @@ function ProductFigures({
               {
                 key: 'dip',
                 label: 'Dip',
-                value: measured(tanks[0]!.dip, (n) => `${n} cm`),
+                value: measured(tanks[0]!.dip, cm),
                 numeric: true,
               },
               {
                 key: 'water',
                 label: 'Water dip',
-                value: measured(tanks[0]!.waterDip, (n) => String(n)),
+                value: measured(tanks[0]!.waterDip, (n) => String(Math.round(n))),
                 numeric: true,
               },
             ]
@@ -489,13 +503,13 @@ function ProductFigures({
                         {
                           key: 'dip',
                           label: 'Dip',
-                          value: measured(t.dip, (n) => `${n} cm`),
+                          value: measured(t.dip, cm),
                           numeric: true,
                         },
                         {
                           key: 'water',
                           label: 'Water dip',
-                          value: measured(t.waterDip, (n) => String(n)),
+                          value: measured(t.waterDip, (n) => String(Math.round(n))),
                           numeric: true,
                         },
                         {

@@ -179,10 +179,21 @@ export function KavachItemRow({ item, busy, onTogglePause, onToggleSos, onVerify
           </Button>
         ) : null}
 
+        {/* The glyph goes through `leftIcon`, not in with the label.
+            `Button` wraps its children in ONE span, so an icon and a word passed
+            together are two inline boxes inside a single flex item: the item
+            sizes to min-content, the row squeezes it, and the word drops under
+            the glyph — which is how this button came to render with "Pause"
+            hanging below its own icon on forty rows. `leftIcon` is a flex item
+            of its own beside the label, and the button's `whitespace-nowrap`
+            then actually governs the pair.
+
+            The word matters on a phone: `title` is a desktop tooltip that touch
+            never fires, so without it the control is a bare glyph with no label
+            anywhere. `md:sr-only` keeps the desktop icon-only look. */}
         <Button
           variant="ghost"
           size="sm"
-          className="min-w-11 md:min-w-0"
           disabled={busy}
           onClick={() => onTogglePause(item)}
           aria-label={item.paused ? 'Resume' : 'Pause'}
@@ -191,16 +202,15 @@ export function KavachItemRow({ item, busy, onTogglePause, onToggleSos, onVerify
               ? 'Resume (count toward the score)'
               : 'Pause (exclude from the score and the work queue)'
           }
+          leftIcon={
+            item.paused ? (
+              <Play width={14} height={14} strokeWidth={1.75} />
+            ) : (
+              <Pause width={14} height={14} strokeWidth={1.75} />
+            )
+          }
         >
-          {/* The word rides beside the glyph below md. The `title` above is the
-              desktop tooltip and nothing else — touch never fires it — so on a
-              phone this control was a bare ⏸ with no label anywhere. */}
-          {item.paused ? (
-            <Play width={14} height={14} strokeWidth={1.75} />
-          ) : (
-            <Pause width={14} height={14} strokeWidth={1.75} />
-          )}
-          <span className="ml-1.5 md:hidden">
+          <span className="md:sr-only">
             {item.paused ? 'Resume' : 'Pause'}
           </span>
         </Button>

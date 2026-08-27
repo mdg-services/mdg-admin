@@ -156,6 +156,28 @@
     font-size: 16px;
   }
 
+  /* ---- The grid-item minimum-size trap -----------------------------------
+     A grid track's automatic minimum size is its item's MIN-CONTENT width, not
+     zero. So a one-column `grid` holding a card whose min-content is 444px
+     resolves its track to 444px inside a 336px container — the container stays
+     336px and the track hangs 108px past it, where `main`'s `overflow-x-hidden`
+     clips it with no gesture that reaches it. The page looks fine at a desk and
+     loses a third of itself on a phone.
+
+     This has now been the cause three separate times (the Festival preview, the
+     Credit & DOD pane, the PAD ledger), always with the same shape and always
+     found only by measuring. Fixing it per-page has not worked, so it is fixed
+     once here: inside the app scroller, a grid item may shrink below its
+     content. Anything that genuinely needs to be wider than its track — a wide
+     ledger, a report frame — owns an `overflow-x-auto` scroller of its own and
+     is unaffected, because that scroller is what carries the width.
+
+     Opt out with `min-w-max` (or any explicit `min-width`) on the item itself;
+     a utility class out-specifies this. */
+  [data-app-scroller] :where(.grid) > * {
+    min-width: 0;
+  }
+
   *:focus-visible {
     outline: 2px solid var(--color-focus-ring);
     outline-offset: 2px;

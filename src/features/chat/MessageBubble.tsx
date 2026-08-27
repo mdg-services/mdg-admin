@@ -57,7 +57,13 @@ function SystemMessage({ message }: { message: Message }) {
   if (!message.body) return null;
   return (
     <div className="flex w-full justify-center">
-      <p className="max-w-[85%] rounded-full bg-surface-2 px-3 py-1 text-center text-xs text-text-muted">
+      {/* `rounded-lg`, not `rounded-full`: the pill shape is only right for a
+          one-line note. A system message can run to a dozen lines — a
+          bilingual service notice does — and a 9999px radius on a 152px-tall
+          box cuts a curve straight through its own first and last lines.
+          Left-aligned for the same reason: centred ragged text is fine for
+          three words and unreadable for a paragraph. */}
+      <p className="max-w-[85%] rounded-lg bg-surface-2 px-3 py-1.5 text-xs text-text-muted">
         {message.body}
       </p>
     </div>
