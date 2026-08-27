@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, SegmentedControl } from '@/components/ui';
 import type { DsrPnlResponse } from '@/hooks/api/useDsr';
 import { formatLitres, formatYmd } from '@/lib/format';
-import type { FuelPnlSettings, LossBasis } from '@/lib/fuelPnl';
+import { defaultRatesFor, RATE_DEFAULTS_SOURCE, type FuelPnlSettings, type LossBasis } from '@/lib/fuelPnl';
 
 /**
  * Every number that is NOT a measurement, on the screen, above the answer.
@@ -128,6 +128,11 @@ export function PnlAssumptions({ data, settings, onChange }: PnlAssumptionsProps
             figure on the page moves.
           </span>
         </p>
+        <p className="-mt-3 text-xs text-text-muted">
+          The rates below start from {RATE_DEFAULTS_SOURCE} They are a starting point for one outlet
+          on one day — VAT differs by state and the pump price changes daily — so replace them with
+          this dealer&rsquo;s own figures when you have them.
+        </p>
 
         {/* ── the rates ───────────────────────────────────────────────── */}
         <div className="space-y-4">
@@ -195,6 +200,14 @@ export function PnlAssumptions({ data, settings, onChange }: PnlAssumptionsProps
                     }
                   />
                 </div>
+                {/* What the starting figures for THIS grade rest on. The premium
+                    grades have no invoice line of their own yet, and a note that
+                    says so is the difference between a default and a guess. */}
+                {defaultRatesFor(p.productKey) ? (
+                  <p className="mt-2 text-xs text-text-muted">
+                    {defaultRatesFor(p.productKey)!.note}
+                  </p>
+                ) : null}
               </div>
             );
           })}

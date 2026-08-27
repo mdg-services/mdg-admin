@@ -23,6 +23,7 @@ import { formatInrWhole, formatLitres, formatYmd, isYmd } from '@/lib/format';
 import {
   computeFuelPnl,
   type FuelPnlSettings,
+  withDefaultRates,
   type PnlProduct,
   type TestingTreatment,
 } from '@/lib/fuelPnl';
@@ -192,6 +193,24 @@ export function DsrPnlView() {
 
   const q = useDsrPnl(dealerId, range.from, range.to, isValidDateRange(range));
   const data = q.data;
+
+  /**
+   * Give every grade a starting rate the first time it is seen.
+   *
+   * The grades are not known until the response lands, so this cannot happen in
+   * `loadSettings`. `withDefaultRates` only ever ADDS a missing key, so a figure
+   * an admin typed — or deliberately cleared to blank — survives; the key-count
+   * guard is what stops this effect from re-running on the state it just set.
+   */
+  React.useEffect(() => {
+    if (!data) return;
+    const seeded = withDefaultRates(
+      settings.rates,
+      data.products.map((p) => p.productKey),
+    );
+    if (Object.keys(seeded).length === Object.keys(settings.rates).length) return;
+    updateSettings({ ...settings, rates: seeded });
+  }, [data, settings, updateSettings]);
 
   // Computed twice, always. The second run is what makes the testing question
   // answerable on the page instead of in someone's head.

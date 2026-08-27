@@ -69,6 +69,91 @@ export interface FuelPnlSettings {
   lossBasis: LossBasis;
 }
 
+/* ───────────────────────── starting figures ───────────────────────── */
+
+/**
+ * Where the starting rates come from, in one sentence, for the screen to quote.
+ *
+ * Named and dated on purpose. A prefilled rate that cannot say where it came
+ * from is exactly the hidden constant this page exists to abolish — the only
+ * thing that makes seeding them defensible is that the source is on the screen
+ * next to them and one keystroke overrides it.
+ */
+export const RATE_DEFAULTS_SOURCE =
+  "IndianOil tax invoice 7010045406 (22 Aug 2026) for the cost, and the Patna pump price on 25 Aug 2026 for the sale.";
+
+interface DefaultRate extends GradeRates {
+  /** Why this figure, said in the admin's words. Shown under the field. */
+  note: string;
+}
+
+/**
+ * A first guess per grade, so the page arrives with numbers in it.
+ *
+ * The two diesel/petrol figures are real and checkable: the cost is that
+ * invoice's own "Total for material" divided by its litres (₹5,86,544.18 ÷
+ * 6,000 for diesel, ₹6,61,896.73 ÷ 6,000 for petrol — both reconcile to the
+ * paisa), and the pump price is what Patna was charging three days later.
+ *
+ * They are a STARTING POINT and nothing more. The invoice belongs to one outlet
+ * on one day; VAT differs by state, the pump price moves daily, and diesel in
+ * Patna swung ₹3 in the week these were read. The screen says so, and every
+ * field is editable.
+ *
+ * The premium grades are the weak ones and are marked as such. We have never
+ * captured an invoice money line for XtraPremium or XtraGreen, so they start on
+ * their ordinary grade's figures — which understates BOTH sides, since premium
+ * costs more to buy and sells for more. Correct them per dealer.
+ */
+const DEFAULTS: Record<string, DefaultRate> = {
+  HSD: {
+    buyPerLitre: 97.76,
+    sellPerLitre: 99.34,
+    note: 'From a real tanker invoice and the Patna pump price. Check against this dealer.',
+  },
+  MS: {
+    buyPerLitre: 110.32,
+    sellPerLitre: 111.21,
+    note: 'From a real tanker invoice and the Patna pump price. The ₹0.89 margin looks thin against the ₹2.50–3.00 usually quoted for petrol — worth confirming with the dealer.',
+  },
+  XP: {
+    buyPerLitre: 110.32,
+    sellPerLitre: 111.21,
+    note: 'Ordinary petrol’s figures — no premium invoice line has been captured yet. Both the real cost and the real pump price are higher than this.',
+  },
+  XG: {
+    buyPerLitre: 97.76,
+    sellPerLitre: 99.34,
+    note: 'Ordinary diesel’s figures — no premium invoice line has been captured yet. Both the real cost and the real pump price are higher than this.',
+  },
+};
+
+/** The starting figures for a grade, or `null` when we have nothing to offer. */
+export function defaultRatesFor(productKey: string): DefaultRate | null {
+  return DEFAULTS[productKey] ?? null;
+}
+
+/**
+ * Seed any grade the admin has never given a rate for.
+ *
+ * Only ever fills a gap — a figure already in `rates`, including one deliberately
+ * cleared back to `null`, is returned untouched. That distinction is the whole
+ * reason this is a separate function rather than a spread: re-seeding a field
+ * somebody blanked on purpose would make the page argue with its operator.
+ */
+export function withDefaultRates(
+  rates: Record<string, GradeRates>,
+  productKeys: readonly string[],
+): Record<string, GradeRates> {
+  const next = { ...rates };
+  for (const key of productKeys) {
+    if (next[key]) continue;
+    const d = defaultRatesFor(key);
+    if (d) next[key] = { buyPerLitre: d.buyPerLitre, sellPerLitre: d.sellPerLitre };
+  }
+  return next;
+}
+
 /* ─────────────────────────────── inputs ─────────────────────────────── */
 
 /** One delivery, as the API hands it over. */
