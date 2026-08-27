@@ -1,10 +1,10 @@
-import { AlertCircle, FileBarChart2, IndianRupee } from 'lucide-react';
+import { AlertCircle, FileBarChart2 } from 'lucide-react';
 import * as React from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 
 
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Button, EmptyState, Skeleton } from '@/components/ui';
+import { EmptyState, Skeleton } from '@/components/ui';
 import {
   useDsrLatest,
   useDsrReport,
@@ -31,7 +31,6 @@ function isNotFound(err: unknown): boolean {
  */
 export function DsrReportView() {
   const { dealerId } = useParams<{ dealerId: string }>();
-  const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const reportParam = search.get('report');
 
@@ -100,18 +99,6 @@ export function DsrReportView() {
           { label: 'Daily Sales Report', to: '/dsr' },
           { label: dealerCodeLabel(outletCode) },
         ]}
-        actions={
-          dealerId ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={<IndianRupee width={14} height={14} strokeWidth={1.75} />}
-              onClick={() => navigate(`/dsr/dealers/${dealerId}/pnl`)}
-            >
-              Fuel P&amp;L
-            </Button>
-          ) : undefined
-        }
         title={`Daily Sales Report · ${dealerCodeLabel(outletCode)}`}
         subtitle={
           report

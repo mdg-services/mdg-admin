@@ -1,5 +1,6 @@
-import { ExternalLink, MoreHorizontal, SlidersHorizontal } from 'lucide-react';
+import { ExternalLink, IndianRupee, MoreHorizontal, SlidersHorizontal } from 'lucide-react';
 import * as React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import {
   Button,
@@ -58,6 +59,29 @@ export interface DsrDateToolbarProps {
   className?: string;
 }
 
+/**
+ * The way through to what the fuel actually earned.
+ *
+ * It lives in the toolbar rather than on one page's header because the DSR
+ * shows up in TWO places — the standalone `/dsr/dealers/:id` view and the
+ * dealer's own Data Vault tab — and the first cut of this button only reached
+ * the first of them, which is not where an admin who came in from the dealer
+ * list ends up. One button in the shared toolbar reaches both.
+ */
+function FuelPnlButton({ dealerId, className }: { dealerId: string; className?: string }) {
+  const navigate = useNavigate();
+  return (
+    <Button
+      variant="secondary"
+      className={className}
+      leftIcon={<IndianRupee width={16} height={16} strokeWidth={1.75} />}
+      onClick={() => navigate(`/dsr/dealers/${dealerId}/pnl`)}
+    >
+      Fuel P&amp;L
+    </Button>
+  );
+}
+
 export function DsrDateToolbar({
   dealerId,
   reports,
@@ -101,6 +125,7 @@ export function DsrDateToolbar({
             dealerId={dealerId}
             businessDate={businessDate}
           />
+          <FuelPnlButton dealerId={dealerId} />
           {generatedAt ? (
             <p className="ml-auto text-xs text-text-subtle">
               Generated {formatDateTime(generatedAt)}
@@ -153,6 +178,7 @@ export function DsrDateToolbar({
               businessDate={businessDate}
               className="w-full"
             />
+            <FuelPnlButton dealerId={dealerId} className="w-full" />
           </div>
         </Sheet>
       </CardContent>
