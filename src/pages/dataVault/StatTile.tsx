@@ -29,9 +29,18 @@ export function StatTile({
   const emphasise = tone !== 'neutral' && value > 0;
   return (
     <Card>
-      <CardContent className="p-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+      {/* `padding="none"` plus an explicit `p-2 md:p-4`, not `className="p-3"`:
+          `cn` is clsx, so a className lands BESIDE the primitive's own padding
+          and Tailwind emits `.p-4` after `.p-3` — the 12px this tile asked for
+          never applied. With the prop emitting nothing there is only one
+          declaration left to win. */}
+      <CardContent padding="none" className="p-2 md:p-4">
+        <div className="flex items-start justify-between gap-2 md:items-center">
+          {/* Wraps rather than truncates. Two tiles share a 360px screen, so the
+              label has ~114px: `truncate` turned "Dealers configured" into
+              "Dealers config…" and, with pinch-zoom off and `main`
+              `overflow-x-hidden`, the rest was not shortened but gone. */}
+          <span className="min-w-0 break-words text-[11px] font-semibold uppercase tracking-wide text-text-muted">
             {label}
           </span>
           <span className={emphasise ? TONE_TEXT[tone] : 'text-text-subtle'} aria-hidden>
@@ -40,7 +49,7 @@ export function StatTile({
         </div>
         <p
           className={cn(
-            'mt-1 text-2xl font-semibold tabular-nums',
+            'mt-1 text-xl font-semibold tabular-nums md:text-2xl',
             emphasise ? TONE_TEXT[tone] : 'text-text',
           )}
         >
@@ -52,7 +61,7 @@ export function StatTile({
           {value.toLocaleString('en-IN')}
         </p>
         {hint ? (
-          <p className="mt-0.5 truncate text-[11px] text-text-subtle">{hint}</p>
+          <p className="mt-0.5 break-words text-[11px] text-text-subtle">{hint}</p>
         ) : null}
       </CardContent>
     </Card>
@@ -66,7 +75,7 @@ export function StatTile({
  */
 export function StatTileRow({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{children}</div>
+    <div className="grid grid-cols-2 gap-2 md:gap-3 lg:grid-cols-4">{children}</div>
   );
 }
 
@@ -76,7 +85,7 @@ export function StatTileSkeletons({ count = 4 }: { count?: number }) {
     <StatTileRow>
       {Array.from({ length: count }).map((_, i) => (
         <Card key={i}>
-          <CardContent className="p-3">
+          <CardContent padding="none" className="p-2 md:p-4">
             <Skeleton className="h-3 w-24" />
             <Skeleton className="mt-2 h-7 w-12" />
           </CardContent>

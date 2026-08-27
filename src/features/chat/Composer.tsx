@@ -379,15 +379,32 @@ export function Composer({
             className="min-h-[36px] min-w-0 resize-none"
           />
           {hasContent ? (
-            <Button
-              type="button"
-              onClick={handleSend}
-              disabled={!hasContent || busy}
-              loading={sending}
-              leftIcon={sending ? null : <Send width={16} height={16} strokeWidth={1.75} />}
-            >
-              Send
-            </Button>
+            // The word "Send" costs ~84px of a 360px row. With the attach
+            // button and the two gaps that left the field about 192px to type
+            // in — half the screen spent on chrome. Below md the glyph alone
+            // says it, at the same 44px target; the labelled button is still
+            // what a desktop gets.
+            isMd ? (
+              <Button
+                type="button"
+                onClick={handleSend}
+                disabled={!hasContent || busy}
+                loading={sending}
+                leftIcon={sending ? null : <Send width={16} height={16} strokeWidth={1.75} />}
+              >
+                Send
+              </Button>
+            ) : (
+              <IconButton
+                aria-label="Send"
+                variant="primary"
+                onClick={handleSend}
+                disabled={!hasContent || busy}
+                loading={sending}
+              >
+                <Send width={18} height={18} strokeWidth={1.75} />
+              </IconButton>
+            )
           ) : (
             <button
               type="button"

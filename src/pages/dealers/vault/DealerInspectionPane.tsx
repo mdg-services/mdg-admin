@@ -31,6 +31,7 @@ import {
   useCollectInspection,
   useInspectionSummary,
 } from '@/hooks/api/useInspectionReports';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import { StatTile, StatTileRow, StatTileSkeletons } from '@/pages/dataVault/StatTile';
@@ -73,6 +74,11 @@ function itemHeading(item: InspectionReportItem, index: number): string {
  * dealer, with a "Capture now" button that reuses the normal run machinery.
  */
 export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
+  // Which shape to BUILD, not just which to show: the portal's table and the
+  // card stack are the same reports twice, and on a phone the table half was
+  // built and then hidden. The `hidden md:block` / `md:hidden` classes stay as
+  // the backstop.
+  const isMd = useMediaQuery('(min-width: 768px)');
   const toast = useToast();
   const summaryQ = useInspectionSummary(dealer.id);
   const collect = useCollectInspection(dealer.id);
@@ -110,10 +116,10 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
 
   if (summaryQ.isLoading) {
     return (
-      <div className="grid gap-4">
+      <div className="grid gap-3 md:gap-4">
         <StatTileSkeletons count={3} />
         <Card>
-          <CardContent className="grid gap-2 p-4">
+          <CardContent className="grid gap-2">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-11 w-full" />
             ))}
@@ -166,7 +172,7 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
   const failed = summary.status === 'FAILED' || !!summary.failureReason;
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3 md:gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-text">Inspection Reports</h2>
@@ -180,7 +186,7 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
 
       {failed ? (
         <Card className="border-danger/40 bg-danger-soft/40">
-          <CardContent className="flex items-start gap-3 p-4">
+          <CardContent className="flex items-start gap-3">
             <AlertCircle
               width={18}
               height={18}
@@ -202,7 +208,7 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
 
       {neverCaptured && summary.total === 0 && summary.latest.length === 0 ? (
         <Card>
-          <CardContent className="p-4">
+          <CardContent>
             <EmptyState
               icon={<ClipboardCheck width={28} height={28} strokeWidth={1.75} />}
               title="No inspection reports captured yet"
@@ -242,7 +248,11 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
           </StatTileRow>
 
           <Card>
-            <CardContent className="p-0">
+            {/* `padding="none"`, not `className="p-0"`: `cn` is clsx and
+                Tailwind emits `.p-4` after `.p-0`, so the p-0 never applied.
+                `md:p-4` is a separate declaration, so ≥768px stays exactly as
+                it renders today. */}
+            <CardContent padding="none" className="md:p-4">
               {/* `CardHeader action`: the count badge is `whitespace-nowrap`
                   and does not shrink, so in a `justify-between` row that cannot
                   wrap it squeezed the sentence beside it at 296px. */}
@@ -276,75 +286,79 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
                   {/* Desktop table (≥ md). Columns come straight from the portal;
                       the pane's `min-w-0` track keeps a wide table scrolling inside
                       the card rather than sideways across the page. */}
-                  <div className="hidden md:block">
-                    <Table>
-                      <THead>
-                        <TRow>
-                          {dataColumns.map((c) => (
-                            <TH key={c.field}>{c.headerName}</TH>
-                          ))}
-                          <TH className="text-right">Report</TH>
-                        </TRow>
-                      </THead>
-                      <TBody>
-                        {summary.latest.map((item, i) => (
-                          <TRow key={item.ref ?? i}>
+                  {isMd ? (
+                    <div className="hidden md:block">
+                      <Table>
+                        <THead>
+                          <TRow>
                             {dataColumns.map((c) => (
-                              <TD key={c.field} className="whitespace-nowrap">
-                                {item.cells[c.field] || '—'}
-                              </TD>
+                              <TH key={c.field}>{c.headerName}</TH>
                             ))}
-                            <TD className="whitespace-nowrap text-right">
-                              {reportAction(item, i)}
-                            </TD>
+                            <TH className="text-right">Report</TH>
                           </TRow>
-                        ))}
-                      </TBody>
-                    </Table>
-                  </div>
+                        </THead>
+                        <TBody>
+                          {summary.latest.map((item, i) => (
+                            <TRow key={item.ref ?? i}>
+                              {dataColumns.map((c) => (
+                                <TD key={c.field} className="whitespace-nowrap">
+                                  {item.cells[c.field] || '—'}
+                                </TD>
+                              ))}
+                              <TD className="whitespace-nowrap text-right">
+                                {reportAction(item, i)}
+                              </TD>
+                            </TRow>
+                          ))}
+                        </TBody>
+                      </Table>
+                    </div>
+                  ) : null}
 
                   {/* Mobile card-stack (< md). Tapping a card opens its report. */}
-                  <MobileCardList
-                    className="p-3"
-                    cards={summary.latest.map((item, i) => {
-                      const detail =
-                        item.report && item.report.sections.length > 0
-                          ? item.report
-                          : null;
-                      return {
-                        key: item.ref ?? String(i),
-                        onClick: detail
-                          ? () =>
-                              setOpenReport({ heading: itemHeading(item, i), detail })
-                          : undefined,
-                        primary: (
-                          <span className="block truncate font-medium text-text">
-                            {itemHeading(item, i)}
-                          </span>
-                        ),
-                        primaryRight: detail ? (
-                          <span className="whitespace-nowrap text-xs font-medium text-brand">
-                            View report ›
-                          </span>
-                        ) : undefined,
-                        secondary: item.ref ? (
-                          <span className="font-mono text-xs">{item.ref}</span>
-                        ) : undefined,
-                        meta: (
-                          <span className="flex flex-col gap-0.5">
-                            {dataColumns.map((c) =>
-                              item.cells[c.field] ? (
-                                <span key={c.field}>
-                                  <span className="text-text-subtle">{c.headerName}: </span>
-                                  {item.cells[c.field]}
-                                </span>
-                              ) : null,
-                            )}
-                          </span>
-                        ),
-                      };
-                    })}
-                  />
+                  {isMd ? null : (
+                    <MobileCardList
+                      variant="rows"
+                      cards={summary.latest.map((item, i) => {
+                        const detail =
+                          item.report && item.report.sections.length > 0
+                            ? item.report
+                            : null;
+                        return {
+                          key: item.ref ?? String(i),
+                          onClick: detail
+                            ? () =>
+                                setOpenReport({ heading: itemHeading(item, i), detail })
+                            : undefined,
+                          primary: (
+                            <span className="block truncate font-medium text-text">
+                              {itemHeading(item, i)}
+                            </span>
+                          ),
+                          primaryRight: detail ? (
+                            <span className="whitespace-nowrap text-xs font-medium text-brand">
+                              View report ›
+                            </span>
+                          ) : undefined,
+                          secondary: item.ref ? (
+                            <span className="font-mono text-xs">{item.ref}</span>
+                          ) : undefined,
+                          meta: (
+                            <span className="flex flex-col gap-0.5">
+                              {dataColumns.map((c) =>
+                                item.cells[c.field] ? (
+                                  <span key={c.field}>
+                                    <span className="text-text-subtle">{c.headerName}: </span>
+                                    {item.cells[c.field]}
+                                  </span>
+                                ) : null,
+                              )}
+                            </span>
+                          ),
+                        };
+                      })}
+                    />
+                  )}
                 </>
               )}
 
@@ -398,7 +412,7 @@ function ReportView({ detail }: { detail: InspectionReportDetail }) {
     );
   }
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3 md:gap-4">
       {detail.sections.map((section, i) => (
         <ReportSection key={i} section={section} />
       ))}
@@ -421,60 +435,69 @@ function ReportView({ detail }: { detail: InspectionReportDetail }) {
  * A one-cell row is a heading in both shapes.
  */
 function ReportSection({ section }: { section: InspectionReportSection }) {
+  // Before the early return: a hook may not sit behind a conditional. A captured
+  // report has several sections and the drawer renders all of them, so building
+  // both shapes for each meant a phone constructing the whole statutory form
+  // twice.
+  const isMd = useMediaQuery('(min-width: 768px)');
   if (section.rows.length === 0) return null;
   const headers = section.columns ?? [];
   return (
     <>
-      <div className="grid gap-2 md:hidden">
-        {section.rows.map((row, ri) =>
-          row.length === 1 ? (
-            <p
-              key={ri}
-              className="rounded-md bg-surface-2 px-2.5 py-1.5 text-sm font-semibold text-text"
-            >
-              {row[0] || '—'}
-            </p>
-          ) : (
-            <div key={ri} className="rounded-md border border-border px-2.5 py-2">
-              <p className="break-words text-sm font-medium text-text">{row[0] || '—'}</p>
-              <KeyValueList
-                className="mt-1.5"
-                items={row.slice(1).map((cell, ci) => ({
-                  key: String(ci),
-                  // The portal does not always send a header row; the column
-                  // number is a poor label but a truthful one, and it keeps the
-                  // values in the order the form prints them.
-                  label: headers[ci + 1] || `Column ${ci + 2}`,
-                  value: cell || '—',
-                }))}
-              />
-            </div>
-          ),
-        )}
-      </div>
+      {isMd ? null : (
+        <div className="grid gap-2 md:hidden">
+          {section.rows.map((row, ri) =>
+            row.length === 1 ? (
+              <p
+                key={ri}
+                className="rounded-md bg-surface-2 px-2.5 py-1.5 text-sm font-semibold text-text"
+              >
+                {row[0] || '—'}
+              </p>
+            ) : (
+              <div key={ri} className="rounded-md border border-border px-2.5 py-2">
+                <p className="break-words text-sm font-medium text-text">{row[0] || '—'}</p>
+                <KeyValueList
+                  className="mt-1.5"
+                  items={row.slice(1).map((cell, ci) => ({
+                    key: String(ci),
+                    // The portal does not always send a header row; the column
+                    // number is a poor label but a truthful one, and it keeps the
+                    // values in the order the form prints them.
+                    label: headers[ci + 1] || `Column ${ci + 2}`,
+                    value: cell || '—',
+                  }))}
+                />
+              </div>
+            ),
+          )}
+        </div>
+      )}
 
-      <div className="hidden overflow-x-auto rounded-md border border-border md:block">
-        <table className="w-full border-collapse text-sm">
-          <tbody>
-            {section.rows.map((row, ri) => (
-              <tr key={ri}>
-                {row.map((cell, ci) => (
-                  <td
-                    key={ci}
-                    className={`border border-border px-2.5 py-1.5 align-top ${
-                      row.length === 1
-                        ? 'bg-surface-2 font-semibold text-text'
-                        : 'text-text'
-                    }`}
-                  >
-                    {cell || '—'}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {isMd ? (
+        <div className="hidden overflow-x-auto rounded-md border border-border md:block">
+          <table className="w-full border-collapse text-sm">
+            <tbody>
+              {section.rows.map((row, ri) => (
+                <tr key={ri}>
+                  {row.map((cell, ci) => (
+                    <td
+                      key={ci}
+                      className={`border border-border px-2.5 py-1.5 align-top ${
+                        row.length === 1
+                          ? 'bg-surface-2 font-semibold text-text'
+                          : 'text-text'
+                      }`}
+                    >
+                      {cell || '—'}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </>
   );
 }

@@ -35,6 +35,18 @@ export interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
   /** `'default'` is the header's own `py-3`. `'comfortable'` is `py-4`, which
    *  is what the hand-rolled `p-4` section headers this prop absorbed had. */
   padding?: 'default' | 'comfortable';
+  /**
+   * How wide the `action` button is below md. `'auto'` (default) lets it be as
+   * wide as its label; `'full'` stretches it across the card.
+   *
+   * Full width used to be unconditional, so a header whose action reads "Add
+   * task" drew a 328px x 44px bar under the title on every card that had one —
+   * a button four times the size of its own text, on the screen with the least
+   * room for it. Ask for `'full'` where the action really is the card's
+   * primary control. From md up both settings are the auto-width button that
+   * has always been there.
+   */
+  actionWidth?: 'auto' | 'full';
 }
 
 /**
@@ -47,15 +59,20 @@ export function CardHeader({
   action,
   align = 'start',
   padding = 'default',
+  actionWidth = 'auto',
   children,
   ...rest
 }: CardHeaderProps) {
-  const pad = padding === 'comfortable' ? 'py-4' : 'py-3';
+  // Below md the gutter is 12px and a card usually sits inside another one, so
+  // a 16px header inset is the third helping of the same padding. From md up
+  // these resolve to the historic `px-4` + `py-3`/`py-4`.
+  const pad =
+    padding === 'comfortable' ? 'py-3 md:py-4' : 'py-2.5 md:py-3';
   if (action === undefined) {
     return (
       <div
         className={cn(
-          'flex justify-between gap-3 border-b border-border px-4',
+          'flex justify-between gap-3 border-b border-border px-3 md:px-4',
           pad,
           align === 'center' ? 'items-center' : 'items-start',
           className,
@@ -69,7 +86,7 @@ export function CardHeader({
   return (
     <div
       className={cn(
-        'flex flex-col items-stretch gap-2 border-b border-border px-4',
+        'flex flex-col items-stretch gap-2 border-b border-border px-3 md:px-4',
         pad,
         'md:flex-row md:justify-between md:gap-3',
         align === 'center' ? 'md:items-center' : 'md:items-start',
@@ -78,7 +95,12 @@ export function CardHeader({
       {...rest}
     >
       <div className="min-w-0 flex-1">{children}</div>
-      <div className="shrink-0 [&>button]:w-full md:[&>button]:w-auto">
+      <div
+        className={cn(
+          'shrink-0 md:[&>button]:w-auto',
+          actionWidth === 'full' && '[&>button]:w-full',
+        )}
+      >
         {action}
       </div>
     </div>
@@ -92,7 +114,7 @@ export function CardTitle({
 }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h3
-      className={cn('text-lg font-semibold text-text', className)}
+      className={cn('text-base font-semibold text-text md:text-lg', className)}
       {...rest}
     >
       {children}
@@ -112,13 +134,38 @@ export function CardSubtitle({
   );
 }
 
+export interface CardContentProps extends React.HTMLAttributes<HTMLDivElement> {
+  /**
+   * `'none'` removes the padding entirely — for a card whose whole body is a
+   * list or a table that should run to the card's own edges.
+   *
+   * This is the fix for the stacked-surface problem the owner photographed on
+   * the Dealers list: `main`'s gutter, then this padding, then a bordered row
+   * card with padding of its own, put the dealer's code 59px from the left of a
+   * 360px screen — a third of the width spent on margins before a character of
+   * data. With `padding="none"` and rows that divide instead of float, the same
+   * text starts at 24px.
+   *
+   * It is a prop and not a `className`, because `cn` is plain clsx: a `p-0`
+   * passed in would land BESIDE `p-3` and lose on stylesheet order.
+   */
+  padding?: 'default' | 'tight' | 'none';
+}
+
 export function CardContent({
   className,
+  padding = 'default',
   children,
   ...rest
-}: React.HTMLAttributes<HTMLDivElement>) {
+}: CardContentProps) {
   return (
-    <div className={cn('p-4', className)} {...rest}>
+    <div
+      className={cn(
+        padding === 'none' ? '' : padding === 'tight' ? 'p-2 md:p-3' : 'p-3 md:p-4',
+        className,
+      )}
+      {...rest}
+    >
       {children}
     </div>
   );
@@ -132,7 +179,7 @@ export function CardFooter({
   return (
     <div
       className={cn(
-        'flex items-center justify-end gap-2 border-t border-border px-4 py-3',
+        'flex items-center justify-end gap-2 border-t border-border px-3 py-2.5 md:px-4 md:py-3',
         className,
       )}
       {...rest}

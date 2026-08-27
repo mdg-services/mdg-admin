@@ -153,8 +153,8 @@ export function DealersPage() {
         }
       />
 
-      <Card className="mb-4">
-        <CardContent className="flex flex-col gap-3 md:flex-row md:items-center">
+      <Card className="mb-3 md:mb-4">
+        <CardContent className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
           <div className="relative flex-1">
             <Search
               width={16}
@@ -170,31 +170,43 @@ export function DealersPage() {
               onChange={(e) => setSearchInput(e.target.value)}
             />
           </div>
-          <div className="md:w-56">
-            <Select
-              value={status ?? ''}
-              onChange={(e) => setStatus(e.target.value as DealerStatus | '')}
-            >
-              {STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
+          {/* Status and "Show deleted" share one line below md — three stacked
+              44px controls that are touched once a visit were spending 188px of
+              a 740px screen before the first dealer. `md:contents` dissolves
+              this wrapper at md, so the desktop filter row is the same flat run
+              of three items it has always been. */}
+          <div className="flex items-center gap-3 md:contents">
+            <div className="min-w-0 flex-1 md:w-56 md:flex-none">
+              <Select
+                value={status ?? ''}
+                onChange={(e) => setStatus(e.target.value as DealerStatus | '')}
+              >
+                {STATUS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            {isSuperAdmin ? (
+              <Checkbox
+                label="Show deleted"
+                labelClassName="shrink-0 text-text-muted"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+            ) : null}
           </div>
-          {isSuperAdmin ? (
-            <Checkbox
-              label="Show deleted"
-              labelClassName="shrink-0 text-text-muted"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />
-          ) : null}
         </CardContent>
       </Card>
 
       <Card>
-        <CardContent className="p-0">
+        {/* The card's whole body is the list, so it runs to the card's own
+            edges. `padding="none"` and not `className="p-0"`: `cn` is clsx, so
+            a `p-0` passed in lands beside the default `p-3` and loses on
+            stylesheet order — which is how the dealer code ended up 59px from
+            the left of a 360px screen. */}
+        <CardContent padding="none" className="md:p-4">
           {isLoading ? (
             <ListSkeleton />
           ) : isError ? (
@@ -269,9 +281,13 @@ export function DealersPage() {
                 </Table>
               </div>
 
-              {/* Mobile card-stack (< md) */}
+              {/* Mobile card-stack (< md). `variant="rows"` because the list
+                  fills a card that has no padding of its own: flush rows
+                  divided by a hairline, rather than a bordered card floating
+                  inside a bordered card. The dealer code now starts 25px from
+                  the screen edge instead of 59px. */}
               <MobileCardList
-                className="p-3"
+                variant="rows"
                 cards={data.items.map((d) => ({
                   key: d.id,
                   onClick: () => navigate(`/dealers/${d.id}`),
@@ -298,7 +314,7 @@ export function DealersPage() {
                   // in `secondary` rather than `meta` because `meta` forces
                   // `text-xs`, and this is the content of the card.
                   secondary: (
-                    <span className="grid grid-cols-[64px_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1">
+                    <span className="grid grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1 md:grid-cols-[64px_minmax(0,1fr)] md:gap-x-3">
                       {ROSTER_SERVICES.map((spec) => {
                         const entry = servicesByDealer.get(d.id)?.get(spec.id);
                         return (
@@ -359,8 +375,10 @@ export function DealersPage() {
 
 function ListSkeleton() {
   return (
-    <div className="p-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
+    <div className="p-3 md:p-4">
+      {/* Three across below md: at two columns these 18 bars are nine rows of
+          grey, taller than the list they stand in for. */}
+      <div className="grid grid-cols-3 gap-2 md:grid-cols-6 md:gap-3">
         {Array.from({ length: 18 }).map((_, i) => (
           <Skeleton key={i} className="h-8" />
         ))}

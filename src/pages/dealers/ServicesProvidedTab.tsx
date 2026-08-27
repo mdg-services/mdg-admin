@@ -32,9 +32,11 @@ export function ServicesProvidedTab({ dealer }: Props) {
           </CardSubtitle>
         </div>
       </CardHeader>
-      <CardContent>
+      {/* The body is the delivery list, so it runs to the card's own edges;
+          the skeleton and the empty state bring their own padding. */}
+      <CardContent padding="none" className="md:p-4">
         {isLoading ? (
-          <div className="grid gap-2">
+          <div className="grid gap-2 p-3 md:p-4">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-10" />
             ))}
@@ -60,6 +62,10 @@ export function ServicesProvidedTab({ dealer }: Props) {
           <DataList
             rows={logs ?? []}
             rowKey={(log) => log.id}
+            // Flush rows below md: a bordered row card inside a bordered card
+            // inside the page gutter put the service name 46px in from a 360px
+            // screen. At md this is the same table it has always been.
+            cardVariant="rows"
             columns={[
               {
                 id: 'service',

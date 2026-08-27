@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 
 import {
+  ActionRow,
   Badge,
   Button,
   Card,
@@ -123,9 +124,11 @@ export function DealerMembersTab({ dealer }: Props) {
           Each member has their own app login and private chat with support.
         </CardSubtitle>
       </CardHeader>
-      <CardContent>
+      {/* The body is the members list, so it runs to the card's own edges —
+          the skeleton and the empty state carry their own padding. */}
+      <CardContent padding="none" className="md:p-4">
         {isLoading ? (
-          <div className="grid gap-2">
+          <div className="grid gap-2 p-3 md:p-4">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-10" />
             ))}
@@ -211,8 +214,12 @@ export function DealerMembersTab({ dealer }: Props) {
               </Table>
             </div>
 
-            {/* Mobile card-stack (< md) */}
+            {/* Mobile card-stack (< md). Flush rows, not floating cards: the
+                login address is the string that must never be cut, and a
+                bordered card inside a bordered card inside the page gutter was
+                taking 46px a side off the line it wraps in. */}
             <MobileCardList
+              variant="rows"
               cards={users.map((u) => ({
                 key: u.id,
                 primary: (
@@ -498,7 +505,11 @@ function AddMemberDialog({
           <Label htmlFor="member-password" required>
             Password
           </Label>
-          <div className="flex flex-wrap items-center gap-2">
+          {/* The field is `w-full`, so this was never a row that wrapped — it
+              was always a full-width input with the two buttons pushed onto a
+              second line by overflow. Stating the two-row shape puts them
+              under the field on purpose, and lined up with its left edge. */}
+          <div className="grid gap-2">
             <Input
               id="member-password"
               type="text"
@@ -508,30 +519,32 @@ function AddMemberDialog({
               invalid={!!errors.password}
               {...register('password')}
             />
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={fillGenerated}
-              leftIcon={<RefreshCw width={14} height={14} />}
-            >
-              Generate
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={copyPassword}
-              leftIcon={
-                copiedPw ? (
-                  <Check width={14} height={14} />
-                ) : (
-                  <Copy width={14} height={14} />
-                )
-              }
-            >
-              {copiedPw ? 'Copied' : 'Copy'}
-            </Button>
+            <ActionRow below="row" align="start">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={fillGenerated}
+                leftIcon={<RefreshCw width={14} height={14} />}
+              >
+                Generate
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={copyPassword}
+                leftIcon={
+                  copiedPw ? (
+                    <Check width={14} height={14} />
+                  ) : (
+                    <Copy width={14} height={14} />
+                  )
+                }
+              >
+                {copiedPw ? 'Copied' : 'Copy'}
+              </Button>
+            </ActionRow>
           </div>
           <FieldError message={errors.password?.message} />
         </div>

@@ -36,7 +36,7 @@ export function DealerPasswordVaultTab({ dealer }: Props) {
   const isArchived = !!dealer.archivedAt;
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3 md:gap-4">
       {isArchived ? (
         <Card>
           <CardContent className="flex items-start gap-3">

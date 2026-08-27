@@ -375,9 +375,25 @@ export function ColumnChart({
         <summary className="min-h-11 cursor-pointer select-none rounded-sm py-3 text-text-muted hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:min-h-0 md:py-1.5">
           {tableCaption ?? 'Show values'}
         </summary>
-        <div className="mt-2 max-h-64 overflow-y-auto overscroll-contain rounded-sm border border-border">
+        {/* The height cap and its nested scroller are `md:` only. Below md this
+            table IS the chart — the columns are ~9px wide and every value is
+            hover-gated — so a month of days was being read eight rows at a time
+            through a 256px letterbox, and `overscroll-contain` meant a finger
+            that landed on it could not scroll the PAGE either: the gesture was
+            swallowed by a scroller that had nowhere left to go. Let it run to
+            its full height on a phone and the page scroll is the only scroll.
+            `overflow-x-auto` at every width because `main` is
+            `overflow-x-hidden`: an unbreakable cell (a long formatted amount)
+            would otherwise be clipped away rather than reachable. */}
+        <div className="mt-2 overflow-x-auto rounded-sm border border-border md:max-h-64 md:overflow-y-auto md:overscroll-contain">
           <table className="w-full border-collapse text-xs">
-            <thead className="sticky top-0 bg-surface-2 text-text-muted">
+            {/* Sticky from md up only. With the cap gone below md there is no
+                scroller of its own to stick inside, and the nearest one is the
+                page — whose padding insets the sticky viewport, so a plain
+                `top-0` would park the header a gutter below the visible top and
+                let rows scroll through the band above it. A header that simply
+                scrolls away is the right answer on a phone. */}
+            <thead className="bg-surface-2 text-text-muted md:sticky md:top-0">
               <tr>
                 <th className="h-8 px-2 text-left font-semibold">Day</th>
                 <th className="h-8 px-2 text-right font-semibold">{tableValueHeader}</th>

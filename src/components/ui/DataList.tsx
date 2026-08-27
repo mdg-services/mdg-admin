@@ -71,6 +71,13 @@ export interface DataListProps<T> {
    *  `'cards'` is the honest answer inside a drawer or a narrow tab column,
    *  which is narrow at every viewport width. */
   shape?: 'auto' | 'table' | 'cards';
+  /**
+   * The phone row's surface, forwarded to `MobileCardList`. `'rows'` renders
+   * flush rows divided by a hairline — for a list that fills a `<Card>` whose
+   * `CardContent` has `padding="none"`, so the page stops nesting a bordered
+   * row inside a bordered card inside the page gutter.
+   */
+  cardVariant?: 'cards' | 'rows';
   /** Classes for the list container — the table's scroll wrapper, or the card
    *  stack's `<ul>`. */
   className?: string;
@@ -132,6 +139,7 @@ export function DataList<T>({
   maxHeight,
   minWidth,
   shape = 'auto',
+  cardVariant,
   className,
 }: DataListProps<T>) {
   const isMd = useMediaQuery('(min-width: 768px)');
@@ -168,6 +176,7 @@ export function DataList<T>({
       rowTone={rowTone}
       loading={loading}
       skeletonRows={skeletonRows}
+      cardVariant={cardVariant}
       className={className}
     />
   );
@@ -303,6 +312,7 @@ function CardShape<T>({
   rowTone,
   loading,
   skeletonRows,
+  cardVariant,
   className,
 }: Pick<
   DataListProps<T>,
@@ -313,6 +323,7 @@ function CardShape<T>({
   | 'rowActions'
   | 'cardActions'
   | 'rowTone'
+  | 'cardVariant'
   | 'className'
 > & { loading: boolean; skeletonRows: number }) {
   if (loading) {
@@ -401,6 +412,7 @@ function CardShape<T>({
     <MobileCardList
       cards={cards}
       className={className}
+      variant={cardVariant}
       // The branch is already chosen in JS; leaving `md:hidden` on would blank
       // the stack for a caller that asked for `shape="cards"` on a desktop.
       visibility="all"

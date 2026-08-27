@@ -20,6 +20,7 @@ import {
   CardSubtitle,
   CardTitle,
   EmptyState,
+  IconButton,
   Input,
   MobileCardList,
   Skeleton,
@@ -353,7 +354,7 @@ export function DealerWorkListTab({ dealer }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3 md:gap-4">
       {/* Summary + save bar. On mobile it renders last and sticks to the bottom
           so Save stays reachable during a long hide/show session; on desktop it
           keeps its place at the top, as the card it has always been.
@@ -415,7 +416,30 @@ export function DealerWorkListTab({ dealer }: Props) {
 
       {/* Default catalog: hide/show */}
       <Card>
-        <CardHeader>
+        {/* The search box lives in the header's `action` slot, not inside the
+            list. Down in the list it scrolled away with the rows, so three
+            groups into a ~45-work catalog there was no way to filter without
+            scrolling back to the top.
+
+            Still wrapped in `md:hidden`: `defaultQuery` narrows `defaultGroups`
+            only, and the desktop table maps the unfiltered `defaultRows` — a
+            field visible at md would be one that types into nothing. */}
+        <CardHeader
+          action={
+            <div className="md:hidden">
+              <Input
+                type="search"
+                inputMode="search"
+                autoComplete="off"
+                autoCapitalize="none"
+                aria-label="Search default works"
+                placeholder="Search works, Hindi labels or codes…"
+                value={defaultQuery}
+                onChange={(e) => setDefaultQuery(e.target.value)}
+              />
+            </div>
+          }
+        >
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <ListChecks width={16} height={16} strokeWidth={1.75} />
@@ -429,7 +453,7 @@ export function DealerWorkListTab({ dealer }: Props) {
             </CardSubtitle>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           {defaultRows.length === 0 ? (
             <EmptyState
               icon={<ListChecks width={28} height={28} strokeWidth={1.75} />}
@@ -491,24 +515,19 @@ export function DealerWorkListTab({ dealer }: Props) {
                 </Table>
               </div>
 
-              {/* Mobile card-stack (< md), searchable and grouped by domain. */}
-              <div className="p-3 md:hidden">
-                <Input
-                  type="search"
-                  inputMode="search"
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  value={defaultQuery}
-                  onChange={(e) => setDefaultQuery(e.target.value)}
-                  placeholder="Search works, Hindi labels or codes…"
-                  aria-label="Search default works"
-                />
+              {/* Mobile card-stack (< md), grouped by domain. No padding of its
+                  own: this sits inside `CardContent padding="none"`, so a group
+                  runs to the card's own edge and a work name starts 25px from
+                  the screen edge instead of 67px — the page gutter, the card
+                  border, the content padding, this wrapper, the group border
+                  and the row card used to stack six surfaces deep. */}
+              <div className="md:hidden">
                 {defaultGroups.length === 0 ? (
-                  <p className="mt-3 break-words text-sm text-text-muted">
+                  <p className="break-words p-3 text-sm text-text-muted">
                     No default work matches “{defaultQuery.trim()}”.
                   </p>
                 ) : (
-                  <div className="mt-3 grid gap-2">
+                  <div className="divide-y divide-border">
                     {defaultGroups.map((g) => {
                       const hiddenHere = g.rows.filter((r) =>
                         hiddenSet.has(r.code),
@@ -521,7 +540,6 @@ export function DealerWorkListTab({ dealer }: Props) {
                           // Left uncontrolled otherwise, so a group the admin
                           // opened stays open across a hide/show tap.
                           open={searchingDefaults || undefined}
-                          className="rounded-lg border border-border"
                         >
                           {/* Block, not flex: a flex <summary> loses its native
                               disclosure triangle, which here is the only cue
@@ -536,20 +554,64 @@ export function DealerWorkListTab({ dealer }: Props) {
                           </summary>
                           <MobileCardList
                             visibility="all"
-                            className="px-3 pb-3"
+                            variant="rows"
+                            className="border-t border-border"
                             cards={g.rows.map((r) => {
                               const hidden = hiddenSet.has(r.code);
                               return {
                                 key: r.code,
                                 tone: hidden ? 'muted' : 'default',
                                 primary: (
-                                  <span className="block font-medium text-text">
+                                  <span className="block break-words font-medium text-text">
                                     {r.labelEn}
                                   </span>
                                 ),
+                                primaryRightWidth: 'clamp' as const,
+                                // The hide/show toggle sits in the row's right
+                                // rail, beside the points, rather than being a
+                                // full-width solid button under it. That button
+                                // was 44px plus 12px of gap on every work in a
+                                // ~45-work catalog, and a whole column of them
+                                // read as the page's main content instead of
+                                // the works themselves. Here it costs no extra
+                                // line: the primary row was already drawn. The
+                                // word is the state, the eye is the action, and
+                                // `aria-label` says both, because "Shown" on
+                                // its own does not tell you what a tap does.
                                 primaryRight: (
-                                  <span className="tabular-nums text-text-muted">
-                                    {r.known ? fmtPoints(r.points) : '—'}
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="tabular-nums text-text-muted">
+                                      {r.known ? fmtPoints(r.points) : '—'}
+                                    </span>
+                                    <Button
+                                      variant={hidden ? 'secondary' : 'ghost'}
+                                      size="sm"
+                                      aria-label={
+                                        hidden
+                                          ? 'Hidden — tap to show'
+                                          : 'Shown — tap to hide'
+                                      }
+                                      onClick={() =>
+                                        toggleHidden(r.code, !hidden)
+                                      }
+                                      leftIcon={
+                                        hidden ? (
+                                          <EyeOff
+                                            width={14}
+                                            height={14}
+                                            strokeWidth={1.75}
+                                          />
+                                        ) : (
+                                          <Eye
+                                            width={14}
+                                            height={14}
+                                            strokeWidth={1.75}
+                                          />
+                                        )
+                                      }
+                                    >
+                                      {hidden ? 'Hidden' : 'Shown'}
+                                    </Button>
                                   </span>
                                 ),
                                 secondary: (
@@ -562,33 +624,6 @@ export function DealerWorkListTab({ dealer }: Props) {
                                       </code>
                                     )}
                                   </span>
-                                ),
-                                actions: (
-                                  <Button
-                                    variant={hidden ? 'secondary' : 'primary'}
-                                    size="sm"
-                                    className="w-full"
-                                    onClick={() => toggleHidden(r.code, !hidden)}
-                                    leftIcon={
-                                      hidden ? (
-                                        <EyeOff
-                                          width={14}
-                                          height={14}
-                                          strokeWidth={1.75}
-                                        />
-                                      ) : (
-                                        <Eye
-                                          width={14}
-                                          height={14}
-                                          strokeWidth={1.75}
-                                        />
-                                      )
-                                    }
-                                  >
-                                    {hidden
-                                      ? 'Hidden — tap to show'
-                                      : 'Shown — tap to hide'}
-                                  </Button>
                                 ),
                               };
                             })}
@@ -606,7 +641,23 @@ export function DealerWorkListTab({ dealer }: Props) {
 
       {/* Custom items */}
       <Card>
-        <CardHeader className="flex-col gap-3 sm:flex-row">
+        {/* `CardHeader`'s own `action` slot, not a second child under a
+            `sm:flex-row`: `sm` is 640px, so the row that class asked for
+            arrived at a width no phone in the target set reaches, and a
+            `whitespace-nowrap` "Add custom work" beside the title squeezed the
+            title instead. The slot already stacks below md and puts the button
+            back on the right at md. */}
+        <CardHeader
+          action={
+            <Button
+              size="sm"
+              onClick={openAddCustom}
+              leftIcon={<Plus width={14} height={14} strokeWidth={1.75} />}
+            >
+              Add custom work
+            </Button>
+          }
+        >
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Sparkles width={16} height={16} strokeWidth={1.75} />
@@ -616,16 +667,8 @@ export function DealerWorkListTab({ dealer }: Props) {
               Dealer-specific works, awardable exactly like default items.
             </CardSubtitle>
           </div>
-          <Button
-            size="sm"
-            className="shrink-0"
-            onClick={openAddCustom}
-            leftIcon={<Plus width={14} height={14} strokeWidth={1.75} />}
-          >
-            Add custom work
-          </Button>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           {customItems.length === 0 ? (
             <EmptyState
               icon={<Sparkles width={28} height={28} strokeWidth={1.75} />}
@@ -710,7 +753,7 @@ export function DealerWorkListTab({ dealer }: Props) {
 
               {/* Mobile card-stack (< md) */}
               <MobileCardList
-                className="p-3"
+                variant="rows"
                 // `primaryRight` is `shrink-0`, so anything parked there is
                 // taken straight out of the title's width. The points figure
                 // earns that; the Active/Inactive badge does not — with both,
@@ -743,7 +786,12 @@ export function DealerWorkListTab({ dealer }: Props) {
                     </span>
                   ),
                   actions: (
-                    <div className="grid grid-cols-2 gap-2">
+                    // Not `grid-cols-2`: two equal halves of a ~300px row give
+                    // each label ~145px, and a `whitespace-nowrap` "Remove"
+                    // with its icon and padding needs ~96px of that. Edit takes
+                    // the line and the destructive half is a fixed 44x44
+                    // square, which cannot overflow whatever it is called.
+                    <div className="flex items-center gap-2 [&>button:first-child]:flex-1">
                       <Button
                         variant="secondary"
                         size="sm"
@@ -752,14 +800,14 @@ export function DealerWorkListTab({ dealer }: Props) {
                       >
                         Edit
                       </Button>
-                      <Button
+                      <IconButton
                         variant="secondary"
                         size="sm"
+                        aria-label={`Remove ${c.labelEn}`}
                         onClick={() => removeCustom(c._localId)}
-                        leftIcon={<Trash2 width={14} height={14} strokeWidth={1.75} />}
                       >
-                        Remove
-                      </Button>
+                        <Trash2 width={16} height={16} strokeWidth={1.75} />
+                      </IconButton>
                     </div>
                   ),
                 }))}

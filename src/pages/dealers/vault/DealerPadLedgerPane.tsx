@@ -56,7 +56,7 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
   return (
     <div className="grid gap-4">
       <Card>
-        <CardContent className="p-4">
+        <CardContent>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -101,7 +101,7 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
       </Card>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           {/* `CardHeader action`: the `whitespace-nowrap` count badge does not
               shrink, so in a `justify-between` row that cannot wrap it squeezed
               the description beside it at 296px. */}

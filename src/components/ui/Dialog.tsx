@@ -31,6 +31,14 @@ export interface DialogProps {
    * settings are visually identical at `≥ md`.
    */
   animateIn?: boolean;
+  /**
+   * `'none'` removes the body's own `p-4`. For a body that IS a full-bleed
+   * thing — a card stack, a table, a report frame — which should meet the
+   * panel's edges rather than lose 32px of a 328px sheet to a gutter it did not
+   * ask for. A prop and not a `className`, because `cn` is plain clsx and a
+   * `p-0` passed in would land beside `p-4` and lose on stylesheet order.
+   */
+  bodyPadding?: 'default' | 'none';
 }
 
 const SIZE_CLASSES: Record<NonNullable<DialogProps['size']>, string> = {
@@ -62,6 +70,7 @@ export function Dialog({
   footer,
   size = 'md',
   animateIn = true,
+  bodyPadding = 'default',
 }: DialogProps) {
   React.useEffect(() => {
     if (!open) return;
@@ -111,7 +120,11 @@ export function Dialog({
                 </h2>
               ) : null}
               {description ? (
-                <p className="mt-1 break-words text-sm text-text-muted">
+                // Clamped below md because this header does not scroll: it is
+                // sticky above the body, so a 230-character description is
+                // ~110px of a 92dvh sheet that the reader can never scroll
+                // past to reach the form.
+                <p className="mt-1 line-clamp-2 break-words text-sm text-text-muted md:line-clamp-none">
                   {description}
                 </p>
               ) : null}
@@ -125,7 +138,12 @@ export function Dialog({
               <X width={16} height={16} strokeWidth={1.75} />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto overscroll-contain p-4 md:max-h-[70vh] md:flex-none">
+          <div
+            className={cn(
+              'flex-1 overflow-y-auto overscroll-contain md:max-h-[70vh] md:flex-none',
+              bodyPadding === 'none' ? '' : 'p-4',
+            )}
+          >
             {children}
           </div>
           {footer ? (

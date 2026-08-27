@@ -143,7 +143,7 @@ export function DealerDataVaultTab({ dealer }: Props) {
   }
 
   const collectButton = (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-2 md:w-auto">
       <Input
         type="date"
         value={collectDate}
@@ -151,7 +151,10 @@ export function DealerDataVaultTab({ dealer }: Props) {
         max={today}
         onChange={(e) => setCollectDate(e.target.value)}
         aria-label="Business date to collect"
-        className="w-40"
+        // `w-full md:w-40`, not a bare `w-40`: `cn` is clsx, and Tailwind emits
+        // `.w-full` AFTER `.w-40`, so the bare override silently lost and the
+        // field took the whole row.
+        className="w-full md:w-40"
       />
       <Button
         variant="secondary"
@@ -167,9 +170,9 @@ export function DealerDataVaultTab({ dealer }: Props) {
   );
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3 md:gap-4">
       <Card>
-        <CardContent className="p-4">
+        <CardContent>
           {latestQ.isLoading ? (
             <div className="grid gap-3">
               <Skeleton className="h-6 w-48" />
@@ -248,7 +251,12 @@ function HistoryCard({
 }) {
   return (
     <Card>
-      <CardContent className="p-0">
+      {/* `padding="none"`, not `className="p-0"`: `cn` is clsx and Tailwind
+          emits `.p-4` after `.p-0`, so the p-0 this card carried never applied
+          and the header's own rule stopped 16px short of the card's edges.
+          `md:p-4` is a separate declaration, so ≥768px stays exactly as it
+          renders today. */}
+      <CardContent padding="none" className="md:p-4">
         {/* `CardHeader action`: the count does not shrink, so in a
             `justify-between` row that cannot wrap it took width off the
             description at 296px. */}
@@ -332,9 +340,12 @@ function HistoryCard({
               </Table>
             </div>
 
-            {/* Mobile card-stack (< md) */}
+            {/* Mobile card-stack (< md). `rows`, not floating cards: the card
+                body has no padding below md, so each capture divides from the
+                next with a hairline and its date starts 25px from the screen
+                edge instead of 54px. */}
             <MobileCardList
-              className="p-3"
+              variant="rows"
               cards={items.map((s) => ({
                 key: s.id,
                 onClick: () => onOpen(s.id),

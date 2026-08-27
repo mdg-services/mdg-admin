@@ -48,6 +48,7 @@ import {
   useStaffAwardsQuery,
   useStaffOverviewQuery,
 } from '@/hooks/api/useStaff';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { formatYmd, inrFormat } from '@/lib/format';
 import { fmtPoints } from '@/lib/staffWork';
@@ -379,7 +380,7 @@ function WarriorDetailBody({
           </div>
 
           <Tabs
-            className="mt-4"
+            className="mt-3 md:mt-4"
             value={tab}
             onChange={setTab}
             items={[
@@ -389,7 +390,7 @@ function WarriorDetailBody({
             ]}
           />
 
-          <div className="mt-4 grid gap-4">
+          <div className="mt-3 grid gap-3 md:mt-4 md:gap-4">
             {tab === 'overview' ? (
               <OverviewTab
                 stats={stats}
@@ -632,7 +633,7 @@ function OverviewTab({
           </div>
         </CardHeader>
         <CardContent>
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <dl className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3">
             <Fact
               label="Days with points"
               value={`${stats.activeDays}`}
@@ -860,7 +861,7 @@ function WorkTab({
             </div>
           </CardHeader>
           <CardContent>
-            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <dl className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3">
               {stats.amountRupees > 0 ? (
                 <Fact
                   label="Fuel & sales logged"
@@ -892,6 +893,10 @@ function LedgerTab({
 }) {
   const [limit, setLimit] = React.useState(LEDGER_PAGE);
   const shown = React.useMemo(() => awards.slice(0, limit), [awards, limit]);
+  // The ledger's two shapes are chosen here rather than by `hidden md:block`,
+  // which only hides the losing one — inside a bottom sheet that shows cards,
+  // React was still building a five-column table for every award.
+  const isMd = useMediaQuery('(min-width: 768px)');
 
   return (
     <>
@@ -935,7 +940,11 @@ function LedgerTab({
             </CardSubtitle>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        {/* The body is the ledger, so it runs to the card's own edges. A
+            `className="p-0"` would lose to the default padding — `cn` is clsx,
+            not tailwind-merge — and inside a drawer that leaves the award
+            sitting four surfaces deep. */}
+        <CardContent padding="none" className="md:p-4">
           {awards.length === 0 ? (
             <EmptyState
               icon={<ScrollText width={28} height={28} strokeWidth={1.75} />}
@@ -952,7 +961,11 @@ function LedgerTab({
                 </Callout>
               ) : null}
 
-              <div className="hidden md:block">
+              {/* One branch mounts, not two. `hidden md:block` only HIDES the
+                  table — React still builds every row of it on a phone, and these
+                  lists run to the endpoint's row cap. The breakpoint is decided in
+                  JS, so the phone never pays for the desktop shape. */}
+              {isMd ? (
                 <Table>
                   <THead>
                     <TRow>
@@ -994,44 +1007,52 @@ function LedgerTab({
                     ))}
                   </TBody>
                 </Table>
-              </div>
-
-              <MobileCardList
-                className="p-3"
-                cards={shown.map((a) => ({
-                  key: a.id,
-                  primary: (
-                    <span className="block truncate font-medium text-text">{a.workLabelEn}</span>
-                  ),
-                  primaryRight: (
-                    <span className="tabular-nums font-semibold">{fmtPoints(a.points)}</span>
-                  ),
-                  secondary: (
-                    <span>
-                      {describeQuantity(a)}
-                      {a.note ? (
-                        <span className="block text-xs text-text-muted">{a.note}</span>
-                      ) : null}
-                    </span>
-                  ),
-                  meta: (
-                    <span>
-                      {formatYmd(a.workDate)} · {a.awardedByName ?? '—'}
-                    </span>
-                  ),
-                  actions: (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => onUndoAward(a)}
-                      leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
-                    >
-                      Undo
-                    </Button>
-                  ),
-                }))}
-              />
+              ) : (
+                /* Flush rows in a card with no padding of its own: drawer
+                    padding, card border, card padding and a bordered row card
+                    put every award 58px in from a 360px sheet. */
+                <MobileCardList
+                  visibility="all"
+                  variant="rows"
+                  cards={shown.map((a) => ({
+                    key: a.id,
+                    primary: (
+                      <span className="block truncate font-medium text-text">{a.workLabelEn}</span>
+                    ),
+                    primaryRight: (
+                      <span className="tabular-nums font-semibold">{fmtPoints(a.points)}</span>
+                    ),
+                    secondary: (
+                      <span>
+                        {describeQuantity(a)}
+                        {a.note ? (
+                          <span className="block text-xs text-text-muted">{a.note}</span>
+                        ) : null}
+                      </span>
+                    ),
+                    meta: (
+                      <span>
+                        {formatYmd(a.workDate)} · {a.awardedByName ?? '—'}
+                      </span>
+                    ),
+                    // A rarely-used, destructive action does not get a
+                    // full-width bar on every entry — that roughly doubled the
+                    // height of each card in the ledger. `Button` still floors
+                    // at 44px below md, so the tap target is unchanged.
+                    actionsLayout: 'wrap' as const,
+                    actions: (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => onUndoAward(a)}
+                        leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
+                      >
+                        Undo
+                      </Button>
+                    ),
+                  }))}
+                />
+              )}
 
               {shown.length < awards.length ? (
                 <div className="border-t border-border p-3">

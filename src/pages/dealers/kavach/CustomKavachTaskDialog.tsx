@@ -100,7 +100,7 @@ export function CustomKavachTaskDialog({ open, onClose, item, onSubmit }: Props)
       }
     >
       <form onSubmit={submit} className="grid gap-3" noValidate>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label htmlFor="ck-labelEn" required>
               Label (English)
@@ -130,7 +130,7 @@ export function CustomKavachTaskDialog({ open, onClose, item, onSubmit }: Props)
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-3">
           <div>
             <Label htmlFor="ck-points" required hint="1–500">
               Points
@@ -178,7 +178,7 @@ export function CustomKavachTaskDialog({ open, onClose, item, onSubmit }: Props)
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-3">
           <div>
             <Label htmlFor="ck-domain" required>
               Domain
@@ -220,7 +220,7 @@ export function CustomKavachTaskDialog({ open, onClose, item, onSubmit }: Props)
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label htmlFor="ck-notesEn" hint="optional">
               Notes (English)

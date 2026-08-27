@@ -199,7 +199,7 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
         {readOnlyNotice}
         <DensityHero products={[]} loading />
         <Card>
-          <CardContent className="grid gap-2 p-4">
+          <CardContent className="grid gap-2">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-11 w-full" />
             ))}
@@ -266,7 +266,7 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
           the last known readings and this says the newest fetch did not land. */}
       {failed ? (
         <Card className="border-danger/40 bg-danger-soft/40">
-          <CardContent className="flex items-start gap-3 p-4">
+          <CardContent className="flex items-start gap-3">
             <AlertCircle
               width={18}
               height={18}
@@ -302,7 +302,7 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
            to the never-fetched state below, its Fetch button would post
            `/collect` and answer a red toast instead of naming the cause. */
         <Card>
-          <CardContent className="p-4">
+          <CardContent>
             <EmptyState
               icon={<Plug width={28} height={28} strokeWidth={1.75} />}
               title={`TT Density is not attached to ${dealerCodeLabel(dealer.code)}`}
@@ -312,7 +312,7 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
         </Card>
       ) : neverFetched && summary.invoiceCount === 0 ? (
         <Card>
-          <CardContent className="p-4">
+          <CardContent>
             <EmptyState
               icon={<Gauge width={28} height={28} strokeWidth={1.75} />}
               title="No tanker invoices captured yet"
@@ -323,7 +323,7 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
         </Card>
       ) : (
         <Card>
-          <CardContent className="p-0">
+          <CardContent padding="none" className="md:p-4">
             {/* `CardHeader action` rather than a second child in a
                 `justify-between` row that cannot wrap: the count badge is
                 `whitespace-nowrap` and does not shrink, so at 296px it squeezed
@@ -364,7 +364,7 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
       )}
 
       <Card>
-        <CardContent className="p-3 md:p-4">
+        <CardContent className="md:p-4">
           <div className="mb-3">
             <p className="text-base font-semibold text-text">
               Density register photos

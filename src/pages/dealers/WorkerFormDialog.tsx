@@ -111,7 +111,10 @@ export function WorkerFormDialog({ dealerId, open, onClose, employee }: Props) {
           />
           <FieldError message={errors.name?.message} />
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        {/* `md:`, not `sm:`: 640px is not a breakpoint any phone in scope
+            reaches, and at 640-767px this form is still in the mobile bottom
+            sheet, where two-up gives two ~150px fields. */}
+        <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label htmlFor="worker-designation">Designation</Label>
             <Input

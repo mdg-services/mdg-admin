@@ -75,7 +75,11 @@ export function ServiceCatalogPage() {
                       {s.cadence}
                     </Badge>
                   </div>
-                  <p className="mt-2 text-sm text-text-muted">
+                  {/* Clamped below md: the longest plugin description is 545
+                      characters, which is thirteen lines in a 294px card — one
+                      screen would show two services. The Drawer this card opens
+                      carries the whole text. */}
+                  <p className="mt-2 line-clamp-3 text-sm text-text-muted md:line-clamp-none">
                     {s.description}
                   </p>
                 </CardContent>
@@ -105,6 +109,14 @@ export function ServiceCatalogPage() {
       >
         {selected ? (
           <div className="grid gap-3">
+            {/* The Drawer prints its own `description` clamped to two lines
+                below md, and two lines is ~90 of the 545 characters the longest
+                plugin has to say — so on a phone the full text lands here
+                instead. `md:hidden` because at md the header already shows it
+                whole and this would be a second copy of it. */}
+            <p className="text-sm text-text-muted md:hidden">
+              {selected.description}
+            </p>
             {/* One column below md: each of the two 150px columns is narrower
                 than a plugin slug, and a slug without hyphens has no break
                 opportunity at all. */}

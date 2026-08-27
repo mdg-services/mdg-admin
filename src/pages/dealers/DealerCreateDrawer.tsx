@@ -73,8 +73,11 @@ export function DealerCreateDrawer({ open, onClose, loading, onSubmit }: Props) 
         </>
       }
     >
-      <form onSubmit={submit} noValidate className="grid gap-4">
-        <p className="text-sm text-text-muted">
+      <form onSubmit={submit} noValidate className="grid gap-3 md:gap-4">
+        {/* Two lines below md: the sheet is capped at 95dvh and also holds a
+            header, a footer and the soft keyboard, so three lines of preamble
+            is a third of what is left for the field being explained. */}
+        <p className="line-clamp-2 text-sm text-text-muted md:line-clamp-none">
           The dealer code is how this outlet is identified everywhere — on their
           reports, in chat and in every list. Everything else is filled in as the
           onboarding journey progresses.

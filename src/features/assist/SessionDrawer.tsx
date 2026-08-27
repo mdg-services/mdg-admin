@@ -21,6 +21,7 @@ import {
   useCreateAssistBlock,
   useUpdateAssistFollowup,
 } from '@/hooks/api/useAssist';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatDuration } from '@/lib/format';
@@ -160,7 +161,7 @@ export function SessionDrawer({ sessionId, onClose }: SessionDrawerProps) {
           }
         />
       ) : (
-        <div className="grid gap-5">
+        <div className="grid gap-4 md:gap-5">
           <HeaderStrip detail={detail} onBlock={() => setBlockOpen(true)} />
 
           <Section title="What was said">
@@ -180,7 +181,15 @@ export function SessionDrawer({ sessionId, onClose }: SessionDrawerProps) {
             // exactly.
             <Section
               title="Recording"
-              className="sticky bottom-0 z-[var(--z-sticky)] -mx-4 border-t border-border bg-surface px-4 pb-1 pt-2 md:static md:mx-0 md:border-t-0 md:px-0 md:pb-0 md:pt-0"
+              // `-bottom-4`, not `bottom-0`, and not `.stick-bottom` either.
+              // A sticky offset resolves against the scrollport INSET BY THE
+              // SCROLL CONTAINER'S PADDING, and the Drawer body is `p-4`, so a
+              // plain `bottom-0` parked the player 16px above the sheet's
+              // bottom edge and transcript lines scrolled visibly through the
+              // band underneath it. `.stick-bottom` is the same correction for
+              // a descendant of `main`, where the inset is `--app-gutter`
+              // (12px) — 4px short of the one that applies in here.
+              className="sticky -bottom-4 z-[var(--z-sticky)] -mx-4 border-t border-border bg-surface px-4 pb-1 pt-2 md:static md:mx-0 md:border-t-0 md:px-0 md:pb-0 md:pt-0"
               titleClassName="sr-only md:not-sr-only md:mb-2"
             >
               <CallPlayer
@@ -251,7 +260,9 @@ function HeaderStrip({
   const ended = endReasonText(detail.endReason);
   const split = costSplitOf(detail);
   return (
-    <div className="rounded-md border border-border bg-surface-2 p-3">
+    // `p-2` below md: the drawer body already pays 16px, and this box's own
+    // 12px on top of it put the badges 28px in from a 360px screen.
+    <div className="rounded-md border border-border bg-surface-2 p-2 md:p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <Badge intent={detail.status === 'escalated' ? 'warning' : 'neutral'}>
@@ -537,8 +548,11 @@ function LeadPanel({
   const lead = detail.lead;
 
   return (
-    <div className="grid gap-3 rounded-md border border-border bg-surface p-3">
-      <dl className="grid gap-2 sm:grid-cols-3">
+    // No box below md. The panel's `bg-surface` IS the drawer's background, so
+    // all the border and the padding bought on a phone was 24px of width off
+    // the one field that matters here — the number being rung.
+    <div className="grid gap-3 md:rounded-md md:border md:border-border md:bg-surface md:p-3">
+      <dl className="grid gap-2 md:grid-cols-3">
         <Field label="Name" value={lead.name} />
         <Field label="Place" value={lead.place} />
         <div className="min-w-0">
@@ -564,7 +578,7 @@ function LeadPanel({
         </div>
       </dl>
 
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,14rem)_1fr] sm:items-start">
+      <div className="grid gap-3 md:grid-cols-[minmax(0,14rem)_1fr] md:items-start">
         <div className="space-y-1.5">
           <Label htmlFor="assist-followup">Follow-up</Label>
           <Select
@@ -667,6 +681,10 @@ function retrievedText(t: AssistTurnTrace): string {
  * a visible change to the one viewport where it already works.
  */
 function TraceSection({ detail }: { detail: AssistSessionDetail }) {
+  // One shape at a time, decided here rather than with `hidden`/`md:hidden`.
+  // Both were built for every turn at every width, so a phone paid to render a
+  // five-column table it then set to `display: none`.
+  const isMd = useMediaQuery('(min-width: 768px)');
   return (
     <details className="rounded-md border border-border bg-surface">
       {/* `min-h-11` below md: 12px of line box plus 24px of padding is a 40px
@@ -682,84 +700,86 @@ function TraceSection({ detail }: { detail: AssistSessionDetail }) {
           panel goes with it — do not build a routine around it.
         </Callout>
 
-        <div className="hidden w-full overflow-x-auto overscroll-x-contain md:block">
-          <table className="w-full border-collapse text-xs">
-            <thead className="bg-surface-2 text-text-muted">
-              <tr>
-                <th className="h-8 px-2 text-left font-semibold">Turn</th>
-                <th className="h-8 px-2 text-left font-semibold">Stage timings</th>
-                <th className="h-8 px-2 text-left font-semibold">Passages retrieved</th>
-                <th className="h-8 px-2 text-left font-semibold">Guards hit</th>
-                <th className="h-8 px-2 text-right font-semibold">Tokens</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detail.trace.map((t) => (
-                <tr key={t.seq} className="border-t border-border align-top">
-                  <td className="px-2 py-2 tabular-nums text-text">
-                    #{t.seq}
-                    <span className="block text-text-subtle">{t.chatModel}</span>
-                    <span className="block text-text-subtle">{t.guardModel}</span>
-                  </td>
-                  <td className="px-2 py-2 text-text-muted">{timingsText(t)}</td>
-                  <td className="px-2 py-2 text-text-muted">{retrievedText(t)}</td>
-                  <td className="px-2 py-2 text-text-muted">
-                    {t.rulesHit.length === 0 ? '—' : t.rulesHit.join(', ')}
-                  </td>
-                  <td className="px-2 py-2 text-right tabular-nums text-text-muted">
-                    {t.tokensIn ?? 0} in / {t.tokensOut ?? 0} out
-                  </td>
+        {isMd ? (
+          <div className="w-full overflow-x-auto overscroll-x-contain">
+            <table className="w-full border-collapse text-xs">
+              <thead className="bg-surface-2 text-text-muted">
+                <tr>
+                  <th className="h-8 px-2 text-left font-semibold">Turn</th>
+                  <th className="h-8 px-2 text-left font-semibold">Stage timings</th>
+                  <th className="h-8 px-2 text-left font-semibold">Passages retrieved</th>
+                  <th className="h-8 px-2 text-left font-semibold">Guards hit</th>
+                  <th className="h-8 px-2 text-right font-semibold">Tokens</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="grid gap-3 md:hidden">
-          {detail.trace.map((t) => (
-            <div key={t.seq} className="rounded-md border border-border p-3">
-              <p className="mb-1 text-xs font-semibold tabular-nums text-text">
-                Turn #{t.seq}
-              </p>
-              <KeyValueList
-                items={[
-                  {
-                    key: 'models',
-                    label: 'Models',
-                    value: `${t.chatModel} · ${t.guardModel}`,
-                    mono: true,
-                    block: true,
-                  },
-                  {
-                    key: 'timings',
-                    label: 'Stage timings',
-                    value: timingsText(t),
-                    block: true,
-                  },
-                  {
-                    key: 'retrieved',
-                    label: 'Passages retrieved',
-                    value: retrievedText(t),
-                    mono: true,
-                    block: true,
-                  },
-                  {
-                    key: 'guards',
-                    label: 'Guards hit',
-                    value: t.rulesHit.length === 0 ? '—' : t.rulesHit.join(', '),
-                    block: true,
-                  },
-                  {
-                    key: 'tokens',
-                    label: 'Tokens',
-                    value: `${t.tokensIn ?? 0} in / ${t.tokensOut ?? 0} out`,
-                    numeric: true,
-                  },
-                ]}
-              />
-            </div>
-          ))}
-        </div>
+              </thead>
+              <tbody>
+                {detail.trace.map((t) => (
+                  <tr key={t.seq} className="border-t border-border align-top">
+                    <td className="px-2 py-2 tabular-nums text-text">
+                      #{t.seq}
+                      <span className="block text-text-subtle">{t.chatModel}</span>
+                      <span className="block text-text-subtle">{t.guardModel}</span>
+                    </td>
+                    <td className="px-2 py-2 text-text-muted">{timingsText(t)}</td>
+                    <td className="px-2 py-2 text-text-muted">{retrievedText(t)}</td>
+                    <td className="px-2 py-2 text-text-muted">
+                      {t.rulesHit.length === 0 ? '—' : t.rulesHit.join(', ')}
+                    </td>
+                    <td className="px-2 py-2 text-right tabular-nums text-text-muted">
+                      {t.tokensIn ?? 0} in / {t.tokensOut ?? 0} out
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {detail.trace.map((t) => (
+              <div key={t.seq} className="rounded-md border border-border p-3">
+                <p className="mb-1 text-xs font-semibold tabular-nums text-text">
+                  Turn #{t.seq}
+                </p>
+                <KeyValueList
+                  items={[
+                    {
+                      key: 'models',
+                      label: 'Models',
+                      value: `${t.chatModel} · ${t.guardModel}`,
+                      mono: true,
+                      block: true,
+                    },
+                    {
+                      key: 'timings',
+                      label: 'Stage timings',
+                      value: timingsText(t),
+                      block: true,
+                    },
+                    {
+                      key: 'retrieved',
+                      label: 'Passages retrieved',
+                      value: retrievedText(t),
+                      mono: true,
+                      block: true,
+                    },
+                    {
+                      key: 'guards',
+                      label: 'Guards hit',
+                      value: t.rulesHit.length === 0 ? '—' : t.rulesHit.join(', '),
+                      block: true,
+                    },
+                    {
+                      key: 'tokens',
+                      label: 'Tokens',
+                      value: `${t.tokensIn ?? 0} in / ${t.tokensOut ?? 0} out`,
+                      numeric: true,
+                    },
+                  ]}
+                />
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* `break-words`: a WebView user-agent string is a run of tokens CSS
             will not break on its own, and the drawer body picks up a sideways

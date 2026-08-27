@@ -434,7 +434,7 @@ export function KavachWorkQueuePage() {
           2 columns costs the ≥1024px layout three extra rows. */}
       <FilterBar
         className="mb-4"
-        contentClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"
+        contentClassName="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5"
         activeCount={activeChips.length}
         onClear={clearFilters}
         chips={activeChips.map((chip) => (
@@ -575,23 +575,44 @@ export function KavachWorkQueuePage() {
         </Callout>
       ) : null}
 
-      {handledCount > 0 ? (
-        <Callout intent="info" className="mb-4">
-          {handledCount} {handledCount === 1 ? 'row' : 'rows'} handled in this
-          pass, still shown in place so the list does not shift under you. Use
-          Refresh above to clear them.
-        </Callout>
+      {/* Two informational Callouts can stand above the queue at once, each a
+          multi-line paragraph plus 16px of margin. Stacked with the header and
+          the filter bar they pushed the first row of work off a 740px phone
+          entirely. Below md they collapse to the one line that carries the two
+          numbers; from md up every word is still there. */}
+      {handledCount > 0 || (rows.length > 0 && rows.length < total) ? (
+        <p className="mb-3 text-xs text-text-muted md:hidden">
+          {handledCount > 0
+            ? `${handledCount} handled in this pass, still in place`
+            : null}
+          {handledCount > 0 && rows.length > 0 && rows.length < total
+            ? ' · '
+            : null}
+          {rows.length > 0 && rows.length < total
+            ? `showing ${rows.length} of ${total}`
+            : null}
+        </p>
       ) : null}
 
-      {rows.length > 0 && rows.length < total ? (
-        <Callout intent="warning" className="mb-4">
-          Showing {rows.length} of {total}. Groups cover the rows loaded so far —
-          pick a single task above to work one of them end to end.
-        </Callout>
-      ) : null}
+      <div className="hidden md:block">
+        {handledCount > 0 ? (
+          <Callout intent="info" className="mb-4">
+            {handledCount} {handledCount === 1 ? 'row' : 'rows'} handled in this
+            pass, still shown in place so the list does not shift under you. Use
+            Refresh above to clear them.
+          </Callout>
+        ) : null}
+
+        {rows.length > 0 && rows.length < total ? (
+          <Callout intent="warning" className="mb-4">
+            Showing {rows.length} of {total}. Groups cover the rows loaded so far
+            — pick a single task above to work one of them end to end.
+          </Callout>
+        ) : null}
+      </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           {queueQ.isLoading ? (
             <div className="space-y-2 p-4">
               {Array.from({ length: 8 }).map((_, i) => (
@@ -643,9 +664,14 @@ export function KavachWorkQueuePage() {
                       time, so after one flick the admin is looking at bare
                       dealer codes with no statement of WHICH task they are
                       certifying — and "8 dealers · 30 pts each" is the sentence
-                      that makes the pass safe. `main` is the scroller and the
-                      tab bar is in-flow, so `top-0` needs no arithmetic. */}
-                  <div className="sticky top-0 z-[var(--z-sticky)] flex flex-wrap items-baseline justify-between gap-2 bg-surface-2 px-4 py-2 md:static md:z-auto">
+                      that makes the pass safe.
+
+                      `stick-top`, not `top-0`: `main` is the scroller and it
+                      paints a gutter, and a sticky offset resolves against the
+                      scrollport INSET BY THAT PADDING — so `top-0` parked this
+                      heading one gutter down and let rows scroll through the
+                      band above it. */}
+                  <div className="sticky stick-top z-[var(--z-sticky)] flex flex-wrap items-baseline justify-between gap-2 bg-surface-2 px-3 py-2 md:static md:z-auto md:px-4">
                     <h2 className="text-sm font-semibold text-text">
                       {group.title}
                     </h2>
@@ -772,7 +798,7 @@ export function KavachWorkQueuePage() {
 
                   {/* Mobile card-stack (< md) */}
                   <MobileCardList
-                    className="p-3"
+                    variant="rows"
                     cards={group.rows.map((row) => {
                       const pending = kavachDaysPendingChip(row);
                       const mark = handled[row.itemId];

@@ -158,7 +158,11 @@ export function AppShell() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-border bg-surface px-3 md:gap-3 md:px-4">
+        {/* 48px below md, not 56: with the tab bar under it the shell's own
+            chrome is 112px of a 740px screen, and on a phone this bar carries
+            only the brand mark (or a back chevron) and the account button. Both
+            of those are 44px tall, so 48px still holds them. 56px from md up. */}
+        <header className="sticky top-0 z-10 flex h-12 items-center gap-2 border-b border-border bg-surface px-3 md:h-14 md:gap-3 md:px-4">
           {/* Mobile: a back chevron on a drill-in, otherwise the brand. Both md:hidden. */}
           {isDealerDetail ? (
             <button
@@ -207,9 +211,9 @@ export function AppShell() {
         <main
           data-app-scroller
           className={cn(
-            'min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-bg p-4 md:p-6',
+            'min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-bg p-[var(--app-gutter)]',
             !showTabBar &&
-              'pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-6',
+              'pb-[calc(var(--app-gutter)+env(safe-area-inset-bottom))]',
           )}
         >
           {/* A second boundary, INSIDE the shell. The outer one in App.tsx sits

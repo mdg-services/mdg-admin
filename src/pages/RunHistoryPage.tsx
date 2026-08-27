@@ -164,11 +164,15 @@ export function RunHistoryPage() {
         />
       ) : (
         <>
-          <div className="grid gap-4">
+          <div className="grid gap-3 md:gap-4">
             {grouped.map((g) => (
               <Card key={g.day}>
-                <CardContent className="p-0">
-                  <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+                {/* The body is the day's run list, so below md it runs to the
+                    card's own edges. `md:p-4` is md+ unchanged: `cn` is clsx
+                    and `.p-4` is emitted after `.p-0`, so the call site's `p-0`
+                    never won there. */}
+                <CardContent padding="none" className="md:p-4">
+                  <div className="flex items-center gap-2 border-b border-border px-3 py-2 md:px-4">
                     <Clock
                       width={14}
                       height={14}
@@ -189,7 +193,7 @@ export function RunHistoryPage() {
                             never paints. The chevron is that cue. */}
                         <button
                           type="button"
-                          className="block min-h-11 w-full px-4 py-2 text-left text-sm hover:bg-surface-2 md:min-h-0"
+                          className="block min-h-11 w-full px-3 py-2 text-left text-sm hover:bg-surface-2 md:min-h-0 md:px-4"
                           onClick={() => setOpen(r)}
                         >
                           {/* Desktop: single dense row (unchanged). */}

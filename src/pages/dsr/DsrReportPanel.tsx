@@ -109,7 +109,13 @@ export function DsrReportPanel({
   const { digest } = report;
 
   return (
-    <div className="flex flex-col gap-4">
+    // The `order-*` below md is the whole point of this being a flex column:
+    // the day book itself is a wide sheet nothing can make narrow, so on a
+    // phone the READABLE restatement of it leads and the sheet follows. At md
+    // the sheet is on screen and legible, so every child goes back to source
+    // order. Warnings carry no `order`, which keeps them at 0 and therefore
+    // first in both shapes.
+    <div className="flex flex-col gap-3 md:gap-4">
       {/* Above the warnings: "these figures no longer match their inputs" is a
           stronger caveat than "this figure was missing a nozzle". */}
       <DsrStaleNotice report={report} />
@@ -137,8 +143,8 @@ export function DsrReportPanel({
       ) : null}
 
       {/* The deliverable itself — the hero. */}
-      <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+      <Card className="order-2 overflow-hidden md:order-none">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5 md:px-4">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-text">
               Daily Sales Report
@@ -161,6 +167,11 @@ export function DsrReportPanel({
               src={report.htmlUrl}
               title={`Daily Sales Report — ${dsrDateLabel(report.businessDate)}`}
               desktopHeightClass={frameClassName}
+              // The full-screen view is a scaled picture of a spreadsheet, and
+              // a picture of a spreadsheet is not a way to read one. The same
+              // digest that leads the page goes into the sheet's own view, so
+              // the numbers are reachable without closing it again.
+              figures={<DsrFigureList report={report} />}
               preview={
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold text-text">
@@ -186,7 +197,7 @@ export function DsrReportPanel({
             />
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
+          <div className="flex flex-col items-center gap-2 px-4 py-8 text-center md:px-6 md:py-16">
             <FileWarning
               width={28}
               height={28}
@@ -221,11 +232,14 @@ export function DsrReportPanel({
       </Card>
 
       {/* The figures, in a shape a phone can read. */}
-      <DsrFigureList report={report} />
+      <DsrFigureList report={report} className="order-1 md:order-none" />
 
-      {/* Supporting: per-product stock variation. */}
+      {/* Supporting: per-product stock variation. Desktop only — below md
+          every figure on these cards, the advisory included, is already in
+          `ProductFigures` above, and printing them twice put roughly 900px of
+          duplicate numbers under the report on a three-grade dealer. */}
       {digest.products.length > 0 ? (
-        <div>
+        <div className="hidden md:block">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
             Stock variation
           </p>
@@ -238,7 +252,7 @@ export function DsrReportPanel({
       ) : null}
 
       {/* The dealer deliverable: the two shareable cards + the share action. */}
-      <DsrShareSection report={report} />
+      <DsrShareSection report={report} className="order-3 md:order-none" />
     </div>
   );
 }
@@ -261,11 +275,17 @@ export function DsrReportPanel({
  * Below md only. At md the sheet itself is on screen and this would be the same
  * figures twice.
  */
-function DsrFigureList({ report }: { report: DsrReportView }) {
+function DsrFigureList({
+  report,
+  className,
+}: {
+  report: DsrReportView;
+  className?: string;
+}) {
   const { digest } = report;
   if (digest.products.length === 0) return null;
   return (
-    <section className="md:hidden">
+    <section className={cn('md:hidden', className)}>
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
         The day&apos;s figures
       </p>
@@ -320,9 +340,35 @@ function ProductFigures({
   const row = rows.find((r) => r.businessDate === businessDate) ?? rows.at(-1);
   const tankNos = product.tankNos ?? [];
   const v = product.variation;
+  const tanks = row ? tankReadingsOf(row, tankNos) : [];
+  // One tank needs no surface of its own to be told apart from anything, and
+  // the heading "Tank 5" only repeats what the product's own subtitle already
+  // says. Its dip and water dip fold into the day's list instead, ahead of the
+  // stock they were read against — which also stops "Stock" appearing twice.
+  //
+  // `tankNos` is checked as well as the readings: a three-tank product where
+  // only one tank reported still has to name which tank the dip came from, so
+  // that case keeps its labelled block.
+  const singleTank = tanks.length === 1 && tankNos.length <= 1;
 
   const dayItems: KeyValueItem[] = row
     ? [
+        ...(singleTank
+          ? [
+              {
+                key: 'dip',
+                label: 'Dip',
+                value: measured(tanks[0]!.dip, (n) => `${n} cm`),
+                numeric: true,
+              },
+              {
+                key: 'water',
+                label: 'Water dip',
+                value: measured(tanks[0]!.waterDip, (n) => String(n)),
+                numeric: true,
+              },
+            ]
+          : []),
         {
           key: 'stock',
           label: tankNos.length > 1 ? 'Stock, all tanks' : 'Stock',
@@ -410,7 +456,10 @@ function ProductFigures({
 
   return (
     <Card>
-      <CardContent className="grid gap-3 p-4">
+      {/* No `p-4` here: `cn` appends, and `p-4` is emitted after the
+          primitive's own `p-3 md:p-4`, so passing it pinned the phone back to
+          the desktop inset. The prop's default is already what this wants. */}
+      <CardContent className="grid gap-3">
         <div className="min-w-0">
           <p className="break-words text-sm font-semibold text-text">
             {product.productLabelEn}
@@ -425,35 +474,40 @@ function ProductFigures({
 
         {row ? (
           <>
-            {tankReadingsOf(row, tankNos).map((t) => (
-              <div key={t.tankNo} className="rounded-md bg-surface-2 p-3">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-                  Tank {t.tankNo}
-                </p>
-                <KeyValueList
-                  items={[
-                    {
-                      key: 'dip',
-                      label: 'Dip',
-                      value: measured(t.dip, (n) => `${n} cm`),
-                      numeric: true,
-                    },
-                    {
-                      key: 'water',
-                      label: 'Water dip',
-                      value: measured(t.waterDip, (n) => String(n)),
-                      numeric: true,
-                    },
-                    {
-                      key: 'stock',
-                      label: 'Stock',
-                      value: measured(t.stock, (n) => formatLitres(n)),
-                      numeric: true,
-                    },
-                  ]}
-                />
-              </div>
-            ))}
+            {singleTank
+              ? null
+              : tanks.map((t) => (
+                  <div
+                    key={t.tankNo}
+                    className="rounded-md bg-surface-2 p-2.5 md:p-3"
+                  >
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                      Tank {t.tankNo}
+                    </p>
+                    <KeyValueList
+                      items={[
+                        {
+                          key: 'dip',
+                          label: 'Dip',
+                          value: measured(t.dip, (n) => `${n} cm`),
+                          numeric: true,
+                        },
+                        {
+                          key: 'water',
+                          label: 'Water dip',
+                          value: measured(t.waterDip, (n) => String(n)),
+                          numeric: true,
+                        },
+                        {
+                          key: 'stock',
+                          label: 'Stock',
+                          value: measured(t.stock, (n) => formatLitres(n)),
+                          numeric: true,
+                        },
+                      ]}
+                    />
+                  </div>
+                ))}
             <KeyValueList items={dayItems} />
           </>
         ) : (
@@ -463,8 +517,32 @@ function ProductFigures({
         )}
 
         <div className="border-t border-border pt-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+              Stock variation
+            </p>
+            <Badge intent={ADVISORY_INTENT[v.advisory.kind]} className="shrink-0">
+              {ADVISORY_LABEL[v.advisory.kind]}
+            </Badge>
+          </div>
           <KeyValueList items={variationItems} />
           <p className="mt-2 text-xs text-text-subtle">{bandNote(v)}</p>
+          {/* The one sentence that says what to DO about the figures above.
+              It used to live only on `VariationCard`, which is now desktop
+              only, so it moves here rather than disappearing off the phone. */}
+          <div
+            className={cn(
+              'mt-3 rounded-md px-3 py-2 text-sm',
+              ADVISORY_INTENT[v.advisory.kind] === 'success'
+                ? 'bg-success-soft text-success'
+                : ADVISORY_INTENT[v.advisory.kind] === 'danger'
+                  ? 'bg-danger-soft text-danger'
+                  : 'bg-warning-soft text-warning',
+            )}
+          >
+            <p className="font-medium">{v.advisory.messageHi}</p>
+            <p className="mt-0.5 opacity-90">{v.advisory.messageEn}</p>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -478,7 +556,13 @@ function ProductFigures({
  * the dealer's chat. Idempotent: once shared, the button becomes a disabled
  * "Shared" with a timestamp.
  */
-function DsrShareSection({ report }: { report: DsrReportView }) {
+function DsrShareSection({
+  report,
+  className,
+}: {
+  report: DsrReportView;
+  className?: string;
+}) {
   const toast = useToast();
   const share = useShareDsr(report.id);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -514,12 +598,12 @@ function DsrShareSection({ report }: { report: DsrReportView }) {
   }
 
   return (
-    <div>
+    <div className={className}>
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
         Share with dealer
       </p>
       <Card>
-        <CardContent className="grid gap-4 p-4">
+        <CardContent className="grid gap-3 md:gap-4">
           <div className="grid gap-3 md:grid-cols-2">
             {cards.map(({ url, label, alt }) =>
               url ? (
@@ -540,7 +624,7 @@ function DsrShareSection({ report }: { report: DsrReportView }) {
               ) : (
                 <div
                   key={label}
-                  className="flex h-40 items-center justify-center rounded-md border border-dashed border-border bg-surface-2 px-4 text-center text-xs text-text-muted"
+                  className="flex h-24 items-center justify-center rounded-md border border-dashed border-border bg-surface-2 px-4 text-center text-xs text-text-muted md:h-40"
                 >
                   The {label.toLowerCase()} card will be generated when you
                   share.
@@ -668,6 +752,12 @@ function bandNote(variation: DsrVariationSummary): string {
   return `${stock} + ${rate}evaporation (${formatLitres(Math.round(b.leakageLitres))})`;
 }
 
+/**
+ * The per-product variation card — rendered from md up only. Below md the same
+ * figures, the same band note and the same advisory are part of
+ * {@link ProductFigures}, where they sit with the day's own numbers instead of
+ * repeating them a second time further down the page.
+ */
 function VariationCard({ variation }: { variation: DsrVariationSummary }) {
   const kind = variation.advisory.kind;
   const intent = ADVISORY_INTENT[kind];
@@ -675,7 +765,7 @@ function VariationCard({ variation }: { variation: DsrVariationSummary }) {
 
   return (
     <Card>
-      <CardContent className="flex h-full flex-col gap-3 p-4">
+      <CardContent className="flex h-full flex-col gap-3">
         {/* Below md the advisory badge takes its own line. "Short beyond limit"
             is ~115px of a 296px card, and beside it "XtraPremium 95 Petrol"
             truncated to "XtraPremium 95 Pe…" — the product name is the one label

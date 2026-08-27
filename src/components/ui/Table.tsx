@@ -5,11 +5,32 @@ import { cn } from '@/lib/cn';
 
 interface TableContextValue {
   stickyHeader: boolean;
+  density: TableDensity;
 }
 
 const TableContext = React.createContext<TableContextValue>({
   stickyHeader: false,
+  density: 'default',
 });
+
+export type TableDensity = 'default' | 'compact';
+
+/**
+ * `compact` buys back horizontal room and nothing else. Six columns at `px-3`
+ * spend 144px of a 328px screen on gutters before a single figure is drawn, so
+ * a table narrow enough to read is a table that has stopped paying for them
+ * twice. The ROW HEIGHT is deliberately untouched — `h-11` stays `h-11`, and a
+ * tappable row keeps its 44px on the axis a thumb travels along.
+ *
+ * It travels on the context rather than as a class on each cell because the
+ * cells are the caller's markup: 27 call sites would each have to remember it,
+ * and `cn` is plain clsx, so a `px-2` passed to a `TD` would land beside the
+ * emitted `px-3` and lose on stylesheet order.
+ */
+const DENSITY_CELL: Record<TableDensity, string> = {
+  default: 'px-3',
+  compact: 'px-2 md:px-3',
+};
 
 /**
  * Freezing the first column is done with arbitrary variants on the `<table>`
@@ -45,6 +66,9 @@ export interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
   /** Classes for the wrapper around the scroller — a border, a rounded corner —
    *  as opposed to `className`, which lands on the `<table>` itself. */
   wrapperClassName?: string;
+  /** `'compact'` halves the cell padding below md and restores it at md+. The
+   *  row height, and with it the tap target, is unchanged. */
+  density?: TableDensity;
 }
 
 /**
@@ -78,6 +102,7 @@ export function Table({
   maxHeight,
   minWidth,
   scrollHint = true,
+  density = 'default',
   style,
   children,
   ...rest
@@ -116,8 +141,8 @@ export function Table({
   }, [hintEnabled]);
 
   const ctx = React.useMemo<TableContextValue>(
-    () => ({ stickyHeader }),
-    [stickyHeader],
+    () => ({ stickyHeader, density }),
+    [stickyHeader, density],
   );
 
   return (
@@ -224,10 +249,12 @@ export function TH({
   children,
   ...rest
 }: React.ThHTMLAttributes<HTMLTableCellElement>) {
+  const { density } = React.useContext(TableContext);
   return (
     <th
       className={cn(
-        'h-9 px-3 text-left font-semibold align-middle',
+        'h-9 text-left font-semibold align-middle',
+        DENSITY_CELL[density],
         className,
       )}
       {...rest}
@@ -242,9 +269,10 @@ export function TD({
   children,
   ...rest
 }: React.TdHTMLAttributes<HTMLTableCellElement>) {
+  const { density } = React.useContext(TableContext);
   return (
     <td
-      className={cn('h-11 px-3 align-middle text-text', className)}
+      className={cn('h-11 align-middle text-text', DENSITY_CELL[density], className)}
       {...rest}
     >
       {children}

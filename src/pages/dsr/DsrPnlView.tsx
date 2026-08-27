@@ -312,7 +312,7 @@ export function DsrPnlView() {
         ]}
       />
 
-      <div className="space-y-5">
+      <div className="space-y-3 md:space-y-5">
         <DateRangeFilter
           value={range}
           onChange={setRange}
@@ -324,7 +324,11 @@ export function DsrPnlView() {
         {/* ── headline ─────────────────────────────────────────────── */}
         {anyPriced ? (
           <Card>
-            <CardContent className="grid grid-cols-2 gap-5 py-5 lg:grid-cols-4">
+            {/* Below md a headline column is ~138px, so the gutters and the 20px
+                of vertical padding are the tallest thing in the card that is
+                not a figure. Every step is gated at md, so the tablet and the
+                desktop keep the spacing they have. */}
+            <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3 py-4 md:gap-5 md:py-5 lg:grid-cols-4">
               <Stat
                 label="Fuel sold"
                 value={formatLitres(t.soldLitres)}
@@ -363,8 +367,8 @@ export function DsrPnlView() {
           // the page waits on two numbers nobody has typed yet, and saying so
           // in one sentence beats printing four em dashes under four headings.
           <Card>
-            <CardContent className="py-5">
-              <div className="grid grid-cols-2 gap-5">
+            <CardContent className="py-4 md:py-5">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 md:gap-5">
                 <Stat label="Fuel sold" value={formatLitres(t.soldLitres)} />
                 <Stat label="Fuel bought" value={formatLitres(t.receiptLitres)} />
               </div>
@@ -481,7 +485,7 @@ function ScenarioCard({
 }) {
   return (
     <div
-      className={`rounded-md border p-3 sm:p-4 ${
+      className={`rounded-md border p-3 md:p-4 ${
         active ? 'border-brand bg-brand-soft' : 'border-border bg-surface-2'
       }`}
     >
@@ -524,7 +528,7 @@ function GradeSection({ product }: { product: PnlProduct }) {
         <CardTitle>{product.labelEn}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 md:gap-4 lg:grid-cols-4">
           <Stat label="Sold" value={formatLitres(product.soldLitres)} />
           <Stat label="Margin on sales" value={formatInrWhole(product.grossMargin)} />
           <Stat

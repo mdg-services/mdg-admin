@@ -175,7 +175,7 @@ export function FiltersCard({
 
       <div className="md:col-span-4">
         {range ? (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <DateRangeFilter
               label="Date range"
               value={range}

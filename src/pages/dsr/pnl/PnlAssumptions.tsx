@@ -119,7 +119,7 @@ export function PnlAssumptions({ data, settings, onChange }: PnlAssumptionsProps
       <CardHeader>
         <CardTitle>Assumptions</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4 md:space-y-6">
         <p className="flex items-start gap-2 text-sm text-text-muted">
           <Info width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden />
           <span>
@@ -145,7 +145,7 @@ export function PnlAssumptions({ data, settings, onChange }: PnlAssumptionsProps
             return (
               <div
                 key={p.productKey}
-                className="rounded-md border border-border bg-surface-2 p-3 sm:p-4"
+                className="rounded-md border border-border bg-surface-2 p-2.5 md:p-4"
               >
                 <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                   {/* h4: the card's own `CardTitle` ("Assumptions") is the h3. */}
@@ -261,7 +261,7 @@ export function PnlAssumptions({ data, settings, onChange }: PnlAssumptionsProps
         </p>
 
         {/* ── what the engine itself ran with ─────────────────────────── */}
-        <div className="rounded-md border border-border p-3 sm:p-4">
+        <div className="rounded-md border border-border p-2.5 md:p-4">
           {/* h4: the card's own `CardTitle` ("Assumptions") is the h3. */}
           <h4 className="mb-1 text-sm font-semibold text-text">
             What the report itself was set to
@@ -270,7 +270,11 @@ export function PnlAssumptions({ data, settings, onChange }: PnlAssumptionsProps
             Read-only here. Changing any of these means regenerating this dealer&rsquo;s reports,
             not re-rendering this page.
           </p>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-4">
+          {/* One column below md. Each constant is a wrapped uppercase micro-label
+              over a wrapped sentence-shaped value ("meter moved 20 L or more"),
+              and two 128px columns of that is TALLER than one 296px column, not
+              shorter. */}
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-4">
             <EngineConstant
               label="Testing charged"
               value={`${data.config.testingPerActivePumpLitres} L / pump / day`}

@@ -111,7 +111,7 @@ export function UsageTab() {
 
   if (usageQ.isLoading) {
     return (
-      <div className="grid gap-4">
+      <div className="grid gap-3 md:gap-4">
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -121,7 +121,7 @@ export function UsageTab() {
   if (usageQ.isError) {
     return (
       <Card>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           <EmptyState
             icon={<AlertCircle width={28} height={28} strokeWidth={1.75} />}
             title="Could not load usage"
@@ -140,7 +140,9 @@ export function UsageTab() {
   }
 
   return (
-    <div className="grid gap-4">
+    // `gap-3` below md: five stacked cards, each with a header of its own, pay
+    // this gap four times before the last figure on the screen.
+    <div className="grid gap-3 md:gap-4">
       {/* Two-up from 0px rather than from 640px. `sm` is 640, above every phone
           in the target set, so all four tiles used to stack: ~372px of scroll to
           read four integers, with the spend meter pushed off the first screen
@@ -214,7 +216,7 @@ export function UsageTab() {
               </CardSubtitle>
             </div>
           </CardHeader>
-          <CardContent className="grid gap-4">
+          <CardContent className="grid gap-3 md:gap-4">
             {/* Two meters against the same total rather than a stacked column:
                 one bill split two ways is a share, and the chart primitives keep
                 to a single hue by house rule — a real second series needs a
@@ -370,9 +372,11 @@ function KnowledgeBaseCard() {
               {kb.error ? <Badge intent="danger">Last try failed</Badge> : null}
             </div>
             {/* Two-up from 0px: four one-line facts as four full-width rows is
-                ~200px of scroll for values that are 8-20 characters long. The
-                640px-and-up layout is unchanged. */}
-            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                ~200px of scroll for values that are 8-20 characters long. Four
+                across only from md: at 640-767px the four columns are ~135px
+                each and "Read at" prints a full date and time, which then wrapped
+                to three lines and set the height of the whole row. */}
+            <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <div>
                 <dt className="text-xs text-text-muted">Version</dt>
                 <dd className="mt-0.5 break-words text-sm text-text">

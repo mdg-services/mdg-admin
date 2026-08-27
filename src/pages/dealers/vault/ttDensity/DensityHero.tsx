@@ -58,7 +58,7 @@ export function DensityHero({ products, loading = false }: DensityHeroProps) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {Array.from({ length: 2 }).map((_, i) => (
           <Card key={i}>
-            <CardContent className="p-4 md:p-5">
+            <CardContent className="md:p-5">
               <Skeleton className="h-3 w-24" />
               <Skeleton className="mt-3 h-10 w-40" />
               <Skeleton className="mt-3 h-3 w-32" />
@@ -94,7 +94,7 @@ function DensityTile({ product }: { product: TtLatestDensity }) {
       <span id={labelId} className="sr-only">
         {heroSpokenLabel(product)}
       </span>
-      <CardContent className="p-4 md:p-5" aria-hidden>
+      <CardContent className="md:p-5" aria-hidden>
         <div className="flex items-start justify-between gap-2">
           {/* `min-w-0` + a two-line clamp: for a provisional product the eyebrow
               is `materialCode · description`, and SAP descriptions are long, so

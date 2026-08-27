@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, Eye } from 'lucide-react';
 import * as React from 'react';
 
 import {
+  ActionRow,
   EmptyState,
   ImageLightbox,
   MobileCardList,
@@ -63,7 +64,7 @@ export function RunsListInline({ dealerId, serviceId }: Props) {
 
   if (isLoading) {
     return (
-      <div className="p-4">
+      <div className="p-3 md:p-4">
         <Skeleton className="h-8 w-full" />
       </div>
     );
@@ -132,9 +133,12 @@ export function RunsListInline({ dealerId, serviceId }: Props) {
         </Table>
       </div>
 
-      {/* Mobile card-stack (< md) */}
+      {/* Mobile card-stack (< md). Flush rows with no padding of its own: this
+          list is rendered both bare on the Run-history tab and inside a card
+          whose body has no padding, and in either host a bordered row card
+          would be the second or third box the same text sits inside. */}
       <MobileCardList
-        className="p-3"
+        variant="rows"
         cards={data.items.map((r) => ({
           key: r.id,
           onClick: () => setOpenRunId(r.id),
@@ -400,7 +404,11 @@ function RunDetail({
                     )}
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                {/* The buttons keep their own width and share one line. With
+                    `flex-1` on each of them, two 44px controls filled the whole
+                    row, so a failed run with six diagnostic artifacts was six
+                    stacked button bars before any of the diagnosis. */}
+                <ActionRow below="wrap" align="end">
                   {/*
                     A failure screenshot is something you LOOK at. Offering only
                     a download meant an operator diagnosing a failed run had to
@@ -413,7 +421,6 @@ function RunDetail({
                     <Button
                       variant="secondary"
                       size="sm"
-                      className="flex-1 md:flex-initial"
                       onClick={() =>
                         setViewing({
                           src: run.artifactViewUrls?.[a.id] ?? '',
@@ -442,7 +449,6 @@ function RunDetail({
                   */}
                   {run.artifactUrls?.[a.id] ? (
                     <DownloadButton
-                      className="flex-1 md:flex-initial"
                       url={run.artifactUrls[a.id]}
                       filename={a.filename}
                       {...(a.contentType ? { contentType: a.contentType } : {})}
@@ -451,16 +457,11 @@ function RunDetail({
                       }
                     />
                   ) : (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="flex-1 md:flex-initial"
-                      disabled
-                    >
+                    <Button variant="secondary" size="sm" disabled>
                       Preparing…
                     </Button>
                   )}
-                </div>
+                </ActionRow>
               </li>
             ))}
           </ul>

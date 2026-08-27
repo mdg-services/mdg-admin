@@ -94,7 +94,7 @@ export function StickyActionBar({
   return (
     <div
       className={cn(
-        'bg-surface px-4',
+        'bg-surface px-3 md:px-4',
         // `card` matches the `Card` + `CardContent` (`p-4`) it replaces exactly,
         // so adopting it is a no-op at md; `bar` keeps the strip's own py-3.
         surface === 'card'
@@ -102,7 +102,14 @@ export function StickyActionBar({
           : 'border-t border-border pt-3',
         mode === 'sticky'
           ? cn(
-              'sticky bottom-0 z-[var(--z-sticky)] pb-[max(env(safe-area-inset-bottom),0.75rem)]',
+              // `stick-bottom`, not `bottom-0`: a sticky offset resolves against
+              // the scrollport inset by the SCROLLER'S padding, so `bottom-0`
+              // parked the bar one page gutter above the bottom edge and let the
+              // list scroll through the strip underneath it. The bar now spans
+              // that gutter, so its own bottom padding has to cover it too —
+              // hence the gutter inside the max().
+              'sticky stick-bottom z-[var(--z-sticky)]',
+              'pb-[calc(var(--app-gutter)+max(env(safe-area-inset-bottom),0.75rem))]',
               surface === 'card' ? 'md:pb-4' : 'md:pb-3',
             )
           : 'fixed inset-x-0 z-[var(--z-page-bar)]',

@@ -113,7 +113,7 @@ export function OverviewPage() {
               'grid gap-3',
               isSuperAdmin
                 ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
-                : 'grid-cols-2 sm:max-w-lg',
+                : 'grid-cols-2 md:max-w-lg',
             )}
           >
             <Kpi
@@ -155,7 +155,7 @@ export function OverviewPage() {
 
           <div
             className={cn(
-              'mt-6 grid grid-cols-1 gap-4',
+              'mt-4 grid grid-cols-1 gap-3 md:mt-6 md:gap-4',
               isSuperAdmin ? 'lg:grid-cols-2' : null,
             )}
           >
@@ -169,7 +169,12 @@ export function OverviewPage() {
                     <CardSubtitle>Newest failed runs.</CardSubtitle>
                   </div>
                 </CardHeader>
-                <CardContent className="p-0">
+                {/* The body is a table at md+ and a divided row stack below
+                    it, so below md it runs to the card's own edges. `md:p-4` is
+                    what md+ has always rendered: the call site's old `p-0` lost
+                    to the base padding, because `cn` is clsx and `.p-4` is
+                    emitted after `.p-0`. */}
+                <CardContent padding="none" className="md:p-4">
                   <RecentFailures runs={data.recentRuns} />
                 </CardContent>
               </Card>
@@ -181,7 +186,7 @@ export function OverviewPage() {
                   <CardSubtitle>Next scheduled by service.</CardSubtitle>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent padding="none" className="md:p-4">
                 <UpcomingRuns runs={data.upcomingRuns ?? []} />
               </CardContent>
             </Card>
@@ -205,7 +210,10 @@ function Kpi({
 }) {
   return (
     <Card>
-      <CardContent>
+      {/* Five of these stack three rows deep on a phone before either list card
+          starts, so the tile pays 8px a side and the figure drops a step.
+          `md:p-4` holds md+ at the padding it has always had. */}
+      <CardContent padding="tight" className="md:p-4">
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm text-text-muted">{label}</span>
           {/* The icon is decorative (`aria-hidden`) and costs 30px of a ~124px
@@ -226,7 +234,9 @@ function Kpi({
             {icon}
           </span>
         </div>
-        <p className="mt-1 text-3xl font-semibold text-text">{value}</p>
+        <p className="mt-1 text-2xl font-semibold text-text md:text-3xl">
+          {value}
+        </p>
       </CardContent>
     </Card>
   );
@@ -239,12 +249,12 @@ function KpiSkeleton({ count = 5 }: { count?: number }) {
         'grid gap-3',
         count > 2
           ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
-          : 'grid-cols-2 sm:max-w-lg',
+          : 'grid-cols-2 md:max-w-lg',
       )}
     >
       {Array.from({ length: count }).map((_, i) => (
         <Card key={i}>
-          <CardContent>
+          <CardContent padding="tight" className="md:p-4">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="mt-2 h-8 w-16" />
           </CardContent>
@@ -307,7 +317,7 @@ function RecentFailures({
 
       {/* Mobile card-stack (< md) */}
       <MobileCardList
-        className="p-3"
+        variant="rows"
         cards={failures.map((r) => ({
           key: r.id,
           // The whole card navigates. It used to be dead space around a 45x16px
@@ -376,6 +386,7 @@ function UpcomingRuns({
 
       {/* Mobile card-stack (< md) */}
       <MobileCardList
+        variant="rows"
         cards={shown.map((r) => ({
           key: r.id,
           primary: (

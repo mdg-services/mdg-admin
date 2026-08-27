@@ -2,6 +2,7 @@ import { Archive, AlertTriangle, RotateCcw } from 'lucide-react';
 import * as React from 'react';
 
 import {
+  ActionRow,
   Button,
   Card,
   CardContent,
@@ -175,13 +176,18 @@ export function DealerDangerZone({ dealer }: Props) {
               stays <span className="font-medium text-text">Suspended</span> and its
               services stay paused until you turn them back on.
             </p>
-            <Button
-              variant="secondary"
-              onClick={() => setConfirming('restore')}
-              leftIcon={<RotateCcw width={16} height={16} strokeWidth={1.75} />}
-            >
-              Restore dealer
-            </Button>
+            {/* The paragraph takes the whole line below md, so the button
+                landed under it at auto width and left-aligned — everywhere
+                else in the area that shape is an `ActionRow`. */}
+            <ActionRow className="w-full md:w-auto">
+              <Button
+                variant="secondary"
+                onClick={() => setConfirming('restore')}
+                leftIcon={<RotateCcw width={16} height={16} strokeWidth={1.75} />}
+              >
+                Restore dealer
+              </Button>
+            </ActionRow>
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -190,13 +196,15 @@ export function DealerDangerZone({ dealer }: Props) {
               signs its team out. The record, documents, reports and chat history
               are all kept, and you can restore it at any time.
             </p>
-            <Button
-              variant="danger"
-              onClick={() => setConfirming('archive')}
-              leftIcon={<Archive width={16} height={16} strokeWidth={1.75} />}
-            >
-              Delete dealer
-            </Button>
+            <ActionRow className="w-full md:w-auto">
+              <Button
+                variant="danger"
+                onClick={() => setConfirming('archive')}
+                leftIcon={<Archive width={16} height={16} strokeWidth={1.75} />}
+              >
+                Delete dealer
+              </Button>
+            </ActionRow>
           </div>
         )}
       </CardContent>

@@ -24,7 +24,14 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       <input
         ref={ref}
         className={cn(
-          'h-11 md:h-9 w-full rounded-sm border bg-surface px-3 text-base md:text-sm text-text',
+          // `min-w-0` is load-bearing in a flex row. A flex item's automatic
+          // minimum size is its intrinsic width, and a `type="date"` field's
+          // intrinsic width is whatever the UA needs for dd/mm/yyyy plus the
+          // picker glyph — measured at 291px in Chrome, on a screen that offers
+          // 328px. Without this the field refuses to shrink, pushes its row past
+          // the right edge, and `main`'s `overflow-x-hidden` clips it: the
+          // reported "date input is going out of the screen".
+          'h-11 md:h-9 w-full min-w-0 rounded-sm border bg-surface px-3 text-base md:text-sm text-text',
           'placeholder:text-text-subtle',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
           invalid ? 'border-danger' : 'border-border-strong',

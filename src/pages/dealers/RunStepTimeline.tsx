@@ -180,7 +180,12 @@ function StepMeta({
       <summary className="inline-flex min-h-11 cursor-pointer select-none items-center text-text-subtle hover:text-text-muted md:min-h-0">
         Details
       </summary>
-      <dl className="scroll-pane mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 overflow-x-auto rounded-sm bg-surface-2 p-2 font-mono text-text-muted">
+      {/* One column below md, key above value — the shape `KeyValueList` uses
+          for the same problem. A key like `sdmsCaptchaAttempts` sets the width
+          of the `auto` track, so inside the run dialog's sheet the value column
+          could fall under ~120px and a long value scrolled sideways in a strip
+          two lines tall. Two columns and the sideways scroll return at md. */}
+      <dl className="scroll-pane mt-1 grid grid-cols-1 gap-y-1 rounded-sm bg-surface-2 p-2 font-mono text-text-muted md:grid-cols-[auto_1fr] md:gap-x-3 md:gap-y-0.5 md:overflow-x-auto">
         {entries.map(([key, value]) => (
           <React.Fragment key={key}>
             <dt className="whitespace-nowrap text-text-subtle">{key}</dt>

@@ -70,12 +70,14 @@ export function LoginPage() {
        than the one it was drawn into. `dvh` is already load-bearing in this app
        (`Dialog` caps at `92dvh`). */
     <div className="flex min-h-[calc(100dvh-env(safe-area-inset-top))] items-center justify-center bg-bg p-4 pb-[max(env(safe-area-inset-bottom),1rem)]">
-      <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-6 shadow-sm">
-        <div className="mb-6 flex flex-col items-center gap-2 text-center">
+      <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-5 shadow-sm md:p-6">
+        <div className="mb-4 flex flex-col items-center gap-2 text-center md:mb-6">
           <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-brand-soft text-brand">
             <Shield width={20} height={20} strokeWidth={1.75} />
           </span>
-          <h1 className="text-2xl font-semibold text-text">Dealer Kavach</h1>
+          <h1 className="text-xl font-semibold text-text md:text-2xl">
+            Dealer Kavach
+          </h1>
           <p className="text-sm text-text-muted">Admin sign-in</p>
         </div>
         <form onSubmit={onSubmit} noValidate>

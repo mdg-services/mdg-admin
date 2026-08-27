@@ -22,6 +22,7 @@ import {
   CardSubtitle,
   CardTitle,
   EmptyState,
+  IconButton,
   Input,
   MobileCardList,
   Skeleton,
@@ -417,7 +418,7 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3 md:gap-4">
       {/* Summary + save bar. On mobile it renders last and sticks to the bottom
           so Save stays reachable through a long hide/show pass; on desktop it
           keeps its place at the top, as the card it has always been.
@@ -519,7 +520,7 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
             </CardSubtitle>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           {catalogRows.length === 0 ? (
             <EmptyState
               icon={<ShieldCheck width={28} height={28} strokeWidth={1.75} />}
@@ -697,7 +698,7 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
 
               {/* Mobile card-stack (< md) */}
               <MobileCardList
-                className="p-3"
+                variant="rows"
                 cards={visibleCatalogRows.map((r) => {
                   const hidden = hiddenSet.has(r.code);
                   const ov = overrides[r.code];
@@ -716,7 +717,38 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                         {r.labelEn}
                       </span>
                     ),
-                    primaryRight: ov ? <Badge intent="info">Overridden</Badge> : null,
+                    primaryRightWidth: 'clamp' as const,
+                    // The visibility toggle lives in the row's right rail, not
+                    // in a full-width button under it. As a solid brand bar it
+                    // was 44px of button plus 12px of gap on every one of ~85
+                    // catalog tasks — the screen read as a column of blue bars
+                    // with the task names squeezed between them. Here it costs
+                    // no extra line at all: the primary row was already being
+                    // drawn. The word is the state and the eye is the action,
+                    // which is exactly the control the desktop table uses, and
+                    // `aria-label` spells out both for a screen reader because
+                    // "Shown" alone does not say what a tap does. The whole
+                    // card also dims when hidden (`tone`), so the state reads
+                    // from across the list and not only from this one pill.
+                    primaryRight: (
+                      <Button
+                        variant={hidden ? 'secondary' : 'ghost'}
+                        size="sm"
+                        aria-label={
+                          hidden ? 'Hidden — tap to show' : 'Shown — tap to hide'
+                        }
+                        onClick={() => toggleHidden(r.code, !hidden)}
+                        leftIcon={
+                          hidden ? (
+                            <EyeOff width={14} height={14} strokeWidth={1.75} />
+                          ) : (
+                            <Eye width={14} height={14} strokeWidth={1.75} />
+                          )
+                        }
+                      >
+                        {hidden ? 'Hidden' : 'Shown'}
+                      </Button>
+                    ),
                     secondary: (
                       <span className="block">
                         {r.labelHi ? r.labelHi : <code className="text-xs">{r.code}</code>}
@@ -731,7 +763,30 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                       </span>
                     ),
                     actions: (
-                      <div className="grid gap-2">
+                      // Folded away by default. Open, one task is two 44px
+                      // fields, their labels, up to two "default …" warnings
+                      // and a reset button — about 180px, and the pass an admin
+                      // actually makes here is hide/show, not re-pointing. A
+                      // row that has been overridden opens itself, so the ones
+                      // that differ from the catalog are never hidden behind a
+                      // tap. Block, not flex: a flex <summary> loses its native
+                      // disclosure triangle, and that triangle is the only cue
+                      // the line opens at all.
+                      <details open={ov != null || undefined}>
+                        <summary className="min-h-11 cursor-pointer select-none break-words py-3 text-xs text-text-muted">
+                          {ov ? (
+                            <span className="font-medium text-warning">
+                              Overridden ·{' '}
+                            </span>
+                          ) : null}
+                          {points} pts ·{' '}
+                          {isSos
+                            ? 'on event'
+                            : cadence == null
+                              ? 'no cadence'
+                              : `every ${cadence} days`}
+                        </summary>
+                        <div className="grid gap-2 pb-1">
                         <div className="grid grid-cols-2 gap-2">
                           {/* `h-9` used to sit on these fields and did nothing:
                               `cn` is clsx, and `Input`'s own `h-11 md:h-9` is
@@ -813,22 +868,8 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                             {r.baseKnown ? ` (${r.basePoints} pts)` : ''}
                           </Button>
                         ) : null}
-                        <Button
-                          variant={hidden ? 'secondary' : 'primary'}
-                          size="sm"
-                          className="w-full"
-                          onClick={() => toggleHidden(r.code, !hidden)}
-                          leftIcon={
-                            hidden ? (
-                              <EyeOff width={14} height={14} strokeWidth={1.75} />
-                            ) : (
-                              <Eye width={14} height={14} strokeWidth={1.75} />
-                            )
-                          }
-                        >
-                          {hidden ? 'Hidden — tap to show' : 'Shown — tap to hide'}
-                        </Button>
-                      </div>
+                        </div>
+                      </details>
                     ),
                   };
                 })}
@@ -867,7 +908,7 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
             </CardSubtitle>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           {customItems.length === 0 ? (
             <EmptyState
               icon={<Sparkles width={28} height={28} strokeWidth={1.75} />}
@@ -967,7 +1008,7 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
 
               {/* Mobile card-stack (< md) */}
               <MobileCardList
-                className="p-3"
+                variant="rows"
                 cards={customItems.map((c) => ({
                   key: c._localId,
                   primary: (
@@ -995,7 +1036,13 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                     </span>
                   ),
                   actions: (
-                    <div className="grid grid-cols-2 gap-2">
+                    // Not `grid-cols-2`: two equal halves of a ~300px row give
+                    // each label ~145px, and a `whitespace-nowrap` "Remove"
+                    // with its icon and padding needs ~96px of that — slack
+                    // that a one-word-longer label spends. Edit takes the line,
+                    // and the destructive half is a fixed 44x44 square that
+                    // cannot overflow whatever it is called.
+                    <div className="flex items-center gap-2 [&>button:first-child]:flex-1">
                       <Button
                         variant="secondary"
                         size="sm"
@@ -1004,14 +1051,14 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                       >
                         Edit
                       </Button>
-                      <Button
+                      <IconButton
                         variant="secondary"
                         size="sm"
+                        aria-label={`Remove ${c.labelEn}`}
                         onClick={() => removeCustom(c._localId)}
-                        leftIcon={<Trash2 width={14} height={14} strokeWidth={1.75} />}
                       >
-                        Remove
-                      </Button>
+                        <Trash2 width={16} height={16} strokeWidth={1.75} />
+                      </IconButton>
                     </div>
                   ),
                 }))}

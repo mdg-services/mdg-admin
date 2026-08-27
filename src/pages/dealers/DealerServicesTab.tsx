@@ -15,9 +15,15 @@ import {
   Button,
   Card,
   CardContent,
+  CardHeader,
+  CardSubtitle,
+  CardTitle,
   ConfirmDialog,
   Dialog,
   EmptyState,
+  Menu,
+  MenuItem,
+  MenuSeparator,
   MobileCardList,
   Skeleton,
   Spinner,
@@ -80,10 +86,6 @@ const EditServiceDialog = React.lazy(
 interface Props {
   dealer: Dealer;
 }
-
-/** 44px icon button used in the mobile service-card action row. */
-const ICON_BTN =
-  'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border-strong bg-surface text-text hover:bg-surface-2';
 
 export function DealerServicesTab({ dealer }: Props) {
   const toast = useToast();
@@ -224,26 +226,30 @@ export function DealerServicesTab({ dealer }: Props) {
 
   return (
     <Card>
-      <CardContent className="p-0">
-        <div className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <div>
-            <p className="text-base font-semibold text-text">
-              Attached services
-            </p>
-            <p className="text-sm text-text-muted">
-              Plugins running for this dealer.
-            </p>
-          </div>
+      {/* `CardHeader` rather than a hand-rolled `p-4` row: the header already
+          knows how to put its action under the title below md and back on the
+          right at md, which the wrapped flex row it replaces did not. */}
+      <CardHeader
+        padding="comfortable"
+        action={
           <Button
+            size="sm"
             leftIcon={<Plus width={16} height={16} strokeWidth={1.75} />}
             onClick={() => setAttachOpen(true)}
           >
             Attach service
           </Button>
-        </div>
-
+        }
+      >
+        <CardTitle>Attached services</CardTitle>
+        <CardSubtitle>Plugins running for this dealer.</CardSubtitle>
+      </CardHeader>
+      {/* The body is a table or a card stack, so it runs to the card's edges.
+          A `className="p-0"` here would lose to the default padding — `cn` is
+          clsx, not tailwind-merge. */}
+      <CardContent padding="none" className="md:p-4">
         {isLoading ? (
-          <div className="p-4">
+          <div className="p-3 md:p-4">
             <Skeleton className="h-8 w-full" />
           </div>
         ) : data && data.length > 0 ? (
@@ -355,9 +361,11 @@ export function DealerServicesTab({ dealer }: Props) {
           </Table>
           </div>
 
-          {/* Mobile card-stack (< md) */}
+          {/* Mobile card-stack (< md). Flush rows in a card with no padding of
+              its own: a bordered card inside a bordered card inside the page
+              gutter put the service name 62px in from a 360px screen. */}
           <MobileCardList
-            className="p-4 pt-0"
+            variant="rows"
             cards={data.map((ds) => ({
               key: ds.id,
               primary: (
@@ -388,50 +396,55 @@ export function DealerServicesTab({ dealer }: Props) {
                   ) : null}
                 </span>
               ),
+              // One labelled action and a kebab for the rest. Four unlabelled
+              // 44px squares plus their gaps came to 200px of a ~236px card —
+              // a whole line per service, and the only thing telling you what
+              // any of them did was a `title` no touch gesture shows.
+              actionsLayout: 'wrap',
               actions: (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    leftIcon={
+                      <RefreshCw width={14} height={14} strokeWidth={1.75} />
+                    }
                     onClick={() => onRunNow(ds)}
-                    aria-label="Run now"
-                    className={ICON_BTN}
                   >
-                    <RefreshCw width={18} height={18} strokeWidth={1.75} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditTarget(ds)}
-                    aria-label="Edit schedule and config"
-                    className={ICON_BTN}
+                    Run now
+                  </Button>
+                  <Menu
+                    label={`More actions for ${ds.serviceId}`}
+                    title={ds.serviceId}
                   >
-                    <Pencil width={18} height={18} strokeWidth={1.75} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onToggle(ds)}
-                    aria-label={ds.status === 'ACTIVE' ? 'Pause' : 'Resume'}
-                    className={ICON_BTN}
-                  >
-                    {ds.status === 'ACTIVE' ? (
-                      <Pause width={18} height={18} strokeWidth={1.75} />
-                    ) : (
-                      <Play width={18} height={18} strokeWidth={1.75} />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDelete(ds)}
-                    aria-label="Detach service"
-                    className={ICON_BTN}
-                  >
-                    <Trash2
-                      width={18}
-                      height={18}
-                      strokeWidth={1.75}
-                      className="text-danger"
-                    />
-                  </button>
-                </div>
+                    <MenuItem
+                      icon={<Pencil width={15} height={15} strokeWidth={1.75} />}
+                      onSelect={() => setEditTarget(ds)}
+                    >
+                      Edit schedule and config
+                    </MenuItem>
+                    <MenuItem
+                      icon={
+                        ds.status === 'ACTIVE' ? (
+                          <Pause width={15} height={15} strokeWidth={1.75} />
+                        ) : (
+                          <Play width={15} height={15} strokeWidth={1.75} />
+                        )
+                      }
+                      onSelect={() => onToggle(ds)}
+                    >
+                      {ds.status === 'ACTIVE' ? 'Pause' : 'Resume'}
+                    </MenuItem>
+                    <MenuSeparator />
+                    <MenuItem
+                      danger
+                      icon={<Trash2 width={15} height={15} strokeWidth={1.75} />}
+                      onSelect={() => onDelete(ds)}
+                    >
+                      Detach service
+                    </MenuItem>
+                  </Menu>
+                </>
               ),
             }))}
           />

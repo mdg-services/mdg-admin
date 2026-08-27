@@ -18,9 +18,32 @@ export interface TabsProps {
    * the shared bottom rule runs behind it so the strip still reads as one bar.
    */
   trailing?: React.ReactNode;
+  /**
+   * Pin the strip to the top of the page scroller below md, so the tabs stay
+   * reachable while a long tab body scrolls under them.
+   *
+   * It is the primitive's job and not the caller's for two reasons. The strip
+   * has to be OPAQUE and it has to bleed to the screen edges — a transparent
+   * one lets the page scroll visibly through it, and one that stops at the page
+   * gutter leaves a strip of moving content either side of it. And the offset
+   * must be `stick-top`, never `top-0`: a sticky offset resolves against the
+   * scrollport inset by the SCROLLER'S padding, and `main` paints a gutter, so
+   * `top-0` parks the strip one gutter below the header and the page scrolls
+   * through the band above it — the gap between the header and the tabs.
+   *
+   * `md:static` and the rest of the `md:` resets restore today's desktop strip.
+   */
+  sticky?: boolean;
 }
 
-export function Tabs({ items, value, onChange, className, trailing }: TabsProps) {
+export function Tabs({
+  items,
+  value,
+  onChange,
+  className,
+  trailing,
+  sticky = false,
+}: TabsProps) {
   const listRef = React.useRef<HTMLDivElement | null>(null);
   const activeRef = React.useRef<HTMLButtonElement | null>(null);
 
@@ -62,7 +85,14 @@ export function Tabs({ items, value, onChange, className, trailing }: TabsProps)
     // where it still lands the underline on the rule but costs no overflow, and
     // `overflow-y-hidden` states the intent instead of leaving it to that
     // computed-value rule.
-    <div className={cn('flex items-center border-b border-border', className)}>
+    <div
+      className={cn(
+        'flex items-center border-b border-border',
+        sticky &&
+          'sticky stick-top z-[var(--z-sticky)] -mx-[var(--app-gutter)] bg-bg px-[var(--app-gutter)] md:static md:z-auto md:mx-0 md:bg-transparent md:px-0',
+        className,
+      )}
+    >
       <div
         ref={listRef}
         role="tablist"

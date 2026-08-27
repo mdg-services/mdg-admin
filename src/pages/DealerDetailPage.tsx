@@ -508,73 +508,82 @@ export function DealerDetailPage() {
       {/* Sticky (mobile) so the tab strip stays reachable while a long tab body
           scrolls; static at ≥ md (desktop unchanged). The overflow menu rides
           along with it, which is why it is pinned to the strip rather than
-          dropped into the page header — the header scrolls away. */}
-      <div className="sticky top-0 z-10 -mx-4 mb-4 bg-bg px-4 md:static md:z-auto md:mx-0 md:bg-transparent md:px-0">
-        <Tabs
-          items={stripTabs.map((t) => ({ id: t.id, label: t.label }))}
-          value={activeTab}
-          onChange={setTab}
-          trailing={
-            <>
-              {/* The fade hints that the strip scrolls to more tabs. `right-full`
-                  parks it immediately left of the menu button, so it sits at the
-                  edge of the scrolling area whether or not that button renders. */}
-              <div className="pointer-events-none absolute inset-y-0 right-full w-6 bg-gradient-to-l from-bg md:hidden" />
-              {hasMenu ? (
-                <Menu
-                  // When the surface on screen lives in here the strip has no
-                  // selected tab, so the trigger has to say where you are. The
-                  // tint says it visually; the name says it to a screen reader
-                  // and to anyone the tint is invisible to. Inside the menu the
-                  // entry itself carries `aria-current` and a check glyph.
-                  label={
-                    activeInMenu
-                      ? `More dealer options — showing ${activeDef.label}`
-                      : 'More dealer options'
-                  }
-                  title="More"
-                  triggerClassName={
-                    activeInMenu
-                      ? 'bg-brand-soft text-brand hover:bg-brand-soft hover:text-brand'
-                      : undefined
-                  }
-                >
-                  {menuEntries.map((t) => (
+          dropped into the page header — the header scrolls away.
+
+          `sticky` is the primitive's own prop, not a wrapper: the strip has to
+          be opaque, has to bleed past the page gutter, and has to use the
+          `stick-top` offset rather than `top-0` — a sticky offset resolves
+          against the scrollport inset by `main`'s gutter, so `top-0` parks the
+          strip one gutter BELOW the header and lets the page scroll through the
+          band between them, which is the reported "gap between the header and
+          the navbar". Keeping all three in `Tabs` means no caller can get one
+          of them wrong. */}
+      <Tabs
+        className="mb-3 md:mb-4"
+        sticky
+        items={stripTabs.map((t) => ({ id: t.id, label: t.label }))}
+        value={activeTab}
+        onChange={setTab}
+        trailing={
+          <>
+            {/* The fade hints that the strip scrolls to more tabs. `right-full`
+                parks it immediately left of the menu button, so it sits at the
+                edge of the scrolling area whether or not that button renders. */}
+            <div className="pointer-events-none absolute inset-y-0 right-full w-6 bg-gradient-to-l from-bg md:hidden" />
+            {hasMenu ? (
+              <Menu
+                // When the surface on screen lives in here the strip has no
+                // selected tab, so the trigger has to say where you are. The
+                // tint says it visually; the name says it to a screen reader
+                // and to anyone the tint is invisible to. Inside the menu the
+                // entry itself carries `aria-current` and a check glyph.
+                label={
+                  activeInMenu
+                    ? `More dealer options — showing ${activeDef.label}`
+                    : 'More dealer options'
+                }
+                title="More"
+                triggerClassName={
+                  activeInMenu
+                    ? 'bg-brand-soft text-brand hover:bg-brand-soft hover:text-brand'
+                    : undefined
+                }
+              >
+                {menuEntries.map((t) => (
+                  <MenuItem
+                    key={t.id}
+                    icon={t.icon}
+                    selected={t.id === activeTab}
+                    onSelect={() => setTab(t.id)}
+                  >
+                    {t.label}
+                  </MenuItem>
+                ))}
+                {isSuperAdmin ? (
+                  <>
+                    {menuEntries.length > 0 ? <MenuSeparator /> : null}
                     <MenuItem
-                      key={t.id}
-                      icon={t.icon}
-                      selected={t.id === activeTab}
-                      onSelect={() => setTab(t.id)}
+                      danger={!isArchived}
+                      icon={
+                        isArchived ? (
+                          <RotateCcw {...ICON} />
+                        ) : (
+                          <Trash2 {...ICON} />
+                        )
+                      }
+                      onSelect={() =>
+                        setDangerAction(isArchived ? 'restore' : 'archive')
+                      }
                     >
-                      {t.label}
+                      {isArchived ? 'Restore dealer' : 'Delete dealer'}
                     </MenuItem>
-                  ))}
-                  {isSuperAdmin ? (
-                    <>
-                      {menuEntries.length > 0 ? <MenuSeparator /> : null}
-                      <MenuItem
-                        danger={!isArchived}
-                        icon={
-                          isArchived ? (
-                            <RotateCcw {...ICON} />
-                          ) : (
-                            <Trash2 {...ICON} />
-                          )
-                        }
-                        onSelect={() =>
-                          setDangerAction(isArchived ? 'restore' : 'archive')
-                        }
-                      >
-                        {isArchived ? 'Restore dealer' : 'Delete dealer'}
-                      </MenuItem>
-                    </>
-                  ) : null}
-                </Menu>
-              ) : null}
-            </>
-          }
-        />
-      </div>
+                  </>
+                ) : null}
+              </Menu>
+            ) : null}
+          </>
+        }
+      />
       {/* The boundary for the lazily-loaded tab bodies above. `key`ed on the
           tab: when an already-revealed boundary suspends again, React keeps the
           previous children mounted and merely hides them, so switching tabs

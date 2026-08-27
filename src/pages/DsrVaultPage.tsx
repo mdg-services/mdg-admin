@@ -126,7 +126,11 @@ export function DsrVaultPage() {
       />
 
       <Card>
-        <CardContent className="p-0">
+        {/* `padding="none"`, not `className="p-0"`: `cn` is clsx and Tailwind
+            emits `.p-4` after `.p-0`, so the p-0 never applied and the filter
+            row's own rule stopped short of the card's edges. `md:p-4` is a
+            separate declaration, so ≥768px stays exactly as it renders today. */}
+        <CardContent padding="none" className="md:p-4">
           {/* `md:`, not `sm:`. 640px fires on no phone in the target set and
               produced a desktop-shaped row while the shell was still in phone
               mode; ≥768px is unchanged. */}
@@ -385,13 +389,18 @@ function DealerList({
         </Table>
       </div>
 
-      {/* Mobile card-stack (< md) */}
+      {/* Mobile card-stack (< md). A dealer with a report is one whole-card tap
+          target — the desktop row already is, so the phone was the only place
+          that needed a 44px "View report" bar under every card to do what the
+          card itself could do. Only the no-report branch keeps a button, because
+          generating is a mutation and not navigation. */}
       <MobileCardList
-        className="p-3"
+        variant="rows"
         cards={rows.map((row) => {
           const latest = row.latest;
           return {
             key: row.dealerId,
+            onClick: latest ? () => onOpen(row.dealerId) : undefined,
             primary: (
               <span className="flex min-w-0 items-center gap-2">
                 <span className="truncate font-medium text-text">
@@ -433,16 +442,7 @@ function DealerList({
             ) : (
               <span>No report generated for this dealer yet</span>
             ),
-            actions: latest ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="w-full"
-                onClick={() => onOpen(row.dealerId)}
-              >
-                View report
-              </Button>
-            ) : (
+            actions: latest ? undefined : (
               <div className="[&>button]:w-full">
                 <GenerateDsrButton dealerId={row.dealerId} />
               </div>

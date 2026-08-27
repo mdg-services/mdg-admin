@@ -265,7 +265,7 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
             // of the whole award. 45dvh gives ~8-9. `overscroll-contain` stops a
             // flick at either end from chaining into the Dialog body behind it,
             // which read as the sheet jumping under the finger.
-            <div className="grid max-h-[45dvh] grid-cols-1 gap-1 overflow-y-auto overscroll-contain rounded-sm border border-border p-2 sm:grid-cols-2 md:max-h-40">
+            <div className="grid max-h-[45dvh] grid-cols-1 gap-1 overflow-y-auto overscroll-contain rounded-sm border border-border p-2 md:max-h-40 md:grid-cols-2">
               {activeWorkers.map((w) => (
                 <label
                   key={w.id}
@@ -324,7 +324,7 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
                 return (
                   <div
                     key={r._id}
-                    className="grid gap-2 rounded-sm border border-border p-2 sm:grid-cols-[1fr_auto_auto]"
+                    className="grid gap-2 rounded-sm border border-border p-2 md:grid-cols-[1fr_auto_auto]"
                   >
                     <Select
                       value={r.workItemCode}
@@ -391,7 +391,7 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
                     {/* Spans the row: "Other cleaning work" says nothing on its
                         own, so it has to say what was actually done. */}
                     {requiresDescription(r.workItemCode) ? (
-                      <div className="sm:col-span-3">
+                      <div className="md:col-span-3">
                         <Label htmlFor={`note-${r._id}`} required>
                           What was done?
                         </Label>
@@ -417,8 +417,13 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
           )}
         </div>
 
-        {/* Meta */}
-        <div className="grid gap-3 sm:grid-cols-2">
+        {/* Meta. The work date keeps a whole column to itself below md: the
+            native date control's intrinsic width in the Android WebView is
+            ~150-170px, so a two-up track is where a date field starts running
+            off the right edge of the sheet — and `main` clips rather than
+            scrolls. `md:`, never `sm:`; 640px is not a breakpoint any phone in
+            scope reaches. */}
+        <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label htmlFor="award-date">Work date</Label>
             <Input

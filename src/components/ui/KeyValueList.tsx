@@ -91,7 +91,11 @@ export function KeyValueList({
     <div className={className}>
       <dl
         className={cn(
-          'grid gap-x-6 gap-y-3',
+          // Below md every field is two stacked lines, so the gap between
+          // fields is paid ten times on a record with ten of them. The label is
+          // muted and the value is not, which is what keeps the pairs readable
+          // at the tighter spacing.
+          'grid gap-x-6 gap-y-2 md:gap-y-3',
           columnsAtMd === 2 && 'md:grid-cols-2',
         )}
         style={style}

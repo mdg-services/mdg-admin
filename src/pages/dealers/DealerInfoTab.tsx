@@ -34,7 +34,7 @@ export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
   const isSuperAdmin = useIsSuperAdmin();
   const isArchived = !!dealer.archivedAt;
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3 md:gap-4">
       {dealer.status === 'ONBOARDING' && !dealer.archivedAt ? (
         <Card>
           <CardContent className="flex flex-wrap items-center justify-between gap-3">
@@ -58,7 +58,7 @@ export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2 md:gap-4">
         <Card>
           <CardHeader>
             <div>

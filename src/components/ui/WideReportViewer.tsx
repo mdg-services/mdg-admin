@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Minus, Plus } from 'lucide-react';
 import * as React from 'react';
 
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -6,6 +6,7 @@ import { cn } from '@/lib/cn';
 
 import { DownloadButton, filenameFromUrl } from './DownloadButton';
 import { Drawer } from './Drawer';
+import { IconButton } from './IconButton';
 import { ImageLightbox } from './ImageLightbox';
 
 /**
@@ -28,11 +29,20 @@ import { ImageLightbox } from './ImageLightbox';
  * instead of a third of it, and take the frame out from inside two other
  * scrollers, so panning it is one gesture rather than three that fight.
  *
- * WHICH IS WHY THIS IS ONLY HALF THE ANSWER. Pair it with a native figure list
- * built from the report's own digest — one stacked block per product, with the
- * dip, water dip, stock, sales, receipts, testing and variation per tank — so
- * every number survives even when the frame is useless. A picture of a
- * spreadsheet is not a way to read a spreadsheet.
+ * ZOOM IS THE OTHER HALF OF THAT. The frame is laid out at a desktop width
+ * (`frameWidth`, 1100px by default) and then SCALED, rather than being handed a
+ * 360px viewport and left to overflow. Scaled to fit, the whole day book is on
+ * screen at once — small, but its shape is legible and the admin can see what
+ * is where. Stepping the scale up to 1 renders the text at full size and the
+ * pane is panned like a map. The app ships `maximum-scale=1.0`, so pinch-zoom
+ * is not available to do this: the two buttons over the frame are the only
+ * zoom the report has.
+ *
+ * IT IS STILL ONLY HALF THE ANSWER. Pass `figures` — a native block built from
+ * the report's own digest, one stack per product with the dip, water dip,
+ * stock, sales, receipts, testing and variation per tank — so every number
+ * survives even when the frame does not. A picture of a spreadsheet is not a
+ * way to read a spreadsheet.
  *
  * `kind="image"` is the easy half: it hands off to `ImageLightbox`, which has
  * real pinch-zoom. `actions` is for the `html` branch — the image branch's
@@ -46,11 +56,35 @@ export interface WideReportViewerProps {
   preview?: React.ReactNode;
   /** Extra footer actions inside the mobile full-screen view (`html` only). */
   actions?: React.ReactNode;
+  /** The report's own numbers, in native markup, shown above the frame in the
+   *  mobile full-screen view. This is the part that stays readable. */
+  figures?: React.ReactNode;
   /** Desktop inline height of the `html` frame. Default `h-[72vh] min-h-[520px]`. */
   desktopHeightClass?: string;
+  /**
+   * The width at which the inline desktop frame is used instead of the mobile
+   * tap card. Default `'(min-width: 768px)'`.
+   *
+   * A 768-1023px Android tablet is the case this exists for: it is `md`, so it
+   * gets the inline 520px frame, which is the state this whole component was
+   * written to replace — just at a slightly larger size. A caller whose report
+   * is a 15-column day book should pass `'(min-width: 1024px)'` and let the
+   * tablet have the full-screen view too.
+   */
+  fullScreenBelow?: string;
+  /** The logical width the frame is laid out at before scaling. Default 1100 —
+   *  a desktop-ish viewport, so the report's own layout does not collapse into
+   *  its narrow form. Raise it for a report with more columns than that fits. */
+  frameWidth?: number;
+  /** The logical height of the frame, same idea. The document is cross-origin,
+   *  so nothing can measure the real one. Default 1600. */
+  frameHeight?: number;
   /** Classes for the mobile preview card. */
   className?: string;
 }
+
+/** Scale steps above "fit". 1 is the report at its own size. */
+const ZOOM_STEPS = [0.5, 0.75, 1];
 
 export function WideReportViewer({
   kind,
@@ -58,11 +92,45 @@ export function WideReportViewer({
   title,
   preview,
   actions,
+  figures,
   desktopHeightClass = 'h-[72vh] min-h-[520px]',
+  fullScreenBelow = '(min-width: 768px)',
+  frameWidth = 1100,
+  frameHeight = 1600,
   className,
 }: WideReportViewerProps) {
-  const isMd = useMediaQuery('(min-width: 768px)');
+  const isMd = useMediaQuery(fullScreenBelow);
   const [open, setOpen] = React.useState(false);
+  const paneRef = React.useRef<HTMLDivElement | null>(null);
+  const [paneWidth, setPaneWidth] = React.useState(0);
+  // `null` means "fit": the scale is whatever puts the whole frame on screen,
+  // and it has to be recomputed rather than stored, because it depends on a
+  // width that changes when the device is rotated.
+  const [zoom, setZoom] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    if (!open) {
+      setZoom(null);
+      return;
+    }
+    const el = paneRef.current;
+    if (!el) return;
+    const measure = () => setPaneWidth(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open]);
+
+  const fit = paneWidth > 0 ? Math.min(paneWidth / frameWidth, 1) : 1;
+  const steps = React.useMemo(
+    () => Array.from(new Set([fit, ...ZOOM_STEPS])).sort((a, b) => a - b),
+    [fit],
+  );
+  const scale = zoom ?? fit;
+  const stepIndex = steps.findIndex((v) => v >= scale - 0.001);
+  const atMin = stepIndex <= 0;
+  const atMax = stepIndex >= steps.length - 1;
 
   // Branching in JS rather than with `md:hidden`, deliberately: a CSS branch
   // keeps BOTH trees mounted, and this one contains an <iframe>. That is the
@@ -142,6 +210,11 @@ export function WideReportViewer({
         onClose={() => setOpen(false)}
         title={title}
         width="lg"
+        // The whole viewport, and no gutter: a report that is already too wide
+        // should not also lose 5% of the height and 32px of the width to the
+        // sheet's own chrome.
+        presentation="fullscreen"
+        bodyPadding="none"
         footer={
           actions ?? (
             <DownloadButton
@@ -153,18 +226,67 @@ export function WideReportViewer({
           )
         }
       >
-        {/* `-m-4` cancels the Drawer body's own padding: a report that is
-            already too wide should not also lose 32px of it to a gutter.
-            A fixed `70dvh` rather than `h-full`, because the Drawer body's
-            height comes from its content — `height: 100%` inside it resolves
-            against an indefinite height and collapses the frame to nothing. */}
-        <div className="-m-4">
-          <iframe
-            src={src}
-            title={title}
-            className="h-[70dvh] w-full border-0 bg-white"
-            referrerPolicy="no-referrer"
-          />
+        {figures ? <div className="p-3">{figures}</div> : null}
+        {/* An explicit height, not `h-full`: the Drawer body's height comes
+            from its content, so a percentage inside it resolves against an
+            indefinite height and collapses the frame to nothing. The 11rem is
+            the sheet's own chrome — its header and its footer. */}
+        <div className="relative">
+          <div
+            ref={paneRef}
+            className="h-[calc(100dvh-11rem)] min-h-[20rem] overflow-auto overscroll-contain bg-white"
+          >
+            {/* The spacer carries the SCALED size, because a transform does not
+                affect layout: without it the scroller would size itself to the
+                frame's 1100px logical width at every zoom level, so "fit" would
+                still pan sideways over empty white. */}
+            <div
+              style={{
+                width: frameWidth * scale,
+                height: frameHeight * scale,
+              }}
+            >
+              <iframe
+                src={src}
+                title={title}
+                className="border-0 bg-white"
+                style={{
+                  width: frameWidth,
+                  height: frameHeight,
+                  transform: `scale(${scale})`,
+                  transformOrigin: 'top left',
+                }}
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          </div>
+          {/* Floating over the frame, and a sibling of the scroller rather than
+              a child of it — a child would scroll away with the report, and a
+              row of controls in the flow above it would cost 44px of the one
+              thing this view is short of. */}
+          <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1 rounded-full border border-border bg-surface/95 p-1 shadow-sm">
+            <IconButton
+              aria-label="Zoom out"
+              size="sm"
+              disabled={atMin}
+              onClick={() => setZoom(steps[Math.max(0, stepIndex - 1)] ?? fit)}
+            >
+              <Minus width={18} height={18} strokeWidth={1.75} />
+            </IconButton>
+            <span className="min-w-[3ch] text-center text-xs tabular-nums text-text-muted">
+              {Math.round(scale * 100)}%
+            </span>
+            <IconButton
+              aria-label="Zoom in"
+              size="sm"
+              disabled={atMax}
+              onClick={() =>
+                setZoom(steps[Math.min(steps.length - 1, stepIndex + 1)] ?? 1)
+              }
+            >
+              <Plus width={18} height={18} strokeWidth={1.75} />
+            </IconButton>
+          </div>
         </div>
       </Drawer>
     </>

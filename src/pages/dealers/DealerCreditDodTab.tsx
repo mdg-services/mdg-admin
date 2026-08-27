@@ -232,7 +232,7 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
 
   return (
     <Card>
-      <CardContent className="flex flex-col gap-4 p-4">
+      <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-base font-semibold text-text">
@@ -355,7 +355,7 @@ function LedgerCard({ dealerId }: { dealerId: string }) {
 
   return (
     <Card>
-      <CardContent className="p-0">
+      <CardContent padding="none" className="md:p-4">
         {/* `flex-wrap`, as the Report history header two components down already
             has. Without it the transaction-count Badge — a hard 22px box — was
             squeezed at 360px until its own label wrapped inside it and clipped. */}
@@ -678,7 +678,7 @@ function SnapshotHistoryCard({ dealerId }: { dealerId: string }) {
 
   return (
     <Card>
-      <CardContent className="p-0">
+      <CardContent padding="none" className="md:p-4">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-4">
           <div>
             <p className="text-base font-semibold text-text">Report history</p>

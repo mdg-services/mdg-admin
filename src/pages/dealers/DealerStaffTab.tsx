@@ -50,6 +50,7 @@ import {
   useStaffAwardsQuery,
   useStaffOverviewQuery,
 } from '@/hooks/api/useStaff';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, formatYmd } from '@/lib/format';
 import { fmtPoints } from '@/lib/staffWork';
@@ -164,6 +165,16 @@ export function DealerStaffTab({ dealer }: Props) {
   /** The warrior whose detail panel is open, or `null`. */
   const [detailId, setDetailId] = React.useState<string | null>(null);
 
+  /**
+   * Which of each list's two shapes to build — the desktop table or the phone
+   * card stack. Decided here rather than left to `hidden md:block`, which only
+   * HIDES the losing shape: React still built and laid out every row of it.
+   * Five lists on this tab, each able to hold `LEDGER_ROW_CAP` rows, means up
+   * to five thousand invisible table cells constructed on a low-end WebView
+   * before the first card the reader can actually see.
+   */
+  const isMd = useMediaQuery('(min-width: 768px)');
+
   // employeeId → display name, resolved from roster then summary rows.
   const nameById = React.useMemo(() => {
     const map = new Map<string, string>();
@@ -195,19 +206,20 @@ export function DealerStaffTab({ dealer }: Props) {
     return map;
   }, [roster]);
   /**
-   * The award history's two renderings, memoised on the data they read.
+   * The award history's rendering for the current breakpoint, memoised on the
+   * data it reads.
    *
-   * This card can hold the endpoint's full 1000 rows, as a desktop table AND a
-   * mobile card stack (both are in the DOM at every breakpoint; `md:hidden`
-   * only hides one). Before this, opening the warrior panel — a `setDetailId`
-   * on THIS component — rebuilt every one of those elements before the panel
-   * could paint, and closing it paid the cost again. Stable element identities
-   * let React skip the whole subtree instead, so the drawer opens against a
-   * 1000-row history as fast as against an empty one.
+   * This card can hold the endpoint's full 1000 rows. Before this, opening the
+   * warrior panel — a `setDetailId` on THIS component — rebuilt every one of
+   * those elements before the panel could paint, and closing it paid the cost
+   * again. Stable element identities let React skip the whole subtree instead,
+   * so the drawer opens against a 1000-row history as fast as against an empty
+   * one. Only the shape that is actually on screen is built: the other one is
+   * an empty array, not a thousand elements nobody will see.
    */
   const historyRows = React.useMemo(
     () =>
-      awards.map((a) => (
+      (isMd ? awards : []).map((a) => (
         <TRow key={a.id}>
           <TD className="whitespace-nowrap text-text-muted">{formatYmd(a.workDate)}</TD>
           <TD className="font-medium">
@@ -246,12 +258,12 @@ export function DealerStaffTab({ dealer }: Props) {
           </TD>
         </TRow>
       )),
-    [awards, nameById],
+    [awards, nameById, isMd],
   );
 
   const historyCards = React.useMemo(
     () =>
-      awards.map((a) => ({
+      (isMd ? [] : awards).map((a) => ({
         key: a.id,
         primary: (
           <span className="block truncate font-medium text-text">
@@ -272,11 +284,15 @@ export function DealerStaffTab({ dealer }: Props) {
             {formatYmd(a.workDate)} · {a.awardedByName ?? '—'}
           </span>
         ),
+        // A rarely-used, destructive action does not get a full-width 44px
+        // bar on each of up to 1,000 entries — that roughly doubled the height
+        // of every card in the history. `actionsLayout` gives it its own
+        // width on a shared line; `Button` still floors at 44px below md.
+        actionsLayout: 'wrap' as const,
         actions: (
           <Button
             variant="secondary"
             size="sm"
-            className="w-full"
             onClick={() => setUndoTarget(a)}
             leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
           >
@@ -284,7 +300,7 @@ export function DealerStaffTab({ dealer }: Props) {
           </Button>
         ),
       })),
-    [awards, nameById],
+    [awards, nameById, isMd],
   );
 
   const targetFor = React.useCallback(
@@ -333,10 +349,13 @@ export function DealerStaffTab({ dealer }: Props) {
   const batches = batchesQ.data ?? [];
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3 md:gap-4">
       {/* Date-window control + award CTA */}
       <Card>
-        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        {/* `md:`, not `sm:`: 640px is not a breakpoint any phone in scope
+            reaches, so this row and the button below it only ever had their
+            stacked form. */}
+        <CardContent className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <DateRangeFilter
             label="Points date range"
             value={range}
@@ -366,7 +385,7 @@ export function DealerStaffTab({ dealer }: Props) {
           />
           <Button
             size="sm"
-            className="w-full shrink-0 sm:w-auto"
+            className="w-full shrink-0 md:w-auto"
             onClick={() => setAwardOpen(true)}
             leftIcon={<Award width={14} height={14} strokeWidth={1.75} />}
           >
@@ -390,7 +409,7 @@ export function DealerStaffTab({ dealer }: Props) {
             </CardSubtitle>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           {overviewQ.isLoading ? (
             <TableSkeleton rows={4} />
           ) : overviewQ.isError ? (
@@ -410,8 +429,11 @@ export function DealerStaffTab({ dealer }: Props) {
             />
           ) : (
             <>
-              {/* Desktop table (≥ md) */}
-              <div className="hidden md:block">
+              {/* One branch mounts, not two. `hidden md:block` only HIDES the
+                  table — React still builds every row of it on a phone, and these
+                  lists run to the endpoint's row cap. The breakpoint is decided in
+                  JS, so the phone never pays for the desktop shape. */}
+              {isMd ? (
                 <Table>
                   <THead>
                     <TRow>
@@ -488,53 +510,54 @@ export function DealerStaffTab({ dealer }: Props) {
                     })}
                   </TBody>
                 </Table>
-              </div>
-
-              {/* Mobile card-stack (< md) */}
-              <MobileCardList
-                className="p-3"
-                cards={summary.rows.map((row, i) => {
-                  const rowTarget = targetFor(row.employeeId);
-                  const hitTarget =
-                    rowTarget !== undefined && row.totalPoints >= rowTarget;
-                  return {
-                    key: row.employeeId,
-                    onClick: () => setDetailId(row.employeeId),
-                    // Rank and name share the title, and nothing else does.
-                    // `primaryRight` is `shrink-0`, so the "/ 3100" half of the
-                    // figure was taken straight out of the name's width — at
-                    // 360px that left ~175px, cutting "#12 Ramesh Kumar Singh"
-                    // at about eighteen characters. The target moved to the
-                    // wrapping meta line, where it also gets to say "met" in
-                    // words rather than only in green.
-                    primary: (
-                      <span className="block font-medium text-text">
-                        <span className="tabular-nums text-text-muted">
-                          #{i + 1}
-                        </span>{' '}
-                        {row.employeeName}
-                      </span>
-                    ),
-                    primaryRight: (
-                      <span className="whitespace-nowrap tabular-nums font-semibold">
-                        {fmtPoints(row.totalPoints)}
-                      </span>
-                    ),
-                    meta: (
-                      <span className="flex flex-wrap items-center gap-1.5">
-                        <EmployeeStatusChip status={row.status} />
-                        <span>· {row.awardCount} awards</span>
-                        {rowTarget !== undefined ? (
-                          <span className={hitTarget ? 'text-success' : undefined}>
-                            · {fmtPoints(rowTarget)} target
-                            {hitTarget ? ' · met' : ''}
-                          </span>
-                        ) : null}
-                      </span>
-                    ),
-                  };
-                })}
-              />
+              ) : (
+                /* Mobile card-stack */
+                <MobileCardList
+                  visibility="all"
+                  variant="rows"
+                  cards={summary.rows.map((row, i) => {
+                    const rowTarget = targetFor(row.employeeId);
+                    const hitTarget =
+                      rowTarget !== undefined && row.totalPoints >= rowTarget;
+                    return {
+                      key: row.employeeId,
+                      onClick: () => setDetailId(row.employeeId),
+                      // Rank and name share the title, and nothing else does.
+                      // `primaryRight` is `shrink-0`, so the "/ 3100" half of the
+                      // figure was taken straight out of the name's width — at
+                      // 360px that left ~175px, cutting "#12 Ramesh Kumar Singh"
+                      // at about eighteen characters. The target moved to the
+                      // wrapping meta line, where it also gets to say "met" in
+                      // words rather than only in green.
+                      primary: (
+                        <span className="block font-medium text-text">
+                          <span className="tabular-nums text-text-muted">
+                            #{i + 1}
+                          </span>{' '}
+                          {row.employeeName}
+                        </span>
+                      ),
+                      primaryRight: (
+                        <span className="whitespace-nowrap tabular-nums font-semibold">
+                          {fmtPoints(row.totalPoints)}
+                        </span>
+                      ),
+                      meta: (
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <EmployeeStatusChip status={row.status} />
+                          <span>· {row.awardCount} awards</span>
+                          {rowTarget !== undefined ? (
+                            <span className={hitTarget ? 'text-success' : undefined}>
+                              · {fmtPoints(rowTarget)} target
+                              {hitTarget ? ' · met' : ''}
+                            </span>
+                          ) : null}
+                        </span>
+                      ),
+                    };
+                  })}
+                />
+              )}
             </>
           )}
         </CardContent>
@@ -542,36 +565,42 @@ export function DealerStaffTab({ dealer }: Props) {
 
       {/* Roster */}
       <Card>
-        <CardHeader className="flex-col gap-3 sm:flex-row">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Users width={16} height={16} strokeWidth={1.75} />
-              Roster
-            </CardTitle>
-            <CardSubtitle>
-              Workers on this dealer&apos;s staff, with window and lifetime points.
-            </CardSubtitle>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-3">
-            <label className="flex min-h-11 items-center gap-2 text-sm text-text-muted md:min-h-0">
-              <input
-                type="checkbox"
-                className="h-5 w-5 rounded border-border-strong accent-brand md:h-4 md:w-4"
-                checked={includeInactive}
-                onChange={(e) => setIncludeInactive(e.target.checked)}
-              />
-              Include inactive
-            </label>
-            <Button
-              size="sm"
-              onClick={openAddWorker}
-              leftIcon={<UserPlus width={14} height={14} strokeWidth={1.75} />}
-            >
-              Add warrior
-            </Button>
-          </div>
+        {/* The controls go in `action` rather than as a second child with a
+            hand-rolled `sm:flex-row`: 640px is not a breakpoint any phone here
+            reaches, so the header only ever had its stacked form, and the
+            header already knows how to put the controls back on the right at
+            md. */}
+        <CardHeader
+          action={
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex min-h-11 items-center gap-2 text-sm text-text-muted md:min-h-0">
+                <input
+                  type="checkbox"
+                  className="h-5 w-5 rounded border-border-strong accent-brand md:h-4 md:w-4"
+                  checked={includeInactive}
+                  onChange={(e) => setIncludeInactive(e.target.checked)}
+                />
+                Include inactive
+              </label>
+              <Button
+                size="sm"
+                onClick={openAddWorker}
+                leftIcon={<UserPlus width={14} height={14} strokeWidth={1.75} />}
+              >
+                Add warrior
+              </Button>
+            </div>
+          }
+        >
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Users width={16} height={16} strokeWidth={1.75} />
+            Roster
+          </CardTitle>
+          <CardSubtitle>
+            Workers on this dealer&apos;s staff, with window and lifetime points.
+          </CardSubtitle>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           {overviewQ.isLoading ? (
             <TableSkeleton rows={4} />
           ) : overviewQ.isError ? (
@@ -604,8 +633,11 @@ export function DealerStaffTab({ dealer }: Props) {
             />
           ) : (
             <>
-              {/* Desktop table (≥ md) */}
-              <div className="hidden md:block">
+              {/* One branch mounts, not two. `hidden md:block` only HIDES the
+                  table — React still builds every row of it on a phone, and these
+                  lists run to the endpoint's row cap. The breakpoint is decided in
+                  JS, so the phone never pays for the desktop shape. */}
+              {isMd ? (
                 <Table>
                   <THead>
                     <TRow>
@@ -687,85 +719,86 @@ export function DealerStaffTab({ dealer }: Props) {
                     })}
                   </TBody>
                 </Table>
-              </div>
-
-              {/* Mobile card-stack (< md) */}
-              <MobileCardList
-                className="p-3"
-                cards={roster.map((emp) => {
-                  const busy =
-                    updateEmployee.isPending &&
-                    updateEmployee.variables?.id === emp.id;
-                  return {
-                    key: emp.id,
-                    // The status chip is `shrink-0` and eats ~66px of a ~278px
-                    // card, so the title had ~200px for a name AND a
-                    // designation and truncated the warrior's name — the one
-                    // string the admin is looking for. The name owns the title
-                    // now; designation joins the phone on the line below.
-                    primary: (
-                      <span className="block font-medium text-text">{emp.name}</span>
-                    ),
-                    primaryRight: <EmployeeStatusChip status={emp.status} />,
-                    secondary:
-                      emp.designation || emp.phone ? (
-                        <span className="block">
-                          {[emp.designation, emp.phone].filter(Boolean).join(' · ')}
+              ) : (
+                /* Mobile card-stack */
+                <MobileCardList
+                  visibility="all"
+                  variant="rows"
+                  cards={roster.map((emp) => {
+                    const busy =
+                      updateEmployee.isPending &&
+                      updateEmployee.variables?.id === emp.id;
+                    return {
+                      key: emp.id,
+                      // The status chip is `shrink-0` and eats ~66px of a ~278px
+                      // card, so the title had ~200px for a name AND a
+                      // designation and truncated the warrior's name — the one
+                      // string the admin is looking for. The name owns the title
+                      // now; designation joins the phone on the line below.
+                      primary: (
+                        <span className="block font-medium text-text">{emp.name}</span>
+                      ),
+                      primaryRight: <EmployeeStatusChip status={emp.status} />,
+                      secondary:
+                        emp.designation || emp.phone ? (
+                          <span className="block">
+                            {[emp.designation, emp.phone].filter(Boolean).join(' · ')}
+                          </span>
+                        ) : undefined,
+                      meta: (
+                        <span>
+                          Window{' '}
+                          <span className="tabular-nums text-text-muted">
+                            {fmtPoints(emp.pointsInWindow)}
+                          </span>{' '}
+                          · Lifetime{' '}
+                          <span className="tabular-nums text-text-muted">
+                            {fmtPoints(emp.totalPoints)}
+                          </span>
                         </span>
-                      ) : undefined,
-                    meta: (
-                      <span>
-                        Window{' '}
-                        <span className="tabular-nums text-text-muted">
-                          {fmtPoints(emp.pointsInWindow)}
-                        </span>{' '}
-                        · Lifetime{' '}
-                        <span className="tabular-nums text-text-muted">
-                          {fmtPoints(emp.totalPoints)}
-                        </span>
-                      </span>
-                    ),
-                    actions: (
-                      // Details gets its own full-width row rather than a third
-                      // column: three buttons across a phone leaves each one too
-                      // narrow to read, and this is the one an admin reaches for
-                      // most.
-                      <div className="grid gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setDetailId(emp.id)}
-                          leftIcon={
-                            <BarChart3 width={14} height={14} strokeWidth={1.75} />
-                          }
-                        >
-                          View details
-                        </Button>
-                        <div className="grid grid-cols-2 gap-2">
+                      ),
+                      actions: (
+                        // Details gets its own full-width row rather than a third
+                        // column: three buttons across a phone leaves each one too
+                        // narrow to read, and this is the one an admin reaches for
+                        // most.
+                        <div className="grid gap-2">
                           <Button
                             variant="secondary"
                             size="sm"
-                            onClick={() => openEditWorker(emp)}
+                            onClick={() => setDetailId(emp.id)}
                             leftIcon={
-                              <Pencil width={14} height={14} strokeWidth={1.75} />
+                              <BarChart3 width={14} height={14} strokeWidth={1.75} />
                             }
                           >
-                            Edit
+                            View details
                           </Button>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            loading={busy}
-                            onClick={() => toggleWorkerStatus(emp)}
-                          >
-                            {emp.status === 'ACTIVE' ? 'Remove' : 'Reactivate'}
-                          </Button>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => openEditWorker(emp)}
+                              leftIcon={
+                                <Pencil width={14} height={14} strokeWidth={1.75} />
+                              }
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              loading={busy}
+                              onClick={() => toggleWorkerStatus(emp)}
+                            >
+                              {emp.status === 'ACTIVE' ? 'Remove' : 'Reactivate'}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    ),
-                  };
-                })}
-              />
+                      ),
+                    };
+                  })}
+                />
+              )}
             </>
           )}
         </CardContent>
@@ -785,7 +818,7 @@ export function DealerStaffTab({ dealer }: Props) {
             </CardSubtitle>
           </div>
         </CardHeader>
-        <CardContent className={draftHasEntries ? 'p-0' : undefined}>
+        <CardContent padding={draftHasEntries ? 'none' : 'default'}>
           {draftQ.isLoading ? (
             <div className="grid gap-2">
               <Skeleton className="h-9 w-full" />
@@ -799,7 +832,7 @@ export function DealerStaffTab({ dealer }: Props) {
             />
           ) : (
             <>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-4 py-3 text-sm">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-3 py-2.5 text-sm md:px-4 md:py-3">
                 <Badge intent="warning">Pending submission</Badge>
                 <span className="text-text-muted">
                   {draft.lineItems.length} entr
@@ -816,8 +849,11 @@ export function DealerStaffTab({ dealer }: Props) {
                   </span>
                 ) : null}
               </div>
-              {/* Desktop table (≥ md) */}
-              <div className="hidden md:block">
+              {/* One branch mounts, not two. `hidden md:block` only HIDES the
+                  table — React still builds every row of it on a phone, and these
+                  lists run to the endpoint's row cap. The breakpoint is decided in
+                  JS, so the phone never pays for the desktop shape. */}
+              {isMd ? (
                 <Table>
                   <THead>
                     <TRow>
@@ -848,38 +884,39 @@ export function DealerStaffTab({ dealer }: Props) {
                     ))}
                   </TBody>
                 </Table>
-              </div>
-
-              {/* Mobile card-stack (< md) */}
-              <MobileCardList
-                className="p-3"
-                cards={draft.lineItems.map((li, i) => ({
-                  key: `${li.employeeId}-${li.workItemCode}-${i}`,
-                  primary: (
-                    <span className="block truncate font-medium text-text">
-                      {li.employeeName}
-                    </span>
-                  ),
-                  primaryRight: (
-                    <span className="tabular-nums font-semibold">
-                      {fmtPoints(li.points)}
-                    </span>
-                  ),
-                  secondary: (
-                    <span>
-                      {li.workLabelEn}
-                      {li.workLabelHi ? (
-                        <span className="text-text-subtle"> / {li.workLabelHi}</span>
-                      ) : null}
-                      {li.source === 'custom' ? (
-                        <Badge intent="info" className="ml-2">
-                          Custom
-                        </Badge>
-                      ) : null}
-                    </span>
-                  ),
-                }))}
-              />
+              ) : (
+                /* Mobile card-stack */
+                <MobileCardList
+                  visibility="all"
+                  variant="rows"
+                  cards={draft.lineItems.map((li, i) => ({
+                    key: `${li.employeeId}-${li.workItemCode}-${i}`,
+                    primary: (
+                      <span className="block truncate font-medium text-text">
+                        {li.employeeName}
+                      </span>
+                    ),
+                    primaryRight: (
+                      <span className="tabular-nums font-semibold">
+                        {fmtPoints(li.points)}
+                      </span>
+                    ),
+                    secondary: (
+                      <span>
+                        {li.workLabelEn}
+                        {li.workLabelHi ? (
+                          <span className="text-text-subtle"> / {li.workLabelHi}</span>
+                        ) : null}
+                        {li.source === 'custom' ? (
+                          <Badge intent="info" className="ml-2">
+                            Custom
+                          </Badge>
+                        ) : null}
+                      </span>
+                    ),
+                  }))}
+                />
+              )}
             </>
           )}
         </CardContent>
@@ -900,7 +937,7 @@ export function DealerStaffTab({ dealer }: Props) {
             </CardSubtitle>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           {batchesQ.isLoading ? (
             <TableSkeleton rows={3} />
           ) : batchesQ.isError ? (
@@ -920,8 +957,11 @@ export function DealerStaffTab({ dealer }: Props) {
             />
           ) : (
             <>
-              {/* Desktop table (≥ md) */}
-              <div className="hidden md:block">
+              {/* One branch mounts, not two. `hidden md:block` only HIDES the
+                  table — React still builds every row of it on a phone, and these
+                  lists run to the endpoint's row cap. The breakpoint is decided in
+                  JS, so the phone never pays for the desktop shape. */}
+              {isMd ? (
                 <Table>
                   <THead>
                     <TRow>
@@ -981,59 +1021,60 @@ export function DealerStaffTab({ dealer }: Props) {
                     ))}
                   </TBody>
                 </Table>
-              </div>
-
-              {/* Mobile card-stack (< md) */}
-              <MobileCardList
-                className="p-3"
-                cards={batches.map((b) => ({
-                  key: b.id,
-                  primary: (
-                    <span className="block font-medium text-text">
-                      {formatYmd(b.workDate)}
-                    </span>
-                  ),
-                  primaryRight: (
-                    <span className="tabular-nums font-semibold">
-                      {fmtPoints(b.totalPoints)}
-                    </span>
-                  ),
-                  meta: (
-                    <span>
-                      {b.employeeCount} workers · {b.entryCount} entries ·{' '}
-                      {b.awardedByName ?? '—'}
-                    </span>
-                  ),
-                  actions: b.hardCopyImageUrl ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPhoto(
-                          b.hardCopyImageUrl
-                            ? { url: b.hardCopyImageUrl, workDate: b.workDate }
-                            : null,
-                        )
-                      }
-                      className="flex items-center gap-2 rounded-sm text-sm text-text-muted"
-                      aria-label="View hardcopy photo"
-                    >
-                      <span className="block h-11 w-11 overflow-hidden rounded-sm border border-border">
-                        <img
-                          src={b.hardCopyImageUrl}
-                          alt="Hardcopy"
-                          className="h-full w-full object-cover"
-                        />
+              ) : (
+                /* Mobile card-stack */
+                <MobileCardList
+                  visibility="all"
+                  variant="rows"
+                  cards={batches.map((b) => ({
+                    key: b.id,
+                    primary: (
+                      <span className="block font-medium text-text">
+                        {formatYmd(b.workDate)}
                       </span>
-                      View hardcopy
-                    </button>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-xs text-text-subtle">
-                      <ImageIcon width={14} height={14} strokeWidth={1.75} />
-                      No hardcopy available
-                    </span>
-                  ),
-                }))}
-              />
+                    ),
+                    primaryRight: (
+                      <span className="tabular-nums font-semibold">
+                        {fmtPoints(b.totalPoints)}
+                      </span>
+                    ),
+                    meta: (
+                      <span>
+                        {b.employeeCount} workers · {b.entryCount} entries ·{' '}
+                        {b.awardedByName ?? '—'}
+                      </span>
+                    ),
+                    actions: b.hardCopyImageUrl ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPhoto(
+                            b.hardCopyImageUrl
+                              ? { url: b.hardCopyImageUrl, workDate: b.workDate }
+                              : null,
+                          )
+                        }
+                        className="flex items-center gap-2 rounded-sm text-sm text-text-muted"
+                        aria-label="View hardcopy photo"
+                      >
+                        <span className="block h-11 w-11 overflow-hidden rounded-sm border border-border">
+                          <img
+                            src={b.hardCopyImageUrl}
+                            alt="Hardcopy"
+                            className="h-full w-full object-cover"
+                          />
+                        </span>
+                        View hardcopy
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-xs text-text-subtle">
+                        <ImageIcon width={14} height={14} strokeWidth={1.75} />
+                        No hardcopy available
+                      </span>
+                    ),
+                  }))}
+                />
+              )}
             </>
           )}
         </CardContent>
@@ -1053,7 +1094,7 @@ export function DealerStaffTab({ dealer }: Props) {
             </CardSubtitle>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           {awardsQ.isLoading ? (
             <TableSkeleton rows={5} />
           ) : awardsQ.isError ? (
@@ -1074,7 +1115,7 @@ export function DealerStaffTab({ dealer }: Props) {
           ) : (
             <>
               {awards.length >= LEDGER_ROW_CAP ? (
-                <p className="flex items-start gap-1.5 border-b border-border px-4 py-2.5 text-xs text-warning">
+                <p className="flex items-start gap-1.5 border-b border-border px-3 py-2.5 text-xs text-warning md:px-4">
                   <AlertTriangle
                     width={14}
                     height={14}
@@ -1089,8 +1130,11 @@ export function DealerStaffTab({ dealer }: Props) {
                 </p>
               ) : null}
 
-              {/* Desktop table (≥ md) */}
-              <div className="hidden md:block">
+              {/* One branch mounts, not two. `hidden md:block` only HIDES the
+                  table — React still builds every row of it on a phone, and these
+                  lists run to the endpoint's row cap. The breakpoint is decided in
+                  JS, so the phone never pays for the desktop shape. */}
+              {isMd ? (
                 <Table>
                   <THead>
                     <TRow>
@@ -1104,10 +1148,10 @@ export function DealerStaffTab({ dealer }: Props) {
                   </THead>
                   <TBody>{historyRows}</TBody>
                 </Table>
-              </div>
-
-              {/* Mobile card-stack (< md) */}
-              <MobileCardList className="p-3" cards={historyCards} />
+              ) : (
+                /* Mobile card-stack */
+                <MobileCardList visibility="all" variant="rows" cards={historyCards} />
+              )}
             </>
           )}
         </CardContent>
@@ -1227,7 +1271,7 @@ export function DealerStaffTab({ dealer }: Props) {
 
 function TableSkeleton({ rows }: { rows: number }) {
   return (
-    <div className="grid gap-2 p-4">
+    <div className="grid gap-2 p-3 md:p-4">
       {Array.from({ length: rows }).map((_, i) => (
         <Skeleton key={i} className="h-9 w-full" />
       ))}

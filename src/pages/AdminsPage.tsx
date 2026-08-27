@@ -159,7 +159,12 @@ export function AdminsPage() {
       />
 
       <Card>
-        <CardContent className="pt-6">
+        {/* The body is the roster itself, so below md it runs to the card's own
+            edges — page gutter + card padding + a bordered row card put the
+            admin's name 46px in from a 360px screen. `md:p-4 md:pt-6` is md+
+            unchanged: `.pt-6` is emitted after `.p-4`, so that is what the pair
+            has always resolved to there. */}
+        <CardContent padding="none" className="md:p-4 md:pt-6">
           {isLoading ? (
             <div className="grid gap-2">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -189,13 +194,19 @@ export function AdminsPage() {
               rows={admins}
               rowKey={(a) => a.id}
               columns={columns}
+              cardVariant="rows"
               cardActions={(a) => (
                 <div className="grid gap-2">
                   <ActionRow below="wrap" align="start">
+                    {/* No `min-w-[9rem] flex-1`: 144 + 8 + 144 does not fit
+                        the 310px a row has at 360px, so both buttons dropped to
+                        full-width lines and every admin carried 96px of button.
+                        At their natural widths they share one 44px line — the
+                        `min-h-11` floor is `Button`'s own, so the target does
+                        not move. */}
                     <Button
                       variant="secondary"
                       size="sm"
-                      className="min-w-[9rem] flex-1"
                       onClick={() => setResetFor(a)}
                       leftIcon={
                         <KeyRound width={14} height={14} strokeWidth={1.75} />
@@ -207,7 +218,6 @@ export function AdminsPage() {
                       <Button
                         variant="secondary"
                         size="sm"
-                        className="min-w-[9rem] flex-1"
                         onClick={() => toggleStatus(a)}
                         loading={suspending(a)}
                       >

@@ -209,10 +209,16 @@ export function IrasShiftDataPane({ params, patchParams }: VaultDatasetProps) {
         businessDate={businessDate}
       />
 
-      <Card className="mt-4">
-        <CardContent className="p-0">
-          <div className="flex flex-col gap-2 border-b border-border p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative sm:max-w-xs sm:flex-1">
+      <Card className="mt-3 md:mt-4">
+        {/* `padding="none"`, not `className="p-0"`: `cn` is clsx and Tailwind
+            emits `.p-4` after `.p-0`, so the p-0 never applied. `md:p-4` is a
+            separate declaration, so ≥768px stays exactly as it renders today. */}
+        <CardContent padding="none" className="md:p-4">
+          {/* `md:`, not `sm:`. 640px fires on no phone in the target set and
+              turned this into a desktop row while the shell was still in phone
+              mode; ≥768px is unchanged. */}
+          <div className="flex flex-col gap-2 border-b border-border p-3 md:flex-row md:items-center md:justify-between">
+            <div className="relative md:max-w-xs md:flex-1">
               <Search
                 width={15}
                 height={15}
@@ -237,7 +243,7 @@ export function IrasShiftDataPane({ params, patchParams }: VaultDatasetProps) {
                     status: e.target.value === 'all' ? null : e.target.value,
                   })
                 }
-                className="w-full sm:w-44"
+                className="w-full md:w-44"
               >
                 {STATUS_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -305,7 +311,11 @@ function BusinessDateControl({
   onChange: (next: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-1">
+    // `flex-wrap`: the four controls' min-content is within ~16px of the 328px a
+    // 360px screen offers, and that slack is gone at 320px or with a longer
+    // rendering of the date field. Wrapping "Today" onto a second line is the
+    // one outcome here that is not a clipped control.
+    <div className="flex flex-wrap items-center gap-1">
       {/* `IconButton`, not `Button className="px-2"`. `cn` is plain clsx, so
           that `px-2` landed BESIDE the size's `px-3` and lost on stylesheet
           order — the override never did anything. And a 16px glyph in a Button
@@ -609,14 +619,19 @@ function DealerList({
         </Table>
       </div>
 
-      {/* Mobile card-stack (< md) — cards carry buttons, so they are never
-          whole-card tap targets (no nested buttons). */}
+      {/* Mobile card-stack (< md). A dealer with a snapshot is one whole-card
+          tap target, the way the desktop row already is; a full-width "View
+          data" bar under every card cost 56px a row for something the card
+          itself can do. Only the not-collected branch keeps a button, because
+          collecting is a mutation and not navigation — and a card with a button
+          is never also a tap target (no nested buttons). */}
       <MobileCardList
-        className="p-3"
+        variant="rows"
         cards={rows.map((row) => {
           const latest = row.latest;
           return {
             key: row.dealerId,
+            onClick: latest ? () => onOpen(row.dealerId) : undefined,
             primary: (
               <span className="flex min-w-0 items-center gap-2">
                 <span className="truncate font-medium text-text">
@@ -662,16 +677,7 @@ function DealerList({
                   : ''}
               </span>
             ),
-            actions: latest ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="w-full"
-                onClick={() => onOpen(row.dealerId)}
-              >
-                View data
-              </Button>
-            ) : (
+            actions: latest ? undefined : (
               <div className="[&>button]:w-full">
                 <CollectButton
                   dealerId={row.dealerId}

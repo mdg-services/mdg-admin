@@ -167,7 +167,10 @@ export function AllUsersPage() {
         </div>
       ) : filtered.length === 0 ? (
         <Card>
-          <CardContent className="pt-6">
+          {/* `EmptyState` carries its own `py-8 md:py-12`; below md this card's
+              padding was simply stacked on top of it. `md:p-4 md:pt-6` is md+
+              unchanged — `.pt-6` is emitted after `.p-4`. */}
+          <CardContent padding="none" className="md:p-4 md:pt-6">
             <EmptyState
               icon={<Users width={28} height={28} strokeWidth={1.5} />}
               title={query ? 'No matching users' : 'No users yet'}
@@ -180,7 +183,7 @@ export function AllUsersPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-3 md:gap-4">
           {filtered.map((group) => (
             <GroupCard
               key={group.dealer?.id ?? '__admins__'}
@@ -211,7 +214,7 @@ function GroupCard({
   const liveCount = group.users.filter((u) => !u.archivedAt).length;
   return (
     <Card>
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 md:px-4 md:py-3">
         {isAdmins ? (
           <ShieldCheck width={18} height={18} strokeWidth={1.75} className="text-brand" />
         ) : (
@@ -239,7 +242,10 @@ function GroupCard({
           {liveCount}
         </Badge>
       </div>
-      <CardContent className="pt-0">
+      {/* The body is the roster, so below md it runs to the card's own edges
+          instead of nesting a bordered row inside this bordered card inside the
+          page gutter. `md:p-4 md:pt-0` is md+ exactly as it renders today. */}
+      <CardContent padding="none" className="md:p-4 md:pt-0">
         {/* Desktop table (≥ md) */}
         <div className="hidden md:block">
           <Table>
@@ -297,7 +303,7 @@ function GroupCard({
 
         {/* Mobile card-stack (< md) */}
         <MobileCardList
-          className="pt-1"
+          variant="rows"
           cards={group.users.map((u) => ({
             key: u.id,
             primary: (
@@ -332,11 +338,14 @@ function GroupCard({
             ) : (
               <Badge intent="neutral">Suspended</Badge>
             ),
+            // `wrap`, not a full-width row: "Manage" is one word and this
+            // stack is six or more users deep, so a 328px bar each cost a
+            // screenful. `Button`'s own `min-h-11` keeps the 44px target.
+            actionsLayout: 'wrap',
             actions: (
               <Button
                 variant="secondary"
                 size="sm"
-                className="w-full"
                 onClick={() => onManage(u)}
                 leftIcon={<Settings2 width={14} height={14} strokeWidth={1.75} />}
               >
@@ -546,7 +555,7 @@ function ManageUserDialog({
       }
     >
       {user ? (
-        <div className="grid gap-6">
+        <div className="grid gap-4 md:gap-6">
           {isArchived ? (
             <div className="flex items-start gap-2 rounded-sm border border-border bg-surface-2 px-3 py-2 text-sm text-text-muted">
               <Archive width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
@@ -564,7 +573,12 @@ function ManageUserDialog({
               {/* Login access */}
               <section>
                 <SectionTitle>Login access</SectionTitle>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                {/* `md:`, not `sm:`, here and in the four sibling rows below.
+                    640px is a width no phone in this app reaches, so the row
+                    never re-formed on a phone — and on a 640-767px tablet it
+                    did, putting a `whitespace-nowrap` "Revoke super-admin"
+                    beside a two-line explanation inside a sheet. */}
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div className="text-sm text-text-muted">
                     {user.status === 'ACTIVE'
                       ? 'Active — can sign in.'
@@ -596,7 +610,7 @@ function ManageUserDialog({
               {isDealerMember ? (
                 <section>
                   <SectionTitle>Role</SectionTitle>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div className="text-sm text-text-muted">
                       Currently <span className="font-medium text-text">{ROLE_LABEL[user.role]}</span>.
                       Switching to {ROLE_LABEL[otherRole]} resets their chat threads.
@@ -633,7 +647,7 @@ function ManageUserDialog({
               {isAdmin ? (
                 <section>
                   <SectionTitle>Super-admin tier</SectionTitle>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div className="text-sm text-text-muted">
                       {user.isSuperAdmin
                         ? 'Can view the Activity log and manage the team.'
@@ -734,7 +748,7 @@ function ManageUserDialog({
           <section className="rounded-sm border border-border-strong/60 p-3">
             <SectionTitle>{isArchived ? 'Restore' : 'Archive'}</SectionTitle>
             {isArchived ? (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div className="text-sm text-text-muted">
                   Bring this user back into the roster. Their login stays disabled until
                   you reactivate them.
@@ -751,7 +765,7 @@ function ManageUserDialog({
                 </Button>
               </div>
             ) : (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div className="text-sm text-text-muted">
                   Disable this login and hide them from the roster. Reversible — their
                   record and chat history are kept.

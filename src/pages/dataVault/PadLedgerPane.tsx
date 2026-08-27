@@ -29,6 +29,7 @@ import {
   TRow,
 } from '@/components/ui';
 import { useCreditDodLedger, useCreditDodVault } from '@/hooks/api/useCreditDod';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, formatDmy, inrFormat } from '@/lib/format';
 import type {
@@ -184,6 +185,11 @@ function DealerList({
    *  pushed a history entry so the way back can pop it. */
   onOpen: (dealerId: string) => void;
 }) {
+  // Which shape to BUILD, not just which to show: the six-column table and the
+  // card stack below it are the same rows twice, and on a phone the table half
+  // is built and then hidden. The `hidden md:block` / `md:hidden` classes stay,
+  // so a momentarily wrong query still cannot show both.
+  const isMd = useMediaQuery('(min-width: 768px)');
   const statusParam = params.get('status');
   const status: StatusFilter = STATUS_OPTIONS.some((o) => o.value === statusParam)
     ? (statusParam as StatusFilter)
@@ -253,10 +259,16 @@ function DealerList({
         </StatTileRow>
       ) : null}
 
-      <Card className="mt-4">
-        <CardContent className="p-0">
-          <div className="flex flex-col gap-2 border-b border-border p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative sm:max-w-xs sm:flex-1">
+      <Card className="mt-3 md:mt-4">
+        {/* `padding="none"`, not `className="p-0"`: `cn` is clsx and Tailwind
+            emits `.p-4` after `.p-0`, so the p-0 never applied. `md:p-4` is a
+            separate declaration, so ≥768px stays exactly as it renders today. */}
+        <CardContent padding="none" className="md:p-4">
+          {/* `md:`, not `sm:`. 640px fires on no phone in the target set and
+              turned this into a desktop row while the shell was still in phone
+              mode; ≥768px is unchanged. */}
+          <div className="flex flex-col gap-2 border-b border-border p-3 md:flex-row md:items-center md:justify-between">
+            <div className="relative md:max-w-xs md:flex-1">
               <Search
                 width={15}
                 height={15}
@@ -280,7 +292,7 @@ function DealerList({
                   status: e.target.value === 'all' ? null : e.target.value,
                 })
               }
-              className="w-full sm:w-44"
+              className="w-full md:w-44"
             >
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -319,155 +331,159 @@ function DealerList({
           ) : (
             <>
               {/* Desktop table (≥ md) */}
-              <div className="hidden md:block">
-                <Table>
-                  <THead>
-                    <TRow>
-                      <TH>Dealer</TH>
-                      <TH className="text-right">Transactions</TH>
-                      <TH>Covers</TH>
-                      <TH className="text-right">Balance</TH>
-                      <TH>Last synced</TH>
-                      <TH className="text-right">Action</TH>
-                    </TRow>
-                  </THead>
-                  <TBody>
-                    {visible.map((row) => {
-                      const hasLedger = row.rowCount > 0;
-                      return (
-                        <TRow
-                          key={row.dealerId}
-                          clickable={hasLedger}
-                          onClick={hasLedger ? () => onOpen(row.dealerId) : undefined}
-                        >
-                          <TD>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">
-                                {dealerCodeLabel(row.dealerCode)}
-                              </span>
-                              {row.enabled ? null : (
-                                <Badge intent="neutral">Paused</Badge>
+              {isMd ? (
+                <div className="hidden md:block">
+                  <Table>
+                    <THead>
+                      <TRow>
+                        <TH>Dealer</TH>
+                        <TH className="text-right">Transactions</TH>
+                        <TH>Covers</TH>
+                        <TH className="text-right">Balance</TH>
+                        <TH>Last synced</TH>
+                        <TH className="text-right">Action</TH>
+                      </TRow>
+                    </THead>
+                    <TBody>
+                      {visible.map((row) => {
+                        const hasLedger = row.rowCount > 0;
+                        return (
+                          <TRow
+                            key={row.dealerId}
+                            clickable={hasLedger}
+                            onClick={hasLedger ? () => onOpen(row.dealerId) : undefined}
+                          >
+                            <TD>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">
+                                  {dealerCodeLabel(row.dealerCode)}
+                                </span>
+                                {row.enabled ? null : (
+                                  <Badge intent="neutral">Paused</Badge>
+                                )}
+                              </div>
+                              <div className="font-mono text-xs text-text-subtle">
+                                {row.dealerCode || '—'}
+                              </div>
+                            </TD>
+                            <TD className="text-right tabular-nums">
+                              {hasLedger ? (
+                                row.rowCount.toLocaleString('en-IN')
+                              ) : (
+                                <span className="text-text-subtle">—</span>
                               )}
-                            </div>
-                            <div className="font-mono text-xs text-text-subtle">
-                              {row.dealerCode || '—'}
-                            </div>
-                          </TD>
-                          <TD className="text-right tabular-nums">
-                            {hasLedger ? (
-                              row.rowCount.toLocaleString('en-IN')
-                            ) : (
-                              <span className="text-text-subtle">—</span>
-                            )}
-                          </TD>
-                          <TD className="whitespace-nowrap text-text-muted">
-                            {hasLedger ? (
-                              <>
-                                {formatDmy(row.earliestDate)} &rarr;{' '}
-                                {formatDmy(row.latestDate)}
-                              </>
-                            ) : (
-                              <span className="inline-flex h-[22px] items-center whitespace-nowrap rounded-full border border-dashed border-border px-2 text-xs font-medium text-text-subtle">
-                                No ledger yet
-                              </span>
-                            )}
-                          </TD>
-                          <TD className="whitespace-nowrap text-right font-medium tabular-nums">
-                            {row.closingBalance === null ? (
-                              <span className="text-text-subtle">—</span>
-                            ) : (
-                              <Balance value={row.closingBalance} />
-                            )}
-                          </TD>
-                          <TD className="whitespace-nowrap text-text-muted">
-                            {row.lastSyncedAt ? formatDateTime(row.lastSyncedAt) : '—'}
-                          </TD>
-                          <TD className="text-right">
-                            {hasLedger ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpen(row.dealerId);
-                                }}
-                              >
-                                View ledger
-                              </Button>
-                            ) : (
-                              <span className="text-xs text-text-subtle">
-                                Nothing collected
-                              </span>
-                            )}
-                          </TD>
-                        </TRow>
-                      );
-                    })}
-                  </TBody>
-                </Table>
-              </div>
+                            </TD>
+                            <TD className="whitespace-nowrap text-text-muted">
+                              {hasLedger ? (
+                                <>
+                                  {formatDmy(row.earliestDate)} &rarr;{' '}
+                                  {formatDmy(row.latestDate)}
+                                </>
+                              ) : (
+                                <span className="inline-flex h-[22px] items-center whitespace-nowrap rounded-full border border-dashed border-border px-2 text-xs font-medium text-text-subtle">
+                                  No ledger yet
+                                </span>
+                              )}
+                            </TD>
+                            <TD className="whitespace-nowrap text-right font-medium tabular-nums">
+                              {row.closingBalance === null ? (
+                                <span className="text-text-subtle">—</span>
+                              ) : (
+                                <Balance value={row.closingBalance} />
+                              )}
+                            </TD>
+                            <TD className="whitespace-nowrap text-text-muted">
+                              {row.lastSyncedAt ? formatDateTime(row.lastSyncedAt) : '—'}
+                            </TD>
+                            <TD className="text-right">
+                              {hasLedger ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpen(row.dealerId);
+                                  }}
+                                >
+                                  View ledger
+                                </Button>
+                              ) : (
+                                <span className="text-xs text-text-subtle">
+                                  Nothing collected
+                                </span>
+                              )}
+                            </TD>
+                          </TRow>
+                        );
+                      })}
+                    </TBody>
+                  </Table>
+                </div>
+              ) : null}
 
               {/* Mobile card-stack (< md). A dealer with a ledger is one tap
                   target; an empty one carries no action, so it is a plain card
                   rather than a button that would do nothing. */}
-              <MobileCardList
-                className="p-3"
-                cards={visible.map((row) => {
-                  const hasLedger = row.rowCount > 0;
-                  return {
-                    key: row.dealerId,
-                    onClick: hasLedger ? () => onOpen(row.dealerId) : undefined,
-                    primary: (
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="truncate font-medium text-text">
-                          {dealerCodeLabel(row.dealerCode)}
-                        </span>
-                        {row.enabled ? null : <Badge intent="neutral">Paused</Badge>}
-                      </span>
-                    ),
-                    primaryRight: hasLedger ? (
-                      <span className="whitespace-nowrap text-sm font-medium tabular-nums">
-                        {row.closingBalance === null ? (
-                          '—'
-                        ) : (
-                          <Balance value={row.closingBalance} />
-                        )}
-                      </span>
-                    ) : (
-                      <span className="inline-flex h-[22px] items-center whitespace-nowrap rounded-full border border-dashed border-border px-2 text-xs font-medium text-text-subtle">
-                        No ledger
-                      </span>
-                    ),
-                    secondary: (
-                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-mono text-xs">
-                          {row.dealerCode || '—'}
-                        </span>
-                        {hasLedger ? (
-                          <span className="text-xs tabular-nums">
-                            · {row.rowCount.toLocaleString('en-IN')} txns
+              {isMd ? null : (
+                <MobileCardList
+                  variant="rows"
+                  cards={visible.map((row) => {
+                    const hasLedger = row.rowCount > 0;
+                    return {
+                      key: row.dealerId,
+                      onClick: hasLedger ? () => onOpen(row.dealerId) : undefined,
+                      primary: (
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="truncate font-medium text-text">
+                            {dealerCodeLabel(row.dealerCode)}
                           </span>
-                        ) : null}
-                      </span>
-                    ),
-                    meta: hasLedger ? (
-                      <span className="flex flex-col gap-0.5">
-                        <span>
-                          {formatDmy(row.earliestDate)} → {formatDmy(row.latestDate)}
+                          {row.enabled ? null : <Badge intent="neutral">Paused</Badge>}
                         </span>
-                        {row.lastSyncedAt ? (
-                          <span>Last synced {formatDateTime(row.lastSyncedAt)}</span>
-                        ) : null}
-                      </span>
-                    ) : (
-                      <span>
-                        Nothing collected yet — the service has not produced a
-                        statement for this dealer.
-                      </span>
-                    ),
-                  };
-                })}
-              />
+                      ),
+                      primaryRight: hasLedger ? (
+                        <span className="whitespace-nowrap text-sm font-medium tabular-nums">
+                          {row.closingBalance === null ? (
+                            '—'
+                          ) : (
+                            <Balance value={row.closingBalance} />
+                          )}
+                        </span>
+                      ) : (
+                        <span className="inline-flex h-[22px] items-center whitespace-nowrap rounded-full border border-dashed border-border px-2 text-xs font-medium text-text-subtle">
+                          No ledger
+                        </span>
+                      ),
+                      secondary: (
+                        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="font-mono text-xs">
+                            {row.dealerCode || '—'}
+                          </span>
+                          {hasLedger ? (
+                            <span className="text-xs tabular-nums">
+                              · {row.rowCount.toLocaleString('en-IN')} txns
+                            </span>
+                          ) : null}
+                        </span>
+                      ),
+                      meta: hasLedger ? (
+                        <span className="flex flex-col gap-0.5">
+                          <span>
+                            {formatDmy(row.earliestDate)} → {formatDmy(row.latestDate)}
+                          </span>
+                          {row.lastSyncedAt ? (
+                            <span>Last synced {formatDateTime(row.lastSyncedAt)}</span>
+                          ) : null}
+                        </span>
+                      ) : (
+                        <span>
+                          Nothing collected yet — the service has not produced a
+                          statement for this dealer.
+                        </span>
+                      ),
+                    };
+                  })}
+                />
+              )}
             </>
           )}
         </CardContent>
@@ -509,6 +525,10 @@ function DealerLedger({
   listFailed: boolean;
   onBack: () => void;
 }) {
+  // Eight columns x a 50-row page is 400 cells a phone never shows. Build one
+  // shape, not both — the CSS visibility classes are left in place as the
+  // backstop.
+  const isMd = useMediaQuery('(min-width: 768px)');
   const {
     data,
     isLoading,
@@ -537,7 +557,7 @@ function DealerLedger({
   if (!row && !listLoading) {
     return (
       <Card>
-        <CardContent className="p-3">
+        <CardContent>
           {backButton}
           <EmptyState
             icon={<AlertCircle width={28} height={28} strokeWidth={1.75} />}
@@ -558,9 +578,9 @@ function DealerLedger({
   }
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3 md:gap-4">
       <Card>
-        <CardContent className="p-3">
+        <CardContent>
           {backButton}
           <div className="mt-1 flex flex-wrap items-start justify-between gap-3 px-1">
             <div className="min-w-0">
@@ -617,7 +637,10 @@ function DealerLedger({
       </Card>
 
       <Card>
-        <CardContent className="p-0">
+        {/* `padding="none"`, not `className="p-0"`: `cn` is clsx and Tailwind
+            emits `.p-4` after `.p-0`, so the p-0 never applied. `md:p-4` is a
+            separate declaration, so ≥768px stays exactly as it renders today. */}
+        <CardContent padding="none" className="md:p-4">
           {/* `CardHeader action`: the `whitespace-nowrap` count badge does not
               shrink, so in a `justify-between` row that cannot wrap it left the
               three-sentence description ~204px at 360px — six or seven lines. */}
@@ -665,88 +688,92 @@ function DealerLedger({
               {/* Desktop table (≥ md). Eight columns is wide; `Table` scrolls it
                   inside the card, and the pane's own `min-w-0` track keeps that
                   from turning into a sideways scroll of the whole page. */}
-              <div className="hidden md:block">
-                <Table>
-                  <THead>
-                    <TRow>
-                      <TH>Date</TH>
-                      <TH>Document</TH>
-                      <TH>Type</TH>
-                      <TH>Terminal</TH>
-                      <TH>Product</TH>
-                      <TH className="text-right">Debit</TH>
-                      <TH className="text-right">Credit</TH>
-                      <TH className="text-right">Balance</TH>
-                    </TRow>
-                  </THead>
-                  <TBody>
-                    {rows.map((r) => (
-                      <TRow key={r.seq}>
-                        <TD className="whitespace-nowrap text-text-muted">
-                          {formatDmy(r.date)}
-                        </TD>
-                        <TD className="font-medium">{r.doc || '—'}</TD>
-                        <TD className="text-text-muted">{r.txnType || '—'}</TD>
-                        <TD className="text-text-muted">{r.terminal || '—'}</TD>
-                        <TD className="text-text-muted">{r.product || '—'}</TD>
-                        <TD className="whitespace-nowrap text-right tabular-nums">
-                          <Amount value={r.debit} />
-                        </TD>
-                        <TD className="whitespace-nowrap text-right tabular-nums">
-                          <Amount value={r.credit} />
-                        </TD>
-                        <TD className="whitespace-nowrap text-right font-medium tabular-nums">
-                          <Balance value={r.balance} />
-                        </TD>
+              {isMd ? (
+                <div className="hidden md:block">
+                  <Table>
+                    <THead>
+                      <TRow>
+                        <TH>Date</TH>
+                        <TH>Document</TH>
+                        <TH>Type</TH>
+                        <TH>Terminal</TH>
+                        <TH>Product</TH>
+                        <TH className="text-right">Debit</TH>
+                        <TH className="text-right">Credit</TH>
+                        <TH className="text-right">Balance</TH>
                       </TRow>
-                    ))}
-                  </TBody>
-                </Table>
-              </div>
+                    </THead>
+                    <TBody>
+                      {rows.map((r) => (
+                        <TRow key={r.seq}>
+                          <TD className="whitespace-nowrap text-text-muted">
+                            {formatDmy(r.date)}
+                          </TD>
+                          <TD className="font-medium">{r.doc || '—'}</TD>
+                          <TD className="text-text-muted">{r.txnType || '—'}</TD>
+                          <TD className="text-text-muted">{r.terminal || '—'}</TD>
+                          <TD className="text-text-muted">{r.product || '—'}</TD>
+                          <TD className="whitespace-nowrap text-right tabular-nums">
+                            <Amount value={r.debit} />
+                          </TD>
+                          <TD className="whitespace-nowrap text-right tabular-nums">
+                            <Amount value={r.credit} />
+                          </TD>
+                          <TD className="whitespace-nowrap text-right font-medium tabular-nums">
+                            <Balance value={r.balance} />
+                          </TD>
+                        </TRow>
+                      ))}
+                    </TBody>
+                  </Table>
+                </div>
+              ) : null}
 
               {/* Mobile card-stack (< md). Debit and credit are the numbers an
                   admin scans for, so they lead; the descriptive columns follow. */}
-              <MobileCardList
-                className="p-3"
-                cards={rows.map((r) => ({
-                  key: String(r.seq),
-                  primary: (
-                    <span className="flex min-w-0 items-baseline gap-2">
-                      <span className="whitespace-nowrap text-sm font-medium text-text">
-                        {formatDmy(r.date)}
-                      </span>
-                      <span className="truncate text-xs text-text-muted">
-                        {r.doc || '—'}
-                      </span>
-                    </span>
-                  ),
-                  primaryRight: (
-                    <span className="whitespace-nowrap text-sm font-medium tabular-nums">
-                      <Balance value={r.balance} />
-                    </span>
-                  ),
-                  secondary: (
-                    <span className="flex flex-wrap items-center gap-x-3 text-xs tabular-nums">
-                      {r.debit ? (
-                        <span>Debit {inrFormat(r.debit)}</span>
-                      ) : null}
-                      {r.credit ? (
-                        <span className="text-success">
-                          Credit {inrFormat(r.credit)}
+              {isMd ? null : (
+                <MobileCardList
+                  variant="rows"
+                  cards={rows.map((r) => ({
+                    key: String(r.seq),
+                    primary: (
+                      <span className="flex min-w-0 items-baseline gap-2">
+                        <span className="whitespace-nowrap text-sm font-medium text-text">
+                          {formatDmy(r.date)}
                         </span>
-                      ) : null}
-                      {!r.debit && !r.credit ? <span>No amount</span> : null}
-                    </span>
-                  ),
-                  meta: (
-                    <span className="flex flex-wrap items-center gap-x-2">
-                      <span>{r.txnType || '—'}</span>
-                      {r.terminal ? <span>· {r.terminal}</span> : null}
-                      {r.product ? <span>· {r.product}</span> : null}
-                    </span>
-                  ),
-                }))}
-              />
+                        <span className="truncate text-xs text-text-muted">
+                          {r.doc || '—'}
+                        </span>
+                      </span>
+                    ),
+                    primaryRight: (
+                      <span className="whitespace-nowrap text-sm font-medium tabular-nums">
+                        <Balance value={r.balance} />
+                      </span>
+                    ),
+                    secondary: (
+                      <span className="flex flex-wrap items-center gap-x-3 text-xs tabular-nums">
+                        {r.debit ? (
+                          <span>Debit {inrFormat(r.debit)}</span>
+                        ) : null}
+                        {r.credit ? (
+                          <span className="text-success">
+                            Credit {inrFormat(r.credit)}
+                          </span>
+                        ) : null}
+                        {!r.debit && !r.credit ? <span>No amount</span> : null}
+                      </span>
+                    ),
+                    meta: (
+                      <span className="flex flex-wrap items-center gap-x-2">
+                        <span>{r.txnType || '—'}</span>
+                        {r.terminal ? <span>· {r.terminal}</span> : null}
+                        {r.product ? <span>· {r.product}</span> : null}
+                      </span>
+                    ),
+                  }))}
+                />
+              )}
 
               <div className="flex items-center justify-between gap-3 border-t border-border p-3">
                 <span className="text-xs text-text-subtle">

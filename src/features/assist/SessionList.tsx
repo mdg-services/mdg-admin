@@ -75,7 +75,7 @@ export function SessionListTab({
   if (listQ.isError) {
     return (
       <Card>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           <EmptyState
             icon={<AlertCircle width={28} height={28} strokeWidth={1.75} />}
             title="Could not load the conversations"
@@ -96,7 +96,7 @@ export function SessionListTab({
   if (items.length === 0) {
     return (
       <Card>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           <EmptyState
             icon={<MessageSquare width={28} height={28} strokeWidth={1.75} />}
             title={
@@ -115,7 +115,7 @@ export function SessionListTab({
 
   return (
     <Card>
-      <CardContent className="p-0">
+      <CardContent padding="none" className="md:p-4">
         {/* Desktop table (≥ md) */}
         <div className="hidden md:block">
           <SessionTable tab={tab} items={items} onOpen={onOpen} />
@@ -125,7 +125,7 @@ export function SessionListTab({
             buttons — a tel: link and the follow-up control — so it is NOT a
             single tap target; a button inside a button is not a thing. */}
         <MobileCardList
-          className="p-3"
+          variant="rows"
           cards={items.map((s) => ({
             key: s.id,
             onClick: tab === 'leads' ? undefined : () => onOpen(s.id),
@@ -163,30 +163,40 @@ export function SessionListTab({
                   </Badge>
                 </div>
               ),
+            // One line, not three stacked bars. The three controls each keep
+            // their own 44px target — that floor is not what was costing the
+            // height. What cost it was that every one of them was full width:
+            // the number, the follow-up and Open took 108px of a card whose own
+            // content is four short lines. The number is a link again rather
+            // than a button-shaped box (it was never a button), the select
+            // carries a 9rem floor so its longest label still reads, and Open
+            // takes only its label. `wrap` is the safety net: on a narrow phone
+            // Open drops to a second line instead of anything being clipped.
+            actionsLayout: tab === 'leads' ? ('wrap' as const) : undefined,
             actions:
               tab === 'leads' ? (
-                <div className="grid gap-2">
-                  <FollowupSelect session={s} />
-                  <div className="flex items-center gap-2">
-                    {s.lead.mobile ? (
-                      <a
-                        href={`tel:+91${s.lead.mobile}`}
-                        className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-sm border border-border-strong bg-surface px-3 text-sm font-medium tabular-nums text-brand"
-                      >
-                        <Phone width={14} height={14} strokeWidth={1.75} aria-hidden />
-                        {s.lead.mobile}
-                      </a>
-                    ) : null}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => onOpen(s.id)}
+                <>
+                  {s.lead.mobile ? (
+                    <a
+                      href={`tel:+91${s.lead.mobile}`}
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-medium tabular-nums text-brand underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                     >
-                      Open
-                    </Button>
+                      <Phone width={14} height={14} strokeWidth={1.75} aria-hidden />
+                      {s.lead.mobile}
+                    </a>
+                  ) : null}
+                  <div className="min-w-[9rem] flex-1">
+                    <FollowupSelect session={s} />
                   </div>
-                </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => onOpen(s.id)}
+                  >
+                    Open
+                  </Button>
+                </>
               ) : undefined,
           }))}
         />

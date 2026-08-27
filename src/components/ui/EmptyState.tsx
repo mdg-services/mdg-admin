@@ -20,7 +20,10 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-2 px-6 py-12 text-center',
+        // 96px of vertical padding is a desktop panel's proportions. On a
+        // 740px phone that is an eighth of the screen spent saying there is
+        // nothing here; the md values are the ones that have always shipped.
+        'flex flex-col items-center justify-center gap-2 px-4 py-8 text-center md:px-6 md:py-12',
         className,
       )}
     >

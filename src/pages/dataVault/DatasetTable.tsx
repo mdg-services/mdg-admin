@@ -15,6 +15,7 @@ import {
   TRow,
 } from '@/components/ui';
 import type { KeyValueItem } from '@/components/ui';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
 import { irasFieldPolicy } from '@dk/shared';
 import type { IrasDataset } from '@dk/shared';
@@ -89,6 +90,12 @@ function rowItems(dataset: IrasDataset, row: Record<string, string>): KeyValueIt
  * 20-column table is unusable on a phone.
  */
 export function DatasetTable({ dataset, filePrefix, className }: DatasetTableProps) {
+  // Which shape to BUILD, not just which to show. A portal report carries up to
+  // 36 columns and 50 rows, so the pair of shapes below is up to ~1,800 `<td>`s
+  // plus the same rows again as cards — and a snapshot opens several datasets at
+  // once. The `hidden md:block` / `md:hidden` classes stay as they are, so if
+  // this query is ever momentarily wrong nothing is shown twice.
+  const isMd = useMediaQuery('(min-width: 768px)');
   const [query, setQuery] = React.useState('');
   const [limit, setLimit] = React.useState(INITIAL_ROWS);
 
@@ -113,8 +120,11 @@ export function DatasetTable({ dataset, filePrefix, className }: DatasetTablePro
 
   return (
     <div className={cn('flex flex-col gap-3', className)}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative sm:max-w-xs sm:flex-1">
+      {/* `md:`, not `sm:`. 640px fires on no phone in the target set, and
+          between 640 and 767px it flipped this toolbar into its desktop row
+          while the rows below were still the phone card stack. */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="relative md:max-w-xs md:flex-1">
           <Search
             width={15}
             height={15}
@@ -130,7 +140,7 @@ export function DatasetTable({ dataset, filePrefix, className }: DatasetTablePro
             className="pl-9"
           />
         </div>
-        <div className="flex items-center justify-between gap-3 sm:justify-end">
+        <div className="flex items-center justify-between gap-3 md:justify-end">
           <span className="text-xs tabular-nums text-text-subtle">
             {filtered
               ? `${rows.length} of ${dataset.rows.length} rows`
@@ -171,39 +181,41 @@ export function DatasetTable({ dataset, filePrefix, className }: DatasetTablePro
         <>
           {/* Desktop (≥ md): the portal's own grid, scrolled inside its own box
               with the first column pinned so a wide report stays readable. */}
-          <div className="hidden overflow-hidden rounded-md border border-border md:block">
-            {/* `freezeFirstColumn` replaces the four hand-written sticky classes
-                this file used to carry — same rules, one place, and the header's
-                corner cell now beats the body's frozen cells on both axes. */}
-            <Table freezeFirstColumn>
-              <THead>
-                <TRow>
-                  {dataset.columns.map((col) => (
-                    <TH key={col.field} className="whitespace-nowrap">
-                      {col.headerName}
-                    </TH>
-                  ))}
-                </TRow>
-              </THead>
-              <TBody>
-                {visible.map((row, rowIndex) => (
-                  <TRow key={rowIndex}>
-                    {dataset.columns.map((col, i) => (
-                      <TD
-                        key={col.field}
-                        className={cn(
-                          'whitespace-nowrap tabular-nums',
-                          i === 0 ? 'font-medium' : 'text-text-muted',
-                        )}
-                      >
-                        {row[col.field] || '—'}
-                      </TD>
+          {isMd ? (
+            <div className="hidden overflow-hidden rounded-md border border-border md:block">
+              {/* `freezeFirstColumn` replaces the four hand-written sticky classes
+                  this file used to carry — same rules, one place, and the header's
+                  corner cell now beats the body's frozen cells on both axes. */}
+              <Table freezeFirstColumn>
+                <THead>
+                  <TRow>
+                    {dataset.columns.map((col) => (
+                      <TH key={col.field} className="whitespace-nowrap">
+                        {col.headerName}
+                      </TH>
                     ))}
                   </TRow>
-                ))}
-              </TBody>
-            </Table>
-          </div>
+                </THead>
+                <TBody>
+                  {visible.map((row, rowIndex) => (
+                    <TRow key={rowIndex}>
+                      {dataset.columns.map((col, i) => (
+                        <TD
+                          key={col.field}
+                          className={cn(
+                            'whitespace-nowrap tabular-nums',
+                            i === 0 ? 'font-medium' : 'text-text-muted',
+                          )}
+                        >
+                          {row[col.field] || '—'}
+                        </TD>
+                      ))}
+                    </TRow>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+          ) : null}
 
           {/*
             Mobile (< md): one key/value card per row, opening on the columns the
@@ -214,19 +226,21 @@ export function DatasetTable({ dataset, filePrefix, className }: DatasetTablePro
             predicate the day editor uses decides what opens; `Show all N fields`
             is there when the answer is not in the short list.
           */}
-          <ul className="grid gap-2 md:hidden">
-            {visible.map((row, rowIndex) => (
-              <li
-                key={rowIndex}
-                className="rounded-lg border border-border bg-surface p-3"
-              >
-                <KeyValueList
-                  items={rowItems(dataset, row)}
-                  collapseAfter={usedByReportCount(dataset)}
-                />
-              </li>
-            ))}
-          </ul>
+          {isMd ? null : (
+            <ul className="grid gap-2 md:hidden">
+              {visible.map((row, rowIndex) => (
+                <li
+                  key={rowIndex}
+                  className="rounded-lg border border-border bg-surface p-2.5 md:p-3"
+                >
+                  <KeyValueList
+                    items={rowItems(dataset, row)}
+                    collapseAfter={usedByReportCount(dataset)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
 
           {hidden > 0 ? (
             <div className="flex justify-center">

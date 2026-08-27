@@ -29,9 +29,9 @@ import type { AssistBlockView } from '@dk/shared';
 /**
  * The visitors we have turned away, and the one control that reverses it.
  *
- * Both shapes carry Unblock — the desktop row's last column and the card's
- * full-width button — because an action that lives only at x≈600 of a table
- * inside a 296px card is an action a phone does not have.
+ * Both shapes carry Unblock — the desktop row's last column and a button on
+ * the card — because an action that lives only at x≈600 of a table inside a
+ * 296px card is an action a phone does not have.
  */
 export function BlockedTab() {
   const blocksQ = useAssistBlocksQuery();
@@ -50,7 +50,7 @@ export function BlockedTab() {
           </CardSubtitle>
         </div>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent padding="none" className="md:p-4">
         {blocksQ.isLoading ? (
           <div className="grid gap-2 p-4">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -134,7 +134,7 @@ export function BlockedTab() {
             </div>
 
             <MobileCardList
-              className="p-3"
+              variant="rows"
               cards={items.map((b) => ({
                 key: b.id,
                 primary: (
@@ -157,13 +157,13 @@ export function BlockedTab() {
                     {b.expiresAt ? `until ${formatDateTime(b.expiresAt)}` : 'until lifted'}
                   </span>
                 ),
+                // As wide as the word, not as wide as the card. A 328px bar
+                // per row, on a list whose rows are two short lines, made the
+                // button the loudest thing on the screen — and Unblock is the
+                // one thing here nobody should reach for by accident. The 44px
+                // target is untouched; only the paint shrank.
                 actions: (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => setConfirming(b)}
-                  >
+                  <Button variant="secondary" size="sm" onClick={() => setConfirming(b)}>
                     Unblock
                   </Button>
                 ),

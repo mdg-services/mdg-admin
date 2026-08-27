@@ -69,7 +69,14 @@ export function RankedBars({
         return (
           <li key={d.key} className="grid gap-1">
             <div className="flex items-baseline justify-between gap-3">
-              <span className="min-w-0 truncate text-sm text-text">
+              {/* Wraps below md, `truncate` from md up. The label is the only
+                  thing that says WHAT the bar under it measures, and it shares
+                  a row with a `shrink-0` value — at 360px inside a drawer that
+                  leaves it about 200px, so "Cleaning the forecourt and toilets"
+                  became "Cleaning the fore…" and the bar measured something
+                  unnameable. A phone has the vertical room to spare; a desktop
+                  row keeps its single line. */}
+              <span className="min-w-0 break-words text-sm text-text md:truncate">
                 {showRank ? (
                   <span className="mr-1.5 tabular-nums text-text-subtle">{d.rank ?? i + 1}</span>
                 ) : null}

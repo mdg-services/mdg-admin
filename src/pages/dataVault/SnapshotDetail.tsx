@@ -105,7 +105,12 @@ export function SnapshotDetail({
             Collected at {formatDateTime(snapshot.capturedAt)}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {/* `shrink-0` only from md. Below it the group holds a date field and
+            two buttons — wider than the 328px a 360px screen offers — and a
+            group that refuses to shrink takes the whole row off the right edge,
+            where `main`'s `overflow-x-hidden` clips it with no gesture that
+            reaches it. */}
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 md:w-auto md:shrink-0">
           {/* The way into the editor from every Vault surface — the cross-dealer
               drawer, the per-dealer tab and a historic capture all render this
               panel, so one button here covers all three. */}
@@ -204,7 +209,7 @@ function ShiftAnchorCard({ shift }: { shift: IrasShiftAnchor }) {
 
   return (
     <Card>
-      <CardContent className="p-4">
+      <CardContent>
         <div className="flex items-center gap-2">
           <Clock
             width={16}
@@ -219,7 +224,11 @@ function ShiftAnchorCard({ shift }: { shift: IrasShiftAnchor }) {
           shifts IRAS offered from the search floor onwards.
         </p>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        {/* Three across at every width, not stacked below `sm`. Each box holds
+            one `HH:MM:SS`, so three of them fit a 360px screen — stacked they
+            were three 70px boxes, 210px of a 640px screen, to state three
+            times. */}
+        <div className="mt-3 grid grid-cols-3 gap-1.5 md:gap-2">
           <AnchorStep
             label="Configured shift"
             value={hhmm(shift.configuredTime)}
@@ -283,7 +292,7 @@ function AnchorStep({
   return (
     <div
       className={cn(
-        'rounded-md border px-3 py-2',
+        'rounded-md border px-2 py-2 md:px-3',
         selected
           ? 'border-brand bg-brand-soft'
           : 'border-border bg-surface-2',
@@ -299,14 +308,14 @@ function AnchorStep({
       </p>
       <p
         className={cn(
-          'mt-0.5 font-mono text-lg font-semibold tabular-nums',
+          'mt-0.5 font-mono text-sm font-semibold tabular-nums md:text-lg',
           selected ? 'text-brand' : 'text-text',
         )}
       >
         {value}
       </p>
       {hint ? (
-        <p className="mt-0.5 truncate text-[11px] text-text-subtle">{hint}</p>
+        <p className="mt-0.5 break-words text-[11px] text-text-subtle">{hint}</p>
       ) : null}
     </div>
   );
@@ -381,12 +390,12 @@ function DatasetSection({
           width={16}
           height={16}
           strokeWidth={1.75}
-          className="mt-0.5 hidden shrink-0 text-text-subtle sm:block"
+          className="mt-0.5 hidden shrink-0 text-text-subtle md:block"
           aria-hidden
         />
       </button>
       {open ? (
-        <div className="border-t border-border bg-bg p-3">
+        <div className="border-t border-border bg-bg p-2 md:p-3">
           <DatasetTable dataset={dataset} filePrefix={filePrefix} />
         </div>
       ) : null}

@@ -243,7 +243,12 @@ export function ActivityPage() {
       </FilterBar>
 
       <Card>
-        <CardContent className="p-0">
+        {/* The body is the audit list itself, so below md it runs to the card's
+            own edges rather than nesting a bordered row inside a bordered card
+            inside the page gutter. `md:p-4` is what md+ already renders: the old
+            call-site `p-0` never won, because `cn` is clsx and `.p-4` is emitted
+            after `.p-0`. */}
+        <CardContent padding="none" className="md:p-4">
           {isLoading ? (
             <ListSkeleton />
           ) : isError ? (
@@ -321,7 +326,7 @@ export function ActivityPage() {
 
               {/* Mobile card-stack (< md) */}
               <MobileCardList
-                className="p-3"
+                variant="rows"
                 cards={(data.items as AuditRow[]).map((row) => ({
                   key: row.id,
                   onClick: () => setSelected(row),
@@ -387,8 +392,13 @@ function AuditDetailDialog({
       description={row ? formatDateTime(row.at) : undefined}
     >
       {row ? (
-        <div className="flex flex-col gap-4 text-sm">
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+        <div className="flex flex-col gap-3 text-sm md:gap-4">
+          {/* `md:`, not `sm:`. The two-up only ever fired at 640px, which no
+              phone in scope reaches, and two of these nine values are a
+              24-character id and a full user-agent string — at 140px a column
+              they would break-all into a wall. One column below md is the
+              honest shape; md+ is the two-up it has always been. */}
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 md:grid-cols-2">
             <DetailRow label="Actor" value={row.actorName || row.actorEmail || 'System'} />
             <DetailRow label="Role" value={roleLabel(row.actorRole)} />
             <DetailRow label="Actor email" value={row.actorEmail ?? '—'} />
@@ -465,7 +475,7 @@ function JsonBlock({ label, value }: { label: string; value: unknown }) {
  */
 function ListSkeleton() {
   return (
-    <div className="p-4">
+    <div className="p-3 md:p-4">
       <div className="grid gap-2 md:hidden">
         {Array.from({ length: 6 }).map((_, i) => (
           <Skeleton key={i} className="h-20" />

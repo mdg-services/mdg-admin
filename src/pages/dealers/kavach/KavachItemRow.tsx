@@ -50,7 +50,10 @@ export function KavachItemRow({ item, busy, onTogglePause, onToggleSos, onVerify
   const requestLive = item.request.state !== 'NONE';
 
   return (
-    <div className="flex flex-col gap-2 border-t border-border px-4 py-3 first:border-t-0 md:flex-row md:items-center md:justify-between">
+    // `px-3` below md: this row is already inside the page gutter and a card
+    // border, so a 16px inset here is the third helping of the same padding and
+    // puts a bilingual task label 29px from the edge of a 360px screen.
+    <div className="flex flex-col gap-2 border-t border-border px-3 py-2.5 first:border-t-0 md:flex-row md:items-center md:justify-between md:px-4 md:py-3">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium text-text">{item.labelEn}</span>
@@ -113,17 +116,33 @@ export function KavachItemRow({ item, busy, onTogglePause, onToggleSos, onVerify
           </span>
           {/* Never verified is an absence, not a blank: say so rather than
               leaving the line off and letting it read as "fine". */}
+          {/* Below md this line keeps only what changes a decision. Eight items
+              at `text-xs` in ~290px of row wrapped to four or five lines, so one
+              task stood 150px tall before its Verify button — and the expiry and
+              hold dates are both restatements of the status badge already above.
+              Who did the checking is an audit detail, not a decision. Desktop
+              keeps every word. */}
           {item.lastVerifiedAt ? (
             <span>
-              checked by {verifierLabel(item.lastVerifiedByKind)}{' '}
+              checked
+              <span className="hidden md:inline">
+                {' '}
+                by {verifierLabel(item.lastVerifiedByKind)}
+              </span>{' '}
               {formatDate(item.lastVerifiedAt)}
             </span>
           ) : (
             <span>never checked</span>
           )}
-          {item.expiresAt ? <span>expires {formatDate(item.expiresAt)}</span> : null}
+          {item.expiresAt ? (
+            <span className="hidden md:inline">
+              expires {formatDate(item.expiresAt)}
+            </span>
+          ) : null}
           {item.status === 'HELD' && item.holdUntil ? (
-            <span>held until {formatDate(item.holdUntil)}</span>
+            <span className="hidden md:inline">
+              held until {formatDate(item.holdUntil)}
+            </span>
           ) : null}
         </div>
       </div>

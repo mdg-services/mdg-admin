@@ -654,7 +654,7 @@ export function InboxPage() {
   return (
     <div
       className={cn(
-        '-m-4 flex md:-m-6 md:h-full',
+        '-m-[var(--app-gutter)] flex md:h-full',
         threadOpen
           ? 'h-[calc(100%+2rem+env(safe-area-inset-bottom))]'
           : 'h-[calc(100%+2rem)]',
@@ -950,8 +950,11 @@ export function InboxPage() {
                 </div>
                 </div>
               </div>
-              {/* Mobile action cluster: one primary by status + details + a
-                  kebab holding the rest (Take over / Upload report). */}
+              {/* Mobile action cluster: one primary by status and a kebab
+                  holding the rest (Details / Take over / Upload report). Four
+                  controls — back chevron, status button, Details, kebab — took
+                  ~232px of a 360px header and left the member's name ~110px, so
+                  Details moved into the sheet the kebab already opens. */}
               <div className="flex items-center gap-1 md:hidden">
                 {conversation.status === 'OPEN' ? (
                   <Button
@@ -992,14 +995,6 @@ export function InboxPage() {
                     Reopen
                   </Button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => setMobileContextOpen(true)}
-                  aria-label="Show details"
-                  className="flex h-11 w-11 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text"
-                >
-                  <Info width={18} height={18} strokeWidth={1.75} />
-                </button>
                 <button
                   type="button"
                   onClick={() => setThreadMenuOpen(true)}
@@ -1206,6 +1201,15 @@ export function InboxPage() {
               onClose={() => setThreadMenuOpen(false)}
               title="Actions"
             >
+              <SheetItem
+                icon={<Info width={20} height={20} strokeWidth={1.75} />}
+                onClick={() => {
+                  setThreadMenuOpen(false);
+                  setMobileContextOpen(true);
+                }}
+              >
+                Details
+              </SheetItem>
               {conversation.status === 'ASSIGNED' &&
               conversation.assignedAdminId !== currentUserId ? (
                 <SheetItem

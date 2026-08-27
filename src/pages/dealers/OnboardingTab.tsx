@@ -84,7 +84,7 @@ export function OnboardingTab({ dealer }: Props) {
   const done = board.completedStepCount;
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3 md:gap-4">
       {dealer.status === 'ACTIVE' ? (
         <Card>
           <CardContent>
@@ -124,7 +124,7 @@ export function OnboardingTab({ dealer }: Props) {
         </Card>
       )}
 
-      <ol className="grid gap-3">
+      <ol className="grid gap-2 md:gap-3">
         {ONBOARDING_STEPS.map((def) => {
           const entry = board.steps.find((s) => s.id === def.id);
           const isCurrent = board.currentStepId === def.id;

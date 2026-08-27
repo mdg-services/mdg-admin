@@ -19,7 +19,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
         ref={ref}
         rows={rows}
         className={cn(
-          'w-full rounded-sm border bg-surface px-3 py-2 text-base md:text-sm text-text',
+          'w-full min-w-0 rounded-sm border bg-surface px-3 py-2 text-base md:text-sm text-text',
           'placeholder:text-text-subtle',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
           invalid ? 'border-danger' : 'border-border-strong',

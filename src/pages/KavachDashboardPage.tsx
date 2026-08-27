@@ -89,7 +89,7 @@ export function KavachDashboardPage() {
       />
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent padding="none" className="md:p-4">
           {isLoading ? (
             <div className="p-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
@@ -202,7 +202,7 @@ export function KavachDashboardPage() {
 
             {/* Mobile card-stack (< md) */}
             <MobileCardList
-              className="p-3"
+              variant="rows"
               cards={rows.map((r) => ({
                 key: r.programmeId,
                 onClick: () => navigate(`/dealers/${r.dealerId}?tab=kavach`),

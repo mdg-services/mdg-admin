@@ -5,6 +5,9 @@ import {
   Button,
   Card,
   CardContent,
+  CardHeader,
+  CardSubtitle,
+  CardTitle,
   EmptyState,
   FieldError,
   Label,
@@ -119,7 +122,7 @@ export function CustomRequestTab({ dealer }: Props) {
     // foot of this tab would never actually stick. A flex item is offset within
     // the flex container's content box, which is the whole tab. The stacking
     // and the 1rem gap are identical either way.
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3 md:gap-4">
       <Card>
         <CardContent className="grid gap-3">
           <div>
@@ -166,13 +169,16 @@ export function CustomRequestTab({ dealer }: Props) {
       </Card>
 
       <Card>
-        <CardContent className="p-0">
-          <div className="border-b border-border p-4">
-            <p className="text-base font-semibold text-text">Recent runs</p>
-            <p className="text-sm text-text-muted">
-              Runs from the custom-request plugin for this dealer.
-            </p>
-          </div>
+        <CardHeader padding="comfortable">
+          <CardTitle>Recent runs</CardTitle>
+          <CardSubtitle>
+            Runs from the custom-request plugin for this dealer.
+          </CardSubtitle>
+        </CardHeader>
+        {/* The run list brings its own padding, so the card body runs to the
+            card's edges. `padding="none"`, never `className="p-0"` — `cn` is
+            clsx and the class would simply lose to the default. */}
+        <CardContent padding="none" className="md:p-4">
           <RunsListInline
             dealerId={dealer.id}
             serviceId={CUSTOM_REQUEST_PLUGIN}

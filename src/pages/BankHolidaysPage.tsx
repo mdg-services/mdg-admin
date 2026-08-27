@@ -197,17 +197,7 @@ export function BankHolidaysPage() {
         }
       />
 
-      <Card className="mb-4">
-        <CardContent className="py-3">
-          <CardSubtitle>
-            Enabled dates push the Credit &amp; DOD payment deadline to the next
-            working day — just like Sundays and 2nd &amp; 4th Saturdays. Library
-            suggestions are national holidays; add state or bank-specific
-            holidays manually. To exclude a suggested national holiday, uncheck
-            its Enabled box and save (Remove is for manually-added dates).
-          </CardSubtitle>
-        </CardContent>
-      </Card>
+      <HowItWorksNote />
 
       <Card>
         {/* `action`, not a second child. As a child, "Add holiday" was one more
@@ -219,7 +209,11 @@ export function BankHolidaysPage() {
             bank holiday from a phone. */}
         <CardHeader
           action={
+            // Below md the same action is the `+` at the end of the month row,
+            // where it costs nothing; as a header `action` it would still buy a
+            // whole 52px line of its own for one small button.
             <Button
+              className="hidden md:inline-flex"
               variant="secondary"
               size="sm"
               onClick={() => setAddOpen(true)}
@@ -252,10 +246,22 @@ export function BankHolidaysPage() {
             >
               <ChevronRight width={16} height={16} strokeWidth={1.75} />
             </IconButton>
+            <IconButton
+              className="md:hidden"
+              variant="secondary"
+              size="sm"
+              onClick={() => setAddOpen(true)}
+              aria-label="Add holiday"
+            >
+              <Plus width={16} height={16} strokeWidth={1.75} />
+            </IconButton>
           </div>
         </CardHeader>
 
-        <CardContent className="p-0">
+        {/* The body is the month's list, so below md it runs to the card's own
+            edges. `md:p-4` is md+ unchanged: `cn` is clsx and `.p-4` is emitted
+            after `.p-0`, so the old call-site `p-0` never won there either. */}
+        <CardContent padding="none" className="md:p-4">
           {monthQ.isLoading ? (
             <ListSkeleton />
           ) : monthQ.isError ? (
@@ -365,7 +371,7 @@ export function BankHolidaysPage() {
 
               {/* Mobile card-stack (< md) */}
               <MobileCardList
-                className="p-3"
+                variant="rows"
                 cards={rows.map((r) => ({
                   key: r.date,
                   // `muted` is the phone counterpart of the desktop row's
@@ -464,6 +470,42 @@ export function BankHolidaysPage() {
         onAdd={addRow}
       />
     </div>
+  );
+}
+
+/**
+ * The 330-character standing instruction above the month.
+ *
+ * At 294px of `text-sm` that is nine lines — ~206px of a 740px screen, every
+ * visit, above a list the admin came here to edit. Below md it shows the first
+ * two lines with a control that opens the rest; the sentence about unchecking
+ * versus Remove is the one that stops a suggested holiday being deleted by
+ * mistake, so it has to stay reachable rather than be clamped away. From md up
+ * the whole paragraph is printed as it always has been and the toggle is gone.
+ */
+function HowItWorksNote() {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <Card className="mb-4">
+      <CardContent className="py-3">
+        <CardSubtitle className={open ? undefined : 'line-clamp-2 md:line-clamp-none'}>
+          Enabled dates push the Credit &amp; DOD payment deadline to the next
+          working day — just like Sundays and 2nd &amp; 4th Saturdays. Library
+          suggestions are national holidays; add state or bank-specific
+          holidays manually. To exclude a suggested national holiday, uncheck
+          its Enabled box and save (Remove is for manually-added dates).
+        </CardSubtitle>
+        <Button
+          className="md:hidden"
+          variant="ghost"
+          size="sm"
+          padding="none"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? 'Show less' : 'Show more'}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -578,7 +620,7 @@ function AddHolidayDialog({
 
 function ListSkeleton() {
   return (
-    <div className="grid gap-2 p-4">
+    <div className="grid gap-2 p-3 md:p-4">
       {Array.from({ length: 6 }).map((_, i) => (
         <Skeleton key={i} className="h-11" />
       ))}

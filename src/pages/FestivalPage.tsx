@@ -338,7 +338,7 @@ export function FestivalPage() {
         // `overflow-x-hidden` then clips two thirds of the page away with no
         // gesture that reaches it. The stage has its own `overflow-x-auto`; this
         // is what stops it recruiting its ancestors into the scroll.
-        <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+        <div className="grid gap-3 lg:grid-cols-2 md:gap-4 [&>*]:min-w-0">
           {/* Below md the Status card is ~250px of prose sitting between the
               Preview and the festival picker that drives it, so the admin chose
               a festival with the preview off the top of the screen. `order-last`
@@ -417,9 +417,16 @@ export function FestivalPage() {
                 </CardSubtitle>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-1.5">
+            <CardContent className="space-y-3 md:space-y-4">
+              {/* `md:`, not `sm:`. The three-up fired at 640px — no phone in
+                  scope — and `min-w-0` on each cell is what lets it survive at
+                  all: a grid item's automatic minimum size is its min-content
+                  width, and a `type="date"` field's is ~291px in Chrome, so
+                  without it the three tracks demand ~905px, the card overflows
+                  and `main`'s `overflow-x-hidden` takes the third field away
+                  rather than letting it scroll. */}
+              <div className="grid gap-3 md:grid-cols-3 md:gap-4">
+                <div className="min-w-0 space-y-1.5">
                   <Label htmlFor="festival">Festival</Label>
                   <Select
                     id="festival"
@@ -433,7 +440,7 @@ export function FestivalPage() {
                     ))}
                   </Select>
                 </div>
-                <div className="space-y-1.5">
+                <div className="min-w-0 space-y-1.5">
                   <Label htmlFor="startDate">Starts on</Label>
                   <Input
                     id="startDate"
@@ -442,7 +449,7 @@ export function FestivalPage() {
                     onChange={(e) => setStartDate(e.target.value)}
                   />
                 </div>
-                <div className="space-y-1.5">
+                <div className="min-w-0 space-y-1.5">
                   <Label htmlFor="days">Show for (days)</Label>
                   <Input
                     id="days"

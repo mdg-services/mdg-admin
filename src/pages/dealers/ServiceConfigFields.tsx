@@ -172,7 +172,11 @@ export function ServiceConfigFields({
         scheduleWarning={scheduleWarning}
       />
 
-      <div className="rounded-md border border-border bg-surface p-3">
+      {/* No box below md. Inside a bottom sheet this is a third surface —
+          dialog body, then this border, then each field — for 24px of a 328px
+          sheet, and the uppercase "Config" label already marks the section.
+          The box comes back at md. */}
+      <div className="rounded-md border-border bg-surface md:border md:p-3">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
           Config
         </p>

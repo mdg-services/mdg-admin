@@ -127,12 +127,20 @@ export function DsrReportView() {
       ) : null}
 
       {reportQ.isLoading ? (
-        <div className="grid gap-4">
-          <Skeleton className="h-[60vh] w-full" />
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        // Below md the report is not an inline frame at all — it is a tap card
+        // over a stacked figure list — so a 60vh block plus three h-40 blocks
+        // was more skeleton than the phone holds, none of it the shape of what
+        // arrives. One block each, at the size the real thing lands at.
+        <div className="grid gap-3 md:gap-4">
+          <Skeleton className="h-40 w-full md:h-[60vh]" />
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <Skeleton className="h-40 w-full" />
-            <Skeleton className="h-40 w-full" />
-            <Skeleton className="h-40 w-full" />
+            <div className="hidden md:block">
+              <Skeleton className="h-40 w-full" />
+            </div>
+            <div className="hidden md:block">
+              <Skeleton className="h-40 w-full" />
+            </div>
           </div>
         </div>
       ) : noReportYet ? (

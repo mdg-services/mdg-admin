@@ -168,7 +168,7 @@ export function WorkListDefaultsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-3 md:gap-4">
           {grouped.map((g) => (
             <Card key={g.domain}>
               <CardHeader>
@@ -177,7 +177,7 @@ export function WorkListDefaultsPage() {
                   <CardSubtitle>{g.items.length} work item(s)</CardSubtitle>
                 </div>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent padding="none" className="md:p-4">
                 {/* Desktop table (≥ md). Everything in here is unchanged; only
                     the wrapper is new. Below md the same six columns need
                     ~730px in a ~328px card, and `main` is `overflow-x-hidden`,
@@ -273,7 +273,7 @@ export function WorkListDefaultsPage() {
                     ("clean-forecourt-canopy-monthly") is one unbreakable token
                     and `break-words` will not split it at its hyphens. */}
                 <MobileCardList
-                  className="p-3"
+                  variant="rows"
                   cards={g.items.map((it) => ({
                     key: it.code,
                     tone: it.active ? 'default' : 'muted',
@@ -306,7 +306,14 @@ export function WorkListDefaultsPage() {
                       </span>
                     ),
                     actions: (
-                      <div className="grid grid-cols-2 gap-2">
+                      // Not `grid-cols-2`: two equal halves of a ~300px row are
+                      // ~145px each, and "Reactivate" is `whitespace-nowrap` at
+                      // ~104px of ink inside 24px of padding — it fits with
+                      // nothing to spare, and a `Button` that outgrows its box
+                      // runs off it rather than wrapping. Wrapping instead of
+                      // splitting lets each button take the width its own label
+                      // needs, and both keep the 44px floor from `Button`.
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button
                           variant="secondary"
                           size="sm"
@@ -474,7 +481,7 @@ function CreateWorkItemDialog({
       }
     >
       <form onSubmit={submit} className="grid gap-3" noValidate>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label htmlFor="wi-code" required>
               Code (slug)
@@ -608,7 +615,7 @@ function EditWorkItemDialog({
       }
     >
       <form onSubmit={submit} className="grid gap-3" noValidate>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label htmlFor="ewi-code">Code (slug)</Label>
             <Input
@@ -674,7 +681,7 @@ function FormFieldsShared({
   const isLabour = pricingMode === 'labour';
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2">
         <div>
           <Label htmlFor="wi-titleEn" required>
             Sheet title (English)
@@ -691,7 +698,7 @@ function FormFieldsShared({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2">
         <div>
           <Label htmlFor="wi-labelEn" required>
             Label (English)
@@ -708,7 +715,7 @@ function FormFieldsShared({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-3">
         <div>
           <Label htmlFor="wi-pricingMode" required>
             Pricing mode
@@ -749,7 +756,7 @@ function FormFieldsShared({
 
       {isLabour ? (
         <>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2">
             <div>
               <Label htmlFor="wi-timeMin" required>
                 Time (minutes)
@@ -780,7 +787,7 @@ function FormFieldsShared({
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-3">
             <div>
               <Label htmlFor="wi-skill" required>
                 Skill (0–100)
@@ -826,7 +833,7 @@ function FormFieldsShared({
           </div>
         </>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-3">
           <div>
             <Label htmlFor="wi-points" required>
               Points
@@ -848,7 +855,7 @@ function FormFieldsShared({
       )}
 
       {isPerUnit ? (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-3">
           <div>
             <Label htmlFor="wi-unit">Unit</Label>
             <Select

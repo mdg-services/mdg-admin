@@ -2,6 +2,7 @@ import { AlertTriangle, Plus, RotateCcw, Undo2 } from 'lucide-react';
 import * as React from 'react';
 
 import { Badge, Button, Menu, MenuItem, Table, TBody, TD, TH, THead, TRow } from '@/components/ui';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
 import {
   IRAS_ROW_LEVEL_FIELD,
@@ -122,6 +123,12 @@ export function IrasEditGrid({
   showAllColumns,
   readOnly,
 }: IrasEditGridProps) {
+  // Which shape to BUILD, not just which to show. Both shapes carry live `Cell`
+  // editors and their validation, and the note above measures the table at
+  // ~1,008px for six columns and ~4,500px for the full portal set — all of it
+  // constructed and then hidden on a phone. The `md:hidden` / `hidden md:block`
+  // classes stay as the backstop, so nothing can show twice.
+  const isMd = useMediaQuery('(min-width: 768px)');
   // Memoised, not just defaulted: `?? []` is a fresh array every render, so every
   // memo below it would recompute on each keystroke in a cell.
   const portalRows = React.useMemo(() => dataset?.rows ?? [], [dataset]);
@@ -337,59 +344,66 @@ export function IrasEditGrid({
       {/* Phone (< md): one card per row, the identity as its heading and the
           fields stacked under it. See the note on this component for why a
           table has no working size here. */}
-      <ul className="grid gap-3 md:hidden">
-        {rowModels.map((r) => (
-          <li
-            key={r.key}
-            className={cn('rounded-md border border-border bg-surface p-3', r.toneClassName)}
-          >
-            {r.gutter('card')}
-            <dl className="mt-3 grid gap-3">
-              {columns.map((col) => (
-                <div key={col.field} className="min-w-0">
-                  <dt className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium uppercase tracking-wide text-text-muted">
-                    <span className="break-all">{col.headerName}</span>
-                    <FieldPolicyMark code={code} field={col.field} shape="card" />
-                  </dt>
-                  <dd className={cn('min-w-0', r.valueClassName)}>{r.cell(col, 'card')}</dd>
-                </div>
-              ))}
-            </dl>
-          </li>
-        ))}
-      </ul>
+      {isMd ? null : (
+        <ul className="grid gap-3 md:hidden">
+          {rowModels.map((r) => (
+            <li
+              key={r.key}
+              className={cn(
+                'rounded-md border border-border bg-surface p-2.5 md:p-3',
+                r.toneClassName,
+              )}
+            >
+              {r.gutter('card')}
+              <dl className="mt-3 grid gap-3">
+                {columns.map((col) => (
+                  <div key={col.field} className="min-w-0">
+                    <dt className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium uppercase tracking-wide text-text-muted">
+                      <span className="break-all">{col.headerName}</span>
+                      <FieldPolicyMark code={code} field={col.field} shape="card" />
+                    </dt>
+                    <dd className={cn('min-w-0', r.valueClassName)}>{r.cell(col, 'card')}</dd>
+                  </div>
+                ))}
+              </dl>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {/* Desktop (≥ md): the spreadsheet, unchanged. It scrolls inside its own
           box — never the page body. */}
-      <div className="hidden overflow-x-auto rounded-md border border-border md:block">
-        <Table>
-          <THead>
-            <TRow>
-              <TH className="w-48 whitespace-nowrap">Row</TH>
-              {columns.map((col) => (
-                <TH key={col.field} className="whitespace-nowrap">
-                  <span className="flex items-center gap-1.5">
-                    {col.headerName}
-                    <FieldPolicyMark code={code} field={col.field} shape="grid" />
-                  </span>
-                </TH>
-              ))}
-            </TRow>
-          </THead>
-          <TBody>
-            {rowModels.map((r) => (
-              <TRow key={r.key} className={r.toneClassName}>
-                <TD className="align-top">{r.gutter('grid')}</TD>
+      {isMd ? (
+        <div className="hidden overflow-x-auto rounded-md border border-border md:block">
+          <Table>
+            <THead>
+              <TRow>
+                <TH className="w-48 whitespace-nowrap">Row</TH>
                 {columns.map((col) => (
-                  <TD key={col.field} className={cn('align-top', r.valueClassName)}>
-                    {r.cell(col, 'grid')}
-                  </TD>
+                  <TH key={col.field} className="whitespace-nowrap">
+                    <span className="flex items-center gap-1.5">
+                      {col.headerName}
+                      <FieldPolicyMark code={code} field={col.field} shape="grid" />
+                    </span>
+                  </TH>
                 ))}
               </TRow>
-            ))}
-          </TBody>
-        </Table>
-      </div>
+            </THead>
+            <TBody>
+              {rowModels.map((r) => (
+                <TRow key={r.key} className={r.toneClassName}>
+                  <TD className="align-top">{r.gutter('grid')}</TD>
+                  {columns.map((col) => (
+                    <TD key={col.field} className={cn('align-top', r.valueClassName)}>
+                      {r.cell(col, 'grid')}
+                    </TD>
+                  ))}
+                </TRow>
+              ))}
+            </TBody>
+          </Table>
+        </div>
+      ) : null}
 
       {readOnly ? null : (
         <div className="flex justify-start">

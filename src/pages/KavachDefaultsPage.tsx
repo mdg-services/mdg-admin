@@ -190,7 +190,7 @@ export function KavachDefaultsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-3 md:gap-4">
           <p className="text-sm text-text-muted">
             {activeCount} active task{activeCount === 1 ? '' : 's'} across{' '}
             {grouped.length} cadence group{grouped.length === 1 ? '' : 's'}.
@@ -205,7 +205,7 @@ export function KavachDefaultsPage() {
                   <CardSubtitle>{g.items.length} task(s)</CardSubtitle>
                 </div>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent padding="none" className="md:p-4">
                 {/* Desktop table (≥ md) */}
                 <div className="hidden md:block">
                 <Table>
@@ -318,7 +318,7 @@ export function KavachDefaultsPage() {
                     A card with `actions` carries no `onClick`: buttons never
                     nest. */}
                 <MobileCardList
-                  className="p-3"
+                  variant="rows"
                   cards={g.items.map((it) => ({
                     key: it.code,
                     tone: it.active ? ('default' as const) : ('muted' as const),
@@ -327,23 +327,28 @@ export function KavachDefaultsPage() {
                         {it.labelEn}
                       </span>
                     ),
+                    primaryRightWidth: 'clamp' as const,
                     primaryRight: (
-                      <Badge intent={it.active ? 'success' : 'neutral'}>
-                        {it.active ? 'Active' : 'Retired'}
-                      </Badge>
+                      <span className="flex items-center gap-1.5">
+                        <span className="tabular-nums font-semibold">
+                          {it.points}
+                        </span>
+                        <Badge intent={it.active ? 'success' : 'neutral'}>
+                          {it.active ? 'Active' : 'Retired'}
+                        </Badge>
+                      </span>
                     ),
                     secondary: (
                       <span className="block break-words">{it.labelHi}</span>
                     ),
+                    // Three rows, not five. "Sr" is a spreadsheet ordinal that
+                    // means nothing to a reader and is already the order this
+                    // list is sorted in; points belong beside the title where a
+                    // figure is being compared down a column, and the cadence
+                    // reads better as a phrase in the meta line than as a
+                    // right-aligned "30d". At ~24px a row that is ~72px back on
+                    // every task in the global catalog.
                     kv: [
-                      { label: 'Sr', value: it.srNo, numeric: true },
-                      { label: 'Points', value: it.points, numeric: true },
-                      {
-                        label: 'Cadence',
-                        value:
-                          it.cadenceDays == null ? '—' : `${it.cadenceDays}d`,
-                        numeric: true,
-                      },
                       {
                         label: 'Verified by',
                         value: (
@@ -362,6 +367,10 @@ export function KavachDefaultsPage() {
                         <code>{it.code}</code>
                         {' · '}
                         {KAVACH_DOMAIN_LABEL[it.domain]}
+                        {' · '}
+                        {it.cadenceDays == null
+                          ? 'on event'
+                          : `every ${it.cadenceDays} days`}
                         {it.signalId ? (
                           <>
                             {' · '}
@@ -371,7 +380,12 @@ export function KavachDefaultsPage() {
                       </span>
                     ),
                     actions: (
-                      <div className="grid grid-cols-2 gap-2">
+                      // Wrapping, not two equal halves: a `Button` is
+                      // `whitespace-nowrap`, so a label wider than its column
+                      // runs out of the card rather than breaking. Letting each
+                      // take its own width means no label can ever be the one
+                      // that overflows.
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button
                           variant="secondary"
                           size="sm"
@@ -526,7 +540,7 @@ function CreateTaskDialog({ open, onClose }: { open: boolean; onClose: () => voi
       }
     >
       <form onSubmit={submit} className="grid gap-3" noValidate>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label htmlFor="kt-code" required>
               Code (slug)
@@ -664,7 +678,7 @@ function EditTaskDialog({
       }
     >
       <form onSubmit={submit} className="grid gap-3" noValidate>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label htmlFor="ekt-code">Code (slug)</Label>
             <Input
@@ -755,7 +769,7 @@ function TaskFieldsShared({
   return (
     <>
       {showTitles ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label htmlFor="kt-titleEn" required>
               Sheet title (English)
@@ -773,7 +787,7 @@ function TaskFieldsShared({
         </div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2">
         <div>
           <Label htmlFor="kt-labelEn" required>
             Label (English)
@@ -793,7 +807,7 @@ function TaskFieldsShared({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-3">
         <div>
           <Label htmlFor="kt-points" required hint="1–500">
             Points
@@ -847,7 +861,7 @@ function TaskFieldsShared({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-3">
         <div>
           <Label htmlFor="kt-domain" required>
             Domain
@@ -897,7 +911,7 @@ function TaskFieldsShared({
         {VERIFICATION_HINT.DEALER_EVIDENCE_THEN_ADMIN}
       </p>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2">
         <div>
           <Label htmlFor="kt-notesEn" hint="optional">
             Notes (English)

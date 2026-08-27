@@ -37,7 +37,11 @@ export interface StatTileProps {
 export function StatTile({ label, value, unit, delta, caption, className }: StatTileProps) {
   return (
     <div className={cn('min-w-0 rounded-md border border-border bg-surface p-3', className)}>
-      <p className="truncate text-xs font-medium text-text-muted">{label}</p>
+      {/* Wraps below md for the same reason the value does: two tiles to a
+          360px row leave the label ~126px, which fits "Margin on sales" and
+          cuts "Pump counts as active". `md:truncate` keeps today's single
+          desktop line. */}
+      <p className="break-words text-xs font-medium text-text-muted md:truncate">{label}</p>
       {/* Proportional figures, not tabular: at this size `tabular-nums` makes a
           number like 121 read loose and gappy. Tabular is for columns.
 

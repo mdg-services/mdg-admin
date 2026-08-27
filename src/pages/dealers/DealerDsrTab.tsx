@@ -101,7 +101,7 @@ export function DealerDsrTab({ dealer }: Props) {
         </div>
       ) : noReportYet ? (
         <Card>
-          <CardContent className="p-4">
+          <CardContent>
             <EmptyState
               icon={
                 <FileBarChart2 width={28} height={28} strokeWidth={1.75} />

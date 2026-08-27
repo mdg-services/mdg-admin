@@ -134,13 +134,17 @@ export function AttachServiceDialog({
           }
         />
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-3 md:gap-4">
           {/* min-w-0 + break-words + shrink-0, matching EditServiceDialog: a
               flex item defaults to `min-width: auto`, so a plugin id or a URL
               inside the description had no break opportunity, refused to shrink
               and pushed this block past the 304px sheet — where `main`'s
               `overflow-x-hidden` clips rather than scrolls. */}
-          <div className="flex items-start justify-between gap-3 rounded-md border border-border bg-surface-2 p-3">
+          {/* Below md this summary drops its own box and is marked by a rule
+              instead: inside the sheet's padding it was a second surface for
+              24px of a 328px line, and the plugin name and its description had
+              ~206px left after the Change button. */}
+          <div className="flex items-start justify-between gap-3 border-b border-border pb-3 md:rounded-md md:border md:border-border md:bg-surface-2 md:p-3">
             <div className="min-w-0">
               <p className="break-words text-sm font-semibold text-text">
                 {selected.name}
@@ -209,11 +213,14 @@ function PluginPicker({
           <button
             type="button"
             onClick={() => onPick(s)}
-            className="flex w-full items-start justify-between gap-3 rounded-md border border-border bg-surface p-3 text-left hover:bg-surface-2"
+            className="flex w-full items-start justify-between gap-3 rounded-md border border-border bg-surface p-2 text-left hover:bg-surface-2 md:p-3"
           >
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-text">{s.name}</p>
-              <p className="mt-0.5 break-words text-xs text-text-muted">
+              {/* Two lines below md. Some plugin descriptions run seven
+                  lines at 360px, so a picker of six plugins became a scroll
+                  through prose instead of a list of choices. */}
+              <p className="mt-0.5 line-clamp-2 break-words text-xs text-text-muted md:line-clamp-none">
                 {s.description}
               </p>
             </div>

@@ -103,7 +103,12 @@ export function DsrDateToolbar({
         id={selectId}
         value={selectedId}
         onChange={(e) => onSelect(e.target.value)}
-        className={isMd ? 'w-full sm:w-72' : 'w-full'}
+        // `md:w-72` and not `w-72`: `Select`'s own base class is `w-full`, and
+        // a call-site width is APPENDED, so a plain `w-72` loses on stylesheet
+        // order and the desktop field silently goes full width. A breakpoint
+        // prefix puts it in a later block, which is the only way it wins. This
+        // branch only mounts at ≥768px, so `md:` is always on here.
+        className={isMd ? 'md:w-72' : 'w-full'}
       >
         {reports.map((r, i) => (
           <option key={r.id} value={r.id}>
@@ -118,7 +123,7 @@ export function DsrDateToolbar({
   if (isMd) {
     return (
       <Card className={className}>
-        <CardContent className="flex flex-wrap items-end gap-4 p-3">
+        <CardContent className="flex flex-wrap items-end gap-4">
           <div>{dateField}</div>
           <GenerateDsrForDate dealerId={dealerId} onGenerated={onGenerated} />
           <EditShiftDataButton
@@ -142,18 +147,23 @@ export function DsrDateToolbar({
   // other two are occasional, so they sit one tap away.
   return (
     <Card className={className}>
-      <CardContent className="grid gap-2 p-3">
+      <CardContent className="grid gap-2">
         <div>{dateField}</div>
+        {/* Sized to its own label, not to the card. A 328px bar reading
+            "Generate or correct a day" was the widest thing on the screen for
+            the least-used control on it; the sheet it opens is titled and
+            lists the three real actions, so the trigger only has to say that
+            there are more. */}
         <Button
           variant="secondary"
-          className="w-full justify-between"
+          className="justify-self-start"
           leftIcon={
             <SlidersHorizontal width={16} height={16} strokeWidth={1.75} />
           }
           onClick={() => setOpen(true)}
           aria-expanded={open}
         >
-          Generate or correct a day
+          More actions
         </Button>
         {generatedAt ? (
           <p className="text-xs text-text-subtle">

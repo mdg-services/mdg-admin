@@ -177,7 +177,10 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
       <CardHeader>
         <div>
           <CardTitle>{title}</CardTitle>
-          <CardSubtitle>
+          {/* Two lines below md. This subtitle plus the same one on the two
+              other cards on the tab was ~90px of header per card before a
+              single credential. Whole at md, where there is room. */}
+          <CardSubtitle className="line-clamp-2 md:line-clamp-none">
             {purpose} Stored encrypted. Any admin can reveal the ID and password
             below; every reveal is logged.
           </CardSubtitle>
@@ -286,7 +289,10 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
                 />
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            {/* The parent stacks below md, so this was a left-aligned row of
+                auto-width buttons hanging under a full-width summary.
+                `ActionRow` is the shape the rest of the area uses. */}
+            <ActionRow below="row" align="start" className="shrink-0">
               <Button
                 variant="secondary"
                 size="sm"
@@ -306,7 +312,7 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
               >
                 Clear
               </Button>
-            </div>
+            </ActionRow>
           </div>
         )}
       </CardContent>

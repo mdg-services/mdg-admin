@@ -68,7 +68,7 @@ export function DealerVaultView({ dealer }: DealerVaultPaneProps) {
   if (!dataset) {
     return (
       <Card>
-        <CardContent className="p-4">
+        <CardContent>
           <EmptyState
             icon={<Database width={28} height={28} strokeWidth={1.75} />}
             title="No data services attached yet"

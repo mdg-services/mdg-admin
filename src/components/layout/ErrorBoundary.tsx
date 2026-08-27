@@ -55,8 +55,11 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, State> {
       return (
         // dvh, not vh: on a phone `60vh` measures the LARGE viewport (the one
         // with the browser chrome hidden) and overshoots what is on screen.
-        <div className="flex min-h-[60dvh] items-center justify-center p-6">
-          <div className="max-w-md rounded-md border border-border bg-surface p-6 text-center shadow-sm">
+        <div className="flex min-h-[60dvh] items-center justify-center p-0 md:p-6">
+          {/* One helping of padding on a phone, not three: this already sits
+              inside main's gutter, and 24px here plus 24px on the card left the
+              error message 232px of a 360px screen to wrap in. */}
+          <div className="max-w-md rounded-md border border-border bg-surface p-4 text-center shadow-sm md:p-6">
             <AlertCircle
               width={28}
               height={28}

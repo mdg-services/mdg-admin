@@ -26,6 +26,18 @@
      AppShell at runtime (3.5rem on a list screen, 0px on a drill-in and at
      ≥ md), because the bar is not always there. The 0px default is what a
      surface rendered outside the shell — login, 404 — reads. */
+  /* ---- The page gutter ----------------------------------------------------
+     The padding <main> paints around every page, published as a token because
+     three other surfaces have to cancel it EXACTLY: the dealer tab strip and
+     the Inbox split both bleed to the edges with a negative margin, and any
+     sticky bar has to offset by it (see `.stick-top`). Hard-coded `-mx-4`
+     against a 12px gutter overhangs by 4px a side, and `main` is
+     `overflow-x-hidden`, so that overhang is clipped rather than scrollable.
+     12px below md — a 360px phone cannot spare 32px of its width on a margin
+     when a card and a row inside it each add their own — and the historic
+     24px from md up, so desktop is unchanged. */
+  --app-gutter: 0.75rem;
+
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --tab-bar-h: 0px;
@@ -44,6 +56,12 @@
   --z-overlay: 50; /* Dialog / Drawer / Sheet / Menu */
   --z-nested-overlay: 60;
   --z-toast: 70; /* above everything: it reports on what is below it */
+}
+
+@media (min-width: 768px) {
+  :root {
+    --app-gutter: 1.5rem;
+  }
 }
 
 .dark {
@@ -202,6 +220,53 @@
     -webkit-user-select: text;
     user-select: text;
     -webkit-touch-callout: default;
+  }
+  /* A bar that must pin FLUSH under the app header — a tab strip, a group
+     heading, a filter row.
+
+     `position: sticky` resolves `top` against the scrollport INSET BY THE
+     SCROLL CONTAINER'S OWN PADDING. `<main>` is the scroller and it has a
+     gutter, so a plain `top: 0` rests one full gutter BELOW the visible top and
+     page content scrolls through the band above it — which is exactly the
+     "gap between the header and the navbar", and why the bar looks broken
+     rather than pinned. Measured in Chromium: main `p-4` gives a 16px gap;
+     `top: -16px` gives 0.
+
+     Cancelling the gutter with a negative offset is the whole fix. It has to
+     track the gutter, hence the token: the two numbers drifting apart is the
+     bug coming back.
+
+     It sets `top` ONLY, so pair it with `sticky`: `sticky stick-top md:static`.
+     Owning `position` here would out-rank a `md:static` on the same element —
+     both are utilities and this file's layer is emitted last — and every one of
+     these bars is deliberately static on a desktop.
+
+     Both reset to 0 from md up. The inset is real at every width, but the
+     desktop look is the baseline this pass must not move, and a bar that hangs
+     24px past the bottom of the scroller is a worse trade than a 24px gap
+     nobody has complained about. */
+  .stick-top {
+    top: calc(-1 * var(--app-gutter));
+  }
+  @media (min-width: 768px) {
+    .stick-top {
+      top: 0;
+    }
+  }
+
+  /* The same correction at the other end, for a sticky action bar. Without it
+     a `bottom-0` bar floats one gutter ABOVE the bottom of the scroller and the
+     page scrolls through the strip underneath it — which reads as a bar that
+     failed to reach the edge, with a sliver of the card behind it showing
+     below. Pair with `sticky`, and give the bar `pb` enough to cover the extra
+     gutter it now spans. */
+  .stick-bottom {
+    bottom: calc(-1 * var(--app-gutter));
+  }
+  @media (min-width: 768px) {
+    .stick-bottom {
+      bottom: 0;
+    }
   }
   /* An inner scroller that should not drag the page — or the sheet it sits in —
      once it reaches its end. Any <pre>, picker list or long code block inside

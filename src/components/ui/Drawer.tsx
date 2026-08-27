@@ -15,6 +15,21 @@ export interface DrawerProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   width?: 'sm' | 'md' | 'lg';
+  /**
+   * Below md only. `'sheet'` (default) is the bottom sheet capped at 95dvh.
+   * `'fullscreen'` gives the panel the whole viewport — for content that is
+   * itself the screen, such as a wide report frame, where the 5% and the
+   * rounded lip are 40px the content needed more than the page behind it did.
+   * `≥ md` is the same right-hand panel either way.
+   */
+  presentation?: 'sheet' | 'fullscreen';
+  /**
+   * `'none'` removes the body's own `p-4`, for a body that should meet the
+   * panel's edges — a report frame, a table, a card stack. A prop and not a
+   * `className`: `cn` is plain clsx, so a `p-0` passed in would lose to `p-4`
+   * on stylesheet order.
+   */
+  bodyPadding?: 'default' | 'none';
 }
 
 const WIDTH_CLASSES: Record<NonNullable<DrawerProps['width']>, string> = {
@@ -39,6 +54,8 @@ export function Drawer({
   children,
   footer,
   width = 'md',
+  presentation = 'sheet',
+  bodyPadding = 'default',
 }: DrawerProps) {
   React.useEffect(() => {
     if (!open) return;
@@ -67,14 +84,27 @@ export function Drawer({
         <div
           className={cn(
             'flex flex-col bg-surface shadow-lg',
-            'w-full rounded-t-2xl md:rounded-none',
-            'max-h-[95dvh] md:max-h-none md:h-full',
+            'w-full md:rounded-none',
+            // The 95dvh sheet leaves the status bar showing above it; a
+            // full-height one does not, and the overlay is `fixed`, so it is
+            // laid out against the viewport and not against the body's own
+            // safe-area padding. Hence the inset here — without it the panel's
+            // title sits under the clock. `box-sizing: border-box` keeps the
+            // panel exactly one viewport tall either way.
+            presentation === 'fullscreen'
+              ? 'h-[100dvh] max-h-none rounded-t-none pt-[env(safe-area-inset-top)] md:h-full md:pt-0'
+              : 'max-h-[95dvh] rounded-t-2xl md:max-h-none md:h-full',
             'border-t border-border md:border-t-0 md:border-l',
             'animate-sheet-up md:animate-none',
             WIDTH_CLASSES[width],
           )}
         >
-          <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-border-strong md:hidden" />
+          {/* The grab cue belongs to a sheet. A full-screen panel has no lip to
+              drag and nothing behind it to drag towards, so it would only cost
+              a line of height. */}
+          {presentation === 'sheet' ? (
+            <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-border-strong md:hidden" />
+          ) : null}
           <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-surface px-4 py-3">
             {/* min-w-0: without it a long unbroken title cannot shrink and
                 squeezes the close button to nothing. */}
@@ -85,7 +115,10 @@ export function Drawer({
                 </h2>
               ) : null}
               {description ? (
-                <p className="mt-1 break-words text-sm text-text-muted">
+                // Clamped below md: this header is sticky above the body and
+                // does not scroll, so a long description is height the reader
+                // can never get past to reach the content.
+                <p className="mt-1 line-clamp-2 break-words text-sm text-text-muted md:line-clamp-none">
                   {description}
                 </p>
               ) : null}
@@ -99,7 +132,12 @@ export function Drawer({
               <X width={16} height={16} strokeWidth={1.75} />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto overscroll-contain p-4">
+          <div
+            className={cn(
+              'flex-1 overflow-y-auto overscroll-contain',
+              bodyPadding === 'none' ? '' : 'p-4',
+            )}
+          >
             {children}
           </div>
           {footer ? (

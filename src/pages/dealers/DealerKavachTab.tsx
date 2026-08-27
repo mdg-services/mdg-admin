@@ -183,20 +183,32 @@ export function DealerKavachTab({ dealer }: Props) {
   }
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3 md:gap-4">
       {/* Score header */}
       <Card>
         <CardContent>
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-4">
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-md bg-brand-soft text-brand">
-                <ShieldCheck width={24} height={24} strokeWidth={1.75} />
+            {/* The icon rail is 40px below md, not 48px. It sits beside a score
+                and a wrapping disclosure line in ~300px of card, so every pixel
+                it takes is one the sentence has to wrap around. Desktop keeps
+                the 48px badge. */}
+            <div className="flex items-center gap-3 md:gap-4">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand md:h-12 md:w-12">
+                {/* Sized in CSS rather than by the usual `width`/`height`
+                    props, because this one glyph has to change size at md and
+                    an attribute cannot carry a breakpoint. A class beats a
+                    presentational attribute, so lucide's own 24px default is
+                    overridden at both widths. */}
+                <ShieldCheck
+                  strokeWidth={1.75}
+                  className="h-5 w-5 md:h-6 md:w-6"
+                />
               </span>
               <div>
                 <div className="flex flex-wrap items-baseline gap-2">
                   {/* The percentage never travels alone: a bare number hides how
                       much of this dealer nobody has examined yet. */}
-                  <span className="text-3xl font-semibold tracking-tight text-text">
+                  <span className="text-2xl font-semibold tracking-tight text-text md:text-3xl">
                     {disclosure[0]}
                   </span>
                   {disclosure.slice(1).map((part) => (
@@ -266,6 +278,7 @@ export function DealerKavachTab({ dealer }: Props) {
               <Button
                 variant="secondary"
                 size="sm"
+                className="w-full md:w-auto"
                 disabled={busyId === 'programme'}
                 leftIcon={
                   isPaused ? (
@@ -288,13 +301,20 @@ export function DealerKavachTab({ dealer }: Props) {
                 {isPaused ? 'Resume' : 'Pause programme'}
               </Button>
               {/* A link, not a Button: the queue is a route, and the whole point
-                  of this panel is that certifying happens over there. */}
+                  of this panel is that certifying happens over there. It has to
+                  be painted like a `Button` by hand, so it copies the primitive
+                  exactly — `rounded-md` and `font-semibold`, not the `rounded-sm`
+                  / `font-medium` it used to carry, which made it visibly a
+                  different shape from the Pause button sitting beside it.
+                  `whitespace-nowrap` because a link at natural width can break
+                  a phrase mid-way; full width below md so the two controls stack
+                  as two equal rows instead of a ragged pair. */}
               <Link
                 to={`/kavach?dealerId=${dealer.id}`}
-                className="inline-flex h-9 min-h-11 items-center gap-2 rounded-sm bg-brand px-4 text-sm font-medium text-text-inverse hover:bg-brand-hover md:min-h-0"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-md bg-brand px-4 text-sm font-semibold text-text-inverse hover:bg-brand-hover md:h-9 md:min-h-0 md:w-auto"
               >
                 <ClipboardCheck width={16} height={16} strokeWidth={1.75} />
-                Verify in the work queue
+                Open work queue
               </Link>
             </div>
           </div>
@@ -342,7 +362,11 @@ export function DealerKavachTab({ dealer }: Props) {
                     {dealerFacing ? 'On' : 'Off'}
                   </Badge>
                 </div>
-                <p className="mt-1 max-w-2xl text-sm text-text-muted">
+                {/* `max-w-2xl` is 672px and does nothing at 360px, so the "off"
+                    copy — 253 characters — ran to eight lines and pushed "Turn
+                    messages on" below the fold on the card whose whole purpose
+                    is that button. Two lines on a phone; every word from md. */}
+                <p className="mt-1 line-clamp-2 text-sm text-text-muted md:line-clamp-none md:max-w-2xl">
                   {dealerFacing
                     ? `This dealer receives their daily Kavach list and can be shown their score card.${
                         programme.dealerFacingEnabledAt
@@ -426,13 +450,13 @@ export function DealerKavachTab({ dealer }: Props) {
             description="This programme tracks nothing. Add tasks — or unhide catalog ones — on the Kavach work list tab."
           />
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-3 md:gap-4">
             {orderedBuckets.map((bucket) => {
               const bucketItems = grouped.get(bucket) ?? [];
               return (
                 <Card key={bucket}>
-                  <CardContent className="p-0">
-                    <div className="flex items-center justify-between px-4 py-3">
+                  <CardContent padding="none" className="md:p-4">
+                    <div className="flex items-center justify-between px-3 py-2 md:px-4 md:py-3">
                       <p className="text-sm font-semibold text-text">
                         {CADENCE_BUCKET_LABEL[bucket]}
                       </p>

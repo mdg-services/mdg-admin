@@ -231,8 +231,8 @@ export function ShiftDataEditorPage() {
       ) : null}
 
       {!day.snapshot ? (
-        <Card className="mt-4">
-          <CardContent className="p-4">
+        <Card className="mt-3 md:mt-4">
+          <CardContent>
             <EmptyState
               icon={<Database width={28} height={28} strokeWidth={1.75} />}
               title={
@@ -271,8 +271,8 @@ export function ShiftDataEditorPage() {
           </CardContent>
         </Card>
       ) : day.snapshot.status === 'FAILED' ? (
-        <Card className="mt-4">
-          <CardContent className="p-4">
+        <Card className="mt-3 md:mt-4">
+          <CardContent>
             <div className="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2.5 text-sm text-danger">
               <AlertTriangle
                 width={16}
@@ -329,7 +329,7 @@ export function ShiftDataEditorPage() {
             </Callout>
           ) : null}
 
-          <div className="mt-3 grid gap-4">
+          <div className="mt-3 grid gap-3 md:gap-4">
             {SECTION_ORDER.filter((c) => IRAS_REPORT_CODES.includes(c)).map((code) => (
               <Section key={code} code={code} day={day}>
                 <IrasEditGrid
@@ -601,7 +601,7 @@ function Section({
   const attribution = code === 'REC' ? recAttributionWindow(dataset?.window) : null;
   return (
     <Card>
-      <CardContent className="p-4">
+      <CardContent>
         <div className="mb-2 flex flex-wrap items-baseline gap-2">
           <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-text">
             {code}
@@ -755,6 +755,14 @@ function PendingBar({
     <StickyActionBar
       below="wrap"
       summaryOnMobile
+      // `stick-bottom` inside the bar already spans the page gutter downwards,
+      // but nothing cancels it sideways: without this the strip stops one gutter
+      // short of each edge and the page scrolls past it in both side margins, so
+      // its `border-t` reads as a floating line rather than a bar. A negative
+      // margin, deliberately — the bar composes its own `px-3`, and a padding
+      // override from a call site would land beside it and lose on stylesheet
+      // order.
+      className="-mx-[var(--app-gutter)] md:mx-0"
       summary={
         <>
           <span className="block font-medium text-text">
