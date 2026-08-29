@@ -14,11 +14,18 @@ import { useDsrRunWatcher } from './useDsrRunWatcher';
 /**
  * "This report no longer matches its inputs."
  *
- * Shown when a receipt was entered or corrected for this day or an earlier one:
- * the stock-vs-sales variation accumulates receipts since the last inspection,
- * so a correction to any past day changes every report after it. The figures on
- * screen are still the ones that were shared with the dealer, which is why the
- * report stays readable and this sits above it rather than replacing it.
+ * Two things flag a report, and both move the same figure — the stock-vs-sales
+ * variation, which accumulates from the last physical inspection:
+ *
+ *   - a receipt entered or corrected for this day or an earlier one, which
+ *     changes every report after it; and
+ *   - the outlet being RE-INSPECTED, which replaces the window itself. That one
+ *     flags automatically the night the new inspection is captured, so a report
+ *     can be out of date without anybody here having touched it.
+ *
+ * The figures on screen are still the ones that were shared with the dealer,
+ * which is why the report stays readable and this sits above it rather than
+ * replacing it. `reason` says which of the two it was.
  *
  * The rebuild is one click but never automatic — regenerating can drive a portal
  * collection, so it stays a decision an admin makes.
