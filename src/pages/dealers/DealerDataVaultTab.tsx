@@ -4,8 +4,10 @@ import {
   Database,
   DownloadCloud,
   History,
+  PencilLine,
 } from 'lucide-react';
 import * as React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 
 
@@ -29,6 +31,7 @@ import {
   TRow,
   useToast,
 } from '@/components/ui';
+import { useDealerServicesQuery } from '@/hooks/api/useDealerServices';
 import {
   useCollectIrasData,
   useDealerLatestIrasSnapshot,
@@ -47,6 +50,9 @@ interface Props {
 }
 
 const HISTORY_PAGE_SIZE = 20;
+
+/** The plugin whose attachment decides whether the portal can be asked at all. */
+const PIPELINE_SERVICE_ID = 'iras-shift-data';
 
 /** `YYYY-MM-DD` → `Thu, 23 Jul 2026`, read as a calendar date, not an instant. */
 function dateLabel(iso: string): string {
@@ -67,13 +73,14 @@ function totalRows(counts: Partial<Record<IrasReportCode, number>>): number {
 }
 
 /**
- * This dealer's slice of the Data Vault: the latest capture in full, a button to
- * collect on demand, and the recent history — each entry opening the same detail
+ * This dealer's slice of the Data Vault: the latest capture in full, a date to
+ * collect or open, and the recent history — each entry opening the same detail
  * panel the cross-dealer Vault uses.
  */
 export function DealerDataVaultTab({ dealer }: Props) {
   const toast = useToast();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const collect = useCollectIrasData();
   const latestQ = useDealerLatestIrasSnapshot(dealer.id);
   const historyQ = useIrasSnapshotsQuery({
@@ -105,12 +112,13 @@ export function DealerDataVaultTab({ dealer }: Props) {
     }
   }, [collectRun.data?.status, collectRunId, qc, toast]);
 
-  // The collect target: the latest shift by default, but an admin can pick a past
-  // shift date to back-fill it (the portal serves back-dated shifts). `today` is
-  // an IST ceiling (matching the backend future-date guard) recomputed each render
-  // so it advances past IST midnight. Empty means today; a valid non-today date is
-  // sent as `businessDate`; an out-of-range value disables the button so the field
-  // and the action agree.
+  // The target date, shared by both actions on this row: collect it from the
+  // portal, or open it in the day editor. The latest shift by default, but an
+  // admin can pick a past shift date to back-fill it (the portal serves
+  // back-dated shifts). `today` is an IST ceiling (matching the backend
+  // future-date guard) recomputed each render so it advances past IST midnight.
+  // Empty means today; a valid non-today date is sent as `businessDate`; an
+  // out-of-range value disables both buttons so the field and the actions agree.
   const today = istTodayYmd();
   const [collectDate, setCollectDate] = React.useState(istTodayYmd);
   const dateValid =
@@ -118,7 +126,24 @@ export function DealerDataVaultTab({ dealer }: Props) {
     (isYmd(collectDate) && collectDate >= MIN_SELECTABLE_YMD && collectDate <= today);
   const backDate =
     dateValid && collectDate !== '' && collectDate !== today ? collectDate : undefined;
+  const openDate = collectDate === '' ? today : collectDate;
   const collecting = collect.isPending || collectRunId !== null;
+
+  // Whether asking the portal is a real option. An outlet with no IRAS account
+  // keeps the pipeline attached but PAUSED, and offering "Collect now" there
+  // sends the operator down a path that cannot finish — it launches a browser
+  // against an account that does not exist, and can leave a FAILED shell on the
+  // date that then blocks both the report and the editor.
+  //
+  // Fails OPEN on purpose: hidden only once the answer is actually IN. "We could
+  // not ask" is not "not attached", and the shared query is already in flight for
+  // the tab strip, so this costs no extra request.
+  const servicesQ = useDealerServicesQuery(dealer.id);
+  const canCollect =
+    !servicesQ.isSuccess ||
+    servicesQ.data.some(
+      (s) => s.serviceId === PIPELINE_SERVICE_ID && s.status === 'ACTIVE',
+    );
 
   function runCollection() {
     collect.mutate(
@@ -142,7 +167,7 @@ export function DealerDataVaultTab({ dealer }: Props) {
     );
   }
 
-  const collectButton = (
+  const dayActions = (
     <div className="flex w-full min-w-0 flex-wrap items-center gap-2 md:w-auto">
       <Input
         type="date"
@@ -150,29 +175,53 @@ export function DealerDataVaultTab({ dealer }: Props) {
         min={MIN_SELECTABLE_YMD}
         max={today}
         onChange={(e) => setCollectDate(e.target.value)}
-        aria-label="Business date to collect"
+        aria-label="Business date to open or collect"
         // `w-full md:w-40`, not a bare `w-40`: `cn` is clsx, and Tailwind emits
         // `.w-full` AFTER `.w-40`, so the bare override silently lost and the
         // field took the whole row.
         //
-        // `flex-1 min-w-0` below md so it SHARES that row with "Collect now"
-        // instead of pushing it onto a third line. Three stacked lines of
-        // collect chrome is 52px of the ~670px a dealer's Data Vault spent
-        // before its first figure. `md:flex-initial` is `flex: 0 1 auto` — the
-        // value a flex item has when nobody sets one — so from md up the field
-        // is the 10rem box it has always been.
-        className="min-w-0 flex-1 md:w-40 md:flex-initial"
+        // `flex-1` below md so it SHARES that row with the actions instead of
+        // pushing them onto a line of their own. Stacked lines of chrome is
+        // 52px of the ~670px a dealer's Data Vault spent before its first
+        // figure. `md:flex-initial` is `flex: 0 1 auto` — the value a flex item
+        // has when nobody sets one — so from md up the field is the 10rem box
+        // it has always been.
+        //
+        // `min-w-[8.5rem]`, not `min-w-0`: with two actions beside it a `flex: 1
+        // 1 0%` field has no floor and a native date input crushes to unreadable
+        // on a 360px phone. The floor makes it wrap the last button to a second
+        // row instead — legible beats one-line.
+        className="min-w-[8.5rem] flex-1 md:w-40 md:flex-initial"
       />
+      {/* The only way into a day that does not exist yet. Without it the tab can
+          reach exactly the days it already holds: "Correct this day" carries the
+          shown snapshot's own date, and the history rows are days too — so a
+          hand-entered outlet could never reach a day it had not collected, and
+          the editor's "Start this day by hand" — the only control that mints
+          one — was unreachable from the whole app. */}
       <Button
-        variant="secondary"
+        variant={canCollect ? 'ghost' : 'secondary'}
         size="sm"
-        loading={collecting}
         disabled={!dateValid}
-        leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
-        onClick={runCollection}
+        leftIcon={<PencilLine width={14} height={14} strokeWidth={1.75} />}
+        onClick={() =>
+          navigate(`/data-vault/dealers/${dealer.id}/days/${openDate}`)
+        }
       >
-        {backDate ? 'Collect' : 'Collect now'}
+        Open day
       </Button>
+      {canCollect ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={collecting}
+          disabled={!dateValid}
+          leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
+          onClick={runCollection}
+        >
+          {backDate ? 'Collect' : 'Collect now'}
+        </Button>
+      ) : null}
     </div>
   );
 
@@ -198,15 +247,26 @@ export function DealerDataVaultTab({ dealer }: Props) {
           ) : !latestQ.data ? (
             <EmptyState
               icon={<Database width={28} height={28} strokeWidth={1.75} />}
-              title="No IRAS data collected yet"
-              description="Once the pipeline runs for this dealer, their shift-anchored reports appear here."
-              cta={collectButton}
+              title={
+                canCollect
+                  ? 'No IRAS data collected yet'
+                  : "This outlet's figures are entered by hand"
+              }
+              // Promising that data "appears here once the pipeline runs" is a
+              // lie to an outlet with no portal account — nothing will ever run,
+              // and that copy is what left day one with no visible next step.
+              description={
+                canCollect
+                  ? 'Once the pipeline runs for this dealer, their shift-anchored reports appear here.'
+                  : 'This dealer has no portal collection running, so nothing will arrive on its own. Pick a date and open the day to type the shift in.'
+              }
+              cta={dayActions}
             />
           ) : (
             <SnapshotDetail
               snapshot={latestQ.data}
               hideDealerName
-              actions={collectButton}
+              actions={dayActions}
             />
           )}
         </CardContent>
