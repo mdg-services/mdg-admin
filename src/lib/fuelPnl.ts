@@ -54,6 +54,17 @@ export type TestingTreatment = 'RETURNED' | 'SOLD';
  */
 export type LossBasis = 'COST' | 'RETAIL';
 
+/**
+ * Above this share of every litre received, a *surplus* stops being plausible.
+ *
+ * Half a percent. A tank that shows more fuel than the books account for at that
+ * rate is almost never a windfall — it is a delivery the portal never reported,
+ * and counting it as profit draws exactly the wrong lesson from it. Lives here
+ * rather than on the screen because the shareable card has to warn about the
+ * same thing at the same threshold, and two copies would drift.
+ */
+export const SUSPICIOUS_GAIN_RATE = 0.005;
+
 /** The two rupee figures per grade that nothing in the system collects. */
 export interface GradeRates {
   /** Landed cost per litre — off the tanker invoice. */

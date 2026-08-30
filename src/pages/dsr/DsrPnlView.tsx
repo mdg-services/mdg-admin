@@ -1,9 +1,10 @@
-import { ArrowLeftRight, IndianRupee } from 'lucide-react';
+import { ArrowLeftRight, IndianRupee, Share2 } from 'lucide-react';
 import * as React from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
+  Button,
   Callout,
   Card,
   CardContent,
@@ -15,6 +16,7 @@ import {
   Skeleton,
   dateRangeForPreset,
   isValidDateRange,
+  useToast,
   type DateRangeValue,
 } from '@/components/ui';
 import { useDsrPnl } from '@/hooks/api/useDsr';
@@ -23,10 +25,13 @@ import { formatInrWhole, formatLitres, formatYmd, isYmd } from '@/lib/format';
 import {
   computeFuelPnl,
   type FuelPnlSettings,
+  SUSPICIOUS_GAIN_RATE,
   withDefaultRates,
   type PnlProduct,
   type TestingTreatment,
 } from '@/lib/fuelPnl';
+import { buildPnlCard } from '@/lib/pnlCard';
+import { renderPnlCardPng, sharePnlCardPng } from '@/lib/pnlCardImage';
 import { dealerCodeLabel } from '@dk/shared';
 
 import { PnlAssumptions } from './pnl/PnlAssumptions';
@@ -45,9 +50,6 @@ import { PnlLoadsTable } from './pnl/PnlLoadsTable';
  * a rate someone signed off, and until there is a place to sign one off, saying
  * "these are your numbers, on your machine" is the honest position.
  */
-
-/** A large excess is nearly always a missing delivery, not free fuel. */
-const SUSPICIOUS_GAIN_RATE = 0.005;
 
 function storageKey(dealerId: string | undefined): string {
   return `mdg.fuelPnl.${dealerId ?? 'unknown'}`;
@@ -161,6 +163,7 @@ function lossLabel(litres: number): string {
 export function DsrPnlView() {
   const { dealerId } = useParams<{ dealerId: string }>();
   const [search, setSearch] = useSearchParams();
+  const toast = useToast();
 
   // The window lives in the URL so a figure someone is querying is a link they
   // can send, and so a refresh does not silently move the period under them.
@@ -231,6 +234,34 @@ export function DsrPnlView() {
 
   const outletCode = data?.outletCode ?? null;
   const title = outletCode ? `Fuel P&L — ${dealerCodeLabel(outletCode)}` : 'Fuel P&L';
+
+  const [sharing, setSharing] = React.useState(false);
+  /**
+   * The whole answer as one PNG.
+   *
+   * Built from `data` and `settings` — the same two inputs this screen renders
+   * from — so the image can never show a figure the page does not. It carries
+   * BOTH testing answers regardless of which one is selected here, because a
+   * profit forwarded without the question behind it is a guess wearing a
+   * number's clothes.
+   */
+  const onShare = React.useCallback(async () => {
+    if (!data) return;
+    setSharing(true);
+    try {
+      const png = await renderPnlCardPng(buildPnlCard(data, settings));
+      const name = `fuel-pnl-${outletCode ?? 'dealer'}-${range.from}-to-${range.to}.png`;
+      const res = await sharePnlCardPng(png, name);
+      if (res.outcome === 'downloaded') toast.success('Image saved.');
+      else if (res.outcome === 'failed') {
+        toast.error(res.reason ?? 'The image could not be saved.');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'The image could not be made.');
+    } finally {
+      setSharing(false);
+    }
+  }, [data, settings, outletCode, range.from, range.to, toast]);
 
   if (q.isLoading) {
     return (
@@ -310,6 +341,16 @@ export function DsrPnlView() {
           ...(dealerId ? [{ label: outletCode ?? 'Dealer', to: `/dsr/dealers/${dealerId}` }] : []),
           { label: 'Fuel P&L' },
         ]}
+        actions={
+          <Button
+            variant="secondary"
+            leftIcon={<Share2 width={16} height={16} strokeWidth={1.75} />}
+            onClick={onShare}
+            loading={sharing}
+          >
+            Share as image
+          </Button>
+        }
       />
 
       <div className="space-y-3 md:space-y-5">
