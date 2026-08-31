@@ -21,7 +21,7 @@ import {
 } from '@/components/ui';
 import { useDsrPnl } from '@/hooks/api/useDsr';
 import { ApiError } from '@/lib/api';
-import { shareCardPng } from '@/lib/cardCanvas';
+import { shareActionLabel, shareCardPng } from '@/lib/cardCanvas';
 import { formatInrWhole, formatLitres, formatYmd, isYmd } from '@/lib/format';
 import {
   computeFuelPnl,
@@ -253,7 +253,7 @@ export function DsrPnlView() {
       const png = await renderPnlCardPng(buildPnlCard(data, settings));
       const name = `fuel-pnl-${outletCode ?? 'dealer'}-${range.from}-to-${range.to}.png`;
       const res = await shareCardPng(png, name);
-      if (res.outcome === 'downloaded') toast.success('Image saved.');
+      if (res.outcome === 'downloaded') toast.success('Image saved to your Downloads.');
       else if (res.outcome === 'failed') {
         toast.error(res.reason ?? 'The image could not be saved.');
       }
@@ -349,7 +349,7 @@ export function DsrPnlView() {
             onClick={onShare}
             loading={sharing}
           >
-            Share as image
+            {shareActionLabel()}
           </Button>
         }
       />

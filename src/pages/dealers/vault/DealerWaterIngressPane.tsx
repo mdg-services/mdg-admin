@@ -19,7 +19,7 @@ import {
 } from '@/components/ui';
 import { useWaterIngressDays } from '@/hooks/api/useWaterIngress';
 import { ApiError } from '@/lib/api';
-import { shareCardPng } from '@/lib/cardCanvas';
+import { shareActionLabel, shareCardPng } from '@/lib/cardCanvas';
 import { formatDateTime, formatYmd, istTodayYmd } from '@/lib/format';
 import { buildWaterIngressCard } from '@/lib/waterIngressCard';
 import { renderWaterIngressCardPng } from '@/lib/waterIngressCardImage';
@@ -127,7 +127,7 @@ export function DealerWaterIngressPane({ dealer }: DealerVaultPaneProps) {
         png,
         `water-ingress-${code ?? 'dealer'}-${day.businessDate}.png`,
       );
-      if (res.outcome === 'downloaded') toast.success('Image saved.');
+      if (res.outcome === 'downloaded') toast.success('Image saved to your Downloads.');
       else if (res.outcome === 'failed') {
         toast.error(res.reason ?? 'The image could not be saved.');
       }
@@ -188,7 +188,7 @@ export function DealerWaterIngressPane({ dealer }: DealerVaultPaneProps) {
               onClick={onShare}
               loading={sharing}
             >
-              Share as image
+              {shareActionLabel()}
             </Button>
           }
         >
