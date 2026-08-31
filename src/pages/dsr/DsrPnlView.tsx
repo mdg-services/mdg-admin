@@ -21,7 +21,6 @@ import {
 } from '@/components/ui';
 import { useDsrPnl } from '@/hooks/api/useDsr';
 import { ApiError } from '@/lib/api';
-import { shareActionLabel, shareCardPng } from '@/lib/cardCanvas';
 import { formatInrWhole, formatLitres, formatYmd, isYmd } from '@/lib/format';
 import {
   computeFuelPnl,
@@ -33,6 +32,7 @@ import {
 } from '@/lib/fuelPnl';
 import { buildPnlCard } from '@/lib/pnlCard';
 import { renderPnlCardPng } from '@/lib/pnlCardImage';
+import { shareActionLabel, shareCardPng } from '@/lib/shareCard';
 import { dealerCodeLabel } from '@dk/shared';
 
 import { PnlAssumptions } from './pnl/PnlAssumptions';

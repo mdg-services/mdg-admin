@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { api, ApiError } from '@/lib/api';
 import type { WaterIngressDayLog } from '@dk/shared';
@@ -36,5 +36,32 @@ export function useWaterIngressDays(dealerId: string | undefined, limit = 14) {
     enabled: !!dealerId,
     retry: retryUnlessClientError,
     staleTime: 60_000,
+  });
+}
+
+/** `GET /water-ingress/dealers/:id/days/:date/card` — the saved picture, signed. */
+export interface WaterIngressCardUrls {
+  /** Inline, for opening in a tab. */
+  viewUrl: string;
+  /** `Content-Disposition: attachment`, for saving. */
+  downloadUrl: string;
+  filename: string;
+  contentType: string;
+  expiresIn: number;
+}
+
+/**
+ * Ask for a day's saved image.
+ *
+ * A mutation rather than a query even though it only reads: the URLs are signed
+ * and short-lived, so caching them would hand somebody an expired link, and the
+ * request is only ever made because a person pressed a button.
+ */
+export function useWaterIngressCard(dealerId: string | undefined) {
+  return useMutation({
+    mutationFn: (businessDate: string) =>
+      api.get<WaterIngressCardUrls>(
+        `/water-ingress/dealers/${dealerId}/days/${businessDate}/card`,
+      ),
   });
 }

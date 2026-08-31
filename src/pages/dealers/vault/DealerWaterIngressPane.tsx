@@ -17,13 +17,11 @@ import {
   useToast,
   type DataColumn,
 } from '@/components/ui';
-import { useWaterIngressDays } from '@/hooks/api/useWaterIngress';
+import { useWaterIngressCard, useWaterIngressDays } from '@/hooks/api/useWaterIngress';
 import { ApiError } from '@/lib/api';
-import { shareActionLabel, shareCardPng } from '@/lib/cardCanvas';
 import { formatDateTime, formatYmd, istTodayYmd } from '@/lib/format';
-import { buildWaterIngressCard } from '@/lib/waterIngressCard';
-import { renderWaterIngressCardPng } from '@/lib/waterIngressCardImage';
-import { dealerCodeLabel, type WaterIngressSlotRecord } from '@dk/shared';
+import { shareActionLabel, shareSavedImage } from '@/lib/shareCard';
+import { dealerCodeLabel, type WaterIngressDayLog, type WaterIngressSlotRecord } from '@dk/shared';
 
 import type { DealerVaultPaneProps } from './types';
 
@@ -116,27 +114,99 @@ export function DealerWaterIngressPane({ dealer }: DealerVaultPaneProps) {
   const [date, setDate] = React.useState<string | null>(null);
   const day = days.find((d) => d.businessDate === date) ?? days[0] ?? null;
 
-  const [sharing, setSharing] = React.useState(false);
-  const onShare = React.useCallback(async () => {
-    if (!day) return;
-    setSharing(true);
-    try {
-      const code = q.data?.outletCode ?? null;
-      const png = await renderWaterIngressCardPng(buildWaterIngressCard(code, day));
-      const res = await shareCardPng(
-        png,
-        `water-ingress-${code ?? 'dealer'}-${day.businessDate}.png`,
-      );
-      if (res.outcome === 'downloaded') toast.success('Image saved to your Downloads.');
-      else if (res.outcome === 'failed') {
-        toast.error(res.reason ?? 'The image could not be saved.');
+  /**
+   * The picture comes from the SERVER, not from this page.
+   *
+   * A finished day is archived the moment its last window is recorded — at
+   * eleven at night, with no browser open anywhere — so the server has to be
+   * able to draw it. Once it can, having the admin draw its own copy as well
+   * would mean two renderers of one card, quietly drifting apart. So there is
+   * one, and this asks it for the file.
+   */
+  const card = useWaterIngressCard(dealer.id);
+  const [pending, setPending] = React.useState<string | null>(null);
+  const onShare = React.useCallback(
+    async (businessDate: string) => {
+      setPending(businessDate);
+      try {
+        const urls = await card.mutateAsync(businessDate);
+        const res = await shareSavedImage(urls);
+        if (res.outcome === 'downloaded') toast.success('Image saved to your Downloads.');
+        else if (res.outcome === 'failed') {
+          toast.error(res.reason ?? 'The image could not be saved.');
+        }
+      } catch (err) {
+        toast.error(
+          err instanceof ApiError ? err.message : 'The image for that day could not be prepared.',
+        );
+      } finally {
+        setPending(null);
       }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'The image could not be made.');
-    } finally {
-      setSharing(false);
-    }
-  }, [day, q.data?.outletCode, toast]);
+    },
+    [card, toast],
+  );
+
+  const historyColumns: DataColumn<WaterIngressDayLog>[] = React.useMemo(
+    () => [
+      {
+        id: 'day',
+        header: 'Day',
+        mobile: 'primary',
+        cell: (d) => (
+          <span className="flex flex-wrap items-center gap-1.5">
+            <span className="whitespace-nowrap">{formatYmd(d.businessDate, { weekday: true })}</span>
+            {d.businessDate === date ? <Badge intent="info">Showing</Badge> : null}
+          </span>
+        ),
+      },
+      {
+        id: 'compliance',
+        header: 'Compliance',
+        mobile: 'primaryRight',
+        mobileLabel: 'Compliance',
+        numeric: true,
+        cell: (d) => `${d.compliancePercent}%`,
+      },
+      {
+        id: 'windows',
+        header: 'Windows',
+        mobileLabel: 'Windows',
+        numeric: true,
+        cell: (d) => `${d.recordedSlots} of ${d.totalSlots}`,
+      },
+      {
+        id: 'saved',
+        header: 'Image',
+        mobileLabel: 'Image',
+        cell: (d) =>
+          d.card ? (
+            <Badge intent="success">Saved</Badge>
+          ) : (
+            <span className="text-text-muted">Not saved yet</span>
+          ),
+      },
+      {
+        id: 'get',
+        header: '',
+        cell: (d) => (
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={<Share2 width={15} height={15} strokeWidth={1.75} />}
+            loading={pending === d.businessDate}
+            // The row itself selects the day; this must not do both.
+            onClick={(e) => {
+              e.stopPropagation();
+              void onShare(d.businessDate);
+            }}
+          >
+            {shareActionLabel()}
+          </Button>
+        ),
+      },
+    ],
+    [date, onShare, pending],
+  );
 
   if (q.isLoading) {
     return (
@@ -185,8 +255,8 @@ export function DealerWaterIngressPane({ dealer }: DealerVaultPaneProps) {
             <Button
               variant="secondary"
               leftIcon={<Share2 width={16} height={16} strokeWidth={1.75} />}
-              onClick={onShare}
-              loading={sharing}
+              onClick={() => void onShare(day.businessDate)}
+              loading={pending === day.businessDate}
             >
               {shareActionLabel()}
             </Button>
@@ -264,6 +334,33 @@ export function DealerWaterIngressPane({ dealer }: DealerVaultPaneProps) {
           </p>
         }
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>History</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="max-w-prose text-sm text-text-muted">
+            A day is saved as a picture the moment its last window is recorded — nothing about it
+            can change after that, because a window can only be filled in while the clock is inside
+            it. Days from before this existed, and days that ended short, are drawn the first time
+            somebody asks for them.
+          </p>
+          <DataList
+            rows={days}
+            rowKey={(d) => d.businessDate}
+            columns={historyColumns}
+            onRowClick={(d) => setDate(d.businessDate)}
+            minWidth="42rem"
+            freezeFirstColumn
+            empty={
+              <p className="rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-text-muted">
+                No days recorded yet.
+              </p>
+            }
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }
