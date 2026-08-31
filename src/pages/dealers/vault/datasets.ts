@@ -2,6 +2,7 @@ import {
   ClipboardCheck,
   CreditCard,
   Database,
+  Droplets,
   FileBarChart2,
   Gauge,
   ReceiptText,
@@ -14,6 +15,7 @@ import { DealerDsrTab } from '../DealerDsrTab';
 import { DealerInspectionPane } from './DealerInspectionPane';
 import { DealerPadLedgerPane } from './DealerPadLedgerPane';
 import { DealerTtDensityPane } from './DealerTtDensityPane';
+import { DealerWaterIngressPane } from './DealerWaterIngressPane';
 import type { DealerVaultDataset } from './types';
 
 /**
@@ -80,6 +82,15 @@ const REGISTRY = [
     Icon: Gauge,
     requiresService: 'tt-density',
     Pane: DealerTtDensityPane,
+  },
+  {
+    id: 'water-ingress',
+    label: 'Water ingress',
+    description:
+      "Which two-hour observation windows this outlet recorded, day by day, and which it missed.",
+    Icon: Droplets,
+    requiresService: 'water-ingress-testing',
+    Pane: DealerWaterIngressPane,
   },
 ] as const satisfies readonly DealerVaultDataset[];
 

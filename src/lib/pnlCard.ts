@@ -20,9 +20,9 @@
  * the pair: this admin has no test runner, so the way a formula gets checked is
  * by being callable without a browser and by being read.
  */
+import type { DsrPnlResponse } from '@/hooks/api/useDsr';
 import { dealerCodeLabel } from '@dk/shared';
 
-import type { DsrPnlResponse } from '@/hooks/api/useDsr';
 
 import { formatInrWhole, formatLitres, formatYmd } from './format';
 import {

@@ -21,6 +21,7 @@ import {
 } from '@/components/ui';
 import { useDsrPnl } from '@/hooks/api/useDsr';
 import { ApiError } from '@/lib/api';
+import { shareCardPng } from '@/lib/cardCanvas';
 import { formatInrWhole, formatLitres, formatYmd, isYmd } from '@/lib/format';
 import {
   computeFuelPnl,
@@ -31,7 +32,7 @@ import {
   type TestingTreatment,
 } from '@/lib/fuelPnl';
 import { buildPnlCard } from '@/lib/pnlCard';
-import { renderPnlCardPng, sharePnlCardPng } from '@/lib/pnlCardImage';
+import { renderPnlCardPng } from '@/lib/pnlCardImage';
 import { dealerCodeLabel } from '@dk/shared';
 
 import { PnlAssumptions } from './pnl/PnlAssumptions';
@@ -251,7 +252,7 @@ export function DsrPnlView() {
     try {
       const png = await renderPnlCardPng(buildPnlCard(data, settings));
       const name = `fuel-pnl-${outletCode ?? 'dealer'}-${range.from}-to-${range.to}.png`;
-      const res = await sharePnlCardPng(png, name);
+      const res = await shareCardPng(png, name);
       if (res.outcome === 'downloaded') toast.success('Image saved.');
       else if (res.outcome === 'failed') {
         toast.error(res.reason ?? 'The image could not be saved.');
