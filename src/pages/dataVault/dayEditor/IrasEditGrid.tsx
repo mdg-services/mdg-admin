@@ -10,6 +10,7 @@ import {
   irasFieldPolicy,
   irasRowKeys,
   irasRowLabel,
+  isAddedRowKey,
   recAttributionWindow,
   recRowDayVerdict,
   validateIrasCell,
@@ -41,6 +42,16 @@ export interface IrasEditGridProps {
   products: EditGridProduct[];
   /** Nozzle number → yesterday's meter reading, for the backwards-meter check. */
   previousTotReadings: Record<string, string>;
+  /**
+   * When this day's shift closed, ISO-8601 — used to stamp a hand-added
+   * delivery on a day that has no collection window of its own.
+   *
+   * A day opened by hand carries `datasets: []`, so there IS no window, and the
+   * seed below used to fall back to no stamp at all: every tanker anybody has
+   * ever typed into a hand-entered day is undated, and the "no decant date"
+   * badge is only drawn on portal rows, so nothing on the screen says so.
+   */
+  shiftAnchorAt?: string;
   /** Reveal the columns no calculation reads. */
   showAllColumns: boolean;
   readOnly: boolean;
@@ -120,6 +131,7 @@ export function IrasEditGrid({
   pending,
   products,
   previousTotReadings,
+  shiftAnchorAt,
   showAllColumns,
   readOnly,
 }: IrasEditGridProps) {
@@ -225,6 +237,7 @@ export function IrasEditGrid({
             products={products}
             pending={pending}
             window={window}
+            shiftAnchorAt={shiftAnchorAt}
             taken={taken}
           />
         )}
@@ -307,6 +320,16 @@ export function IrasEditGrid({
             committed={undefined}
             pending={pending}
             readOnly={readOnly || dropping}
+            // The backwards-meter check used to be passed only to portal rows,
+            // which meant it was dead on the one outlet where every meter row is
+            // typed by hand, every morning — the single most valuable check in
+            // this editor, silent on the only day that needs it.
+            previousReading={
+              code === 'TOT' && col.field === 'TOT_READING'
+                ? previousTotReadings[String(c.row?.NOZZLE_NO ?? '').trim()]
+                : undefined
+            }
+            handRow
           />
         ),
       };
@@ -334,6 +357,11 @@ export function IrasEditGrid({
           field={col.field}
           value={a.row[col.field] ?? ''}
           onChange={(v) => pending.editAddedRow(a.localId, col.field, v)}
+          previousReading={
+            code === 'TOT' && col.field === 'TOT_READING'
+              ? previousTotReadings[String(a.row.NOZZLE_NO ?? '').trim()]
+              : undefined
+          }
         />
       ),
     })),
@@ -412,6 +440,7 @@ export function IrasEditGrid({
             products={products}
             pending={pending}
             window={window}
+            shiftAnchorAt={shiftAnchorAt}
             taken={taken}
           />
         </div>
@@ -511,6 +540,7 @@ function Cell({
   pending,
   readOnly: readOnlyProp,
   previousReading,
+  handRow = false,
   shape,
 }: {
   code: IrasReportCode;
@@ -521,6 +551,16 @@ function Cell({
   pending: PendingApi;
   readOnly: boolean;
   previousReading?: string;
+  /**
+   * Whether this row exists only because somebody typed it.
+   *
+   * It widens the meter check from "below yesterday's" to "below or equal to
+   * yesterday's". A portal row keeps the narrower test: an unchanged reading
+   * there is what the portal said and there is nothing for the operator to type,
+   * so the wider one would put a new advisory line on the eight collected
+   * dealers' correction screens, which is a change and not a fix.
+   */
+  handRow?: boolean;
   shape: CellShape;
 }) {
   const policy = irasFieldPolicy(code, field);
@@ -547,12 +587,13 @@ function Cell({
   const [draft, setDraft] = React.useState(inForce);
 
   const problem = editing ? validateIrasCell(code, field, draft) : null;
-  const backwards =
+  const comparable =
     editing &&
     previousReading !== undefined &&
     draft.trim() !== '' &&
-    Number.isFinite(Number(draft)) &&
-    Number(draft) < Number(previousReading);
+    Number.isFinite(Number(draft));
+  const backwards = comparable && Number(draft) < Number(previousReading);
+  const unchanged = comparable && handRow && Number(draft) === Number(previousReading);
 
   function open() {
     if (readOnly) return;
@@ -567,7 +608,17 @@ function Cell({
     // Typing the portal's own figure back is a revert, not a correction — the
     // server treats it the same way, so the two never disagree about what the
     // day's correction count means.
-    pending.setCell(code, rowKey, field, next === portalValue.trim() ? null : next);
+    //
+    // Except on a hand-added row, where there IS no portal figure to hand the
+    // cell back to. `null` there means "revert", and the server's added-row
+    // branch writes an EMPTY STRING rather than restoring anything — so retyping
+    // a tank's own stock figure used to record that tank as holding nothing.
+    pending.setCell(
+      code,
+      rowKey,
+      field,
+      !isAddedRowKey(rowKey) && next === portalValue.trim() ? null : next,
+    );
   }
 
   if (editing) {
@@ -605,6 +656,7 @@ function Cell({
           policy={policy}
           problem={problem}
           backwards={backwards}
+          unchanged={unchanged}
           previousReading={previousReading}
           value={draft}
         />
@@ -738,17 +790,25 @@ function NewRowCell({
   field,
   value,
   onChange,
+  previousReading,
   shape,
 }: {
   code: IrasReportCode;
   field: string;
   value: string;
   onChange: (v: string) => void;
+  /** Yesterday's reading for this nozzle. See `Cell.handRow`: a row being added
+   *  by hand is a hand row, so the check is "below or equal to yesterday's". */
+  previousReading?: string;
   shape: CellShape;
 }) {
   const problem = validateIrasCell(code, field, value);
   const policy = irasFieldPolicy(code, field);
   const card = shape === 'card';
+  const comparable =
+    previousReading !== undefined && value.trim() !== '' && Number.isFinite(Number(value));
+  const backwards = comparable && Number(value) < Number(previousReading);
+  const unchanged = comparable && Number(value) === Number(previousReading);
   return (
     <div className={card ? undefined : 'min-w-[7rem]'}>
       <input
@@ -771,7 +831,14 @@ function NewRowCell({
         outlet forgot is exactly when someone needs to be told that the decant
         date decides which day the litres count on.
       */}
-      <CellNotes policy={policy} problem={problem} backwards={false} value={value} />
+      <CellNotes
+        policy={policy}
+        problem={problem}
+        backwards={backwards}
+        unchanged={unchanged}
+        previousReading={previousReading}
+        value={value}
+      />
     </div>
   );
 }
@@ -789,12 +856,15 @@ function CellNotes({
   policy,
   problem,
   backwards,
+  unchanged = false,
   previousReading,
   value,
 }: {
   policy: ReturnType<typeof irasFieldPolicy>;
   problem: string | null;
   backwards: boolean;
+  /** Exactly yesterday's reading, on a row somebody is typing. */
+  unchanged?: boolean;
   previousReading?: string;
   value: string;
 }) {
@@ -805,6 +875,18 @@ function CellNotes({
         <p className="mt-1 max-w-[16rem] text-[11px] text-warning">
           Meters do not run backwards — yesterday this nozzle read{' '}
           {Number(previousReading).toLocaleString('en-IN')}.
+        </p>
+      ) : null}
+      {/*
+        A totaliser is a lifetime odometer, so a reading that has not moved
+        reports zero litres sold on that nozzle AND drops its 5 litre test draw,
+        because the engine charges testing only to a nozzle that moved. Nothing
+        in this editor said so before.
+      */}
+      {!problem && !backwards && unchanged ? (
+        <p className="mt-1 max-w-[16rem] text-[11px] text-warning">
+          Same as yesterday. This reports zero litres sold on this nozzle, and it also drops that
+          nozzle’s 5 litre test draw.
         </p>
       ) : null}
       {!problem && !backwards && value.trim() === '' && policy.dropsRowWhenBlank ? (
@@ -992,6 +1074,42 @@ function HandRowGutter({
 /* ──────────────────────────────── add a row ─────────────────────────────── */
 
 /**
+ * When a hand-added tanker was decanted, stamped INSIDE the day it belongs to.
+ *
+ * One hour before the shift closed is unambiguously this day's, and without a
+ * stamp the row carries no date at all — `recRowDayVerdict` then reads it as
+ * `UNDATED` and counts it on whichever day is being generated.
+ *
+ * The window comes from the collection, and a day opened by hand has no
+ * collection: `datasets` is empty by design, so `window` is undefined and every
+ * tanker anybody has typed into a hand-entered day has gone in undated, with
+ * nothing on screen saying so — the "no decant date" badge is only drawn on
+ * portal rows. The shift's own anchor is the same instant the window would have
+ * ended at, so it produces the identical stamp on the one kind of day that needs
+ * the fallback.
+ *
+ * Exported so the shift sheet's own delivery card stamps a tanker exactly the
+ * way the full grid does; two implementations of this would be two answers to
+ * "which day do these litres count on".
+ */
+export function decantSeedFields(
+  window: { from: string; to: string } | undefined,
+  shiftAnchorAt: string | undefined,
+): IrasRow {
+  const attribution = recAttributionWindow(window);
+  const anchor = attribution?.to ?? (shiftAnchorAt ? new Date(shiftAnchorAt) : null);
+  if (!anchor || !Number.isFinite(anchor.getTime())) return {};
+  // Read back in IST because the portal writes its stamps in IST, and a `Date`
+  // read on a machine in another zone would name the wrong calendar day.
+  const ist = new Date(anchor.getTime() - 60 * 60_000 + 5.5 * 60 * 60_000);
+  const two = (n: number): string => String(n).padStart(2, '0');
+  return {
+    DECANT_END_DATE: `${two(ist.getUTCDate())}-${two(ist.getUTCMonth() + 1)}-${ist.getUTCFullYear()}`,
+    DECANT_END_TIME: `${two(ist.getUTCHours())}:${two(ist.getUTCMinutes())}:00`,
+  };
+}
+
+/**
  * Add a row the portal never sent.
  *
  * This is the commonest correction of all — a tanker decanted and nobody entered
@@ -1014,6 +1132,7 @@ function AddRowButtons({
   products,
   pending,
   window,
+  shiftAnchorAt,
   taken,
 }: {
   code: IrasReportCode;
@@ -1021,6 +1140,8 @@ function AddRowButtons({
   pending: PendingApi;
   /** The day's collection window, for stamping a hand-added delivery. */
   window?: { from: string; to: string };
+  /** When this day's shift closed — the fallback when there is no window. */
+  shiftAnchorAt?: string;
   /** Which nozzle / tank numbers this day already has a row for. */
   taken: { NOZZLE_NO: Set<string>; TANK_NO: Set<string> };
 }) {
@@ -1062,14 +1183,6 @@ function AddRowButtons({
         PRODCODE: prodCode,
       };
     }
-    // Seed the decant stamp INSIDE the day's window. Without it the row carries
-    // no date, and the operator adding the tanker the outlet forgot would be
-    // relying on a fallback rather than stating the day — one hour before the
-    // shift close is unambiguously this day's.
-    const attribution = recAttributionWindow(window);
-    const seedAt = attribution ? new Date(attribution.to.getTime() - 60 * 60_000) : null;
-    const ist = seedAt ? new Date(seedAt.getTime() + 5.5 * 60 * 60_000) : null;
-    const two = (n: number): string => String(n).padStart(2, '0');
     return {
       TANK_NO: String(product?.tankNos[0] ?? ''),
       NET_QTY_DECANTED: '',
@@ -1079,12 +1192,7 @@ function AddRowButtons({
       INVOICE_QUANTITY: '',
       INVOICE_NUMBER: '',
       PRODCODE: prodCode,
-      ...(ist
-        ? {
-            DECANT_END_DATE: `${two(ist.getUTCDate())}-${two(ist.getUTCMonth() + 1)}-${ist.getUTCFullYear()}`,
-            DECANT_END_TIME: `${two(ist.getUTCHours())}:${two(ist.getUTCMinutes())}:00`,
-          }
-        : {}),
+      ...decantSeedFields(window, shiftAnchorAt),
     };
   }
 

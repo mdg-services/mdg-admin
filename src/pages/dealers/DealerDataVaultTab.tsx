@@ -208,7 +208,11 @@ export function DealerDataVaultTab({ dealer }: Props) {
           navigate(`/data-vault/dealers/${dealer.id}/days/${openDate}`)
         }
       >
-        Open day
+        {/* Named for what it does at THIS outlet. Where the portal collects,
+            opening a day is a look at figures that arrive on their own; where it
+            does not, this is the only route to typing the shift in, and the
+            control that says so is worth two clicks a morning. */}
+        {canCollect ? 'Open day' : 'Type the shift'}
       </Button>
       {canCollect ? (
         <Button

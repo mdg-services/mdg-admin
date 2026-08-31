@@ -23,12 +23,19 @@ import {
   Checkbox,
   EmptyState,
   MobileCardList,
+  SegmentedControl,
   Skeleton,
+  Spinner,
   StatusChip,
   StickyActionBar,
   useToast,
 } from '@/components/ui';
-import { useDsrStaleReports, useRegenerateStaleDsr } from '@/hooks/api/useDsr';
+import {
+  useDsrReports,
+  useDsrStaleReports,
+  useGenerateDsr,
+  useRegenerateStaleDsr,
+} from '@/hooks/api/useDsr';
 import { useCollectIrasData, useStartManualIrasDay } from '@/hooks/api/useIrasData';
 import {
   useCommitIrasCorrections,
@@ -50,6 +57,7 @@ import type { IrasDayEditorView, IrasReportCode } from '@dk/shared';
 import { reportsAffected } from './describePending';
 import { IrasEditGrid } from './IrasEditGrid';
 import { ReviewApplyDialog } from './ReviewApplyDialog';
+import { ShiftSheet, shiftSheetAvailable, useShiftSheetModel } from './ShiftSheet';
 import { toChanges, usePendingChanges, useUnloadGuard } from './usePendingChanges';
 
 /**
@@ -85,28 +93,134 @@ export function ShiftDataEditorPage() {
   const day = dayQ.data;
 
   const pending = usePendingChanges(`${dealerId}|${businessDate}`);
-  useUnloadGuard(pending.count > 0);
 
   const [showAll, setShowAll] = React.useState(false);
   const [reviewing, setReviewing] = React.useState(false);
-  const [applied, setApplied] = React.useState<{ changes: number; staleDates: string[] } | null>(
-    null,
-  );
+  const [applied, setApplied] = React.useState<{
+    changes: number;
+    staleDates: string[];
+    /** How many hand-typed figures are on record, on a day typed by hand. */
+    figures: number | null;
+  } | null>(null);
+  /** Set once this page has asked for a report to be built, so "not built yet"
+   *  and "the build failed" can be told apart rather than reading the same. */
+  const [buildAsked, setBuildAsked] = React.useState(false);
+
+  /**
+   * Which of the two surfaces is on screen.
+   *
+   * `null` means "whichever suits this day", resolved on every render rather
+   * than settled in an effect — the day arrives asynchronously, and an effect
+   * would show the wrong surface for one frame. A portal day never gets the
+   * choice at all: see `shiftSheetAvailable`.
+   */
+  const [mode, setMode] = React.useState<'sheet' | 'grid' | null>(null);
+  const sheetAvailable = shiftSheetAvailable(day);
+  const activeMode: 'sheet' | 'grid' = sheetAvailable ? (mode ?? 'sheet') : 'grid';
 
   const commit = useCommitIrasCorrections(dealerId, businessDate);
   const collect = useCollectIrasData();
   const startDay = useStartManualIrasDay();
-  // Whether the portal can be asked at all. For an outlet with no IRAS account
-  // the attachment is left paused, and offering "Collect" would send the
-  // operator down a path that cannot finish.
-  const canCollect = day?.dealer.portalCollection === 'ACTIVE';
+  /*
+   * Two different questions about the portal, deliberately kept apart.
+   *
+   * `portalCollects` is whether the portal is where this outlet's figures come
+   * from. An outlet with no IRAS account keeps the attachment attached but
+   * paused, so its day never arrives on its own and an empty day has to lead
+   * with typing the shift in rather than with collecting it.
+   *
+   * `canCollect` is whether asking the portal can finish at all, and that is a
+   * question about the route rather than about the status.
+   * `POST /iras-data/dealers/:dealerId/collect` refuses two things and only two:
+   * a dealer with no IRAS Shift Data attachment at all, and an ARCHIVED dealer,
+   * which its own guard turns away with "Dealer not found" before it can open a
+   * portal session. A PAUSED attachment is accepted, the run is created and the
+   * collection goes ahead.
+   *
+   * Both halves have cost something. Reading the STATUS here took Re-collect
+   * away from a collected dealer whose pipeline was merely paused — routine on
+   * the eight — and that button is the only way to fix a bad collection. Reading
+   * the attachment ALONE left it live on an archived dealer, directly under the
+   * banner saying their data is read-only, where every press came back "Dealer
+   * not found" — a button that cannot work, answering with the name of a dealer
+   * whose day is on screen.
+   */
+  const portalCollects = day?.dealer.portalCollection === 'ACTIVE';
+  const canCollect = !!day && !day.dealer.archived && day.dealer.portalCollection !== 'NONE';
   const regenerate = useRegenerateStaleDsr(dealerId);
-  const run = useDsrRunWatcher(dealerId, 'Reports rebuilt.');
+  // The toast a finished run leaves behind, and it deliberately does not say
+  // "reports are up to date". This one watcher covers a single date's build AND
+  // a regenerate-stale of a whole chain, and nothing here has checked either —
+  // the line below is what checks, and the notice names whatever is left.
+  const run = useDsrRunWatcher(
+    dealerId,
+    'That build finished. Anything still out of date is listed on this page.',
+  );
   // Re-read after the rebuild rather than claiming success: the generator repairs
   // a bounded forward chain, and `regenerate-stale` is designed to need a second
   // press in some cases. Saying "nothing is out of date" without checking is how
   // an operator walks away from a half-rebuilt week.
   const staleQ = useDsrStaleReports(dealerId, !!applied || !!day?.dsr.attached);
+  // Whether a report now exists for this date. Read from the reports list rather
+  // than from the day payload because a finished run invalidates the `dsr` cache
+  // and not this day's — so this is the query that actually refreshes when the
+  // report lands.
+  const reportsQ = useDsrReports(dealerId);
+  const generate = useGenerateDsr();
+  const reportExists = (reportsQ.data?.reports ?? []).some(
+    (r) => r.businessDate === businessDate,
+  );
+  /*
+   * Building — and still building until the answer has actually been re-read.
+   *
+   * `useDsrRunWatcher` invalidates the DSR queries and drops the run id in one
+   * effect, so `run.busy` goes false in the same commit in which `reportsQ` is
+   * still holding the list it read BEFORE the build. `reportExists` is false
+   * for that whole window, and the notice used to spend it telling the operator
+   * the report could not be built, beside the toast saying it had been, and
+   * offering a Try again that queues a second, redundant run. On a 2G phone the
+   * window is seconds. `reportsQ` is the query that answers "is there a report
+   * for this date", so the building state lasts until it has answered.
+   */
+  const building =
+    generate.isPending ||
+    regenerate.isPending ||
+    run.busy ||
+    (buildAsked && !reportExists && reportsQ.isFetching);
+
+  const sheet = useShiftSheetModel({
+    day,
+    pending,
+    readOnly: day?.dealer.archived ?? false,
+    active: sheetAvailable && activeMode === 'sheet',
+  });
+
+  /*
+   * Unsaved work, in the operator's terms.
+   *
+   * On the full grid every pending change is something a person did, so the
+   * count is the answer. On the shift sheet the day arrives with eight empty
+   * rows the SYSTEM proposed — losing those loses nothing — so the guard asks
+   * whether anything has actually been typed. Prompting somebody who opened a
+   * day and walked away teaches them to dismiss the prompt that matters.
+   *
+   * That question is READ off the sheet's model, not asked again here. The model
+   * already publishes it, counted in `@dk/shared` over the rows in force, and it
+   * is the same answer the sheet's own "Discard all" confirm turns on — so the
+   * two guards over one morning's typing cannot disagree.
+   *
+   * It is `anythingTyped` rather than the figure count beside it, and that is
+   * the whole point of the field. `progress.entered` counts the day's PLANNED
+   * figures: the six meter readings and the two tanks' stock and product dip. A
+   * tanker is not one of them — a morning with no delivery is a complete morning
+   * — so an operator whose first act was "A tanker came" and 12,000 litres into
+   * the invoiced quantity had typed nothing at all as far as both guards could
+   * see. Close the tab, or press Discard, and the delivery went without a prompt
+   * or a confirm; type the rest of the morning without it and the previous day's
+   * report is 12,000 L of receipts short, which on a permissible band of about
+   * 55 L is the suspension advisory.
+   */
+  useUnloadGuard(pending.count > 0 && (activeMode !== 'sheet' || sheet.progress.anythingTyped));
 
   // Cmd/Ctrl+Z over the pending set. Never touches the server.
   React.useEffect(() => {
@@ -160,26 +274,86 @@ export function ShiftDataEditorPage() {
   const stale = staleQ.data?.reports ?? [];
 
   async function onApply(reason: string) {
+    const typedByHand = sheetAvailable && activeMode === 'sheet';
+    // A fresh save starts a fresh answer to "has a report been built for this
+    // day": the previous attempt's verdict must not colour this one's.
+    setBuildAsked(false);
+    const figures = typedByHand ? sheet.progress.entered : null;
     try {
       const result = await commit.mutateAsync({
         revision: day!.revision,
         reason,
         ...toChanges(pending.state),
+        // The statement "this pump did not run today", on the commit body only.
+        // It is written into the audit entry and never into a correction: the
+        // shared field policy would reject a column the portal does not send,
+        // and teaching that table a field the engine never reads is exactly what
+        // the DSR's own field test exists to prevent.
+        //
+        // Sent whichever surface pressed Apply. The statement is made on the
+        // shift sheet and lives in the pending set, so it survives a switch to
+        // the Full grid — but gating it on the surface that happened to be on
+        // screen at Apply saved the zero and threw away the only durable record
+        // that a person deliberately reported a nozzle as having sold nothing.
+        // A portal day cannot reach the sheet, so this stays empty there.
+        ...(sheet.acknowledgedUnchangedNozzles.length > 0
+          ? { acknowledgedUnchangedNozzles: sheet.acknowledgedUnchangedNozzles }
+          : {}),
       });
       setReviewing(false);
+      /*
+       * Every line from here down runs on a commit the server has accepted, and
+       * that is now true whatever the network does next. `useCommitIrasCorrections`
+       * holds the save until this day has been re-read — so the figures are back
+       * on screen before the pending set is emptied — but it stops holding it
+       * after eight seconds, because a phone that loses the signal in that second
+       * would otherwise leave a saved morning sitting under "you have unsaved
+       * work" with a spinner and no way out. Emptying the set here is what takes
+       * the unload guard down, so it must not be behind a wait that can outlast
+       * the outage.
+       */
       pending.discardAll();
-      setApplied({ changes: result.changes.length, staleDates: result.staleDates });
+      setApplied({ changes: result.changes.length, staleDates: result.staleDates, figures });
+      for (const warning of result.warnings ?? []) toast.info(warning);
+      /*
+       * Saved figures are not a report, and the button promised one.
+       *
+       * The primary on a day typed by hand reads "Save the shift and build the
+       * report", so the build is chained after EVERY successful save, not only
+       * the first-ever one. It used to be chained only when nothing was flagged
+       * stale, which meant the promise was kept on the first save of a date and
+       * quietly broken on every re-save — exactly the saves where a report
+       * already exists and is now wrong.
+       *
+       * Generating THIS date covers both cases with one call: it builds a
+       * report that never existed, it rebuilds one that did, and the generator
+       * then walks forward re-closing each consecutive later day that already
+       * has a report (`dsr-report/index.ts`, "Heal the forward chain"), which is
+       * the same repair `regenerate-stale` would have asked for. Anything it
+       * cannot reach stays on the stale list, and the notice below still offers
+       * Regenerate for it.
+       */
+      const willBuild = typedByHand && day!.dsr.attached && result.changes.length > 0;
       if (result.changes.length === 0) {
         toast.info('Nothing changed — the figures on record already match.');
       } else if (result.staleDates.length === 0) {
-        toast.success('Corrections applied. No generated report is affected yet.');
+        toast.success(
+          typedByHand
+            ? 'Shift saved.'
+            : 'Corrections applied. No generated report is affected yet.',
+        );
       } else {
         toast.success(
-          `Corrections applied. ${result.staleDates.length} report${
-            result.staleDates.length === 1 ? '' : 's'
-          } now need regenerating.`,
+          willBuild
+            ? `Shift saved. Rebuilding ${result.staleDates.length} report${
+                result.staleDates.length === 1 ? '' : 's'
+              } that used these figures.`
+            : `Corrections applied. ${result.staleDates.length} report${
+                result.staleDates.length === 1 ? '' : 's'
+              } now need regenerating.`,
         );
       }
+      if (willBuild) buildReport();
     } catch (err) {
       toast.error(
         err instanceof ApiError
@@ -189,13 +363,33 @@ export function ShiftDataEditorPage() {
     }
   }
 
+  /** Build the report for this day, and watch the run to completion in place. */
+  function buildReport() {
+    setBuildAsked(true);
+    generate.mutate(
+      { dealerId, businessDate },
+      {
+        onSuccess: (data) => run.watch(data.runId),
+        onError: (err) =>
+          toast.error(
+            err instanceof ApiError ? err.message : 'Could not start building the report',
+          ),
+      },
+    );
+  }
+
   return (
     // No bottom spacer: the pending bar below is `sticky`, not `fixed`, so it
     // takes its own space at the end of the column and nothing is buried under
     // it. The old `pb-28` was a guess that was already short on a phone, where
     // the bar stacks to three wrapped lines.
     <div>
-      <Header day={day} onCollect={() => runCollect()} collecting={collect.isPending} />
+      <Header
+        day={day}
+        onCollect={() => runCollect()}
+        collecting={collect.isPending}
+        canCollect={canCollect}
+      />
 
       {day.dealer.archived ? (
         <Callout intent="warning" className="mt-3">
@@ -209,7 +403,13 @@ export function ShiftDataEditorPage() {
         <AppliedNotice
           applied={applied}
           stale={stale}
-          busy={regenerate.isPending || run.busy}
+          staleUnreadable={staleQ.isError}
+          busy={building}
+          reportExists={reportExists}
+          reportsUnreadable={reportsQ.isError}
+          buildAsked={buildAsked}
+          onBuild={() => buildReport()}
+          dsrAttached={day.dsr.attached}
           onRegenerate={() =>
             regenerate.mutate(undefined, {
               onSuccess: (data) => {
@@ -236,36 +436,52 @@ export function ShiftDataEditorPage() {
             <EmptyState
               icon={<Database width={28} height={28} strokeWidth={1.75} />}
               title={
-                canCollect
+                portalCollects
                   ? 'Nothing has been collected for this day'
                   : 'This outlet’s figures are entered by hand'
               }
               description={
-                canCollect
+                portalCollects
                   ? 'There are no portal rows to correct yet. Collect the day first — it takes about a minute.'
-                  : 'This dealer has no portal collection running, so nothing will arrive on its own. Open the day and type the shift in: the meter readings, each tank’s dip and stock, and any tanker that came.'
+                  : day.dsr.products.length === 0
+                    ? 'This outlet has no portal collection, so nothing arrives on its own — and no Daily Sales Report layout either, so we do not yet know which nozzles and tanks it has. Set the layout up on the dealer’s Services tab and the shift sheet will lay itself out.'
+                    : `This outlet has no portal collection, so nothing arrives on its own. Opening the day sets out ${layoutSentence(day)}, ready for this morning’s figures.`
               }
+              /* Nothing to press on an archived dealer: both routes behind these
+                 buttons refuse one outright, and the banner above already says
+                 their data is read-only. Offering a dead action under that
+                 sentence is how an operator ends up believing the archive is
+                 the thing that is broken. */
               cta={
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  {canCollect ? (
+                readOnly ? undefined : (
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {portalCollects ? (
+                      <Button
+                        variant="secondary"
+                        loading={collect.isPending}
+                        leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
+                        onClick={() => runCollect()}
+                      >
+                        Collect this day
+                      </Button>
+                    ) : null}
                     <Button
-                      variant="secondary"
-                      loading={collect.isPending}
-                      leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
-                      onClick={() => runCollect()}
+                      variant={portalCollects ? 'ghost' : 'secondary'}
+                      loading={startDay.isPending}
+                      leftIcon={<PencilLine width={14} height={14} strokeWidth={1.75} />}
+                      onClick={() => runStartDay()}
                     >
-                      Collect this day
+                      {/* The shift sheet is promised by name only where there is
+                          a layout for it to lay out. Without one the day opens on
+                          the full grid, and a button that said "Type the shift
+                          for 31 Aug 2026" would have promised a screen the
+                          operator is not about to get. */}
+                      {portalCollects || day.dsr.products.length === 0
+                        ? 'Start this day by hand'
+                        : `Type the shift for ${formatYmd(businessDate)}`}
                     </Button>
-                  ) : null}
-                  <Button
-                    variant={canCollect ? 'ghost' : 'secondary'}
-                    loading={startDay.isPending}
-                    leftIcon={<PencilLine width={14} height={14} strokeWidth={1.75} />}
-                    onClick={() => runStartDay()}
-                  >
-                    Start this day by hand
-                  </Button>
-                </div>
+                  </div>
+                )
               }
             />
           </CardContent>
@@ -285,37 +501,90 @@ export function ShiftDataEditorPage() {
                 {day.snapshot.failureReason ? (
                   <p className="mt-0.5">{day.snapshot.failureReason}</p>
                 ) : null}
+                {/* What to do next, and only what this dealer can actually do.
+                    "Re-collect it, then come back" was said to every failed day
+                    — including an archived dealer's, where the route answers
+                    "Dealer not found", and one whose attachment has since been
+                    removed, where it answers 404. An instruction nobody can
+                    follow, under a red panel, on the one screen that exists to
+                    get a wrong day right. */}
                 <p className="mt-0.5">
-                  Correcting figures needs a collected day. Re-collect it, then come back.
+                  {canCollect
+                    ? 'Correcting figures needs a collected day. Re-collect it, then come back.'
+                    : readOnly
+                      ? 'Correcting figures needs a collected day. This dealer is archived, so nothing can be collected or corrected here.'
+                      : 'Correcting figures needs a collected day, and this dealer has no IRAS Shift Data service attached to collect one. Attach it on their Services tab, then re-collect.'}
                 </p>
               </div>
             </div>
-            <div className="mt-3">
-              <Button
-                variant="secondary"
-                loading={collect.isPending}
-                leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
-                onClick={() => runCollect()}
-              >
-                Re-collect this day
-              </Button>
-            </div>
+            {/* The header's Re-collect and this one are the same button under
+                the same rule — see `canCollect`. */}
+            {canCollect ? (
+              <div className="mt-3">
+                <Button
+                  variant="secondary"
+                  loading={collect.isPending}
+                  leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
+                  onClick={() => runCollect()}
+                >
+                  Re-collect this day
+                </Button>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : (
         <>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-text-muted">
-              Correct what the portal got wrong. Your corrections are what the report uses; the
-              portal’s own values are kept and always visible.
-            </p>
-            <Checkbox
-              checked={showAll}
-              onChange={(e) => setShowAll(e.target.checked)}
-              label="Show all portal columns"
-              labelClassName="shrink-0 text-text-muted"
-            />
-          </div>
+          {/* The switch is rendered only on a day nobody collected. A portal
+              day — including one whose collection FAILED, which keeps
+              `source: 'PORTAL'` — never sees it, so a corrector can never be
+              shown a row this screen proposed. That is the whole protection for
+              the eight collected dealers' correction job. */}
+          {sheetAvailable ? (
+            <div className="mt-4">
+              <SegmentedControl
+                aria-label="How to enter this day"
+                value={activeMode}
+                onChange={setMode}
+                options={[
+                  { value: 'sheet', label: 'Shift sheet' },
+                  { value: 'grid', label: 'Full grid' },
+                ]}
+              />
+            </div>
+          ) : null}
+
+          {/* Without a report layout the sheet has no rows to lay out: nothing
+              knows which nozzles and tanks this outlet has. Only the hand-typed
+              day is asked about — a portal day never wanted the sheet — and only
+              a collected one reaches here at all, so the "no snapshot" half of
+              this test that used to sit beside it could never be true. The day
+              that has no snapshot AND no layout is answered by the empty state
+              above, in the same words. */}
+          {!sheetAvailable &&
+          day.snapshot.source === 'MANUAL' &&
+          day.dsr.products.length === 0 ? (
+            <Callout intent="warning" className="mt-3">
+              This dealer has no Daily Sales Report layout, so we do not know which nozzles and
+              tanks it has. Set the layout up on the dealer&rsquo;s Services tab, then come back and
+              the shift sheet will lay itself out.
+            </Callout>
+          ) : null}
+
+          {activeMode === 'grid' ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-text-muted">
+                Correct what the portal got wrong. Your corrections are what the report uses; the
+                portal’s own values are kept and always visible.
+              </p>
+              <Checkbox
+                checked={showAll}
+                onChange={(e) => setShowAll(e.target.checked)}
+                label="Show all portal columns"
+                labelClassName="shrink-0 text-text-muted"
+              />
+            </div>
+          ) : null}
 
           {day.dsr.attached ? null : (
             <Callout className="mt-3">
@@ -329,28 +598,41 @@ export function ShiftDataEditorPage() {
             </Callout>
           ) : null}
 
-          <div className="mt-3 grid gap-3 md:gap-4">
-            {SECTION_ORDER.filter((c) => IRAS_REPORT_CODES.includes(c)).map((code) => (
-              <Section key={code} code={code} day={day}>
-                <IrasEditGrid
-                  code={code}
-                  dataset={day.snapshot?.datasets[code]}
-                  corrections={day.corrections}
-                  pending={pending}
-                  products={day.dsr.products}
-                  previousTotReadings={day.previousTotReadings}
-                  showAllColumns={showAll}
-                  readOnly={readOnly}
-                />
-              </Section>
-            ))}
-          </div>
+          {activeMode === 'sheet' ? (
+            <ShiftSheet
+              day={day}
+              model={sheet}
+              pending={pending}
+              readOnly={readOnly}
+              onSave={() => setReviewing(true)}
+            />
+          ) : (
+            <div className="mt-3 grid gap-3 md:gap-4">
+              {SECTION_ORDER.filter((c) => IRAS_REPORT_CODES.includes(c)).map((code) => (
+                <Section key={code} code={code} day={day}>
+                  <IrasEditGrid
+                    code={code}
+                    dataset={day.snapshot?.datasets[code]}
+                    corrections={day.corrections}
+                    pending={pending}
+                    products={day.dsr.products}
+                    previousTotReadings={day.previousTotReadings}
+                    shiftAnchorAt={day.snapshot?.shift.anchorAt}
+                    showAllColumns={showAll}
+                    readOnly={readOnly}
+                  />
+                </Section>
+              ))}
+            </div>
+          )}
 
           <CorrectionHistory dealerId={dealerId} />
         </>
       )}
 
-      {pending.count > 0 ? (
+      {/* The sheet carries its own bar: it counts figures rather than pending
+          changes, and it holds the keyboard accessory. */}
+      {activeMode !== 'sheet' && pending.count > 0 ? (
         <PendingBar
           count={pending.count}
           affected={affected}
@@ -358,6 +640,21 @@ export function ShiftDataEditorPage() {
           onUndo={pending.undo}
           onDiscard={pending.discardAll}
           onReview={() => setReviewing(true)}
+          // One rule, both surfaces. The sheet lays eight blank rows out the
+          // moment a hand day opens, and switching to the Full grid used to take
+          // the only gate on them off screen: four taps from opening the day,
+          // "Apply 8 changes" was live, the server refused the whole commit
+          // because a blank meter row has no reading on it, and the operator
+          // read a column name for eight rows they never added. The sheet's
+          // findings are computed for the whole day rather than for whichever
+          // surface is showing, so the answer already exists here — it was
+          // simply never asked for.
+          //
+          // A portal day is untouched. `shiftSheetAvailable` is false for it, so
+          // `blocked` is false, no sentence is added and nothing is disabled —
+          // the eight collected dealers' bar is the bar they have always had.
+          blocked={sheetAvailable && !sheet.canSave}
+          blockReason={sheet.blockReason}
         />
       ) : null}
 
@@ -369,6 +666,18 @@ export function ShiftDataEditorPage() {
           pending={pending}
           applying={commit.isPending}
           onApply={(reason) => void onApply(reason)}
+          manual={
+            activeMode === 'sheet'
+              ? {
+                  title: `Save the shift of ${formatYmd(day.businessDate, { weekday: true })}`,
+                  defaultReason: sheet.defaultReason,
+                  lines: sheet.saveSummary.lines,
+                  primaryLabel: day.dsr.attached
+                    ? 'Save the shift and build the report'
+                    : 'Save the shift',
+                }
+              : undefined
+          }
         />
       ) : null}
     </div>
@@ -385,8 +694,10 @@ export function ShiftDataEditorPage() {
     startDay.mutate(
       { dealerId, businessDate },
       {
-        onSuccess: () =>
-          toast.success('Day opened. Add a row for each nozzle, each tank, and any tanker that came.'),
+        // One press, one day: the shell is created here and the sheet lays the
+        // rows out the moment it mounts, so nothing else has to be pressed
+        // before the first figure can be typed.
+        onSuccess: () => toast.success('Day opened. The rows are laid out — type the figures in.'),
         onError: (err) =>
           toast.error(err instanceof ApiError ? err.message : 'Could not open the day'),
       },
@@ -408,16 +719,47 @@ export function ShiftDataEditorPage() {
   }
 }
 
+/** How many nozzles and tanks this dealer's report layout names. */
+function nozzleCount(day: IrasDayEditorView): number {
+  return new Set(day.dsr.products.flatMap((p) => p.nozzleNos.map(String))).size;
+}
+
+function tankCount(day: IrasDayEditorView): number {
+  return new Set(day.dsr.products.flatMap((p) => p.tankNos.map(String))).size;
+}
+
+/**
+ * "6 nozzles and 2 tanks" — what opening the day will lay out, in words.
+ *
+ * Worded rather than interpolated because a one-nozzle outlet was being promised
+ * "1 nozzles and 1 tanks", which is the same fault `irasDayFiguresSentence` was
+ * written in `@dk/shared` to stop the sheet's own readout making. Only ever
+ * shown where the layout names something: with no layout at all this would read
+ * "0 nozzles and 0 tanks", which tells an operator nothing about what to do
+ * next, so that case says what is missing instead.
+ */
+function layoutSentence(day: IrasDayEditorView): string {
+  const nozzles = nozzleCount(day);
+  const tanks = tankCount(day);
+  return `${nozzles} ${nozzles === 1 ? 'nozzle' : 'nozzles'} and ${tanks} ${
+    tanks === 1 ? 'tank' : 'tanks'
+  }`;
+}
+
 /* ──────────────────────────────── header ──────────────────────────────── */
 
 function Header({
   day,
   onCollect,
   collecting,
+  canCollect,
 }: {
   day: IrasDayEditorView;
   onCollect: () => void;
   collecting: boolean;
+  /** Whether asking the portal can finish — i.e. this dealer has an IRAS Shift
+   *  Data attachment for the collect route to run, and is not archived. */
+  canCollect: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const shift = day.snapshot?.shift;
@@ -479,17 +821,25 @@ function Header({
           </>
         ) : null}
       </div>
-      <div className="flex shrink-0 flex-wrap gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          loading={collecting}
-          leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
-          onClick={onCollect}
-        >
-          Re-collect
-        </Button>
-      </div>
+      {/* Hidden only where the request cannot finish. The collect route refuses
+          two cases — a dealer with no IRAS Shift Data attachment, and an
+          archived dealer — and in both the button is a guaranteed 404. A PAUSED
+          attachment is accepted and the collection runs, so a collected dealer
+          keeps this button through a pause, which is how the eight have always
+          had it. */}
+      {canCollect ? (
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={collecting}
+            leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
+            onClick={onCollect}
+          >
+            Re-collect
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -570,8 +920,22 @@ function Banners({ day, pending }: { day: IrasDayEditorView; pending: number }) 
 
       {corrections > 0 && pending === 0 ? (
         <Callout intent="info">
-          This day has {corrections} correction{corrections === 1 ? '' : 's'}. Reports are using the
-          corrected figures.
+          {/*
+            Nobody corrected a hand-typed day — they typed it. Calling an
+            operator's own morning "8 corrections" every time they reopen it puts
+            the platform's word for fixing a portal mistake in front of the one
+            person who has no portal, and it is the vocabulary the rest of this
+            feature goes out of its way to avoid. A collected day keeps the
+            original sentence, so the eight portal dealers see no change at all.
+          */}
+          {day.snapshot === null || day.snapshot.source === 'MANUAL' ? (
+            <>This day’s figures are saved. The reports are using them.</>
+          ) : (
+            <>
+              This day has {corrections} correction{corrections === 1 ? '' : 's'}. Reports are using
+              the corrected figures.
+            </>
+          )}
         </Callout>
       ) : null}
 
@@ -647,73 +1011,208 @@ function fmtWindow({ from, to }: { from: Date; to: Date }): string {
 
 /* ─────────────────────── applied → regenerate → verify ─────────────────── */
 
+/**
+ * Saved figures are not a report, and this notice used to say they were.
+ *
+ * `markReportsStaleFrom` returns an empty list when nothing matches, which is
+ * exactly what happens on the first day a dealer's figures were ever typed — and
+ * the notice read that as "every report for this dealer is up to date" and
+ * offered a link to a report that had never been built. So an empty stale list
+ * now asks the honest question instead: has a report for THIS date been built,
+ * is one being built right now, or did the build we asked for fail?
+ */
 function AppliedNotice({
   applied,
   stale,
+  staleUnreadable,
   busy,
+  reportExists,
+  reportsUnreadable,
+  buildAsked,
+  onBuild,
+  dsrAttached,
   onRegenerate,
   onDismiss,
   dealerId,
   businessDate,
 }: {
-  applied: { changes: number; staleDates: string[] };
+  applied: { changes: number; staleDates: string[]; figures: number | null };
   stale: Array<{ businessDate: string }>;
+  /** Whether the stale list could not be read at all, so an empty `stale` means
+   *  "we do not know", not "nothing is out of date". */
+  staleUnreadable: boolean;
   busy: boolean;
+  /** Whether a report now exists for this business date. */
+  reportExists: boolean;
+  /** Whether that question could not be answered at all — the request for this
+   *  dealer's reports failed, so `reportExists` is "we do not know", not "no". */
+  reportsUnreadable: boolean;
+  /** Whether this page has already asked for one to be built. */
+  buildAsked: boolean;
+  onBuild: () => void;
+  /** Whether this dealer has the Daily Sales Report service at all. */
+  dsrAttached: boolean;
   onRegenerate: () => void;
   onDismiss: () => void;
   dealerId: string;
   businessDate: string;
 }) {
-  const done = stale.length === 0;
+  const nothingStale = stale.length === 0;
+  const dateLabel = formatYmd(businessDate);
+  const saved =
+    applied.figures !== null
+      ? `${applied.figures} figure${applied.figures === 1 ? '' : 's'} ${
+          applied.figures === 1 ? 'is' : 'are'
+        } on record for ${dateLabel}.`
+      : `${applied.changes} change${applied.changes === 1 ? '' : 's'} applied.`;
+
+  let tone: 'success' | 'warning' | 'info' = 'info';
+  let title: string;
+  let body: React.ReactNode;
+  let action: React.ReactNode;
+
+  if (!nothingStale) {
+    tone = 'warning';
+    title =
+      applied.changes === 0
+        ? 'Nothing changed'
+        : `${applied.changes} change${applied.changes === 1 ? '' : 's'} applied`;
+    body = `${stale.length} report${stale.length === 1 ? '' : 's'} still need regenerating (${stale
+      .slice(0, 5)
+      .map((s) => formatYmd(s.businessDate))
+      .join(', ')}${stale.length > 5 ? '…' : ''}).`;
+    action = (
+      <Button
+        size="sm"
+        loading={busy}
+        leftIcon={<RefreshCw width={14} height={14} strokeWidth={1.75} />}
+        onClick={onRegenerate}
+      >
+        {busy ? 'Rebuilding…' : 'Regenerate reports'}
+      </Button>
+    );
+  } else if (busy) {
+    title = applied.figures !== null ? 'Shift saved' : 'Changes applied';
+    body = (
+      <span className="inline-flex items-center gap-2">
+        <Spinner size={14} />
+        {saved} Building the report — this updates when it lands.
+      </span>
+    );
+    action = null;
+  } else if (reportExists) {
+    tone = 'success';
+    title =
+      applied.figures !== null
+        ? `Report built for ${dateLabel}`
+        : applied.changes === 0
+          ? 'Nothing changed'
+          : `${applied.changes} change${applied.changes === 1 ? '' : 's'} applied`;
+    // "Every report is up to date" is a claim about the whole dealer, and the
+    // only thing that can make it is the stale list. A request that failed comes
+    // back as an empty list, which reads identical to "nothing is out of date" —
+    // and that is precisely how an operator walks away from a half-rebuilt week.
+    // So a list nobody could read says so instead of speaking for the dealer.
+    body =
+      applied.figures !== null
+        ? saved
+        : staleUnreadable
+          ? 'We could not check whether any other report is now out of date.'
+          : 'Every report for this dealer is up to date.';
+    action = (
+      <Link
+        to={`/dsr/dealers/${dealerId}?date=${businessDate}`}
+        className="text-sm font-semibold underline"
+      >
+        {applied.figures !== null ? 'Open the report' : `Open the report for ${dateLabel}`}
+      </Link>
+    );
+  } else if (buildAsked) {
+    /*
+     * A report list nobody could read is not a build that failed.
+     *
+     * "Is there a report for this date" is answered by one request — the
+     * dealer's report list — and on a forecourt phone that request drops. React
+     * Query gives up after one retry, `reportExists` stays false, and this
+     * branch used to read that as the build having failed: the operator is told
+     * so, and pressed Try again, which queues a second run of a job that may
+     * well have finished and that can drive a portal session. It is the same
+     * mistake the "still building" window above was added to stop, arriving by
+     * the other door. So a list we could not read says exactly that, and points
+     * at the screen where the answer actually lives.
+     */
+    tone = 'warning';
+    title = 'The figures are saved';
+    body = reportsUnreadable
+      ? `${saved} We could not check whether the report was built.`
+      : `${saved} The report could not be built.`;
+    action = reportsUnreadable ? (
+      <Link
+        to={`/dsr/dealers/${dealerId}?date=${businessDate}`}
+        className="text-sm font-semibold underline"
+      >
+        Open the report screen
+      </Link>
+    ) : (
+      <Button
+        size="sm"
+        leftIcon={<RefreshCw width={14} height={14} strokeWidth={1.75} />}
+        onClick={onBuild}
+      >
+        Try again
+      </Button>
+    );
+  } else {
+    title = applied.figures !== null ? 'Shift saved' : 'Changes applied';
+    // Same rule as the branch above: a report list that could not be read is not
+    // a report that does not exist, and this sentence must not say it is. The
+    // button is right either way — building a date that already has a report
+    // rebuilds it — so only the wording changes.
+    body = !dsrAttached
+      ? `${saved} This dealer does not have the Daily Sales Report service, so no report is built from them.`
+      : reportsUnreadable
+        ? `${saved} We could not check whether a report has been built for that day.`
+        : `${saved} No report has been built for that day yet.`;
+    action = dsrAttached ? (
+      <Button size="sm" onClick={onBuild}>
+        Build the report
+      </Button>
+    ) : null;
+  }
+
   return (
     <div
       className={cn(
         'mt-3 flex flex-wrap items-start gap-3 rounded-md px-3 py-2.5 text-sm',
-        done ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning',
+        tone === 'success'
+          ? 'bg-success-soft text-success'
+          : tone === 'warning'
+            ? 'bg-warning-soft text-warning'
+            : 'bg-info-soft text-info',
       )}
     >
-      {done ? (
+      {tone === 'success' ? (
         <CheckCircle2 width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
       ) : (
         <History width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
       )}
       <div className="min-w-0 flex-1">
-        <p className="font-medium">
-          {applied.changes === 0
-            ? 'Nothing changed'
-            : `${applied.changes} change${applied.changes === 1 ? '' : 's'} applied`}
-        </p>
-        <p className="mt-0.5">
-          {done
-            ? 'Every report for this dealer is up to date.'
-            : `${stale.length} report${stale.length === 1 ? '' : 's'} still need regenerating (${stale
-                .slice(0, 5)
-                .map((s) => formatYmd(s.businessDate))
-                .join(', ')}${stale.length > 5 ? '…' : ''}).`}
-        </p>
-        {done ? (
-          <Link
-            to={`/dsr/dealers/${dealerId}?date=${businessDate}`}
-            className="mt-0.5 inline-block font-semibold underline"
-          >
-            Open the report for {formatYmd(businessDate)}
-          </Link>
-        ) : null}
+        <p className="font-medium">{title}</p>
+        <p className="mt-0.5">{body}</p>
       </div>
-      {done ? (
+      {action}
+      {/* Dismissable whenever this notice has finished saying what it has to
+          say. Tying it to the green state took the button away from a
+          correction applied to a date with no generated report — the commonest
+          shape of the eight collected dealers' work — and left a notice on
+          screen with no way to clear it. While reports are still to be rebuilt,
+          Regenerate is the way out; while a build is in flight the notice is
+          still live and says so. */}
+      {nothingStale && !busy ? (
         <Button variant="ghost" size="sm" onClick={onDismiss}>
           Dismiss
         </Button>
-      ) : (
-        <Button
-          size="sm"
-          loading={busy}
-          leftIcon={<RefreshCw width={14} height={14} strokeWidth={1.75} />}
-          onClick={onRegenerate}
-        >
-          {busy ? 'Rebuilding…' : 'Regenerate reports'}
-        </Button>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -743,6 +1242,8 @@ function PendingBar({
   onUndo,
   onDiscard,
   onReview,
+  blocked,
+  blockReason,
 }: {
   count: number;
   affected: { dates: string[]; sharedDates: string[] };
@@ -750,6 +1251,13 @@ function PendingBar({
   onUndo: () => void;
   onDiscard: () => void;
   onReview: () => void;
+  /**
+   * Whether something on this day would make the server refuse the whole
+   * commit. False on a portal day, which has no such check and never had one.
+   */
+  blocked: boolean;
+  /** The one sentence saying what — the shift sheet's own wording, unchanged. */
+  blockReason: string | null;
 }) {
   return (
     <StickyActionBar
@@ -783,6 +1291,13 @@ function PendingBar({
         </>
       }
     >
+      {/* The reason the button is dead, as visible text beside it — the same
+          sentence, in the same place, as the shift sheet's own save bar. Never a
+          `title`: it does not fire on touch, so on a phone a disabled primary
+          would be silent and the operator would be left tapping it. */}
+      {blocked && blockReason ? (
+        <p className="w-full text-sm text-text-muted md:w-auto">{blockReason}</p>
+      ) : null}
       {canUndo ? (
         <Button
           variant="ghost"
@@ -796,7 +1311,7 @@ function PendingBar({
       <Button variant="secondary" size="sm" onClick={onDiscard}>
         Discard all
       </Button>
-      <Button size="sm" onClick={onReview}>
+      <Button size="sm" disabled={blocked} onClick={onReview}>
         Review &amp; apply
       </Button>
     </StickyActionBar>

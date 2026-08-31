@@ -285,6 +285,38 @@ are the shape a hand-rolled `p-4` section header had.
 
 ---
 
+#### `FieldCardList`
+
+A list of rows that are **edited** rather than read — the shape §6's decision rule prescribes as
+"Card + `KeyValueList` per row", which nothing could actually build because `KeyValueList` takes
+values, not field slots.
+
+```ts
+<FieldCardList
+  aria-label="Meter readings for HIGH SPEED DIESEL"
+  rowHeader="Nozzle"
+  columns={[{ key: 'TOT_READING', header: 'Reading this morning', numeric: true }]}
+  cards={[{ key: 'n2', heading: 'Nozzle 2', headingRight: 'Sold 412 L',
+            fields: [{ key: 'TOT_READING', label: 'Reading this morning',
+                       control: <input … />, note: <p>Yesterday 4,52,180</p> }],
+            action: <Menu … /> }]}
+/>
+```
+
+Below md one card per row, label over control, note under it. At md the same `FieldCardField[]`
+feeds a `Table density="compact"`, one row per record; a field with no matching column is stacked
+inside the identity cell, which is how a five-field delivery stays a four-column table. Give a
+column the exported `HEADING_RIGHT_COLUMN` key and it prints the row's live figure.
+
+**One shape is mounted, decided in JS.** Both shapes carry live editors, so building both would
+double every input in the document. The usual objection — a rotation past 768px remounts the row
+and discards what the editor held — does not apply, because this primitive is only for callers
+that keep no local state in their fields. Do not adopt it in one that does.
+
+Four or five columns is the ceiling: `main` is `overflow-x-hidden`, so a wider table is cut off,
+not scrolled. `scrollHint` and `freezeFirstColumn` are deliberately off — a frozen identity column
+would paint a cell on top of a live field.
+
 ### Controls
 
 #### `Button` — extended
@@ -757,7 +789,6 @@ re-derive it.
 | `KeyValueList` has no `labelVariant` | Three field lists (`RunHistoryPage`, `ServiceCatalogPage`, `RunsListInline`) render `text-xs uppercase tracking-wide text-text-subtle` labels above their values. Migrating them to the primitive's fixed `text-sm text-text-muted` `dt` would visibly change three desktop dialogs, which §4 forbids. They stay as three near-identical local `Field` helpers. A `labelVariant?: 'default'\|'caption'` would let them adopt it with no diff. |
 | `KeyValueList` has no grouping | Per-tank DSR readings and the Assist trace panel each wrap one list per sub-record in a hand-written heading + `<div>`. A `group` field on `KeyValueItem`, or sections, would remove that. |
 | `MobileCardList` has no sections | The per-domain grouping in `DealerWorkListTab` and `WorkListDefaultsPage` is one list per group inside a hand-written `<details>`. `visibility="all"` makes the nesting clean, but `sections?: { key; header; cards }[]` would remove it. |
-| No primitive for an **editable** row card | §6 prescribes "Card + `KeyValueList` per row" for an editable row, but `KeyValueList` takes values, not field slots, so `IrasEditGrid` hand-builds its `<ul>` of field cards. A `FieldCardList` — or a `KeyValueList` whose `value` may be a 44px editor slot — would be reused by any future editor. |
 | `SegmentedControl` has no `subtle` variant | Adopting it on the DSR/Credit "Today / Past date" tabs was mandated and is a **real ≥768px visual change**: the old `ModeTab` drew a raised `bg-surface` chip on a `bg-surface-2` track, the primitive draws a brand-filled pill on a bordered track. A `variant="subtle"` reproducing the track-and-chip look would make that swap desktop-neutral. |
 | `DownloadButton` has no `disabledReason` | A run artifact whose signed URL is still in flight renders a hand-rolled disabled `Button` plus a `md:hidden` sentence. The prop wants the same shape `DefRow hint` ended up with: visible text below md, `title` at md. |
 | `WideReportViewer` has no `figures` slot | Its own doc says it is "only half the answer" and must be paired with a native figure list, but nothing in the API makes that structural. Every future caller can forget the half that makes the artifact readable. |
@@ -784,9 +815,12 @@ re-derive it.
   revert that then needs a measured content spacer.
 - **Four chevrons narrowed by 8px at md** (the shift-data day arrows, the TT-density month
   arrows) by becoming real `IconButton` squares. They carried a `px-2` that never applied.
-- **`IrasEditGrid` mounts both shapes** and lets CSS pick, so a 13-row REC report builds 156
-  cells instead of 78. That is deliberate: a JS branch would remount on rotation and discard an
-  open cell editor's draft. Revisit only if low-end Android profiling says so.
+- **`IrasEditGrid` decides its shape in JS** (`useMediaQuery('(min-width: 768px)')`), so only one
+  of the two trees is built. The note that used to sit here — that both shapes mount and CSS
+  picks — has been wrong since that change. The cost of the JS branch is real and unfixed:
+  rotating a phone past 768px remounts `Cell` and discards an open editor's local `draft`. The
+  fix is to lift `Cell.draft` into the pending set, which is its own small packet; the shift
+  sheet is immune because no field there holds local state.
 - **The DSR native figure list is `md:hidden`.** It would be useful on desktop too; adding a new
   visible block at ≥768px is a product decision, not a mobile fix.
 - **`maximum-scale=1.0` stays.** Re-evaluated on its own, in the emulator, once every dense

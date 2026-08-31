@@ -22,6 +22,7 @@ export * from './Sheet';
 export * from './Portal';
 export * from './Table';
 export * from './MobileCardList';
+export * from './FieldCardList';
 export * from './DataList';
 export * from './KeyValueList';
 export * from './ActionRow';
