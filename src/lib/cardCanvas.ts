@@ -30,8 +30,57 @@ export const CARD_INNER = CARD_W - CARD_PAD * 2;
 /** Drawn at 2× so the type is not mush on a phone or a retina screen. */
 const SCALE = 2;
 
+/**
+ * Devanagari named at the END, after every Latin fallback.
+ *
+ * A canvas resolves a stack per GLYPH, exactly as CSS does, so a Devanagari face
+ * listed last is still the one that draws Hindi — Kohinoor on macOS, Nirmala on
+ * Windows, Noto on Android. Naming them at all is the fix for tofu boxes on a
+ * machine with no Devanagari default.
+ *
+ * The ORDER is not cosmetic, and the Credit & DOD card's server-side stack
+ * (which puts Devanagari first) is the wrong model here. This app never actually
+ * loads Inter — there is no `@font-face` and no font link anywhere — so every
+ * card has always been drawn in `system-ui`. Put a Devanagari face ahead of that
+ * and it wins the LATIN glyphs too, because it has them: the Fuel P&L card
+ * silently re-typeset itself in Kohinoor the moment this stack was written the
+ * other way round.
+ */
 const FONT =
-  "Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+  "Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, " +
+  "'Noto Sans Devanagari', 'Kohinoor Devanagari', 'Nirmala UI', " +
+  "'Devanagari Sangam MN', sans-serif";
+
+/** Where a card's content sits. `inset` is 0 for a card drawn edge to edge. */
+export interface CardGeometry {
+  width: number;
+  /** Content margin, measured from the canvas edge. */
+  pad: number;
+  /** Gap between the canvas edge and the card's OUTER edge. */
+  inset: number;
+  /**
+   * The frame's border, counted here rather than on {@link CardFrame} because
+   * it is geometry: `edge` — where a full-bleed band starts — has to land
+   * INSIDE the border, or the band paints over the very frame it sits in.
+   */
+  borderWidth: number;
+}
+
+const DEFAULT_GEOMETRY: CardGeometry = {
+  width: CARD_W,
+  pad: CARD_PAD,
+  inset: 0,
+  borderWidth: 0,
+};
+
+/** A bordered card floating on a coloured page — the Credit & DOD card's shape. */
+export interface CardFrame {
+  /** Behind the card, visible at the rounded corners. */
+  page: string;
+  card: string;
+  border: string;
+  radius: number;
+}
 
 export const C = {
   page: '#ffffff',
@@ -57,6 +106,24 @@ export const C = {
   redSoft: '#fef2f2',
   redLine: '#fca5a5',
   redInk: '#991b1b',
+
+  /* The Credit & DOD card's own palette, so a second card in that family is
+     the same maroon and the same gold rather than a near miss. Lifted verbatim
+     from `automation/sdms/report/renderCard.ts`. */
+  maroon: '#7f1d1d',
+  maroonDeep: '#5c1010',
+  maroonSoft: '#fef2f2',
+  cardRed: '#b91c1c',
+  cardGreen: '#15803d',
+  cardGreenSoft: '#f0fdf4',
+  gold: '#f59e0b',
+  goldMid: '#fbbf24',
+  goldSoft: '#fffaf0',
+  cream: '#fffdf5',
+  cardInk: '#1c1917',
+  cardInkSoft: '#57534e',
+  grid: '#e7d9bf',
+  pageWarm: '#f4ede0',
 } as const;
 
 type Ctx = CanvasRenderingContext2D;
@@ -94,6 +161,24 @@ export interface CardKv {
 export interface Painter {
   /** The vertical cursor, in CSS px from the top of the card. */
   y: number;
+  /** Canvas width. */
+  readonly width: number;
+  /** Left edge of CONTENT. */
+  readonly pad: number;
+  /** Content width. */
+  readonly inner: number;
+  /** Left edge of the CARD itself — where a full-bleed band starts. */
+  readonly edge: number;
+  /** Card width, for a band that runs to both edges. */
+  readonly edgeW: number;
+  /**
+   * The raw context, for a card that needs a gradient or a clip.
+   *
+   * Deliberately exposed rather than wrapped: the primitives here cover the
+   * shapes two cards share, and inventing a `gradientRect` for the one band
+   * that needs one would be a worse abstraction than handing over the object.
+   */
+  readonly ctx: CanvasRenderingContext2D;
   font(weight: number, size: number): void;
   /** Draw wrapped text from a top-left origin; returns the height it used. */
   para(s: string, x: number, top: number, maxW: number, o: TextOpts): number;
@@ -102,6 +187,8 @@ export interface Painter {
   box(x: number, top: number, w: number, h: number, fill: string, stroke: string): void;
   /** A 1px horizontal rule. Does not move the cursor. */
   hline(x: number, top: number, w: number, color: string): void;
+  /** A flat filled rectangle. Does not move the cursor. */
+  rect(x: number, top: number, w: number, h: number, color: string): void;
   /** The dark header band. Advances past it. */
   band(o: {
     eyebrow: string;
@@ -127,7 +214,10 @@ function cellText(c: CardCell): string {
   return typeof c === 'string' ? c : c.text;
 }
 
-export function createPainter(ctx: Ctx): Painter {
+export function createPainter(ctx: Ctx, geometry: CardGeometry = DEFAULT_GEOMETRY): Painter {
+  const { width: W, pad: PAD, inset, borderWidth } = geometry;
+  const INNER = W - PAD * 2;
+  const EDGE = inset + borderWidth;
   const font = (weight: number, size: number): void => {
     ctx.font = `${weight} ${size}px ${FONT}`;
   };
@@ -180,6 +270,12 @@ export function createPainter(ctx: Ctx): Painter {
 
   const p: Painter = {
     y: 0,
+    width: W,
+    pad: PAD,
+    inner: INNER,
+    edge: EDGE,
+    edgeW: W - EDGE * 2,
+    ctx,
     font,
     para,
     paraH,
@@ -190,50 +286,59 @@ export function createPainter(ctx: Ctx): Painter {
       ctx.fillRect(x, top, w, 1);
     },
 
+    rect(x, top, w, h, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x, top, w, h);
+    },
+
     band(o) {
+      // Every offset below is measured from where the band STARTS, not from the
+      // top of the canvas: a framed card begins its content inside the border,
+      // and absolute baselines would print the title over it.
       const BAND = 150;
+      const t = p.y;
       ctx.fillStyle = C.band;
-      ctx.fillRect(0, 0, CARD_W, BAND);
+      ctx.fillRect(0, t, W, BAND);
       font(700, 12);
       ctx.fillStyle = C.bandKey;
-      ctx.fillText(o.eyebrow, CARD_PAD, 40);
+      ctx.fillText(o.eyebrow, PAD, t + 40);
       font(700, 34);
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(o.headline, CARD_PAD, 64);
+      ctx.fillText(o.headline, PAD, t + 64);
       font(500, 15);
       ctx.fillStyle = C.bandMuted;
-      ctx.fillText(o.sub, CARD_PAD, 108);
+      ctx.fillText(o.sub, PAD, t + 108);
       font(500, 12);
       ctx.fillStyle = C.bandSubtle;
       ctx.textAlign = 'right';
-      if (o.rightTop) ctx.fillText(o.rightTop, CARD_W - CARD_PAD, 41);
-      if (o.rightBottom) ctx.fillText(o.rightBottom, CARD_W - CARD_PAD, 108);
+      if (o.rightTop) ctx.fillText(o.rightTop, W - PAD, t + 41);
+      if (o.rightBottom) ctx.fillText(o.rightBottom, W - PAD, t + 108);
       ctx.textAlign = 'left';
-      p.y = BAND + 30;
+      p.y = t + BAND + 30;
     },
 
     section(label, note) {
       font(700, 12);
       ctx.fillStyle = C.subtle;
-      ctx.fillText(label.toUpperCase(), CARD_PAD, p.y);
+      ctx.fillText(label.toUpperCase(), PAD, p.y);
       if (note) {
         font(500, 12);
         ctx.fillStyle = C.subtle;
         ctx.textAlign = 'right';
-        ctx.fillText(note, CARD_W - CARD_PAD, p.y);
+        ctx.fillText(note, W - PAD, p.y);
         ctx.textAlign = 'left';
       }
       p.y += 18;
       ctx.fillStyle = C.line;
-      ctx.fillRect(CARD_PAD, p.y, CARD_INNER, 1);
+      ctx.fillRect(PAD, p.y, INNER, 1);
       p.y += 16;
     },
 
     strip(note, fill, stroke, ink) {
       p.y += 12;
-      const h = paraH(note, CARD_INNER - 32, { weight: 500, size: 13, lh: 19 }) + 24;
-      box(CARD_PAD, p.y, CARD_INNER, h, fill, stroke);
-      para(note, CARD_PAD + 16, p.y + 12, CARD_INNER - 32, {
+      const h = paraH(note, INNER - 32, { weight: 500, size: 13, lh: 19 }) + 24;
+      box(PAD, p.y, INNER, h, fill, stroke);
+      para(note, PAD + 16, p.y + 12, INNER - 32, {
         weight: 500,
         size: 13,
         color: ink,
@@ -243,7 +348,7 @@ export function createPainter(ctx: Ctx): Painter {
     },
 
     stats(items) {
-      const cw = CARD_INNER / items.length;
+      const cw = INNER / items.length;
       let labelLines = 1;
       for (const k of items) {
         labelLines = Math.max(
@@ -252,9 +357,9 @@ export function createPainter(ctx: Ctx): Painter {
         );
       }
       const h = 16 + labelLines * 13 + 4 + 22 + 14 + 16;
-      box(CARD_PAD, p.y, CARD_INNER, h, C.soft, C.line);
+      box(PAD, p.y, INNER, h, C.soft, C.line);
       items.forEach((k, i) => {
-        const x = CARD_PAD + i * cw + 14;
+        const x = PAD + i * cw + 14;
         const w = cw - 20;
         para(k.label.toUpperCase(), x, p.y + 16, w, {
           weight: 700,
@@ -270,9 +375,9 @@ export function createPainter(ctx: Ctx): Painter {
     },
 
     table(columns, weights, rows) {
-      const widths = weights.map((wt) => wt * CARD_INNER);
+      const widths = weights.map((wt) => wt * INNER);
       const xs: number[] = [];
-      let acc = CARD_PAD;
+      let acc = PAD;
       for (const w of widths) {
         xs.push(acc);
         acc += w;
@@ -296,7 +401,7 @@ export function createPainter(ctx: Ctx): Painter {
       );
       p.y += headH + 8;
       ctx.fillStyle = C.line;
-      ctx.fillRect(CARD_PAD, p.y, CARD_INNER, 1);
+      ctx.fillRect(PAD, p.y, INNER, 1);
       p.y += 1;
 
       for (const row of rows) {
@@ -323,14 +428,14 @@ export function createPainter(ctx: Ctx): Painter {
         });
         p.y = top + rowH + 10;
         ctx.fillStyle = C.line;
-        ctx.fillRect(CARD_PAD, p.y, CARD_INNER, 1);
+        ctx.fillRect(PAD, p.y, INNER, 1);
         p.y += 1;
       }
     },
 
     kvGrid(items, columns) {
       const gap = 24;
-      const cw = (CARD_INNER - gap * (columns - 1)) / columns;
+      const cw = (INNER - gap * (columns - 1)) / columns;
       const itemH = (k: CardKv): number =>
         paraH(k.label, cw, { weight: 700, size: 10, lh: 13 }) +
         3 +
@@ -341,7 +446,7 @@ export function createPainter(ctx: Ctx): Painter {
         const rowItems = items.slice(i, i + columns);
         const h = Math.max(...rowItems.map(itemH));
         rowItems.forEach((k, j) => {
-          const x = CARD_PAD + j * (cw + gap);
+          const x = PAD + j * (cw + gap);
           let ky = p.y;
           ky += para(k.label.toUpperCase(), x, ky, cw, {
             weight: 700,
@@ -359,10 +464,10 @@ export function createPainter(ctx: Ctx): Painter {
 
     footer(lines) {
       ctx.fillStyle = C.line;
-      ctx.fillRect(CARD_PAD, p.y, CARD_INNER, 1);
+      ctx.fillRect(PAD, p.y, INNER, 1);
       p.y += 14;
       for (const line of lines) {
-        p.y += para(line, CARD_PAD, p.y, CARD_INNER, {
+        p.y += para(line, PAD, p.y, INNER, {
           weight: 500,
           size: 11,
           color: C.subtle,
@@ -377,11 +482,34 @@ export function createPainter(ctx: Ctx): Painter {
   return p;
 }
 
+/** How one card wants to be laid out and framed. */
+export interface RenderCardOptions {
+  geometry?: CardGeometry;
+  /** Omit for a card drawn edge to edge on a plain ground. */
+  frame?: CardFrame;
+}
+
 /**
  * Run a card's `draw` twice — once to measure, once to paint — and hand back a
  * PNG. `draw` must be deterministic; see the two-pass note at the top.
+ *
+ * A framed card is painted in three moves: the page colour over the whole
+ * canvas, the rounded card on top of it, then `draw` under a clip of that same
+ * rounded path — so a full-bleed band inside the card cannot square off its
+ * corners. The frame can only be drawn on the SECOND pass, because it needs the
+ * height the first pass measured.
  */
-export async function renderCardPng(draw: (p: Painter) => void): Promise<Blob> {
+export async function renderCardPng(
+  draw: (p: Painter) => void,
+  opts: RenderCardOptions = {},
+): Promise<Blob> {
+  const geometry = opts.geometry ?? DEFAULT_GEOMETRY;
+  const frame = opts.frame;
+  const W = geometry.width;
+  // Where content begins: inside the border for a framed card, at the top
+  // otherwise. Both passes must agree, so it is computed once here.
+  const top = geometry.inset + geometry.borderWidth;
+
   // Canvas draws with whatever the font stack resolves to AT THE MOMENT of the
   // call, so a card rendered before Inter finishes loading silently comes out in
   // the fallback — with different metrics from the ones just measured.
@@ -391,27 +519,56 @@ export async function renderCardPng(draw: (p: Painter) => void): Promise<Blob> {
     /* a browser without the Font Loading API still gets a card */
   }
 
-  const prepare = (ctx: Ctx, height: number): void => {
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = C.page;
-    ctx.fillRect(0, 0, CARD_W, height);
+  const roundedCard = (ctx: Ctx, height: number, f: CardFrame): void => {
+    // The stroke straddles the path, so the path sits half a border in.
+    const half = geometry.borderWidth / 2;
+    const x = geometry.inset + half;
+    const y = geometry.inset + half;
+    const w = W - geometry.inset * 2 - geometry.borderWidth;
+    const h = height - geometry.inset * 2 - geometry.borderWidth;
+    ctx.beginPath();
+    const rr = (
+      ctx as Ctx & { roundRect?: (x: number, y: number, w: number, h: number, r: number) => void }
+    ).roundRect;
+    if (typeof rr === 'function') rr.call(ctx, x, y, w, h, f.radius);
+    else ctx.rect(x, y, w, h);
   };
 
   const measureCtx = document.createElement('canvas').getContext('2d');
   if (!measureCtx) throw new Error('This browser cannot draw the image.');
-  prepare(measureCtx, 1);
-  const measure = createPainter(measureCtx);
+  measureCtx.textBaseline = 'top';
+  const measure = createPainter(measureCtx, geometry);
+  measure.y = top;
   draw(measure);
-  const height = Math.ceil(measure.y + CARD_PAD);
+  const height = Math.ceil(
+    measure.y + (frame ? geometry.borderWidth + geometry.inset : geometry.pad),
+  );
 
   const canvas = document.createElement('canvas');
-  canvas.width = CARD_W * SCALE;
+  canvas.width = W * SCALE;
   canvas.height = height * SCALE;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('This browser cannot draw the image.');
   ctx.scale(SCALE, SCALE);
-  prepare(ctx, height);
-  draw(createPainter(ctx));
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = frame ? frame.page : C.page;
+  ctx.fillRect(0, 0, W, height);
+
+  if (frame) {
+    roundedCard(ctx, height, frame);
+    ctx.fillStyle = frame.card;
+    ctx.fill();
+    ctx.strokeStyle = frame.border;
+    ctx.lineWidth = geometry.borderWidth;
+    ctx.stroke();
+    ctx.save();
+    roundedCard(ctx, height, frame);
+    ctx.clip();
+  }
+  const painter = createPainter(ctx, geometry);
+  painter.y = top;
+  draw(painter);
+  if (frame) ctx.restore();
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
