@@ -13,6 +13,21 @@ export interface StickyActionBarProps {
    *  `summaryOnMobile` — a phone screen is 640px tall and the buttons are the
    *  part that has to be reachable. */
   summary?: React.ReactNode;
+  /**
+   * The buttons. **Sentences do not go in here — put them in `summary`.**
+   *
+   * `children` are wrapped in an `ActionRow` that is `md:shrink-0`, so the whole
+   * row refuses to give width up, while `summary` is the only item carrying
+   * `min-width: 0`. Anything wide in here is therefore paid for by the summary,
+   * pixel for pixel, and the summary has no floor to stop at.
+   *
+   * That is not theoretical. A one-sentence explanation of why a save button was
+   * disabled, put beside the buttons, made this row 1,227px on a 1,224px line —
+   * and the 3px of overflow collapsed the summary to ZERO width. `break-words`
+   * then broke its text at every character: one letter per line, 3,762px tall,
+   * with the rest of the screen pushed off the bottom of it. The page read as
+   * completely broken over three pixels.
+   */
   children: React.ReactNode;
   /** Hide the bar without unmounting its children, so a form's state and any
    *  focus inside it survive the bar going quiet. */
