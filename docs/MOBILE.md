@@ -298,7 +298,9 @@ values, not field slots.
   columns={[{ key: 'TOT_READING', header: 'Reading this morning', numeric: true }]}
   cards={[{ key: 'n2', heading: 'Nozzle 2', headingRight: 'Sold 412 L',
             fields: [{ key: 'TOT_READING', label: 'Reading this morning',
-                       control: <input … />, note: <p>Yesterday 4,52,180</p> }],
+                       control: <input value="4,52,180" … />,
+                       note: <p>Carried from 30 Aug — change it to this morning’s meter
+                                reading.</p> }],
             action: <Menu … /> }]}
 />
 ```
@@ -308,10 +310,18 @@ feeds a `Table density="compact"`, one row per record; a field with no matching 
 inside the identity cell, which is how a five-field delivery stays a four-column table. Give a
 column the exported `HEADING_RIGHT_COLUMN` key and it prints the row's live figure.
 
+The shift sheet's own boxes open holding the previous day's figure rather than empty, so the
+note under one is usually the sentence asking for this morning's, and the reference figure is
+the value in the control. The control shows it grouped (`4,52,180`) while nobody is in it and
+as plain digits while it has focus — the swap is the CALLER'S, off the one `focusedId` it
+already keeps for the sticky bar's accessory, which is what keeps the rule below true.
+
 **One shape is mounted, decided in JS.** Both shapes carry live editors, so building both would
 double every input in the document. The usual objection — a rotation past 768px remounts the row
 and discards what the editor held — does not apply, because this primitive is only for callers
-that keep no local state in their fields. Do not adopt it in one that does.
+that keep no local state in their fields. Do not adopt it in one that does. Display state a field
+needs — which box has focus, so its value can be shown grouped or plain — belongs to the caller
+for the same reason: held in the field, a rotation would remount it into the wrong shape.
 
 Four or five columns is the ceiling: `main` is `overflow-x-hidden`, so a wider table is cut off,
 not scrolled. `scrollHint` and `freezeFirstColumn` are deliberately off — a frozen identity column

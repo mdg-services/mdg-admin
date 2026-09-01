@@ -12,17 +12,26 @@ import type { IrasReportCode } from '@dk/shared';
  * The three states are the whole point of this file, and they are visual, not
  * decorative:
  *
- *   - **Asked** — the box is empty and yesterday's figure is printed UNDER it,
- *     never inside it. A placeholder in an empty box reads as a value to anyone
+ *   - **Asked** — the box is empty, because the previous day has no figure for
+ *     it. Yesterday's figure, where there is one, is never printed INSIDE an
+ *     empty box as a placeholder: a placeholder reads as a value to anyone
  *     glancing at a 360px card, and half of a phone screen is glances.
  *   - **Carried** — the system put the value there. Dashed border, muted text,
- *     and a caption that names the day it came from. Only the water dip is ever
- *     in this state: it is the one measurement the report never calculates with.
+ *     and a caption that names the day it came from and asks for this
+ *     morning's. Four boxes open in this state: the meter reading, the stock,
+ *     the product dip and the water dip. The first three BLOCK the save until
+ *     somebody changes them — a carried reading reports zero litres sold — and
+ *     the water dip does not, because it is the one measurement the report
+ *     prints and never calculates with. A carried figure is also the one the
+ *     box GROUPS while nobody is in it — `4,52,180`, not `452180` — and shows
+ *     as plain digits the moment it takes focus. See {@link ShiftSheetField.display}.
  *   - **Answered** — a person put it there. Solid border, full-weight text, and
- *     the caption becomes the live figure the value produces.
+ *     the caption becomes the figure the value is measured against.
  *
  * Focusing a carried field and leaving it alone does not make it Answered.
- * Reading a value is not confirming it.
+ * Reading a value is not confirming it — which is why tapping into a carried box
+ * selects the whole number rather than dropping a caret in the middle of it. See
+ * {@link selectWholeValue}.
  */
 
 export type ShiftFieldState = 'ASKED' | 'CARRIED' | 'ANSWERED';
@@ -77,10 +86,38 @@ export interface ShiftSheetField {
   /** Spoken name: "Meter reading for nozzle 2, HIGH SPEED DIESEL". */
   ariaLabel: string;
   value: string;
+  /**
+   * What the box SHOWS while the operator is not in it, when that differs from
+   * the figure itself — the carried figure with its thousands separators,
+   * `4,52,180` for a `452180` the plan carried in.
+   *
+   * Two names because they answer two questions, and every rule on this sheet
+   * reads {@link value}. A six-figure totaliser ungrouped is materially harder
+   * to check against a paper register, and before the pre-fill this figure was
+   * a grouped caption UNDER an empty box; now it is the value in the box, so
+   * the grouping came here with it.
+   *
+   * It is display only, and it is never what the operator edits: the caller
+   * leaves it unset for the focused box, so the string under the caret is the
+   * plain digits the field policy accepts and a half-edited `49,1` can never
+   * reach the pending set as a figure nothing can read. `value` is what the
+   * pending set, the findings and the validator see, always.
+   */
+  display?: string;
   state: ShiftFieldState;
-  /** Under the box when nothing is wrong: yesterday's figure, or the live one. */
+  /**
+   * Under the box when nothing is WRONG: yesterday's figure, the movement it
+   * implies — or, on a box still holding the figure the system carried into it,
+   * the one quiet sentence asking for this morning's.
+   *
+   * That last one is a BLOCK the caller deliberately routes here rather than
+   * into `problem`, and the reason is in `ShiftSheet`'s `buildField`: a day
+   * nobody has started yet has ten of them, and ten red alerts before anybody
+   * has done anything wrong teaches an operator to stop reading the colour.
+   */
   caption?: React.ReactNode;
-  /** Under the box when something is: a BLOCK in danger, a WARN in warning. */
+  /** Under the box when something IS wrong: a BLOCK in danger, a WARN in
+   *  warning. Never the carried sentence — see `caption`. */
   problem?: { message: string; severity: 'BLOCK' | 'WARN' } | null;
   onChange: (value: string) => void;
 }
@@ -157,6 +194,43 @@ export interface ShiftSheetRowHandlers {
   onFieldKeyDown: (event: React.KeyboardEvent<HTMLInputElement>, id: string) => void;
 }
 
+/**
+ * Put the whole of a carried figure under the next keystroke — twice, because a
+ * phone throws the first attempt away.
+ *
+ * This is what makes the pre-fill an improvement rather than a regression. The
+ * box opens holding 49,059. Tap it on a phone and the browser drops a caret
+ * wherever the thumb landed — usually somewhere in the middle of the number —
+ * so an operator typing this morning's 49,412 produces 4949,412059 and has to
+ * clear it by hand, thirteen backspaces, six times a morning. Selecting the
+ * whole value means typing REPLACES it, which is what a person tapping into a
+ * number they are about to overwrite expects.
+ *
+ * Twice because of the order iOS does things in: the caret is placed when the
+ * tap FINISHES, after the focus event this is called from, so a single `select()`
+ * there is silently undone on exactly the device this admin is used on. The
+ * second one is made on the next macrotask, once the tap has finished being a
+ * tap.
+ *
+ * The second one carries the grouping too. Taking focus swaps the box from
+ * `49,059` to `49059` — see {@link ShiftSheetField.display} — and React writes
+ * that text into the input in this very event; writing an input's value
+ * collapses whatever was selected in it. The deferred select runs after that
+ * write, so the whole of the plain figure is what the next keystroke replaces.
+ *
+ * Guarded on the field still having focus, so a select that arrives after the
+ * operator has moved on cannot steal the selection in the box they moved to.
+ * Deliberately editing a few digits still works: the second tap into a box that
+ * already has focus fires no focus event at all, so nothing here runs and the
+ * caret lands where it was put — as do the arrow keys, and tapping inside.
+ */
+function selectWholeValue(el: HTMLInputElement): void {
+  el.select();
+  window.setTimeout(() => {
+    if (document.activeElement === el) el.select();
+  }, 0);
+}
+
 /** One field's box and whatever it has to say about itself. */
 function ShiftFieldBox({
   code,
@@ -175,7 +249,11 @@ function ShiftFieldBox({
   return (
     <input
       id={field.id}
-      value={field.value}
+      // Grouped while nobody is in the box, plain digits under the caret — the
+      // caller swaps them, because the caller is what knows which box has
+      // focus. See {@link ShiftSheetField.display}. `onChange` still reads the
+      // box's own text, so what a person types is what is stored, ungrouped.
+      value={field.display ?? field.value}
       readOnly={readOnly}
       // A read-only day (an archived dealer) leaves the box on screen so the
       // layout does not shift, but takes it out of the tab order: a control that
@@ -191,7 +269,20 @@ function ShiftFieldBox({
       aria-describedby={field.problem || field.caption ? noteId : undefined}
       data-shift-field={field.id}
       onChange={(e) => field.onChange(e.target.value)}
-      onFocus={() => handlers.onFocusField(field.id)}
+      onFocus={(e) => {
+        // Only a CARRIED box, and that restraint matters as much as the select
+        // itself. A figure a PERSON typed is usually being visited to fix one
+        // digit of, and selecting all of it would put their whole reading one
+        // keystroke from gone. The system's own figure is the opposite: it is
+        // there to be replaced.
+        //
+        // The element is read out of the event synchronously, because the
+        // deferred half of `selectWholeValue` runs long after React has finished
+        // with this event object.
+        const el = e.currentTarget;
+        if (!readOnly && field.state === 'CARRIED') selectWholeValue(el);
+        handlers.onFocusField(field.id);
+      }}
       onBlur={() => handlers.onBlurField(field.id)}
       onKeyDown={(e) => handlers.onFieldKeyDown(e, field.id)}
       className={cn(
@@ -207,13 +298,20 @@ function ShiftFieldBox({
 /**
  * Everything under one box: what is wrong with it, and what it read yesterday.
  *
- * BOTH, never one or the other. The problem used to replace the caption, and on
- * a fresh day every box the operator has to fill carries a missing-figure
- * problem — so the previous day's reading, which is the whole reason this sheet
- * lays a day out at all, was hidden on exactly the eight boxes it exists for and
- * appeared only once the figure had been typed. The one moment a person wants
- * yesterday's meter total in front of them is while they are reading today's off
- * the register, and that was the one moment it was not there.
+ * BOTH, never one or the other. The problem used to REPLACE the caption, and the
+ * caption was the only place yesterday's figure appeared — so on a fresh day,
+ * where every box the operator has to fill carried a missing-figure problem, the
+ * previous reading was hidden on exactly the boxes it exists for and came back
+ * only once the figure had been typed. The one moment a person wants yesterday's
+ * meter total in front of them is while they are reading today's off the
+ * register, and that was the one moment it was not there.
+ *
+ * The pre-fill moved that figure INTO the box, so a fresh day now reaches this
+ * component the other way round: one carried sentence in `caption`, no problem
+ * at all. Both slots are still drawn together, because the boxes that matter
+ * most are the ones that have something wrong with them AND a figure to be
+ * checked against — a reading typed below yesterday's is the whole reason this
+ * stacks rather than chooses.
  *
  * One element, one id, because `aria-describedby` on the input points at it.
  */

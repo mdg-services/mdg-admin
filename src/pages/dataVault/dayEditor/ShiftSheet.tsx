@@ -20,6 +20,7 @@ import { formatLitres, formatYmd } from '@/lib/format';
 import {
   IRAS_ROW_LEVEL_FIELD,
   irasAcknowledgementsInForce,
+  irasCarriedUntouched,
   irasDayCanSave,
   irasDayDateLabel,
   irasDayFiguresSentence,
@@ -28,7 +29,6 @@ import {
   irasDayProgress,
   irasDayReadyForPreview,
   irasFieldLabel,
-  irasFieldPolicy,
   irasFiguresOverwritten,
   irasMeterScale,
   irasNozzleSold,
@@ -63,8 +63,8 @@ import { toChanges, type PendingApi, type PendingState, type RowTarget } from '.
  * minutes, and eight of those clicks are pressing "Add a nozzle reading" one row
  * at a time for a forecourt whose shape has not changed since it was set up. So
  * this surface arrives with the day already built: one row per configured nozzle
- * and tank, each labelled, each water dip carried from yesterday and marked as
- * carried, and yesterday's reading printed under every empty box.
+ * and tank, each labelled, and every box the previous day has a figure for
+ * already holding that figure, marked as carried, for the operator to type over.
  *
  * THREE THINGS THIS FILE DOES NOT DO, EACH FOR A REASON
  * -----------------------------------------------------
@@ -82,10 +82,28 @@ import { toChanges, type PendingApi, type PendingState, type RowTarget } from '.
  *    report from that date forward as stale before a single real figure existed,
  *    with a reason nobody wrote — and would then make the server's
  *    identity-collision guard refuse the operator's own rows.
- * 3. **It never carries a meter reading.** A totaliser is a lifetime odometer:
- *    a carried reading left untouched reports zero litres sold on that nozzle
- *    and drops its 5 litre test draw, and the variation then swings negative by
- *    the missing litres. Yesterday's figure is printed beside the empty box.
+ * 3. **It does not decide that a carried figure is unfinished work, and it does
+ *    not paint that finding red.** A totaliser is a lifetime odometer, so
+ *    yesterday's reading left exactly where it stands reports zero litres sold
+ *    on that nozzle and drops its 5 litre test draw. That is why the three
+ *    boxes the day ASKS for — the meter reading, the stock and the product dip
+ *    — BLOCK the save until somebody changes them, and why the water dip
+ *    carried in beside them does not: it is the one measurement the report
+ *    prints and never calculates with. That block is `CARRIED_UNTOUCHED`,
+ *    raised by `irasDayFindings` off the answer
+ *    `irasCarriedUntouched` gives — the same answer this file styles the box
+ *    off, counts the day off and disables the button off, so the four cannot
+ *    describe four different mornings.
+ *
+ *    It is said QUIETLY, in the carried style, and that is the whole reason the
+ *    ruleset has two findings where it used to have one. "You have not done
+ *    this box yet" is true of all ten boxes the moment a day opens, and a
+ *    morning nobody has started is not a morning with ten things wrong with it.
+ *    Red is kept for something actually wrong: a reading that has run
+ *    backwards, a value nobody can read in a box a PERSON has been in, and the
+ *    figure a PERSON typed that means zero litres sold — `METER_UNCHANGED`,
+ *    unchanged. The one route to a zero-sales nozzle is still the confirmed
+ *    "This pump did not run today".
  *
  * And it is reachable ONLY on a day somebody opened BY HAND — see
  * {@link shiftSheetAvailable}. That is the whole protection for the eight
@@ -100,8 +118,9 @@ import { toChanges, type PendingApi, type PendingState, type RowTarget } from '.
  *
  * In the pending set rather than in this component's own `useState` because
  * `undo` restores a whole `PendingState` snapshot: a map held outside it would
- * survive the undo unchanged, so a carried water dip the operator had just put
- * back would come back reading as one they had confirmed themselves.
+ * survive the undo unchanged, so a carried figure the operator had just put back
+ * would come back reading as one they had confirmed themselves — and, since the
+ * pre-fill, as one the day could be saved on.
  */
 export const SHIFT_CARRIED_META = 'irasShiftCarried';
 export const SHIFT_ACK_META = 'irasShiftAcknowledgedNozzles';
@@ -259,7 +278,35 @@ interface WalkStop {
   id: string;
   /** What the sticky bar calls it while it has focus, e.g. `Nozzle 2`. */
   name: string;
-  blank: boolean;
+  /**
+   * Whether this box is one of the figures the DAY ASKS FOR and is still owed
+   * an answer — blank, or still holding what the system carried in. Enter on
+   * the last field goes back to the first box that is.
+   *
+   * TWO TESTS, AND BOTH HAVE TO PASS — the day asks for this box, and nobody
+   * has answered it. Getting that wrong traps the cursor either way round.
+   * It was "blank" alone until the pre-fill, and blankness stopped
+   * being the question the moment the boxes opened full: on a freshly laid out
+   * day not one of them is empty, so Enter from the last field would have gone
+   * straight to a save button disabled on ten carried figures. Adding "or still
+   * carried" fixed that end and left the other one open — every blank box was
+   * still owed, including the boxes the day does not ask for. A tank whose
+   * water dip the previous day has no figure for, or a tanker entered without
+   * its invoice number, would then catch Enter on the last field and send it
+   * back to a box the operator had deliberately left empty, every press, for
+   * ever.
+   *
+   * So the list is the plan's own `figuresNeeded` — see `askedForByTheDay` —
+   * which is the same list the readout at the top of the sheet counts. The
+   * water dip, all three tanker figures and the decant stamp are never owed:
+   * the day is complete without them.
+   *
+   * A day where nothing is owed can still be unsaveable for a reason no single
+   * box holds — a reading that has run backwards, a row that is missing. Enter
+   * blurs the field there and the disabled button takes no focus, so the
+   * keyboard closes over the save bar, where the reason is written.
+   */
+  unanswered: boolean;
 }
 
 export interface ShiftSaveSummary {
@@ -295,17 +342,25 @@ export interface ShiftSaveSummary {
  * Two different acts wore one label. A saved row whose removal is only pending
  * comes back exactly as the server holds it, figures and all — that is a genuine
  * put-back. A row this sheet proposed and the operator dropped is not on record
- * anywhere, so it can only be laid out AGAIN, empty, and whatever was typed into
- * it before it was dropped is gone. Naming both under "Put the missing rows
- * back" promised the operator their figures were safe on exactly the press where
- * they were not.
+ * anywhere, so it can only be laid out AGAIN, from the plan, and whatever was
+ * typed into it before it was dropped is gone. Naming both under "Put the
+ * missing rows back" promised the operator their figures were safe on exactly
+ * the press where they were not.
  */
 export interface ShiftMissingRows {
   /** The `MISSING_ROW` findings, in the ruleset's order — one message each. */
   findings: IrasDayFinding[];
   /** Rows that come back with the figures already saved on them. */
   restored: string[];
-  /** Rows that have to be laid out again and come back with nothing in them. */
+  /**
+   * Rows that have to be laid out again — and come back the way the day opened,
+   * holding the previous day's figures, carried and blocking, with nothing of
+   * what was typed into them.
+   *
+   * "Empty" until the pre-fill, and the difference is not cosmetic: a row that
+   * comes back full LOOKS finished. The panel says which figures they are and
+   * which day they came from, so the press cannot be mistaken for a put-back.
+   */
   rebuilt: string[];
 }
 
@@ -345,6 +400,20 @@ export interface ShiftSheetModel {
   readyForPreview: boolean;
   /** The one sentence beside the disabled save button. */
   blockReason: string | null;
+  /**
+   * `planKey` → the boxes on that row the SYSTEM filled in and nobody has
+   * touched since. The seam the whole pre-fill turns on.
+   *
+   * Seeded from `IrasPlannedRow.carried` when the day is laid out, and a field
+   * comes off it the moment that box is edited. It lives in the pending set's
+   * `meta` rather than in this hook's own state because `undo` restores a whole
+   * `PendingState` snapshot: a map held outside it would survive the undo, so a
+   * figure the operator had just put back would come back labelled as theirs.
+   *
+   * Handed to `@dk/shared` on every row, where it raises `CARRIED_UNTOUCHED` and
+   * keeps a pre-filled day from counting as typed — see the rows this hook
+   * hands to `irasDayFindings` and `irasDayProgress`.
+   */
   carried: Record<string, string[]>;
   /**
    * The nozzles whose "this pump did not run today" statement the typed figures
@@ -415,6 +484,35 @@ export function shiftSheetAvailable(day: IrasDayEditorView | undefined): boolean
 }
 
 /**
+ * One figure, printed the way a person reads it: `452180` → `4,52,180`.
+ *
+ * Hoisted, not `Number(x).toLocaleString('en-IN')` per call, for the reason
+ * `src/lib/format.ts` documents at length: a locale handed in per call is
+ * re-resolved every time, and this runs on every box and every caption of every
+ * row on every keystroke.
+ *
+ * ANYTHING THAT IS NOT A PLAIN FIGURE COMES BACK UNTOUCHED, and that is the
+ * whole of the safety here. Only `12345` and `12345.6` are grouped; the digits
+ * after the point are copied across verbatim rather than re-formatted, so a dip
+ * of `1275.40` cannot come back rounded, and a previous day's `1,275` that
+ * already has a comma in it — the value the ruleset raises `UNREADABLE_VALUE`
+ * over — is left exactly as it stands rather than being tidied into looking
+ * fine. Fifteen digits is where a `Number` stops being exact, and a totaliser
+ * is eight, so anything longer is left alone too.
+ *
+ * This is display only. The figure itself is never rewritten: see
+ * {@link ShiftSheetField.display}.
+ */
+const FIGURE_FMT = new Intl.NumberFormat('en-IN');
+
+function groupFigure(value: unknown): string {
+  const raw = String(value ?? '').trim();
+  const parts = /^(\d{1,15})(\.\d+)?$/.exec(raw);
+  if (!parts) return raw;
+  return `${FIGURE_FMT.format(Number(parts[1]))}${parts[2] ?? ''}`;
+}
+
+/**
  * `2026-08-30` → `30-08-2026`, the spelling every stored IRAS date uses.
  *
  * One helper rather than the same three-line split in two places: it is written
@@ -481,10 +579,15 @@ export function useShiftSheetModel({
     [products, previousTot, previousStk, previousDate],
   );
 
-  const carried = (pending.state.meta[SHIFT_CARRIED_META] as Record<string, string[]>) ?? {};
-  // Memoised on the meta bag rather than defaulted inline: `?? []` is a fresh
-  // array every render, which would re-run the findings on every keystroke
-  // anywhere on the page.
+  // Memoised on the meta bag rather than defaulted inline: `?? {}` and `?? []`
+  // are a fresh object every render, which would re-run the findings on every
+  // keystroke anywhere on the page. The carried map has to be memoised now that
+  // the findings read it: it is a dependency of `findingRows`, so a fresh `{}`
+  // each render would recompute the whole day's rules for nothing.
+  const carried = React.useMemo<Record<string, string[]>>(
+    () => (pending.state.meta[SHIFT_CARRIED_META] as Record<string, string[]>) ?? {},
+    [pending.state.meta],
+  );
   const acknowledgedRaw = React.useMemo<string[]>(
     () => (pending.state.meta[SHIFT_ACK_META] as string[]) ?? [],
     [pending.state.meta],
@@ -613,17 +716,36 @@ export function useShiftSheetModel({
 
   /*
    * The rows in force, in the shape `@dk/shared` reads them — each one carrying
-   * the same row as the SERVER holds it.
+   * the same row as the SERVER holds it, and the list of boxes on it the system
+   * filled in.
    *
    * `onRecord` is what tells the ruleset which figures this change set is
    * actually putting there. Leave it off and every rule reads every row as fresh
    * work, which is the module's documented default and exactly how this screen
    * behaved before: 16E's two dead pumps then blocked the day again every time
    * it was re-opened, on readings nobody had touched.
+   *
+   * `carried` is the other half of that question and it has to be a second
+   * field, because `onRecord` cannot answer it: on a freshly opened day there is
+   * no server row at all — every row is one this change set is adding — so
+   * nothing on record can tell a figure the plan pre-filled from a figure the
+   * operator typed. Only the sheet knows, because the sheet is where a keystroke
+   * happens: it seeds the list from the plan and strikes a field off the moment
+   * that box is edited. Passing it here is what raises `CARRIED_UNTOUCHED` and
+   * what keeps `irasDayProgress` from reading a whole pre-filled day as
+   * finished. Any caller that leaves it off — the backend's after-save pass, and
+   * so the eight portal dealers' correction job — reads exactly as it read
+   * before the pre-fill existed.
    */
   const findingRows = React.useMemo(
-    () => rows.map((r) => ({ code: r.code, row: r.row, onRecord: r.onRecord })),
-    [rows],
+    () =>
+      rows.map((r) => ({
+        code: r.code,
+        row: r.row,
+        onRecord: r.onRecord,
+        carried: carried[r.planKey] ?? [],
+      })),
+    [rows, carried],
   );
 
   /*
@@ -749,11 +871,13 @@ export function useShiftSheetModel({
       });
       if (built.rows.length === 0 && !replace) return;
       // Merged, never replaced. The carried map is keyed by `planKey` and holds
-      // every row the system filled in; writing only the rows THIS plan built
-      // over the top of it told the operator that every other tank's water dip
-      // was a figure they had confirmed themselves, the moment one missing row
-      // was laid back down. A reset is the one case that starts from nothing,
-      // because `replace` empties the pending set the map describes.
+      // every box the system filled in on every row; writing only the rows THIS
+      // plan built over the top of it told the operator that every other row's
+      // carried figures were ones they had confirmed themselves, the moment one
+      // missing row was laid back down — which since the pre-fill would also
+      // have let a whole untouched morning save. A reset is the one case that
+      // starts from nothing, because `replace` empties the pending set the map
+      // describes.
       const carriedSeed: Record<string, string[]> = replace ? {} : { ...current.carried };
       for (const r of built.rows) {
         if (r.carried.length > 0) carriedSeed[r.planKey] = r.carried.map((c) => c.field);
@@ -847,10 +971,7 @@ export function useShiftSheetModel({
         pending.state,
         removedSavedRows,
       ),
-    // `carried` is read fresh off `pending.state.meta` each render; `rows`
-    // already changes with it, so the summary cannot go stale.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, acknowledgedInForce, pending.state, previousDate, removedSavedRows],
+    [rows, carried, acknowledgedInForce, pending.state, previousDate, removedSavedRows],
   );
 
   const rescaffold = React.useCallback(() => scaffold({ replace: true }), [scaffold]);
@@ -1114,11 +1235,26 @@ function buildSaveSummary(
     );
   }
 
-  // Only rows this commit is adding: a water dip on a row that was saved
-  // yesterday was not carried by this commit and saying so would be a claim
-  // about work nobody did here.
+  /*
+   * The water dips going in unchanged — named as water dips because that is
+   * what they are, not because nothing else can be carried.
+   *
+   * Since the pre-fill, `carried` can hold the stock and the product dip too,
+   * and this line used to read "a row with anything carried on it". It would
+   * still print the right sentence today, but only because `CARRIED_UNTOUCHED`
+   * blocks the save until the stock and the dip have been typed over, so
+   * neither can ever survive as far as this dialog. That is a rule being
+   * enforced two files away holding up a sentence in this one, and if the block
+   * ever moved, the dialog would quietly start calling a stale stock figure a
+   * water dip. The field is named here instead, so the sentence is true because
+   * of what it counts.
+   *
+   * Only rows this commit is adding: a water dip on a row that was saved
+   * yesterday was not carried by this commit and saying so would be a claim
+   * about work nobody did here.
+   */
   const carriedTanks = added
-    .filter((r) => r.code === 'STK' && (carried[r.planKey]?.length ?? 0) > 0)
+    .filter((r) => r.code === 'STK' && (carried[r.planKey] ?? []).includes('WATER_DIP'))
     .map((r) => r.identity)
     .filter(Boolean);
   if (carriedTanks.length > 0) {
@@ -1208,6 +1344,33 @@ function defaultReasonFor(businessDate: string, summary: ShiftSaveSummary): stri
     : `Added to the shift of ${date} by hand: ${what}. Nothing already saved was changed.`;
 }
 
+/**
+ * The carried map with one field struck off one row — what "a person has
+ * answered this box" looks like in the pending set.
+ *
+ * One helper rather than the same three lines twice, because TWO different acts
+ * answer a box and they have to answer it identically: a keystroke in it, and
+ * the confirmed "This pump did not run today", which is as much a person's
+ * answer to that reading as any figure they type. Written differently, one of
+ * them would leave the box dashed and muted and uncounted for ever.
+ *
+ * The WHOLE map comes back, because `meta` is merged one key deep: writing half
+ * of it would drop every other row's list, and a tank whose water dip the system
+ * carried would start reading as a figure the operator had confirmed.
+ *
+ * The same object is returned when there is nothing to strike, so a caller can
+ * tell a real change from a no-op and leave the pending set alone.
+ */
+function strikeCarried(
+  carried: Record<string, string[]>,
+  planKey: string,
+  field: string,
+): Record<string, string[]> {
+  const fields = carried[planKey];
+  if (!fields?.includes(field)) return carried;
+  return { ...carried, [planKey]: fields.filter((f) => f !== field) };
+}
+
 function joinList(parts: readonly string[]): string {
   if (parts.length === 0) return '';
   if (parts.length === 1) return parts[0]!;
@@ -1267,7 +1430,7 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
     preview,
   );
 
-  /** `30 Aug` — the day a carried water dip was measured on. */
+  /** `30 Aug` — the day every carried figure on this sheet was measured on. */
   const previousLabel = irasDayDateLabel(model.previousDate) || 'the previous day';
   /**
    * TWO THINGS, TWO NAMES — and the whole of this sheet's tanker wording turns
@@ -1327,13 +1490,16 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
 
         if (event.key === 'Enter') {
           event.preventDefault();
-          // Enter never saves. On the last field it goes back for whatever is
-          // still blank, and only when nothing is does it hand the operator to
-          // the button — a day that cannot be saved must not end with the focus
-          // on a disabled control.
+          // Enter never saves. On the last field it goes back for whatever the
+          // day is still owed — one of its own figures left blank, or one still
+          // holding the figure the system carried in — and only when nothing is
+          // does it offer the button. The button may still be disabled for a
+          // reason no single box holds, and `focus()` on a disabled control does
+          // nothing: the blur is what happens then, closing the keyboard over
+          // the save bar and its reason. See {@link WalkStop.unanswered}.
           if (index === stops.length - 1) {
-            const blank = stops.find((s) => s.blank);
-            if (blank) focusField(blank.id);
+            const owed = stops.find((s) => s.unanswered);
+            if (owed) focusField(owed.id);
             else {
               input.blur();
               document.getElementById(SAVE_BUTTON_ID)?.focus();
@@ -1446,47 +1612,176 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
     return map;
   }, [model.plan]);
 
+  /**
+   * Every box the DAY ASKS FOR, keyed the way the rows on screen are keyed.
+   *
+   * `irasDayPlan`'s own `figuresNeeded` — the same list `irasDayProgress` counts
+   * the day against, so "still owed a figure" here and "not typed yet" in the
+   * readout at the top of the sheet are one answer. Which fields a day needs is
+   * not decided in this file; it is read.
+   *
+   * It is the water dip and the tanker boxes this list keeps OUT, and that is
+   * what it is for. See {@link WalkStop.unanswered}.
+   */
+  const askedForByTheDay = React.useMemo(() => {
+    const keys = new Set<string>();
+    for (const f of model.plan.figuresNeeded) {
+      keys.add(`${f.code}:${irasRowIdentity(f.identity)}:${f.field}`);
+    }
+    return keys;
+  }, [model.plan]);
+
+  /**
+   * Whether one box is still holding the figure the system carried into it —
+   * `@dk/shared`'s answer, never this file's.
+   *
+   * The very call `irasDayFindings` makes before it raises `CARRIED_UNTOUCHED`,
+   * and the one `irasDayProgress` makes before it declines to count that figure
+   * as typed. Asked here as well so the dashed box, the quiet sentence under it,
+   * the litres beside it, the count at the top of the sheet and the disabled
+   * save button are one answer rather than five — a screen that blocks on a box
+   * it is also counting as done is the exact fault this predicate exists to make
+   * impossible.
+   *
+   * The carried list is the sheet's own, because the sheet is where a keystroke
+   * happens. Everything else in the answer is the shared function's.
+   */
+  const stillCarried = (row: SheetRow, field: string, previous: string | undefined): boolean =>
+    irasCarriedUntouched(
+      { row: row.row, onRecord: row.onRecord, carried: model.carried[row.planKey] ?? [] },
+      field,
+      previous,
+    );
+
   /** Build one field, register it in the walk, and say which state it is in. */
   function buildField(
     row: SheetRow,
     field: string,
-    options: { heading: string; ariaLabel: string; caption?: React.ReactNode },
+    options: {
+      heading: string;
+      ariaLabel: string;
+      caption?: React.ReactNode;
+      /**
+       * Yesterday's figure for this box — which, since the pre-fill, is also the
+       * figure the box OPENED holding.
+       *
+       * Supplied for the three boxes the day asks for: the meter reading, the
+       * stock and the product dip. On those, `irasCarriedUntouched` decides
+       * whether the box is still the system's, and its answer both styles the
+       * box and blocks the save.
+       *
+       * NOT supplied for the water dip, which is carried and never asked for —
+       * the shared predicate is written for the asked figures and documented as
+       * not being for that one. There the sheet's own carried list is the whole
+       * answer, exactly as it was before the pre-fill, and the water dip goes on
+       * being the one carried figure that does not block: the report prints it
+       * and never calculates with it.
+       */
+      previous?: string;
+      /**
+       * One more sentence for the carried note, when this box has a second
+       * honest way out of it.
+       *
+       * Exactly one box does: a meter reading on a pump that really did not run
+       * this morning. The shared note tells every carried box to type this
+       * morning's figure over it, which on 16E's two dead pumps is an
+       * instruction to type a reading that did not happen — and the honest
+       * answer, "This pump did not run today", was named only in the block
+       * beside the save button, a whole screen away from the box.
+       */
+      carriedAlso?: string;
+    },
   ): ShiftSheetField {
     const id = `shift-${row.key}-${field}`;
     const value = String(row.row[field] ?? '');
     const label = irasFieldLabel(row.code, field);
+    // A box the plan pre-filled is handed `previous`; the water dip is not.
+    // That one option decides which test says the box is still the system's.
+    const asked = options.previous !== undefined;
+    const isCarried = asked
+      ? stillCarried(row, field, options.previous)
+      : (model.carried[row.planKey] ?? []).includes(field);
     // The row AND the figure, because the row alone does not locate anybody. A
     // tank card holds three boxes — stock, product dip, water dip — and with the
     // keyboard up they are the only three things on screen; a bar reading "Tank
     // 3" told the operator which card they were in and nothing about which of
     // its figures. The name is the field's own label, not a shorter synonym for
     // it, so the bar and the box above it say the same word.
-    walk.current.push({ id, name: `${options.heading} · ${label}`, blank: value.trim() === '' });
-    const isCarried = (model.carried[row.planKey] ?? []).includes(field);
+    walk.current.push({
+      id,
+      name: `${options.heading} · ${label}`,
+      // Owed, and owed is not the same as empty. See {@link WalkStop.unanswered}.
+      unanswered:
+        askedForByTheDay.has(`${row.code}:${row.identity}:${field}`) &&
+        (value.trim() === '' || isCarried),
+    });
     const finding = fieldFinding(row.rowIndex, field);
+    /*
+     * The one BLOCK this sheet does not paint red.
+     *
+     * `CARRIED_UNTOUCHED` says "you have not done this box yet", and on a
+     * freshly opened 16E morning that is true of all ten of them. Rendered as a
+     * `problem` it would greet the operator with ten red sentences, ten
+     * `role="alert"`s and `aria-invalid` on ten boxes whose values are not
+     * invalid — merely nobody's — before a single thing had been done wrong. So
+     * it is drawn where the plain "Carried from 30 Aug" caption used to sit: one
+     * quiet muted line under a dashed box, which is the same sentence with the
+     * instruction added to it.
+     *
+     * It hides nothing the operator has to act on, because the ruleset now
+     * makes sure there is nothing else on this box to hide. A previous day's
+     * figure that cannot be read — `1,275`, comma and all — is carried into the
+     * box AND fails the value check, and the ruleset drops the second of those:
+     * the operator did not type that figure, the system put it there, and this
+     * morning's typed over it settles both sentences at once. Both are BLOCK, so
+     * the day is refused either way; only one of them says what to do.
+     */
+    const carriedNote = finding?.kind === 'CARRIED_UNTOUCHED' ? finding.message : null;
+    // The carried sentence names the day the figure came from itself, so it
+    // REPLACES the plain "Carried from 30 Aug" rather than stacking a second
+    // line under it. One box, one sentence — plus, on a meter reading, the one
+    // other honest way out of it. See `options.carriedAlso`.
+    const carriedCaption = carriedNote ?? (isCarried ? `Carried from ${previousLabel}` : null);
     return {
       field,
       id,
       label,
       ariaLabel: options.ariaLabel,
       value,
+      /*
+       * Grouped while the operator is somewhere else, plain digits while they
+       * are in it — and only ever on a carried figure the system itself put
+       * there.
+       *
+       * `focusedId` is the sheet's own record of which box has the caret; it
+       * already draws the sticky bar's accessory off it, so the box and the bar
+       * cannot disagree about where the operator is. Nothing is regrouped once
+       * the figure is a person's own: a box somebody has typed into is usually
+       * being revisited to fix one digit, and rewriting their text under their
+       * caret to add a comma is the one thing worse than an ungrouped figure.
+       * The numeric test is the shared field table's, so an invoice number's
+       * leading zeros can never be grouped away.
+       */
+      display:
+        isCarried && id !== focusedId && shiftFieldShape(row.code, field).numeric
+          ? groupFigure(value)
+          : undefined,
       state: isCarried ? 'CARRIED' : value.trim() === '' ? 'ASKED' : 'ANSWERED',
-      caption: isCarried ? `Carried from ${previousLabel}` : options.caption,
-      problem: finding ? { message: finding.message, severity: finding.severity } : null,
+      caption: carriedCaption
+        ? [carriedCaption, options.carriedAlso].filter(Boolean).join(' ')
+        : options.caption,
+      problem:
+        finding && !carriedNote ? { message: finding.message, severity: finding.severity } : null,
       onChange: (next) => {
         // The moment a person touches a carried figure it stops being carried —
         // in the SAME undoable step, so one press of Undo cannot put the value
         // back while leaving it labelled as theirs.
-        const stillCarried = model.carried[row.planKey];
-        const meta = stillCarried?.includes(field)
-          ? {
-              [SHIFT_CARRIED_META]: {
-                ...model.carried,
-                [row.planKey]: stillCarried.filter((f) => f !== field),
-              },
-            }
-          : undefined;
-        row.set(field, next, meta);
+        const struck = strikeCarried(model.carried, row.planKey, field);
+        row.set(
+          field,
+          next,
+          struck === model.carried ? undefined : { [SHIFT_CARRIED_META]: struck },
+        );
       },
     };
   }
@@ -1577,6 +1872,7 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
     if (!row) return null;
     const heading = `Nozzle ${identity}`;
     const previous = plannedByKey.get(`TOT:${identity}`)?.previous.TOT_READING;
+    const readingCarried = stillCarried(row, 'TOT_READING', previous);
     // The platform's one litres rule, scale and all — both halves of it now.
     // Subtracting here was a third implementation of the arithmetic, and looking
     // the factor up loosely was a second implementation of the lookup: 14E's
@@ -1584,16 +1880,38 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
     // not put 2,800 L beside a box the report prints 280 L for.
     const sold = irasNozzleSold(row.row.TOT_READING, previous, irasMeterScale(product, nozzleNo));
     const remove = removalOf(row);
+    /*
+     * Whether this row can offer "This pump did not run today" at all — asked
+     * once, and read by the menu item AND by the note under the box.
+     *
+     * One condition, because a note naming an action the row does not offer is
+     * worse than no note: there is nothing to tap, and the operator is left
+     * hunting a menu that does not have it. A nozzle with no previous reading
+     * cannot make the statement — there is no figure to stand still at.
+     */
+    const canSayDidNotRun = !readOnly && previous !== undefined;
 
     return {
       key: row.key,
       code: 'TOT',
       heading,
-      // Nothing while the reading is blank or unreadable, and nothing when it is
-      // below yesterday's — the warning under the field owns that space rather
-      // than a negative litres figure the report would never print.
+      /*
+       * Nothing while the reading is blank or unreadable, nothing when it is
+       * below yesterday's — the warning under the field owns that space rather
+       * than a negative litres figure the report would never print — and
+       * nothing while the box is still holding the figure the system carried
+       * into it.
+       *
+       * That last one is the pre-fill's own trap, and it is the same trap
+       * `CARRIED_UNTOUCHED` was split off `METER_UNCHANGED` to close, wearing a
+       * different hat. A carried reading equals yesterday's BY CONSTRUCTION, so
+       * the arithmetic is honestly zero — and every nozzle on a freshly opened
+       * morning would print "Sold 0 L" in warning type before the operator had
+       * touched a box. Nobody knows what this nozzle sold yet, so nothing is
+       * what the column says, exactly as it does over an empty box.
+       */
       headingRight:
-        sold === null || sold < 0 ? undefined : (
+        readingCarried || sold === null || sold < 0 ? undefined : (
           <span className={cn(sold === 0 && 'text-warning')}>Sold {formatLitres(sold)}</span>
         ),
       readOnly,
@@ -1601,10 +1919,44 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
         buildField(row, 'TOT_READING', {
           heading,
           ariaLabel: `Meter reading for nozzle ${identity}, ${product.labelEn}`,
+          previous,
+          /*
+           * Yesterday's total, and it stays there once the operator has typed
+           * over it.
+           *
+           * While the box is still carried this is replaced by the carried
+           * sentence — the figure is IN the box, grouped exactly as this caption
+           * would have printed it, so printing it underneath as well would be
+           * the same number twice on one card. The moment a real
+           * reading is typed it becomes the reference again, and it is the one
+           * thing under this box worth printing: it is the figure the litres
+           * beside the nozzle are measured from, so it is what lets the operator
+           * check "Sold 412 L" against the register rather than take it on
+           * trust. The litres themselves are not repeated here — they are
+           * already beside the heading, and at md they are a column of their own.
+           */
           caption:
             previous === undefined
               ? 'Yesterday not known — no sales figure for this nozzle yet.'
-              : `Yesterday ${Number(previous).toLocaleString('en-IN')}`,
+              : `Yesterday ${groupFigure(previous)}`,
+          /*
+           * The way out for a pump that really did not run, said on the pump's
+           * own box.
+           *
+           * 16E's nozzles 5 and 6 are out of service and sit at their
+           * inspection baselines, so the pre-fill opens them holding this
+           * morning's true reading — and the shared carried note then tells
+           * their operator to "change it to this morning's meter reading",
+           * every morning of their life, about the one box on the sheet where
+           * that is the wrong thing to do. The honest answer was named only in
+           * the block beside the save button, which is a scroll away on a phone
+           * and speaks about the day rather than about this nozzle.
+           *
+           * The same words the save bar uses, so the two name one act.
+           */
+          carriedAlso: canSayDidNotRun
+            ? 'If this pump did not run at all, say so on its row menu.'
+            : undefined,
         }),
       ],
       footer: rowFooter(row),
@@ -1612,8 +1964,14 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
        * Offered on every nozzle with a previous reading, whether or not anything
        * is currently blocking.
        *
-       * The block it answers now fires only on a reading THIS change set puts
-       * there, so a re-opened morning does not ask 16E's two dead pumps to be
+       * It now answers BOTH blocks a zero-sales nozzle can raise — the quiet
+       * "you have not done this box yet" and the red "you typed a number that
+       * means zero litres sold" — because the ruleset consults the statement
+       * before it considers either. It has to: 16E's two dead pumps could
+       * otherwise never be saved without typing a reading that did not happen.
+       *
+       * The blocks it answers fire only on a reading THIS change set puts
+       * there, so a re-opened morning does not ask those two pumps to be
        * sworn for a second time — that is the whole point of the scoping. What
        * the action does is unchanged, and it stays available: an operator who
        * has just typed yesterday's figure into a pump that genuinely stood still
@@ -1622,8 +1980,11 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
        * never written by the system and never pre-filled — it is made here, by a
        * named person, one confirm at a time.
        */
+      // The same one condition as the note under the box — see
+      // `canSayDidNotRun`. The second test is TypeScript's rather than a second
+      // rule: it is what narrows `previous` to a figure inside the closure.
       onDidNotRun:
-        readOnly || previous === undefined
+        !canSayDidNotRun || previous === undefined
           ? undefined
           : () =>
               setConfirmUnchanged({
@@ -1641,6 +2002,23 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
                       ...model.acknowledgedRaw.filter((n) => n !== identity),
                       identity,
                     ],
+                    /*
+                     * And the box stops being the system's, in the same
+                     * undoable step as the statement itself.
+                     *
+                     * A named person has just sworn that this reading IS this
+                     * morning's, so it is their figure now, however identical
+                     * to yesterday's it looks. Without this line it stays
+                     * "carried and untouched" for ever: dashed and muted as if
+                     * nobody had been near it, and — much worse — never counted
+                     * by `irasDayProgress`. 16E has two dead pumps EVERY
+                     * morning, so its readout would sit for ever at "8 of 10
+                     * figures typed" over an enabled save button, on a day its
+                     * operator had completely finished. The block itself is
+                     * already gone by then, cleared by the statement before
+                     * either carried or unchanged is considered.
+                     */
+                    [SHIFT_CARRIED_META]: strikeCarried(model.carried, row.planKey, 'TOT_READING'),
                   });
                   setConfirmUnchanged(null);
                 },
@@ -1677,23 +2055,52 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
         buildField(row, 'NET_QTY', {
           heading,
           ariaLabel: `Stock in litres for tank ${identity}, ${product.labelEn}`,
+          previous: previousStock,
+          /*
+           * Yesterday's stock, and how far the tank has moved off it.
+           *
+           * The movement is the useful half and it is why this caption is not
+           * simply the reference figure. What a tank went DOWN by overnight
+           * should be about what its pumps sold, so a stock typed one digit out
+           * shows up here as a tank that dropped 12,400 L on a morning the
+           * pumps sold 1,240 — a fortnight before the variation says so. While
+           * the box is still carried this is replaced by the carried sentence:
+           * the movement would be nought, and "up 0 L" is not a fact about the
+           * outlet, it is a fact about nobody having typed yet.
+           *
+           * `unchanged` rather than "up 0 L" when the operator really does type
+           * yesterday's figure back — which the pre-fill makes far likelier,
+           * since it is now one deliberate keystroke away.
+           */
           caption:
             yesterdayStock === null
               ? undefined
               : move === null
                 ? `Yesterday ${formatLitres(yesterdayStock)}`
-                : `Yesterday ${formatLitres(yesterdayStock)} · ${
-                    move >= 0 ? 'up' : 'down'
-                  } ${formatLitres(Math.abs(move))}`,
+                : move === 0
+                  ? `Yesterday ${formatLitres(yesterdayStock)} · unchanged`
+                  : `Yesterday ${formatLitres(yesterdayStock)} · ${
+                      move > 0 ? 'up' : 'down'
+                    } ${formatLitres(Math.abs(move))}`,
         }),
         buildField(row, 'PRODUCT_DIP', {
           heading,
           ariaLabel: `Product dip for tank ${identity}, ${product.labelEn}`,
+          previous: previousDip,
+          // Yesterday's dip, and nothing worked out from it. A dip is the
+          // dealer's own independent witness to the stock beside it rather than
+          // a figure anything calculates with, so the only useful thing under
+          // this box is the reading it has to be read against — and inventing a
+          // movement for it would be inventing a meaning the report does not
+          // give it.
           caption:
             previousDip === undefined
               ? undefined
-              : `Yesterday ${Number(previousDip).toLocaleString('en-IN')}`,
+              : `Yesterday ${groupFigure(previousDip)}`,
         }),
+        // No `previous`: the water dip is carried and is not one of the two
+        // figures the day asks a tank for, so it does not block and the sheet's
+        // own carried list is the whole answer for it. See `buildField`.
         buildField(row, 'WATER_DIP', {
           heading,
           ariaLabel: `Water dip for tank ${identity}, ${product.labelEn}`,
@@ -1929,7 +2336,11 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
         ))}
 
         {model.missingRows.findings.length > 0 && !readOnly ? (
-          <MissingRowsPanel missing={model.missingRows} onPut={model.putMissingRowsBack} />
+          <MissingRowsPanel
+            missing={model.missingRows}
+            carriedFrom={previousLabel}
+            onPut={model.putMissingRowsBack}
+          />
         ) : null}
 
         {/* ── meter readings ── */}
@@ -1954,10 +2365,13 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
               detail={
                 'The number on the pump’s own totaliser this morning — it only ever goes up. ' +
                 'The day’s sales are the change since yesterday’s reading for the same nozzle, ' +
-                'which is why yesterday’s figure is printed under each box. Some pumps count on a ' +
-                'different scale, and where that is set up the report converts it for you. Type ' +
-                'what the register says and check the litres shown beside each nozzle, rather ' +
-                'than working back from the sales figure you expect.'
+                'so each box opens holding yesterday’s figure for you to type this morning’s ' +
+                'over. Tapping a box selects the whole number, so typing replaces it. Until you ' +
+                'change it the day cannot be saved: a reading left exactly as it was reports ' +
+                'that the nozzle sold nothing. Some pumps count on a different scale, and where ' +
+                'that is set up the report converts it for you. Type what the register says and ' +
+                'check the litres shown beside each nozzle, rather than working back from the ' +
+                'sales figure you expect.'
               }
             />
           </div>
@@ -1993,10 +2407,31 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
             <h2 id="shift-tanks-heading" className="text-sm font-semibold text-text">
               {shiftRowGroupName('STK')}s
             </h2>
+            {/* Written for this surface, exactly like the meter badge above it,
+              and for the same reason: this section's three boxes are now
+              governed by the pre-fill and the shared field hint knows nothing
+              about it. That hint was what this badge printed, so the one place
+              on the sheet that explains a tank said only what the stock is used
+              for — nothing about the two boxes opening full, nothing about why
+              the day will not save until they are changed, and nothing about
+              the third box beside them that behaves differently on purpose. */}
             <InfoBadge
               label="What this is"
               sheetTitle={`${shiftRowGroupName('STK')}s`}
-              detail={irasFieldPolicy('STK', 'NET_QTY').hint ?? ''}
+              detail={
+                'What the tank held this morning, and the dips that witness it. The stock is ' +
+                'the figure the report opens the day with — every tank of a grade is added up, ' +
+                'and the day’s variation is measured against that total. The stock box and the ' +
+                'product dip box open holding yesterday’s figures, and tapping a box selects the ' +
+                'whole number so typing replaces it. Until both are changed the day cannot be ' +
+                'saved: left as they are, they report a tank nobody measured this morning. Type ' +
+                'the dip the same way as the figure already in the box, so this morning’s and ' +
+                'yesterday’s can be read against each other. If it comes out exactly the same as ' +
+                'yesterday’s the day still saves, with a note asking you to check the tank was ' +
+                'dipped today — the report prints that dip beside the stock as the dealer’s own ' +
+                'witness to it. The water dip is carried in the same way and never blocks the ' +
+                'save: the report prints it and calculates nothing from it.'
+              }
             />
           </div>
           <div className="grid gap-4">
@@ -2095,9 +2530,10 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
            * "Discard all" sits beside the save button and throws away a whole
            * morning on one tap, while removing a SINGLE row is gated behind a
            * dialog — the cheaper act was the protected one. A day that has only
-           * just laid its empty rows out still resets on one press: confirming a
-           * tap that costs nothing is how an operator learns to dismiss the one
-           * that costs a morning.
+           * just laid itself out still resets on one press, carried figures and
+           * all: nobody has typed anything yet, so there is nothing of theirs to
+           * lose, and confirming a tap that costs nothing is how an operator
+           * learns to dismiss the one that costs a morning.
            *
            * `anythingTyped` and not `entered`, because `entered` counts only the
            * figures the day NEEDS: type the litres of a delivery before any
@@ -2120,7 +2556,7 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
           title={`Nozzle ${confirmUnchanged.identity} did not run today?`}
           description={
             <>
-              Its meter will read {Number(confirmUnchanged.previous).toLocaleString('en-IN')} — the
+              Its meter will read {groupFigure(confirmUnchanged.previous)} — the
               same as yesterday — so the report will show nozzle {confirmUnchanged.identity} sold
               nothing, and it will not be charged its 5 litre test draw. This is recorded against
               your name.
@@ -2154,14 +2590,14 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
               {/* What the day goes back TO, on this day rather than in general.
                   A reset lays the day out again from what the server is holding,
                   so a morning that is already saved comes back with all of its
-                  figures on it — and the old sentence said the day "goes back to
-                  the empty rows it opened with", which is true of exactly one
-                  case: the first typing of a day nothing is saved for. On a
-                  re-opened saved day it described a loss that was not going to
-                  happen, over a button whose whole purpose is to be understood
-                  before it is pressed. */}
-              {discardOutcome(model.savedProgress)} Undo puts them back, while you are still on this
-              day.
+                  figures on it, and a row nothing is saved for comes back the
+                  way it opened — holding the previous day's figures. The old
+                  sentence said the day "goes back to the empty rows it opened
+                  with", which described a loss that was not going to happen on a
+                  saved day and, since the pre-fill, an empty screen that never
+                  happens at all: nothing on this sheet goes back to empty. */}
+              {discardOutcome(model.savedProgress, previousLabel)} Undo puts them back, while you
+              are still on this day.
             </>
           }
           confirmLabel="Discard what I typed"
@@ -2183,15 +2619,23 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
  * The button used to say "Put the missing rows back" for both of the things it
  * can do, and only one of them is a put-back. A saved row whose removal is
  * merely pending comes back exactly as the server holds it. A row this sheet
- * proposed and the operator dropped comes back EMPTY — anything typed into it
- * first is not recoverable from anywhere, and the old label promised otherwise
- * on precisely the press where it mattered.
+ * proposed and the operator dropped comes back AS THE PLAN BUILDS IT — holding
+ * the previous day's figures again, with anything typed into it first not
+ * recoverable from anywhere, and the old label promised otherwise on precisely
+ * the press where it mattered.
+ *
+ * Which day those carried figures are from is named here, because since the
+ * pre-fill the rebuilt row comes back FULL: a row of yesterday's figures is
+ * exactly what a row of this morning's looks like from across the screen.
  */
 function MissingRowsPanel({
   missing,
+  carriedFrom,
   onPut,
 }: {
   missing: ShiftMissingRows;
+  /** `30 Aug` — the day a rebuilt row's figures come back from. */
+  carriedFrom: string;
   onPut: () => void;
 }) {
   const { restored, rebuilt } = missing;
@@ -2210,8 +2654,9 @@ function MissingRowsPanel({
       ) : null}
       {rebuilt.length > 0 ? (
         <p className="text-xs text-danger">
-          {sentenceCase(joinList(rebuilt))} {rebuilt.length === 1 ? 'comes' : 'come'} back empty.
-          Anything typed into {rebuilt.length === 1 ? 'it' : 'them'} before{' '}
+          {sentenceCase(joinList(rebuilt))} {rebuilt.length === 1 ? 'comes' : 'come'} back holding{' '}
+          {carriedFrom}’s figures again, for you to type this morning’s over. Anything typed into{' '}
+          {rebuilt.length === 1 ? 'it' : 'them'} before{' '}
           {rebuilt.length === 1 ? 'it was' : 'they were'} removed is gone.
         </p>
       ) : null}
@@ -2229,14 +2674,23 @@ function MissingRowsPanel({
  *
  * A reset does not empty the day: `rescaffold` lays it out again from the rows
  * the SERVER is holding, so every figure already saved is still there afterwards
- * and only the rows nothing is saved for come back blank. Which of the three
+ * and the rows nothing is saved for come back exactly as the day opened —
+ * holding the previous day's figures, carried and blocking. Which of the three
  * sentences is true depends entirely on how much of the day is on record, so it
  * is answered from `savedProgress` — the same count the save bar prints one line
  * above the button — rather than asserted.
+ *
+ * The day those figures come back from is named rather than called "empty",
+ * which is what this said before the pre-fill and is now true of nothing on
+ * this sheet.
  */
-function discardOutcome({ entered, needed }: { entered: number; needed: number }): string {
+function discardOutcome(
+  { entered, needed }: { entered: number; needed: number },
+  /** `30 Aug` — the day the rebuilt rows carry their figures from. */
+  carriedFrom: string,
+): string {
   if (entered === 0) {
-    return 'Nothing is saved for this day yet, so it goes back to the empty rows it opened with.';
+    return `Nothing is saved for this day yet, so it goes back to the rows it opened with, holding ${carriedFrom}’s figures again.`;
   }
   if (entered >= needed) {
     return needed === 1
@@ -2247,8 +2701,8 @@ function discardOutcome({ entered, needed }: { entered: number; needed: number }
   // figure" while this one said "The 1 figure", and the two are one keystroke
   // apart on the same dialog for the same count.
   return entered === 1
-    ? 'The one figure already saved for this day stays exactly as it is; the rest of the day goes back to empty rows.'
-    : `The ${entered} figures already saved for this day stay exactly as they are; the rest of the day goes back to empty rows.`;
+    ? `The one figure already saved for this day stays exactly as it is; the rest of the day goes back to ${carriedFrom}’s figures.`
+    : `The ${entered} figures already saved for this day stay exactly as they are; the rest of the day goes back to ${carriedFrom}’s figures.`;
 }
 
 /** `nozzle 4’s meter reading row` → `Nozzle 4’s meter reading row`. */
@@ -2562,6 +3016,13 @@ function ReconcileLine({
  * runs on does not sanitise, and the parser drops any meter row whose reading is
  * blank — so a half-typed day comes back with a variation computed from two of
  * six meters. A confident, precise, wrong number is worse than none.
+ *
+ * Since the pre-fill a half-typed day is rarely blank; it is half yesterday's,
+ * which lies the other way round — no row is dropped at all, and every nozzle
+ * nobody has reached reads as having sold nothing. The gate holds either way,
+ * and holds harder: `irasDayReadyForPreview` is `irasDayCanSave`, and a carried
+ * figure blocks, so the engine is never asked about a day whose figures are
+ * still the system's.
  *
  * And an answer is only ever handed back for the figures that are ON THE SCREEN.
  * The debounce is 800 ms and a request takes as long again, and for that second
