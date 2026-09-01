@@ -3188,6 +3188,25 @@ function SaveBar({
       summary={
         <>
           <span className="block font-medium text-text">{model.figuresSentence}</span>
+          {/*
+            Why the button is dead, as visible text — `title` never fires on
+            touch, so on a phone a disabled primary would be silent about it.
+            It lives in the SUMMARY, not beside the buttons.
+
+            It was a sibling of the buttons, inside `ActionRow`, and that row is
+            `flex: 0 0 auto` — it never gives width up. A whole sentence in there
+            made its content 1,227px on a 1,224px line, and the summary is the
+            only item carrying `min-width: 0`, so the summary absorbed every
+            pixel of the overflow and collapsed to ZERO. Its text then broke at
+            every character, one letter per line, 1,740px tall, and the day's
+            figures were pushed off the screen underneath it.
+
+            The summary column is the one built to hold a sentence: it wraps, and
+            nothing here can squeeze a sibling that refuses to shrink.
+          */}
+          {model.canSave || !model.blockReason ? null : (
+            <span className="mt-0.5 block text-warning">{model.blockReason}</span>
+          )}
           <span className="mt-0.5 block">
             {/* What is on the SERVER, which is not what is on the screen. This
                 line used to read "nothing saved yet" on every day, including one
@@ -3228,11 +3247,6 @@ function SaveBar({
         </>
       }
     >
-      {/* The reason the button is dead, as visible text beside it. `title` never
-          fires on touch, so on a phone a disabled primary would be silent. */}
-      {model.canSave || !model.blockReason ? null : (
-        <p className="w-full text-sm text-text-muted md:w-auto">{model.blockReason}</p>
-      )}
       {canUndo ? (
         <Button variant="ghost" size="sm" onClick={onUndo}>
           Undo
