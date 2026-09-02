@@ -32,9 +32,36 @@ const MAX_EDGE = 1600;
 /** JPEG quality for the re-encode. */
 const JPEG_QUALITY = 0.7;
 
+/**
+ * A caller's own profile, for a photograph whose job is not the same as a
+ * register page's.
+ *
+ * THE THREE DEFAULTS ABOVE DO NOT MOVE, and that is the whole reason these are
+ * options rather than new constants. 1,600px at q0.70 was chosen so a person
+ * could eyeball a handwritten register over 2G, and every existing caller — the
+ * chat attachment, the density register page, the Kavach proof — is tuned to it
+ * and read back by a dealer's phone on that connection.
+ *
+ * Reading a slip is a different job. There the picture is not looked at by a
+ * person to get the gist; it is read character by character by a machine, and
+ * one lost pixel on the tail of `48615.550` moves hundreds of litres. So that
+ * one caller asks for a larger edge and a gentler quality, and says so at its
+ * own call site rather than pushing every other photograph in the admin up with
+ * it.
+ */
+export interface CompressImageOptions {
+  contentType?: string;
+  /** Longest edge of the output, in CSS px. Default 1,600. Never upscales. */
+  maxEdge?: number;
+  /** JPEG quality, 0–1. Default 0.70. */
+  quality?: number;
+  /** Files below this are left alone. Default ~300 KB. */
+  minBytes?: number;
+}
+
 export async function compressImage(
   file: File,
-  opts?: { contentType?: string },
+  opts?: CompressImageOptions,
 ): Promise<File | null> {
   try {
     // Recover the real kind/type even when Android hands back an empty MIME.
@@ -43,7 +70,7 @@ export async function compressImage(
     if (resolved.kind !== 'image') return null;
     // Animated GIFs would be flattened to one frame — leave them alone.
     if (type.includes('gif')) return null;
-    if (file.size < MIN_COMPRESS_BYTES) return null;
+    if (file.size < (opts?.minBytes ?? MIN_COMPRESS_BYTES)) return null;
     if (typeof createImageBitmap === 'undefined' || typeof document === 'undefined') {
       return null;
     }
@@ -55,7 +82,11 @@ export async function compressImage(
       return null;
     }
 
-    const scale = Math.min(1, MAX_EDGE / Math.max(width, height));
+    // `Math.min(1, …)` is what keeps this from ever UPSCALING: a slip
+    // photographed at 1,200px stays 1,200px rather than being stretched to
+    // 2,400 and re-encoded, which would cost bytes and invent no detail.
+    const maxEdge = opts?.maxEdge ?? MAX_EDGE;
+    const scale = Math.min(1, maxEdge / Math.max(width, height));
     const w = Math.max(1, Math.round(width * scale));
     const h = Math.max(1, Math.round(height * scale));
 
@@ -71,7 +102,7 @@ export async function compressImage(
     bitmap.close?.();
 
     const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((b) => resolve(b), 'image/jpeg', JPEG_QUALITY);
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', opts?.quality ?? JPEG_QUALITY);
     });
     // Release the backing store promptly on memory-constrained devices.
     canvas.width = 0;

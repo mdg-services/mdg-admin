@@ -29,6 +29,7 @@ import {
   irasDayProgress,
   irasDayReadyForPreview,
   irasFieldLabel,
+  irasFigureReadOffSlip,
   irasFiguresOverwritten,
   irasMeterScale,
   irasNozzleSold,
@@ -43,7 +44,9 @@ import type {
   IrasDayFinding,
   IrasDayPlan,
   IrasDayPlanProduct,
+  IrasFigureReadOffSlip,
   IrasPlannedRow,
+  IrasReadKind,
   IrasReportCode,
   IrasRow,
 } from '@dk/shared';
@@ -52,7 +55,14 @@ import { reportsAffected } from './describePending';
 import { decantSeedFields } from './IrasEditGrid';
 import { HEADING_RIGHT_COLUMN, shiftFieldShape, shiftSheetRowCard } from './ShiftSheetRow';
 import type { ShiftSheetField, ShiftSheetRowHandlers, ShiftSheetRowModel } from './ShiftSheetRow';
-import { toChanges, type PendingApi, type PendingState, type RowTarget } from './usePendingChanges';
+import { SlipPanel, type SlipDateAnswer, type SlipFill } from './SlipPanel';
+import {
+  toChanges,
+  type PendingApi,
+  type PendingCellTarget,
+  type PendingState,
+  type RowTarget,
+} from './usePendingChanges';
 
 /**
  * The Shift sheet — a whole morning's figures, laid out the way they were
@@ -124,6 +134,83 @@ import { toChanges, type PendingApi, type PendingState, type RowTarget } from '.
  */
 export const SHIFT_CARRIED_META = 'irasShiftCarried';
 export const SHIFT_ACK_META = 'irasShiftAcknowledgedNozzles';
+/**
+ * Where the figures that came off a photograph of the outlet's own shift slip
+ * live, and how each of them earned its place.
+ *
+ * Beside the carried map, in the pending set, for exactly the same reason: `undo`
+ * restores a whole `PendingState` snapshot, so a map held in this component's own
+ * state would survive the undo and a box the operator had just put back would go
+ * on claiming a slip had supplied it.
+ *
+ * ONE map rather than two, and the value is the provenance rather than a bare
+ * list, because the same answer has to serve two questions that must never
+ * disagree: `@dk/shared` wants the FIELD NAMES on the row (`Object.keys` of the
+ * inner record) to lift `CARRIED_UNTOUCHED` and to count the day honestly, and
+ * the pre-written save note wants to say how many of those readings the money
+ * proved and how many a person checked by hand. Two maps would drift the first
+ * time somebody struck one and forgot the other.
+ */
+export const SHIFT_READ_META = 'irasShiftRead';
+/**
+ * The slip reads whose figures this change set is carrying — the ids the commit
+ * sends so the server can record which photograph each figure came off.
+ *
+ * In `meta` and not in this component's state, so it moves with an undo and dies
+ * with a discard, and so it survives a switch to the Full grid exactly as the
+ * "this pump did not run today" statement does. `meta` never reaches the wire on
+ * its own — `toChanges` builds the commit body field by field — so the page
+ * reads this off the model and sends it deliberately.
+ */
+export const SHIFT_SLIP_READS_META = 'irasShiftSlipReads';
+/**
+ * The operator's answers to a slip that could not say which morning it is.
+ *
+ * Beside the read map and the slip-read ids, in the pending set, for the same
+ * reason: it moves with an Undo and dies with a Discard. Written only when
+ * figures are actually taken off that slip, so confirming the date and then
+ * filling nothing in records nothing — which is right, because there is then
+ * nothing the answer is about.
+ *
+ * This exists because the screen was making a promise nothing kept. "You have
+ * said this is the right slip. That goes on the record with your name" was
+ * printed in the review, and no line of code anywhere wrote that sentence down.
+ * A system whose whole safety rests on never claiming more than it can show must
+ * not make a false claim about its own record-keeping either.
+ */
+export const SHIFT_SLIP_DATE_META = 'irasShiftSlipDates';
+
+/**
+ * How one figure read off the slip earned its place in the box.
+ *
+ * `PROVED` — the rupee counter printed on the same block turned the money into
+ * the same number of litres the meter says, so the reading was proved by the
+ * dealer's own paper before anybody pressed anything. `CHECKED` — nothing on the
+ * slip could prove it, so a named person read it against the paper and accepted
+ * it on its own card. Both are read off the slip; only one of them was checked
+ * by arithmetic, and the save note says which.
+ *
+ * `@dk/shared`'s own name for it, aliased rather than re-declared: the ruleset
+ * reads this map, so a second spelling of the two words would be free to drift
+ * from the one the engine understands.
+ */
+export type ShiftReadKind = IrasReadKind;
+
+/**
+ * `planKey` → the boxes on that row a slip filled, the figure the slip supplied,
+ * and how each was earned.
+ *
+ * THE FIGURE IS IN THE MARK, and that is the whole of why this is not a list of
+ * field names. A mark that cannot falsify itself goes on claiming after it has
+ * stopped being true: a bare list survived the operator retyping the box on the
+ * Full grid — a surface that knows nothing about this map and never strikes it —
+ * and the day's readout and the pre-written audit reason then said the slip had
+ * supplied a figure the operator had overruled. With the digits here,
+ * `irasFigureReadOffSlip` answers the question by COMPARING what the box holds
+ * against what the slip supplied, so every surface agrees whichever one took the
+ * keystroke.
+ */
+export type ShiftReadMap = Record<string, Record<string, IrasFigureReadOffSlip>>;
 
 /** The order the outlet is walked in: pumps, then tanks, then the paperwork. */
 const SHEET_CODES: IrasReportCode[] = ['TOT', 'STK', 'REC'];
@@ -240,6 +327,16 @@ interface SheetRow {
   /** Its place in the array the findings were computed over. */
   rowIndex: number;
   origin: SheetRowOrigin;
+  /**
+   * How to address this row in a MULTI-CELL write — `pending.setCells`.
+   *
+   * `set` writes one box and already knows which of the three shapes this row
+   * is; a write of six boxes across six rows in one undoable step cannot, so the
+   * target is carried rather than parsed back out of `key`. A row this change
+   * set is adding is named by its `localId`; a row the server already holds is
+   * named by the code/rowKey pair every correction uses.
+   */
+  target: PendingCellTarget;
   set: (field: string, value: string, meta?: Record<string, unknown>) => void;
   remove: () => void;
 }
@@ -332,6 +429,27 @@ export interface ShiftSaveSummary {
    * for it asks the operator to explain a change they did not make.
    */
   overwriting: boolean;
+  /**
+   * Meter readings THIS commit is adding that came off the outlet's own slip.
+   *
+   * Counted only on rows this commit is adding, exactly like the carried water
+   * dips below them: a figure on a row that was saved yesterday was not read by
+   * this commit, and saying so would be a claim about work nobody did here.
+   */
+  readOffSlip: number;
+  /** Of those, the ones the money printed on the slip proved. */
+  readProved: number;
+  /**
+   * What a named person answered about a slip that could not say which morning
+   * it was — the sentence, ready to print, or `''` when nothing was asked.
+   *
+   * Printed in the save dialog's list AND appended to the pre-written reason, so
+   * the answer the review promised would be recorded actually is. It goes only
+   * on a commit that still carries a figure off that slip: an operator who
+   * confirmed the date and then typed over every reading has nothing left for
+   * the sentence to be about.
+   */
+  slipDateNote: string;
   /** The lines the save dialog prints under "What you are saving". */
   lines: string[];
 }
@@ -391,7 +509,23 @@ export interface ShiftSheetModel {
    * shared counts and the shared value comparison, never from a second count of
    * the day.
    */
-  progress: { entered: number; needed: number; tankersTyped: number; anythingTyped: boolean };
+  progress: {
+    entered: number;
+    /**
+     * Figures a slip supplied and a named person accepted.
+     *
+     * Counted apart from `entered` and named apart from it everywhere it is
+     * shown, because they are not the same thing. A day whose six meter readings
+     * came off a photograph is a complete day — the figures are there, they were
+     * seen, and they survive a reset prompt — but a readout calling them typed
+     * would be saying six digits were keyed in that were not. `@dk/shared` does
+     * the counting; the sheet only says where each box's figure came from.
+     */
+    read: number;
+    needed: number;
+    tankersTyped: number;
+    anythingTyped: boolean;
+  };
   /** How much of this day is already on the server, in the same units. */
   savedProgress: { entered: number; needed: number };
   /** "4 of 10 figures typed." — worded once, in `@dk/shared`. */
@@ -415,6 +549,37 @@ export interface ShiftSheetModel {
    * hands to `irasDayFindings` and `irasDayProgress`.
    */
   carried: Record<string, string[]>;
+  /**
+   * `planKey` → the boxes on that row a SLIP filled, and how each earned its
+   * place. See {@link SHIFT_READ_META}.
+   *
+   * The counterpart of `carried` and kept beside it: `carried` says "the system
+   * put this here and nobody has been near it", `read` says "a photograph
+   * supplied this and a named person accepted it against the paper". A box is
+   * never in both — writing a slip figure strikes the field off `carried` in the
+   * same undoable step — and a keystroke takes a box out of either.
+   */
+  read: ShiftReadMap;
+  /**
+   * The slip reads this change set is carrying, oldest first.
+   *
+   * Sent on the commit so the server can record which photograph each figure
+   * came off. A stale id is harmless — the server keeps only the ones belonging
+   * to this dealer and this day and then works out per nozzle what actually
+   * landed — and sending none is harmless too. A photograph must never be able
+   * to fail a morning.
+   */
+  slipReadIds: string[];
+  /**
+   * What a named person answered about a slip that could not say which morning
+   * it was, oldest first.
+   *
+   * In the pending set beside the slip-read ids, so it moves with an Undo and
+   * dies with a Discard. It reaches the audit trail through the pre-written
+   * reason and the save dialog's list — see {@link SHIFT_SLIP_DATE_META} — and
+   * nowhere else.
+   */
+  slipDateAnswers: SlipDateAnswer[];
   /**
    * The nozzles whose "this pump did not run today" statement the typed figures
    * STILL bear out — what the save dialog prints and what goes on the wire.
@@ -481,6 +646,31 @@ export interface ShiftSheetModel {
 export function shiftSheetAvailable(day: IrasDayEditorView | undefined): boolean {
   if (!day?.snapshot) return false;
   return day.snapshot.source === 'MANUAL' && day.dsr.products.length > 0;
+}
+
+/**
+ * Whether the SERVER says reading slips is switched on for this installation.
+ *
+ * `SLIP_READ_ENABLED` is off by default and the read route refuses outright
+ * without it, so on an installation where nothing is configured the panel is an
+ * offer that cannot be taken: a button, a photograph, an upload and a round trip,
+ * ending in "Reading the slip is not switched on here." Nothing is owed to an
+ * operator about a feature that does not exist here — the sheet should simply be
+ * what it was before slips existed.
+ *
+ * IT FAILS CLOSED, and that is the whole reason it is written this way. A server
+ * that says nothing is a server that has not been told to offer this, so the
+ * panel does not render. The alternative — assume on unless told otherwise —
+ * would put the button back on every installation the flag was added to guard.
+ *
+ * The day route decides it, off the same two conditions the upload branch
+ * refuses on — the feature switched on, and a second reader configured. Drawing
+ * the panel on the strength of the day being hand-typed offered a camera that
+ * could not work, and the refusal only arrived after the photograph had been
+ * compressed and uploaded.
+ */
+export function slipReadingConfigured(day: IrasDayEditorView | undefined): boolean {
+  return day?.slipRead === true;
 }
 
 /**
@@ -588,6 +778,18 @@ export function useShiftSheetModel({
     () => (pending.state.meta[SHIFT_CARRIED_META] as Record<string, string[]>) ?? {},
     [pending.state.meta],
   );
+  const read = React.useMemo<ShiftReadMap>(
+    () => (pending.state.meta[SHIFT_READ_META] as ShiftReadMap) ?? {},
+    [pending.state.meta],
+  );
+  const slipReadIds = React.useMemo<string[]>(
+    () => (pending.state.meta[SHIFT_SLIP_READS_META] as string[]) ?? [],
+    [pending.state.meta],
+  );
+  const slipDateAnswers = React.useMemo<SlipDateAnswer[]>(
+    () => (pending.state.meta[SHIFT_SLIP_DATE_META] as SlipDateAnswer[]) ?? [],
+    [pending.state.meta],
+  );
   const acknowledgedRaw = React.useMemo<string[]>(
     () => (pending.state.meta[SHIFT_ACK_META] as string[]) ?? [],
     [pending.state.meta],
@@ -653,6 +855,7 @@ export function useShiftSheetModel({
             out.length,
             'portal',
             {
+              target: { code, rowKey },
               set: (field, value, meta) =>
                 pending.setCell(
                   code,
@@ -686,6 +889,7 @@ export function useShiftSheetModel({
             out.length,
             'saved',
             {
+              target: { code, rowKey: c.rowKey },
               // Never `null` on a hand-added row: there is no portal figure to
               // hand it back to, and the server's added-row branch writes an
               // empty string rather than restoring anything — on a stock figure
@@ -705,6 +909,7 @@ export function useShiftSheetModel({
           // figure on record anywhere to compare against and nothing typed into
           // it can be an overwrite.
           sheetRow(code, `new:${a.localId}`, a.row, null, out.length, 'new', {
+            target: { localId: a.localId },
             set: (field, value, meta) => pending.editAddedRow(a.localId, field, value, { meta }),
             remove: () => pending.dropAddedRow(a.localId),
           }),
@@ -744,8 +949,21 @@ export function useShiftSheetModel({
         row: r.row,
         onRecord: r.onRecord,
         carried: carried[r.planKey] ?? [],
+        /*
+         * The whole mark, figure and all, because the ruleset's answer is a
+         * COMPARISON and not a lookup: it holds `row[field]` against the digits
+         * the slip supplied and calls the box read only while the two still
+         * match. Handing over field names alone would put that question beyond
+         * its reach and leave a box retyped on the Full grid counted as a slip
+         * figure. `read` is optional in `@dk/shared` and default-off, and this is
+         * the one caller that ever passes it: the backend's after-save pass and
+         * every one of the eight portal dealers hand over rows with no read map
+         * at all and get, to the number, what they got before a slip could be
+         * read.
+         */
+        read: read[r.planKey],
       })),
-    [rows, carried],
+    [rows, carried, read],
   );
 
   /*
@@ -834,6 +1052,7 @@ export function useShiftSheetModel({
     savedRows,
     findings,
     carried,
+    read,
     removedSavedRows,
   });
   latest.current = {
@@ -845,6 +1064,7 @@ export function useShiftSheetModel({
     savedRows,
     findings,
     carried,
+    read,
     removedSavedRows,
   };
 
@@ -879,13 +1099,30 @@ export function useShiftSheetModel({
       // starts from nothing, because `replace` empties the pending set the map
       // describes.
       const carriedSeed: Record<string, string[]> = replace ? {} : { ...current.carried };
+      /*
+       * The stale-provenance landmine, closed in the same walk.
+       *
+       * `addRows` merges `meta` one key deep, so a read entry left standing here
+       * would survive onto a row this plan has just REBUILT from scratch —
+       * holding the previous day's figures again — and that row would then claim
+       * a slip had supplied a figure it did not. It would be painted as read,
+       * counted as read, and it would not block the save. So every planKey this
+       * plan lays down loses its read entry, in the same place the carried seed
+       * is built, and a reset starts from nothing because `replace` empties the
+       * pending set the map describes.
+       */
+      const readSeed: ShiftReadMap = replace ? {} : { ...current.read };
       for (const r of built.rows) {
         if (r.carried.length > 0) carriedSeed[r.planKey] = r.carried.map((c) => c.field);
         else delete carriedSeed[r.planKey];
+        delete readSeed[r.planKey];
       }
       current.pending.addRows(
         built.rows.map((r) => ({ code: r.code, row: r.row })),
-        { meta: { [SHIFT_CARRIED_META]: carriedSeed }, replace },
+        {
+          meta: { [SHIFT_CARRIED_META]: carriedSeed, [SHIFT_READ_META]: readSeed },
+          replace,
+        },
       );
     },
     [],
@@ -966,12 +1203,23 @@ export function useShiftSheetModel({
       buildSaveSummary(
         rows,
         carried,
+        read,
+        slipDateAnswers,
         acknowledgedInForce,
         previousDate,
         pending.state,
         removedSavedRows,
       ),
-    [rows, carried, acknowledgedInForce, pending.state, previousDate, removedSavedRows],
+    [
+      rows,
+      carried,
+      read,
+      slipDateAnswers,
+      acknowledgedInForce,
+      pending.state,
+      previousDate,
+      removedSavedRows,
+    ],
   );
 
   const rescaffold = React.useCallback(() => scaffold({ replace: true }), [scaffold]);
@@ -1032,11 +1280,17 @@ export function useShiftSheetModel({
       anythingTyped: progress.anythingTyped || saveSummary.overwriting || typedBesideTheCount,
     },
     savedProgress,
-    figuresSentence: irasDayFiguresSentence(plan, progress.entered),
+    // Three arguments, not two. With two it still compiles and still says "All
+    // 10 figures typed" on a morning six of them were read off a photograph —
+    // which is the exact lie the third count exists to stop.
+    figuresSentence: irasDayFiguresSentence(plan, progress.entered, progress.read),
     canSave: irasDayCanSave(findings),
     readyForPreview: irasDayReadyForPreview(findings),
     blockReason: blocking?.blockReason ?? null,
     carried,
+    read,
+    slipReadIds,
+    slipDateAnswers,
     acknowledgedUnchangedNozzles: acknowledgedInForce,
     acknowledgedRaw,
     previousDate,
@@ -1055,7 +1309,7 @@ function sheetRow(
   onRecord: IrasRow | null,
   rowIndex: number,
   origin: SheetRowOrigin,
-  actions: { set: SheetRow['set']; remove: SheetRow['remove'] },
+  actions: { target: PendingCellTarget; set: SheetRow['set']; remove: SheetRow['remove'] },
 ): SheetRow {
   const identity = irasRowIdentity(code === 'TOT' ? row.NOZZLE_NO : row.TANK_NO);
   return {
@@ -1067,6 +1321,7 @@ function sheetRow(
     onRecord,
     rowIndex,
     origin,
+    target: actions.target,
     set: actions.set,
     remove: actions.remove,
   };
@@ -1117,12 +1372,50 @@ function restorableMissing(
 function buildSaveSummary(
   rows: SheetRow[],
   carried: Record<string, string[]>,
+  read: ShiftReadMap,
+  slipDateAnswers: readonly SlipDateAnswer[],
   acknowledged: readonly string[],
   previousDate: string,
   pendingState: PendingState,
   removedSavedRows: readonly RemovedRow[],
 ): ShiftSaveSummary {
   const added = rows.filter((r) => r.origin === 'new');
+  /*
+   * How many of this commit's meter readings came off a photograph, and how many
+   * of those the slip's own money proved.
+   *
+   * Asked of the same map the box is painted from, THROUGH THE SAME SHARED
+   * PREDICATE, so the sentence that goes into the audit trail and the tint on
+   * the box cannot describe two different mornings. This used to count marks and
+   * that was the bug: a reading typed over on the Full grid — a surface that
+   * never touches this map — left its mark standing, and the note then told the
+   * audit trail the slip had supplied a figure the operator had overruled.
+   */
+  let readOffSlip = 0;
+  let readProved = 0;
+  /*
+   * Counted over EVERY row in force, not just the ones this commit is adding.
+   *
+   * A day that is already on record is reopened and its readings filled from a
+   * slip: those rows are edits, not additions, so `added` skips them and the
+   * provenance sentence reached neither the save dialog nor the audit reason.
+   * The figures still came off a photograph, and the record has to say so on the
+   * morning the correction is made as much as on the morning the day was typed.
+   */
+  for (const row of rows) {
+    const marks = read[row.planKey];
+    if (!marks) continue;
+    for (const [field, mark] of Object.entries(marks)) {
+      // The shared predicate, not the presence of a mark. A box the operator
+      // retyped — here or on the Full grid, which never touches this map — is no
+      // longer holding the slip's figure, and the note that goes into the audit
+      // trail must not count it. This is the same test the box's own tint and
+      // the day's readout make, so the three cannot describe different mornings.
+      if (!irasFigureReadOffSlip({ row: row.row, read: marks }, field)) continue;
+      readOffSlip += 1;
+      if (mark.kind === 'PROVED') readProved += 1;
+    }
+  }
   const meters = added.filter((r) => r.code === 'TOT').length;
   const tanks = added.filter((r) => r.code === 'STK').length;
   const deliveries = added.filter((r) => r.code === 'REC').length;
@@ -1271,6 +1564,26 @@ function buildSaveSummary(
     );
   }
 
+  const provenance = slipProvenanceSentence(readOffSlip, readProved);
+  // Said on the last screen before the figures go on record, because a list
+  // reading "6 meter readings" over six figures that came off a photograph is a
+  // true sentence that leaves out the one thing worth knowing about them.
+  if (provenance) lines.push(provenance);
+
+  /*
+   * And the one thing louder than where the figures came from: that the slip
+   * they came off could not say which morning it was, and a person said it
+   * anyway.
+   *
+   * Gated on `readOffSlip`, so it falsifies itself the same way the read mark
+   * does. Type over every reading the slip supplied and this sentence goes with
+   * them — there is no longer a figure on this commit for the answer to be
+   * about, and a note claiming one would be exactly the kind of leftover claim
+   * the read map was rewritten to stop making.
+   */
+  const slipDateNote = readOffSlip > 0 ? slipDateSentence(slipDateAnswers) : '';
+  if (slipDateNote) lines.push(slipDateNote);
+
   // Printed straight from `irasAcknowledgementsInForce`'s answer. There used to
   // be a filter here that kept the nozzles the report layout names — a second,
   // weaker implementation of "is this statement worth printing", which asked
@@ -1283,7 +1596,78 @@ function buildSaveSummary(
       } recorded as not having run today.`,
     );
   }
-  return { meters, tanks, deliveries, wholeShift, overwriting, lines };
+  return {
+    meters,
+    tanks,
+    deliveries,
+    wholeShift,
+    overwriting,
+    readOffSlip,
+    readProved,
+    slipDateNote,
+    lines,
+  };
+}
+
+/**
+ * What the operator said about a slip that could not date itself, in one
+ * sentence — and it says which of the two questions they answered.
+ *
+ * "This slip is dated 30-08-2026" and "no date could be read off this slip" are
+ * not the same fact and must never be recorded as if they were. The second never
+ * claims the paper carries no date: nothing in this system has seen the paper,
+ * only what came back off it, and asserting something a reader merely failed to
+ * see is the fault this whole area is built to avoid.
+ *
+ * The slip's own date is spelled by `dmy`, the same function that spells the
+ * business date in the sentence beside it, so a note naming two dates does not
+ * name them two different ways.
+ *
+ * Returns `''` when nothing was asked, which is every ordinary morning.
+ */
+function slipDateSentence(answers: readonly SlipDateAnswer[]): string {
+  const said: string[] = [];
+  const seen = new Set<string>();
+  for (const answer of answers ?? []) {
+    const key = answer.kind === 'ANOTHER_DAY' ? `d:${answer.printed}` : 'n';
+    if (seen.has(key)) continue;
+    seen.add(key);
+    said.push(
+      answer.kind === 'ANOTHER_DAY'
+        ? `The slip was dated ${dmy(answer.printed)} and was confirmed as this morning’s.`
+        : 'No date could be read on the slip and it was confirmed as this morning’s.',
+    );
+  }
+  return said.join(' ');
+}
+
+/**
+ * Where the meter readings came from, in one sentence.
+ *
+ * Written once and printed twice — in the save dialog's list of what is being
+ * saved, and inside the pre-written reason that lands verbatim in the audit
+ * trail. Two spellings of the same fact on two screens a press apart is how an
+ * operator learns to stop reading either.
+ *
+ * It says three things and every one of them is checkable: how many figures came
+ * off the slip, how many the money printed on that same slip proved, and how
+ * many a person checked against the paper themselves. Returns `''` when no
+ * figure on this commit came off a slip, which is every commit for the eight
+ * portal dealers and every morning somebody types by hand.
+ */
+function slipProvenanceSentence(readOffSlip: number, readProved: number): string {
+  const n = readOffSlip;
+  if (n <= 0) return '';
+  const head = `${n === 1 ? 'One meter reading was' : `${n} of the meter readings were`} read off the outlet’s slip`;
+  const proved = Math.min(readProved, n);
+  const byHand = n - proved;
+  if (proved === 0) {
+    return `${head}, and ${byHand === 1 ? 'it was' : 'each was'} checked against the paper by hand.`;
+  }
+  if (byHand === 0) {
+    return `${head}, and ${proved === 1 ? 'it was' : 'each was'} checked against the money the slip prints.`;
+  }
+  return `${head}; ${proved} ${proved === 1 ? 'was' : 'were'} checked against the money the slip prints and ${byHand} ${byHand === 1 ? 'was' : 'were'} checked by hand.`;
 }
 
 /** `6 meter readings`, `2 stock rows`, `1 tanker` — worded once, printed twice. */
@@ -1336,12 +1720,43 @@ function defaultReasonFor(businessDate: string, summary: ShiftSaveSummary): stri
   // Nothing added and nothing on record moved. Honest, and not a question.
   if (parts.length === 0) return `Shift of ${date} checked by hand; nothing changed.`;
   const what = joinList(parts);
+  /*
+   * And where the meter readings came from, when some of them came off the
+   * outlet's own slip.
+   *
+   * This lands verbatim in the audit `after.reason`, so it is the sentence
+   * somebody reads in six months asking why the box said 48,615.550 on 2
+   * September. It is appended rather than replacing the sentence above it,
+   * because both facts are true: a person entered this shift, and some of the
+   * digits in it were read off a photograph and accepted by them. Editable, like
+   * every other pre-written reason.
+   */
+  const provenance = slipProvenanceSentence(summary.readOffSlip, summary.readProved);
+  /*
+   * And, after it, the answer the review said would go on the record.
+   *
+   * This is the half that was missing. The review printed "You have said this is
+   * the right slip. That goes on the record with your name" and nothing wrote
+   * that sentence anywhere — so the audit trail held a morning's figures taken
+   * off a slip dated the day before, with no trace that anybody had been asked
+   * or had answered. It is appended AFTER the provenance sentence because it
+   * qualifies it: where the figures came from, and then what was known to be
+   * wrong with where they came from.
+   */
+  const tail = [provenance, summary.slipDateNote].filter(Boolean).join(' ');
+  const tailText = tail ? ` ${tail}` : '';
   // "by hand" in both, because the dialog's question for a pre-written reason is
   // where these figures came from, and the answer is the same either way: a
-  // person typed them. The provenance chips append to whichever sentence this is.
+  // person put them there. "TYPED in by hand" is the one word that stops being
+  // true the moment a slip supplies some of the digits, so a morning with a slip
+  // on it says "entered" instead — and a morning without one keeps, to the byte,
+  // the sentence it has always had.
+  const opening = provenance
+    ? `Shift of ${date} entered by hand`
+    : `Shift of ${date} typed in by hand`;
   return summary.wholeShift
-    ? `Shift of ${date} typed in by hand: ${what}.`
-    : `Added to the shift of ${date} by hand: ${what}. Nothing already saved was changed.`;
+    ? `${opening}: ${what}.${tailText}`
+    : `Added to the shift of ${date} by hand: ${what}. Nothing already saved was changed.${tailText}`;
 }
 
 /**
@@ -1369,6 +1784,61 @@ function strikeCarried(
   const fields = carried[planKey];
   if (!fields?.includes(field)) return carried;
   return { ...carried, [planKey]: fields.filter((f) => f !== field) };
+}
+
+/**
+ * The read map with one field struck off one row — "a person has typed over the
+ * figure the slip put here".
+ *
+ * BELT, NOT BRACES, and that is a change from what this used to be. The mark now
+ * carries the slip's own figure, so `irasFigureReadOffSlip` already answers "is
+ * this box still the slip's" by comparing, on every surface, whether or not
+ * anybody remembered to strike anything. Striking is still worth doing so the
+ * map does not accumulate entries for boxes nobody will ever ask about again —
+ * but no rule depends on it any more, and that is the point: the honest answer
+ * must not depend on which screen took the keystroke.
+ *
+ * The twin of {@link strikeCarried} and deliberately a second function rather
+ * than one generalised over both, because the two maps do not hold the same
+ * thing: `carried` holds a list of field names, `read` holds a field name AND
+ * the figure the slip supplied for it. One function over
+ * `Record<string, unknown>` would have had to lose that, or take a type
+ * parameter that made both call sites harder to read than these six lines.
+ *
+ * The WHOLE map comes back for the same reason as its twin: `meta` is merged one
+ * key deep, so writing half of it would drop every other row's entry. The same
+ * object is returned when there is nothing to strike, so a caller can tell a
+ * real change from a no-op and leave the pending set alone.
+ */
+function strikeRead(read: ShiftReadMap, planKey: string, field: string): ShiftReadMap {
+  const fields = read[planKey];
+  if (!fields || fields[field] === undefined) return read;
+  const rest = { ...fields };
+  delete rest[field];
+  const next = { ...read };
+  // The row's own entry goes when its last field does, so an empty object cannot
+  // accumulate on every row somebody has typed over.
+  if (Object.keys(rest).length === 0) delete next[planKey];
+  else next[planKey] = rest;
+  return next;
+}
+
+/**
+ * The read map with one field written onto one row: the figure THE SLIP
+ * supplied, and how that figure earned its place.
+ *
+ * `mark.value` is what the slip was read as and never what the box holds now —
+ * the box is the thing being checked against it. That is what lets
+ * `irasFigureReadOffSlip` catch a keystroke on any surface at all, including the
+ * Full grid, which knows nothing about this map.
+ */
+function withRead(
+  read: ShiftReadMap,
+  planKey: string,
+  field: string,
+  mark: IrasFigureReadOffSlip,
+): ShiftReadMap {
+  return { ...read, [planKey]: { ...(read[planKey] ?? {}), [field]: mark } };
 }
 
 function joinList(parts: readonly string[]): string {
@@ -1648,10 +2118,49 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
    */
   const stillCarried = (row: SheetRow, field: string, previous: string | undefined): boolean =>
     irasCarriedUntouched(
-      { row: row.row, onRecord: row.onRecord, carried: model.carried[row.planKey] ?? [] },
+      {
+        row: row.row,
+        onRecord: row.onRecord,
+        carried: model.carried[row.planKey] ?? [],
+        // Handed over as well as `carried`, because the shared predicate is the
+        // one place that decides which of the two wins. A figure a slip supplied
+        // is not one the system carried in — a named person accepted it against
+        // the paper — and without this the box would paint dashed and muted
+        // while the ruleset three files away counted it as answered.
+        read: model.read[row.planKey],
+      },
       field,
       previous,
     );
+
+  /**
+   * What a box a slip filled says about itself.
+   *
+   * Colour is never the only channel. The tint says "the system put this here";
+   * these four words say it too, for anyone who cannot see the tint, is looking
+   * at a phone in daylight, or simply is not looking for it — and they say the
+   * one thing the operator has to do about it, which is hold it against the
+   * paper.
+   *
+   * The day is NAMED rather than called "yesterday", exactly as the carried
+   * caption beside it names it. The previous business date is not always the day
+   * before: on a Monday after a day nobody typed, "yesterday" would be pointing
+   * at the wrong figure on the one screen whose job is saying where a figure
+   * came from.
+   */
+  function readCaption(kind: ShiftReadKind | undefined, previous: string | undefined): string {
+    // `kind` is optional in the shared mark, so the caption falls to the weaker
+    // of the two claims when it is missing. Every read figure was accepted by a
+    // named person; only some of them were proved by the money on the paper, and
+    // a box with no record of which must not claim the stronger one.
+    const head =
+      kind === 'PROVED'
+        ? 'Read off the slip — check it against the paper.'
+        : 'Read off the slip and accepted by you.';
+    return previous && previous.trim()
+      ? `${head} ${previousLabel} read ${groupFigure(previous)}.`
+      : head;
+  }
 
   /** Build one field, register it in the walk, and say which state it is in. */
   function buildField(
@@ -1701,6 +2210,23 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
     const isCarried = asked
       ? stillCarried(row, field, options.previous)
       : (model.carried[row.planKey] ?? []).includes(field);
+    /*
+     * A figure this outlet's own slip supplied, which a named person accepted on
+     * a screen showing the slip, the transcript and the arithmetic.
+     *
+     * It is not carried — nobody carried it — and it is not typed either, and
+     * that distinction is the whole safety of the feature. Asked of the shared
+     * predicate rather than of this map's keys, and handed the same map
+     * `findingRows` gives `@dk/shared`, so the tint on the box, the count in the
+     * readout, the block that no longer fires and the note in the audit trail
+     * are one answer rather than four — and a box retyped anywhere at all, on
+     * this sheet or on the Full grid, stops being read on every one of them at
+     * once. Only `TOT_READING` on a meter row can ever be in it: the slip has no
+     * tanks and no tankers on it.
+     */
+    const isRead =
+      !isCarried && irasFigureReadOffSlip({ row: row.row, read: model.read[row.planKey] }, field);
+    const readKind = model.read[row.planKey]?.[field]?.kind;
     // The row AND the figure, because the row alone does not locate anybody. A
     // tank card holds three boxes — stock, product dip, water dip — and with the
     // keyboard up they are the only three things on screen; a bar reading "Tank
@@ -1762,28 +2288,145 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
        * The numeric test is the shared field table's, so an invoice number's
        * leading zeros can never be grouped away.
        */
+      // A read box groups too. It would be perverse for the box a slip filled
+      // with `48,615.550` to be less legible against the paper than the carried
+      // one it replaced — and checking a six-figure totaliser character by
+      // character is the entire act this screen exists for.
       display:
-        isCarried && id !== focusedId && shiftFieldShape(row.code, field).numeric
+        (isCarried || isRead) && id !== focusedId && shiftFieldShape(row.code, field).numeric
           ? groupFigure(value)
           : undefined,
-      state: isCarried ? 'CARRIED' : value.trim() === '' ? 'ASKED' : 'ANSWERED',
+      state: isCarried
+        ? 'CARRIED'
+        : isRead
+          ? 'READ'
+          : value.trim() === ''
+            ? 'ASKED'
+            : 'ANSWERED',
       caption: carriedCaption
         ? [carriedCaption, options.carriedAlso].filter(Boolean).join(' ')
-        : options.caption,
+        : isRead
+          ? readCaption(readKind, options.previous)
+          : options.caption,
       problem:
         finding && !carriedNote ? { message: finding.message, severity: finding.severity } : null,
       onChange: (next) => {
         // The moment a person touches a carried figure it stops being carried —
         // in the SAME undoable step, so one press of Undo cannot put the value
         // back while leaving it labelled as theirs.
-        const struck = strikeCarried(model.carried, row.planKey, field);
-        row.set(
-          field,
-          next,
-          struck === model.carried ? undefined : { [SHIFT_CARRIED_META]: struck },
-        );
+        //
+        // And the same for a figure the slip put there — which is now tidiness
+        // rather than the guard it once was. The mark carries the slip's own
+        // digits, so the moment this keystroke lands the box no longer matches
+        // them and every rule that asks stops calling it read, whether or not
+        // anything struck the map. Striking it here keeps dead entries from
+        // piling up on rows nobody will ask about again. Both maps move in the
+        // one step the keystroke makes.
+        const struckCarried = strikeCarried(model.carried, row.planKey, field);
+        const struckRead = strikeRead(model.read, row.planKey, field);
+        const meta: Record<string, unknown> = {};
+        if (struckCarried !== model.carried) meta[SHIFT_CARRIED_META] = struckCarried;
+        if (struckRead !== model.read) meta[SHIFT_READ_META] = struckRead;
+        row.set(field, next, Object.keys(meta).length > 0 ? meta : undefined);
       },
     };
+  }
+
+  /**
+   * The nozzles a slip may still fill without being asked.
+   *
+   * A box still holding the figure the system carried in is nobody's answer yet,
+   * so a proved reading goes straight into it. A box somebody has typed, or that
+   * an earlier slip already filled, is somebody's answer — the reading is still
+   * offered on its own card, but it is never ticked for them. That is what
+   * "typing always wins" means in one line, and it is also what makes "Read
+   * another slip" fill only the boxes the first slip missed.
+   */
+  const untouchedNozzleNos = model.rows.reduce<number[]>((out, row) => {
+    if (row.code !== 'TOT') return out;
+    const planned = plannedByKey.get(row.planKey);
+    if (!stillCarried(row, 'TOT_READING', planned?.previous.TOT_READING)) return out;
+    const nozzleNo = Number(row.identity);
+    if (Number.isFinite(nozzleNo)) out.push(nozzleNo);
+    return out;
+  }, []);
+
+  /**
+   * Put the slip's figures in the boxes — ONE write, one undo frame.
+   *
+   * The array arrives already decided: `slipFillsForSheet` in `@dk/shared` has
+   * refused everything the screen refuses and everything the boxes would refuse,
+   * and it is the last word on it. What is left for this file is the one thing
+   * only it knows — which row on screen each nozzle is — and the discipline of
+   * writing once.
+   *
+   * ONCE MATTERS MORE THAN IT LOOKS. `meta` merges one key deep, and both maps
+   * are a single key holding a whole `planKey → fields` map. Six sequential
+   * writes each computing their map from this render's snapshot would leave only
+   * the LAST one's map standing: five boxes holding the slip's figures while
+   * still painted dashed, still uncounted by the readout, and still blocking the
+   * save. And one frame is what makes Undo take the whole slip back in one press
+   * rather than one nozzle at a time off a fifty-deep stack.
+   */
+  function fillFromSlip(
+    fills: readonly SlipFill[],
+    slipReadId: string,
+    dateAnswer: SlipDateAnswer | null,
+  ): void {
+    const edits: Array<PendingCellTarget & { field: string; value: string }> = [];
+    let carriedAfterAll = model.carried;
+    let readAfterAll = model.read;
+
+    for (const fill of fills) {
+      const row = byIdentity.tot.get(irasRowIdentity(fill.nozzleNo));
+      // A nozzle with no row on screen has nothing to write to. The shared
+      // function already dropped the ones this outlet has no layout for; this is
+      // the row-level belt under those braces.
+      if (!row) continue;
+      edits.push({ ...row.target, field: fill.field, value: fill.value });
+      carriedAfterAll = strikeCarried(carriedAfterAll, row.planKey, fill.field);
+      readAfterAll =
+        fill.source === 'read'
+          ? // The figure goes into the mark as well as into the box, so the mark
+            // can be checked against the box later rather than believed. This is
+            // the same string on both sides today; tomorrow, after a keystroke,
+            // it is what tells the two apart.
+            withRead(readAfterAll, row.planKey, fill.field, {
+              value: fill.value,
+              kind: fill.proved ? 'PROVED' : 'CHECKED',
+            })
+          : // A figure the operator typed over the slip's is THEIRS. Recording it
+            // as read would tell tomorrow's rupee proof it was anchored to a
+            // photograph it was not, and would put a claim in the audit trail
+            // nobody made.
+            strikeRead(readAfterAll, row.planKey, fill.field);
+    }
+    if (edits.length === 0) return;
+
+    pending.setCells(edits, {
+      meta: {
+        [SHIFT_CARRIED_META]: carriedAfterAll,
+        [SHIFT_READ_META]: readAfterAll,
+        // Deduped and capped at the ten the commit route accepts, newest last.
+        [SHIFT_SLIP_READS_META]: [
+          ...new Set([...model.slipReadIds, slipReadId]),
+        ].slice(-10),
+        /*
+         * The answer to "is this this morning's slip?", written in the SAME step
+         * as the figures it is about.
+         *
+         * One step matters here exactly as it does for the two maps: `meta`
+         * merges one key deep, so a second write computed off this render's
+         * snapshot would leave only the last list standing. And writing it here
+         * rather than when the operator taps the button is what makes the record
+         * honest — the answer is worth keeping only because figures were taken
+         * off that slip, and an Undo takes both back together.
+         */
+        [SHIFT_SLIP_DATE_META]: dateAnswer
+          ? [...model.slipDateAnswers, dateAnswer].slice(-10)
+          : model.slipDateAnswers,
+      },
+    });
   }
 
   function rowFooter(row: SheetRow): React.ReactNode {
@@ -2317,7 +2960,13 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
           <DayReadout
             sentence={model.figuresSentence}
             noPreviousDay={noPreviousDay}
-            complete={model.progress.needed > 0 && model.progress.entered >= model.progress.needed}
+            /* `entered + read`, because a figure read off the slip and accepted
+               is a figure the day HAS. Counting only the typed ones would leave
+               a finished morning reading as half done. */
+            complete={
+              model.progress.needed > 0 &&
+              model.progress.entered + model.progress.read >= model.progress.needed
+            }
             checking={checking}
             reconcile={reconcile}
           />
@@ -2342,6 +2991,36 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
             onPut={model.putMissingRowsBack}
           />
         ) : null}
+
+        {/*
+          The offer, and it is the LAST thing in this column.
+
+          It is an offer and nothing else, so nothing red may be pushed below the
+          fold by it: the day's readout, the rows the plan dropped, the rows this
+          day is short of all come first, and the boxes themselves are directly
+          under it. It is drawn inside this column and never inside the save
+          bar's children — that row is `md:shrink-0` and never gives width up, so
+          a panel of sentences in there would squeeze the one item carrying
+          `min-width: 0` down to nothing and break its text one letter per line.
+
+          `readOnly` is an archived dealer, where nothing on this sheet may be
+          written at all. Everything else that gates this surface — a hand-opened
+          MANUAL day, a dealer with a report layout, the sheet being the surface
+          on screen — has already gated the whole component.
+
+          And the server's own answer, which is the one gate the client cannot
+          work out for itself: where reading slips is not switched on, this
+          renders NOTHING. No button, no message, no explanation owed — the sheet
+          is what it was before slips existed. See {@link slipReadingConfigured}.
+        */}
+        {readOnly || !slipReadingConfigured(day) ? null : (
+          <SlipPanel
+            dealerId={day.dealer.id}
+            businessDate={day.businessDate}
+            untouchedNozzleNos={untouchedNozzleNos}
+            onFill={fillFromSlip}
+          />
+        )}
 
         {/* ── meter readings ── */}
         <section aria-labelledby="shift-meters-heading">
@@ -2596,8 +3275,19 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
                   with", which described a loss that was not going to happen on a
                   saved day and, since the pre-fill, an empty screen that never
                   happens at all: nothing on this sheet goes back to empty. */}
-              {discardOutcome(model.savedProgress, previousLabel)} Undo puts them back, while you
-              are still on this day.
+              {discardOutcome(model.savedProgress, previousLabel)}{' '}
+              {/* The readings a slip supplied go with everything else, and they
+                  are the one part of a morning that cannot simply be retyped
+                  from memory — the photograph has to be read again. Said only
+                  when there are some. */}
+              {model.progress.read > 0
+                ? `The ${model.progress.read} ${
+                    model.progress.read === 1 ? 'reading' : 'readings'
+                  } filled in from the slip ${
+                    model.progress.read === 1 ? 'goes' : 'go'
+                  } too — you would have to read the slip again. `
+                : ''}
+              Undo puts them back, while you are still on this day.
             </>
           }
           confirmLabel="Discard what I typed"

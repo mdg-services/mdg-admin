@@ -503,6 +503,40 @@ onOpenExternally?: () => void;
 `max-w-full` a 4000×3000 landscape photo rendered ~597px wide inside a 360px sheet and opened
 on its left third. The `downloadUrl` branch now goes through `DownloadButton`.
 
+#### Uploading a photograph from a forecourt phone — the slip pattern
+
+`src/lib/uploadSlipPhoto.ts` is the shape to copy for **any** photograph an operator sends from
+a phone, and it exists because "reading the slip" is the first upload in this admin where the
+connection is part of the design rather than an afterthought.
+
+```ts
+uploadSlipPhoto({ dealerId, file, onStage, onProgress, signal }): Promise<SlipPhotoUpload>
+```
+
+Four rules, each paid for by something that goes wrong without it:
+
+1. **Shrink before you presign.** The presigned PUT carries the size and type the server was
+   told about, so shrinking afterwards makes both describe a file that was never sent — and the
+   server's cheap size refusal then refuses the wrong thing.
+2. **PUT with `XMLHttpRequest`, never `fetch`.** `fetch` reports no upload progress at all, and
+   a 4 MB photo on 2G is well over a minute. A spinner that long is indistinguishable from a
+   hang, so the operator retakes the photo and the upload doubles. XHR is the only browser API
+   that reports bytes sent.
+3. **Offer `Stop` at every stage** — `xhr.abort()` for the PUT, an `AbortController` for the
+   read — and abort on unmount. A slow photograph must never be able to hold up the work it was
+   meant to save.
+4. **Enumerate the mime types on the `<input>`; never `image/*`.** A browser canvas cannot
+   decode HEIC, so a HEIC can neither be shrunk before it is sent nor shown back on the screen
+   where it is supposed to be checked. And clear `input.value` after every pick, or choosing the
+   same file twice fires no event — which is exactly what somebody does after a blurred first
+   try.
+
+`compressImage` now takes `{ maxEdge, quality, minBytes }`. **Its defaults do not move**:
+1,600px at q0.70 was chosen so a person could eyeball a handwritten register over 2G, and every
+existing caller is tuned to it. The slip passes 2,400px at q0.85 because its picture is read
+character by character rather than for the gist — one lost pixel on the tail of `48615.550` is
+hundreds of litres. That is a per-caller judgement, made at the call site.
+
 #### `WideReportViewer` — new
 ```ts
 export interface WideReportViewerProps {
@@ -805,6 +839,8 @@ re-derive it.
 | `StickyActionBar` has no content-width cap | In `sticky` mode the bar spans the page column. A `contentClassName` (or `maxWidth`) would let a caller keep a centred `max-w-6xl` content column, which the shift-data editor's old fixed bar had. |
 | `Drawer`/`Dialog` `description` has no clamp | It renders in the sticky, non-scrolling header, so a 230-character paragraph eats ~110px of a `95dvh` sheet. Three call sites hand-moved their prose into the body. `line-clamp-2 md:line-clamp-none`, or a `descriptionInBody` prop, would fix it centrally. |
 | `Drawer` has no `mobileFooterExtra` | The Assist drawer gets a second footer child with `md:hidden`, which works only because `.md\:hidden` is emitted after `.inline-flex` — exactly the ordering dependence fact 2 says not to rely on. |
+| No progress-bar primitive | `SlipPanel` draws its upload bar by hand: a `h-1.5 rounded-full bg-surface-2` track with a `bg-brand` fill, `role="progressbar"` and the percentage in a **non-live** sibling of the `aria-live` sentence (a live percentage talks over the operator for the whole upload). It is the first determinate progress in the admin. A second caller should extract `ProgressBar` rather than copy it. |
+| `Drawer` has no way to keep a nested overlay's Escape to itself | `CheckSlipDrawer` opens `ImageLightbox` over itself, and both listen for Escape on `document`, so one press closes both. Harmless here only because the drawer's accept state lives in its caller and is restored on re-open — which is why it lives there. A `Dialog` that stopped Escape at the topmost overlay would fix it centrally; fixing it from the call site is what §5 forbids. |
 | `Tabs.tsx` has no edge fades | The strip scrolls and auto-centres correctly — **do not touch that logic**; the naive `scrollIntoView` fix was tried and reverted, and the comment at the top of the file records it. Only the visual cue that it scrolls is missing. Two packets worked around it by shortening a label below md instead. |
 
 ### Product decisions still open
@@ -835,3 +871,14 @@ re-derive it.
   visible block at ≥768px is a product decision, not a mobile fix.
 - **`maximum-scale=1.0` stays.** Re-evaluated on its own, in the emulator, once every dense
   surface has its own zoom or expand affordance. See `index.html`'s comment.
+- **"Readings from a slip" renders even where the server cannot do it.** There is no flag on
+  the day payload saying whether reading slips is switched on for this installation, so the
+  panel cannot hide itself; the first press comes back with the server's own sentence,
+  "Reading the slip is not switched on here. Type the figures in yourself." That is a correct
+  sentence in the wrong place. A `slipRead: boolean` on `IrasDayEditorView` closes it and is
+  the one change that would let the panel render nothing at all.
+- **Nothing in the slip flow has been run on a device or against a real slip.** The camera
+  input, the XHR progress, `Stop` mid-upload, the fullscreen review drawer at 360px and the
+  tinted READ box in both themes are type-checked, linted and built — nothing more. §14's
+  checklist at 360 / 390 / 411 is owed, and so is one morning holding a real slip against the
+  saved figures.

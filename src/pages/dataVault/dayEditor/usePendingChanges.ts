@@ -40,6 +40,17 @@ export interface RowTarget {
   rowKey: string;
 }
 
+/**
+ * Which row one cell of a multi-cell write lands on.
+ *
+ * A row this change set is adding has no server identity yet, so it can only be
+ * named by the `localId` this hook minted for it; a row the server holds is
+ * named by the pair every correction uses. One union rather than two methods,
+ * so a caller writing a mixed day still makes exactly one call and gets exactly
+ * one undo frame.
+ */
+export type PendingCellTarget = { localId: string } | RowTarget;
+
 export interface PendingState {
   cells: Record<CellId, PendingCell>;
   addedRows: PendingAddedRow[];
@@ -209,6 +220,33 @@ export interface PendingApi {
     value: string,
     options?: PendingEditOptions,
   ) => void;
+  /**
+   * Write several cells across several rows in ONE undoable step.
+   *
+   * `meta` is merged ONE KEY DEEP, and the shift sheet's carried map and read
+   * map are each a single key holding a whole `planKey → fields` map. N
+   * sequential calls each computing their map from the same render snapshot
+   * would leave only the LAST one's map standing — five boxes holding the slip's
+   * figures while still painted dashed, still uncounted by the day's readout,
+   * and still blocking the save. Compute both maps once, write once.
+   *
+   * It is also one history frame on purpose: Undo takes a whole slip back in one
+   * press rather than one nozzle at a time off a fifty-deep stack, where six
+   * readings would evict the structural changes underneath them.
+   *
+   * Two kinds of target, because a hand-typed day has two kinds of row. A row
+   * this change set is adding is addressed by its `localId` and is edited in
+   * place, exactly as {@link PendingApi.editAddedRow} does it. A row the server
+   * is already holding — a day saved at 07:00 and reopened at 09:00 — is
+   * addressed by `code` + `rowKey` and becomes an ordinary pending cell, exactly
+   * as {@link PendingApi.setCell} would. Without the second kind, filling a
+   * re-opened morning from a slip would silently drop every figure whose row was
+   * already saved, having just told the operator it was filling them in.
+   */
+  setCells: (
+    edits: ReadonlyArray<PendingCellTarget & { field: string; value: string }>,
+    options?: { meta?: Record<string, unknown> },
+  ) => void;
   dropAddedRow: (localId: string) => void;
   toggleExclude: (t: RowTarget) => void;
   toggleRestore: (t: RowTarget) => void;
@@ -355,6 +393,40 @@ export function usePendingChanges(resetKey: string): PendingApi {
           }),
           options?.coalesce === false ? undefined : `added:${localId}|${field}`,
         ),
+
+      setCells: (edits, options) =>
+        commit((prev) => {
+          // Gathered per row first, so two figures on one row are one object
+          // spread rather than two passes over `addedRows`.
+          const byLocalId = new Map<string, Record<string, string>>();
+          const cells = { ...prev.cells };
+          for (const edit of edits) {
+            if ('localId' in edit) {
+              const found = byLocalId.get(edit.localId) ?? {};
+              found[edit.field] = edit.value;
+              byLocalId.set(edit.localId, found);
+            } else {
+              cells[cellId(edit.code, edit.rowKey, edit.field)] = {
+                code: edit.code,
+                rowKey: edit.rowKey,
+                field: edit.field,
+                value: edit.value,
+              };
+            }
+          }
+          return {
+            ...prev,
+            cells,
+            addedRows:
+              byLocalId.size === 0
+                ? prev.addedRows
+                : prev.addedRows.map((a) => {
+                    const fields = byLocalId.get(a.localId);
+                    return fields ? { ...a, row: { ...a.row, ...fields } } : a;
+                  }),
+            meta: withMeta(prev, options?.meta),
+          };
+        }),
 
       dropAddedRow: (localId) =>
         commit((prev) => ({

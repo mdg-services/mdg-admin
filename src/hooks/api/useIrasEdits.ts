@@ -8,7 +8,9 @@ import type {
   IrasCorrectionPreview,
   IrasDataCorrection,
   IrasDayEditorView,
+  SlipReading,
 } from '@dk/shared';
+import type { ReadSlipInput } from '@dk/shared/schemas';
 
 import { dsrKeys } from './useDsr';
 import { irasDataKeys } from './useIrasData';
@@ -43,6 +45,28 @@ export const irasEditKeys = {
   day: (dealerId: string | undefined, businessDate: string | undefined) =>
     ['irasEdits', 'day', dealerId, businessDate] as const,
   history: (dealerId: string | undefined) => ['irasEdits', 'history', dealerId] as const,
+  slipPhoto: (dealerId: string | undefined, slipReadId: string | undefined) =>
+    ['irasEdits', 'slipPhoto', dealerId, slipReadId] as const,
+};
+
+/**
+ * The commit body, with the one field `@dk/shared` does not carry.
+ *
+ * `slipReadIds` is on the wire and on the route's zod schema, and deliberately
+ * NOT on `IrasCorrectionCommitInput`: it is not a change to a figure, it is a
+ * note saying which photographs the operator was looking at while they typed,
+ * and the same reasoning that keeps `acknowledgedUnchangedNozzles` off every
+ * correction document keeps this off the shared type. Widened here, at the one
+ * place in the admin that sends a commit, rather than by editing `shared`.
+ *
+ * A stale id is harmless by design: the server keeps only the ids that belong to
+ * this dealer AND this business date, and then works out per nozzle which
+ * figures actually landed. Sending none is harmless too — nothing is refused
+ * over it, because a photograph must never be able to fail a morning.
+ */
+export type IrasCorrectionCommitBody = IrasCorrectionCommitInput & {
+  /** Slip reads whose figures this commit is putting on record. At most ten. */
+  slipReadIds?: string[];
 };
 
 /**
@@ -159,7 +183,7 @@ function afterMs(ms: number): Promise<void> {
 export function useCommitIrasCorrections(dealerId: string, businessDate: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: IrasCorrectionCommitInput) =>
+    mutationFn: (body: IrasCorrectionCommitBody) =>
       api.put<IrasCorrectionCommitResult>(
         `/iras-data/dealers/${dealerId}/days/${businessDate}/corrections`,
         body,
@@ -179,5 +203,81 @@ export function useCommitIrasCorrections(dealerId: string, businessDate: string)
         .catch(() => undefined);
       return Promise.race([dayCaughtUp, afterMs(DAY_CATCH_UP_MS)]);
     },
+  });
+}
+
+/* ─────────────────────────── reading the slip ──────────────────────────── */
+
+/**
+ * What one read of one photograph came back with.
+ *
+ * Declared here rather than imported, because it is the backend service's own
+ * response shape and `@dk/shared` carries only the half both sides decide with —
+ * `SlipReading`. The four fields around it are this route's, and typing them
+ * here is what keeps the screen from reaching for a field the route does not
+ * send.
+ */
+export interface SlipReadResponse {
+  slipReadId: string;
+  reading: SlipReading;
+  /** The transcript the parser read. Shown to the operator against the paper. */
+  transcript: string[];
+  photo: { storageKey: string; viewUrl: string; expiresIn: number };
+  quota: { limit: number; used: number; remaining: number; businessDate: string };
+  cost: { tokensIn: number; tokensOut: number; estPaise: number };
+}
+
+/**
+ * Read one slip. Writes nothing to the day — not one figure, not one row.
+ *
+ * A mutation and not a query, because it is an act with a cost: it spends one of
+ * this dealer's ten reads for the day, it holds a slot on a box that also runs
+ * portal sessions, and it is driven by a photograph the operator has just taken.
+ * Cached by anything, it would be re-run by a refocus.
+ *
+ * `signal` is threaded through because `Stop` has to mean it. The route wires
+ * the response's close to an `AbortController` of its own, so a client that goes
+ * away actually releases the slot rather than paying for a read nobody will see.
+ */
+export function useReadSlip(dealerId: string, businessDate: string) {
+  return useMutation({
+    mutationFn: ({ body, signal }: { body: ReadSlipInput; signal?: AbortSignal }) =>
+      api.post<SlipReadResponse>(
+        `/iras-data/dealers/${dealerId}/days/${businessDate}/read-slip`,
+        body,
+        signal,
+      ),
+  });
+}
+
+/**
+ * A fresh signed URL for one slip's photograph, every time the picture is drawn.
+ *
+ * Signed on demand and never held. The URL lives fifteen minutes, and one held
+ * across a break renders as a broken image — which, on the one screen whose
+ * whole job is showing the operator the evidence, looks exactly like no evidence
+ * at all. `refetchOnMount: 'always'` with no stale window is what makes "opened
+ * the picture" and "asked for a URL" the same event.
+ *
+ * `gcTime: 0` so a URL that has expired cannot be served from the cache to the
+ * next open, and `retry: false` because a 404 here means the id belongs to
+ * another dealer and asking again will not change that.
+ */
+export function useSlipPhotoUrl(
+  dealerId: string | undefined,
+  slipReadId: string | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: irasEditKeys.slipPhoto(dealerId, slipReadId),
+    queryFn: () =>
+      api.get<{ viewUrl: string; filename: string; contentType: string; expiresIn: number }>(
+        `/iras-data/dealers/${dealerId}/slip-reads/${slipReadId}/photo-url`,
+      ),
+    enabled: enabled && !!dealerId && !!slipReadId,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+    refetchOnMount: 'always',
   });
 }

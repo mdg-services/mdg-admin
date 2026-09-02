@@ -99,7 +99,8 @@ export function ShiftDataEditorPage() {
   const [applied, setApplied] = React.useState<{
     changes: number;
     staleDates: string[];
-    /** How many hand-typed figures are on record, on a day typed by hand. */
+    /** How many figures are on record, on a day entered by hand — typed and
+     *  read off the outlet's slip together. */
     figures: number | null;
   } | null>(null);
   /** Set once this page has asked for a report to be built, so "not built yet"
@@ -278,7 +279,14 @@ export function ShiftDataEditorPage() {
     // A fresh save starts a fresh answer to "has a report been built for this
     // day": the previous attempt's verdict must not colour this one's.
     setBuildAsked(false);
-    const figures = typedByHand ? sheet.progress.entered : null;
+    /*
+     * How many figures this day has, which is not the same as how many were
+     * typed. The sentence this feeds says "N figures are on record for 31 Aug
+     * 2026", so a reading a slip supplied and a named person accepted belongs in
+     * it — leaving it out would tell an operator who had just finished a whole
+     * morning that four of its ten figures had been saved.
+     */
+    const figures = typedByHand ? sheet.progress.entered + sheet.progress.read : null;
     try {
       const result = await commit.mutateAsync({
         revision: day!.revision,
@@ -299,6 +307,29 @@ export function ShiftDataEditorPage() {
         ...(sheet.acknowledgedUnchangedNozzles.length > 0
           ? { acknowledgedUnchangedNozzles: sheet.acknowledgedUnchangedNozzles }
           : {}),
+        /*
+         * Which photographs the operator was looking at while they typed.
+         *
+         * On the commit body only, for the same reason as the statement above
+         * it: it is not a change to any figure, so it cannot go on a correction
+         * document — the shared field policy would reject a column the portal
+         * does not send. It is written into the commit's audit entry and onto
+         * the slip reads themselves, and nowhere else.
+         *
+         * The SERVER decides what each id is worth. It keeps only the ones
+         * belonging to this dealer and this business date, and then records, per
+         * nozzle, only the figures that actually landed character-identical to
+         * what the slip was read as — so a reading the operator typed over is
+         * deliberately NOT recorded as coming off the slip, which is what keeps
+         * tomorrow's rupee proof honest. Sending a stale id is harmless and
+         * sending none is harmless: a photograph must never be able to fail a
+         * morning.
+         *
+         * Read off the sheet's model, which reads it off the pending set — so it
+         * moves with an Undo, dies with a Discard, and survives a switch to the
+         * Full grid exactly as the acknowledgement does.
+         */
+        ...(sheet.slipReadIds.length > 0 ? { slipReadIds: sheet.slipReadIds } : {}),
       });
       setReviewing(false);
       /*

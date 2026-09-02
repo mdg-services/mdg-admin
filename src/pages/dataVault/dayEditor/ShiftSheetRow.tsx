@@ -9,7 +9,7 @@ import type { IrasReportCode } from '@dk/shared';
 /**
  * One row of the shift sheet, turned into a `FieldCard`.
  *
- * The three states are the whole point of this file, and they are visual, not
+ * The four states are the whole point of this file, and they are visual, not
  * decorative:
  *
  *   - **Asked** — the box is empty, because the previous day has no figure for
@@ -27,28 +27,45 @@ import type { IrasReportCode } from '@dk/shared';
  *     as plain digits the moment it takes focus. See {@link ShiftSheetField.display}.
  *   - **Answered** — a person put it there. Solid border, full-weight text, and
  *     the caption becomes the figure the value is measured against.
+ *   - **Read** — it came off a photograph of the outlet's own shift slip, and a
+ *     named person accepted it on a screen showing the slip, the transcript and
+ *     the arithmetic. Solid border, because dashed means "nobody put this here"
+ *     and somebody did; full weight, because these digits are the thing being
+ *     checked against the paper; and a tinted background, because a box the
+ *     system filled must never read as one a person typed. That distinction is
+ *     the whole safety of the feature, so it is never carried by the tint alone
+ *     — the caption's first four words say it: "Read off the slip".
  *
  * Focusing a carried field and leaving it alone does not make it Answered.
  * Reading a value is not confirming it — which is why tapping into a carried box
  * selects the whole number rather than dropping a caret in the middle of it. See
- * {@link selectWholeValue}.
+ * {@link selectWholeValue}. A read box selects the same way and for the same
+ * reason: an operator correcting one digit of `48615.550` would otherwise drop a
+ * caret in the middle of it.
  */
 
-export type ShiftFieldState = 'ASKED' | 'CARRIED' | 'ANSWERED';
+export type ShiftFieldState = 'ASKED' | 'CARRIED' | 'ANSWERED' | 'READ';
 
-/** How each field's box is painted. Written as three whole strings rather than
+/** How each field's box is painted. Written as four whole strings rather than
  *  as overrides: `cn` is plain clsx, so two classes setting the same property
- *  would be decided by stylesheet order and not by which was written last. */
+ *  would be decided by stylesheet order and not by which was written last.
+ *
+ *  `bg-surface` lives in these strings and NOT in `FIELD_BASE`, for exactly that
+ *  reason: `READ` is the one state with a background of its own, and leaving the
+ *  default in the base would have put two background classes on the same element
+ *  and let the stylesheet decide which won. The invalid branch carries its own
+ *  too, so every path through `cn` sets the background exactly once. */
 const FIELD_BASE =
-  'w-full min-w-0 rounded-sm border bg-surface px-3 h-11 md:h-9 outline-none ' +
+  'w-full min-w-0 rounded-sm border px-3 h-11 md:h-9 outline-none ' +
   // 16px below md: a 14px field is under iOS's focus-zoom floor, and pinch-zoom
   // is disabled app-wide, so there is no way back out of the zoom it triggers.
   'text-base md:text-sm focus-visible:ring-2 focus-visible:ring-focus-ring';
 
 const FIELD_STATE: Record<ShiftFieldState, string> = {
-  ASKED: 'border-border-strong text-text',
-  CARRIED: 'border-dashed border-border-strong text-text-muted',
-  ANSWERED: 'border-border-strong font-medium text-text',
+  ASKED: 'border-border-strong bg-surface text-text',
+  CARRIED: 'border-dashed border-border-strong bg-surface text-text-muted',
+  ANSWERED: 'border-border-strong bg-surface font-medium text-text',
+  READ: 'border-border-strong bg-brand-soft font-medium text-text',
 };
 
 /**
@@ -279,8 +296,18 @@ function ShiftFieldBox({
         // The element is read out of the event synchronously, because the
         // deferred half of `selectWholeValue` runs long after React has finished
         // with this event object.
+        //
+        // READ joins CARRIED here and ANSWERED still does not. A figure a PERSON
+        // typed is usually being visited to fix one digit of, and selecting all
+        // of it would put their whole reading one keystroke from gone. A figure
+        // the SLIP supplied is the opposite: an operator who has just read the
+        // paper and disagrees with it is replacing the whole number, and
+        // dropping a caret into the middle of `48615.550` is the thirteen-
+        // backspace failure this function was written for.
         const el = e.currentTarget;
-        if (!readOnly && field.state === 'CARRIED') selectWholeValue(el);
+        if (!readOnly && (field.state === 'CARRIED' || field.state === 'READ')) {
+          selectWholeValue(el);
+        }
         handlers.onFocusField(field.id);
       }}
       onBlur={() => handlers.onBlurField(field.id)}
@@ -288,7 +315,7 @@ function ShiftFieldBox({
       className={cn(
         FIELD_BASE,
         shape.numeric && 'tabular-nums',
-        invalid ? 'border-danger text-text' : FIELD_STATE[field.state],
+        invalid ? 'border-danger bg-surface text-text' : FIELD_STATE[field.state],
         readOnly && 'cursor-default bg-surface-2',
       )}
     />
