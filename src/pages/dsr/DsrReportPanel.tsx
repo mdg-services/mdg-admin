@@ -366,9 +366,26 @@ function tankReadingsOf(row: DsrDayRow, tankNos: number[]): DsrTankReading[] {
   ];
 }
 
-/** `null` is "nobody measured it", which is not the same figure as zero. */
-function measured(value: number | null, render: (n: number) => string): string {
-  return value === null ? 'not measured' : render(value);
+/**
+ * A figure that may not have arrived at all, said in words rather than printed.
+ *
+ * An absent figure is not the figure zero — a tank nobody dipped is not an empty
+ * tank, and a nozzle that sent no reading is not a nozzle that sold nothing — so
+ * the panel says so instead of showing a number that would be read as one.
+ *
+ * Non-finite counts as absent as well as `null`. The engine marks a missing
+ * meter with `NaN`; the stored row and the wire carry that as `null` (JSON has
+ * no `NaN`), and this guard covers both so neither path can ever print the
+ * string "NaN" beside a real litre figure.
+ */
+function measured(
+  value: number | null | undefined,
+  render: (n: number) => string,
+  absent = 'not measured',
+): string {
+  return value === null || value === undefined || !Number.isFinite(value)
+    ? absent
+    : render(value);
 }
 
 /**
@@ -433,10 +450,16 @@ function ProductFigures({
           value: formatLitres(row.openingStock),
           numeric: true,
         },
+        // A nozzle can reach the ledger with no reading at all — the portal
+        // sent none, or the pump did not run — and that day's row stores it as
+        // `null`. Printing it raw crashed this whole panel for 16E, whose dead
+        // pumps report nothing every morning; printing it as 0 would have been
+        // worse, since the meter is a lifetime totaliser and a zero there reads
+        // as the pump having sold its entire throughput back.
         ...row.pumps.map((pump) => ({
           key: `nozzle-${pump.nozzleNo}`,
           label: `Nozzle ${pump.nozzleNo} meter`,
-          value: pump.reading.toLocaleString('en-IN'),
+          value: measured(pump.reading, (n) => n.toLocaleString('en-IN'), 'no reading'),
           numeric: true,
         })),
         {
