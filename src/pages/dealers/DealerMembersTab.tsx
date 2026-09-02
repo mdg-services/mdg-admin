@@ -61,6 +61,15 @@ function memberRoleLabel(u: User): string {
   return u.role;
 }
 
+/**
+ * Every new member starts on the same password, so an admin adding a manager
+ * over the phone has nothing to read out or invent. It is prefilled rather
+ * than forced: the field stays editable, and `Generate` still replaces it with
+ * a random one. Eight characters because that is the minimum the login
+ * endpoint itself enforces (`loginSchema` in @dk/shared).
+ */
+const DEFAULT_MEMBER_PASSWORD = 'mdg@1234';
+
 const addMemberSchema = z.object({
   memberRole: z.enum(['owner', 'manager']),
   name: z.string().trim().min(2, 'Name is required').max(200),
@@ -357,7 +366,7 @@ function AddMemberDialog({
       name: '',
       title: 'Manager',
       email: '',
-      password: '',
+      password: DEFAULT_MEMBER_PASSWORD,
       phone: defaultPhone ?? '',
     },
   });
@@ -379,7 +388,7 @@ function AddMemberDialog({
         name: '',
         title: 'Manager',
         email: '',
-        password: '',
+        password: DEFAULT_MEMBER_PASSWORD,
         phone: defaultPhone ?? '',
       });
     }
