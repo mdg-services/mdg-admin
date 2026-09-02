@@ -2,6 +2,7 @@ import type {
   Cadence,
   DealerServiceStatus,
   DealerStatus,
+  IrasDayState,
   IrasSnapshotStatus,
   ServiceRunStatus,
   SlaTier,
@@ -32,6 +33,7 @@ export function statusIntent(
   kind: 'irasSnapshot',
   v: IrasSnapshotStatus,
 ): Intent;
+export function statusIntent(kind: 'irasDayState', v: IrasDayState): Intent;
 export function statusIntent(kind: string, v: string): Intent {
   switch (kind) {
     case 'dealer':
@@ -61,6 +63,21 @@ export function statusIntent(kind: string, v: string): Intent {
       if (v === 'COMPLETE') return 'success';
       if (v === 'PARTIAL') return 'warning';
       if (v === 'FAILED') return 'danger';
+      return 'neutral';
+    case 'irasDayState':
+      // A day with no data at all is `danger`, the same weight as a failed
+      // collection: the consequence is identical — the day is absent from every
+      // report that covers it — and the only difference is whether anything
+      // tried. An admin scanning the month needs both to catch the eye.
+      if (v === 'MISSING') return 'danger';
+      if (v === 'FAILED') return 'danger';
+      if (v === 'PARTIAL') return 'warning';
+      if (v === 'MISMATCH') return 'warning';
+      // Accepted, not fine: `info` rather than `success`, because the gap is
+      // still there and somebody chose to live with it.
+      if (v === 'MISMATCH_OK') return 'info';
+      if (v === 'OK') return 'success';
+      // OPEN — today, on every dealer, every day. Nothing is wrong with it.
       return 'neutral';
     default:
       return 'neutral';

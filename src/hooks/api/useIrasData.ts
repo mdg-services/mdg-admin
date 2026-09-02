@@ -8,6 +8,8 @@ import type {
   IrasDataSnapshotSummary,
   IrasDataVaultDealerRow,
   IrasDataVaultOverview,
+  IrasDayStateRow,
+  IrasDayStatesPage,
   IrasSnapshotStatus,
 } from '@dk/shared';
 
@@ -40,6 +42,14 @@ export interface IrasSnapshotsPage {
   pageSize: number;
 }
 
+/** Window for `GET /iras-data/dealers/:id/day-states`. */
+export interface IrasDayStatesParams {
+  /** How many calendar days back from `to`. Ignored when `from` is given. */
+  days?: number;
+  from?: string;
+  to?: string;
+}
+
 /** `POST /iras-data/dealers/:id/collect` — 202 with the queued run. */
 export interface IrasCollectAccepted {
   runId: string;
@@ -68,6 +78,8 @@ export const irasDataKeys = {
   snapshots: (params: IrasSnapshotsParams) =>
     ['irasData', 'snapshots', params] as const,
   snapshot: (id: string | undefined) => ['irasData', 'snapshot', id] as const,
+  dayStates: (dealerId: string | undefined, params: IrasDayStatesParams) =>
+    ['irasData', 'dayStates', dealerId, params] as const,
   dealerLatest: (dealerId: string | undefined) =>
     ['irasData', 'dealerLatest', dealerId] as const,
 };
@@ -183,6 +195,72 @@ export function useStartManualIrasDay() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: irasDataKeys.all });
       void qc.invalidateQueries({ queryKey: irasEditKeys.all });
+    },
+  });
+}
+
+/**
+ * One dealer's data day by calendar day — every date in the window, including
+ * the ones nothing was ever collected for.
+ *
+ * Deliberately not `useIrasSnapshotsQuery` with a filter: that endpoint returns
+ * captures, and a capture list cannot represent a day on which nothing was
+ * captured. Those are the rows this screen exists to show.
+ */
+export function useIrasDayStatesQuery(
+  dealerId: string | undefined,
+  params: IrasDayStatesParams = {},
+) {
+  return useQuery({
+    queryKey: irasDataKeys.dayStates(dealerId, params),
+    queryFn: () =>
+      api.get<IrasDayStatesPage>(`/iras-data/dealers/${dealerId}/day-states`, {
+        ...params,
+      }),
+    enabled: !!dealerId,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Accept a day whose figures do not add up, with a reason.
+ *
+ * The server reads the gap itself at commit time rather than trusting what this
+ * screen was showing — so a tab left open while the figures moved cannot sign
+ * for a number that is no longer there. It answers with the day's new state.
+ */
+export function useVerifyIrasDay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      dealerId,
+      businessDate,
+      note,
+    }: {
+      dealerId: string;
+      businessDate: string;
+      note: string;
+    }) =>
+      api.put<IrasDayStateRow>(
+        `/iras-data/dealers/${dealerId}/days/${businessDate}/verification`,
+        { note },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: irasDataKeys.all });
+    },
+  });
+}
+
+/** Withdraw a day's acceptance; it goes back to standing on its own figures. */
+export function useUnverifyIrasDay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dealerId, businessDate }: { dealerId: string; businessDate: string }) =>
+      api.del<IrasDayStateRow>(
+        `/iras-data/dealers/${dealerId}/days/${businessDate}/verification`,
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: irasDataKeys.all });
     },
   });
 }
