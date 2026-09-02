@@ -28,17 +28,15 @@ import { irasDataKeys } from './useIrasData';
 /**
  * The pending change set, i.e. a commit without its revision and reason.
  *
- * `acknowledgedUnchangedNozzles` is subtracted too, and that is deliberate. It
- * is a statement about the operator ("this pump did not run today"), not a
- * change to any figure: it belongs in the commit's audit entry and nowhere else.
- * Leaving it in this type would let it be sent to the preview endpoint, which
- * neither reads it nor records it — and would make the change set the unload
- * guard counts disagree with the change set the server is asked to apply.
+ * There used to be a third name subtracted here — `acknowledgedUnchangedNozzles`,
+ * the operator's confirmed "this pump did not run today" — because it was a
+ * statement about a person rather than a change to a figure, and the preview
+ * endpoint neither reads nor records one. The statement is gone from the whole
+ * system, and so is the field it travelled in: `IrasCorrectionCommitInput` no
+ * longer carries it, and naming it in this `Omit` would be a subtraction of
+ * nothing that reads as if the field were still out there somewhere.
  */
-export type IrasPendingChanges = Omit<
-  IrasCorrectionCommitInput,
-  'revision' | 'reason' | 'acknowledgedUnchangedNozzles'
->;
+export type IrasPendingChanges = Omit<IrasCorrectionCommitInput, 'revision' | 'reason'>;
 
 export const irasEditKeys = {
   all: ['irasEdits'] as const,
@@ -55,9 +53,9 @@ export const irasEditKeys = {
  * `slipReadIds` is on the wire and on the route's zod schema, and deliberately
  * NOT on `IrasCorrectionCommitInput`: it is not a change to a figure, it is a
  * note saying which photographs the operator was looking at while they typed,
- * and the same reasoning that keeps `acknowledgedUnchangedNozzles` off every
- * correction document keeps this off the shared type. Widened here, at the one
- * place in the admin that sends a commit, rather than by editing `shared`.
+ * and a correction document may hold only columns the portal itself sends.
+ * Widened here, at the one place in the admin that sends a commit, rather than
+ * by editing `shared`.
  *
  * A stale id is harmless by design: the server keeps only the ids that belong to
  * this dealer AND this business date, and then works out per nozzle which

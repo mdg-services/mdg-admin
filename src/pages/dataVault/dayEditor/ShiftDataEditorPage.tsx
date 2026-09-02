@@ -292,29 +292,22 @@ export function ShiftDataEditorPage() {
         revision: day!.revision,
         reason,
         ...toChanges(pending.state),
-        // The statement "this pump did not run today", on the commit body only.
-        // It is written into the audit entry and never into a correction: the
-        // shared field policy would reject a column the portal does not send,
-        // and teaching that table a field the engine never reads is exactly what
-        // the DSR's own field test exists to prevent.
-        //
-        // Sent whichever surface pressed Apply. The statement is made on the
-        // shift sheet and lives in the pending set, so it survives a switch to
-        // the Full grid — but gating it on the surface that happened to be on
-        // screen at Apply saved the zero and threw away the only durable record
-        // that a person deliberately reported a nozzle as having sold nothing.
-        // A portal day cannot reach the sheet, so this stays empty there.
-        ...(sheet.acknowledgedUnchangedNozzles.length > 0
-          ? { acknowledgedUnchangedNozzles: sheet.acknowledgedUnchangedNozzles }
-          : {}),
         /*
          * Which photographs the operator was looking at while they typed.
          *
-         * On the commit body only, for the same reason as the statement above
-         * it: it is not a change to any figure, so it cannot go on a correction
-         * document — the shared field policy would reject a column the portal
-         * does not send. It is written into the commit's audit entry and onto
-         * the slip reads themselves, and nowhere else.
+         * On the commit body only: it is not a change to any figure, so it
+         * cannot go on a correction document — the shared field policy would
+         * reject a column the portal does not send, and teaching that table a
+         * field the engine never reads is exactly what the DSR's own field test
+         * exists to prevent. It is written into the commit's audit entry and
+         * onto the slip reads themselves, and nowhere else.
+         *
+         * It is the ONLY field of this shape left on the body. There was a
+         * second — `acknowledgedUnchangedNozzles`, the operator's confirmed
+         * "this pump did not run today" — and it is gone with the control that
+         * made it. It restored no figure on any report, and the audit entry it
+         * was written into was read back by nothing, so sending it was a record
+         * with no reader.
          *
          * The SERVER decides what each id is worth. It keeps only the ones
          * belonging to this dealer and this business date, and then records, per
@@ -327,7 +320,9 @@ export function ShiftDataEditorPage() {
          *
          * Read off the sheet's model, which reads it off the pending set — so it
          * moves with an Undo, dies with a Discard, and survives a switch to the
-         * Full grid exactly as the acknowledgement does.
+         * Full grid exactly as the carried map does. Sent whichever surface
+         * pressed Apply, for that reason; a portal day cannot reach the sheet,
+         * so this stays empty there.
          */
         ...(sheet.slipReadIds.length > 0 ? { slipReadIds: sheet.slipReadIds } : {}),
       });

@@ -697,21 +697,14 @@ function NozzleCard({
         <p className="min-w-0 text-xs text-text-muted">{entry.message}</p>
       ) : null}
       {/*
-        Where the honest escape lives, said once and only on the reading that
-        has one. The statement "this pump did not run today" is the most
-        dangerous value in the system — the report then shows the nozzle sold
-        nothing and drops its 5 litre test draw — so it keeps its ONE home,
-        behind the confirm in the nozzle's own row menu on the sheet. A second
-        button here would need a second copy of that confirm, and a statement
-        this expensive must not have two doors. The shared message already says
-        "say so"; this says where.
+        There is nowhere to send anybody any more, and that is the point.
+        A reading equal to yesterday's used to need a statement made behind a
+        confirm in the nozzle's own row menu; the menu item is gone, because the
+        keystroke that puts the figure in the box is already the deliberate act
+        and the statement restored no figure and was read back by nothing. The
+        reading is accepted like any other and the day carries a warning that
+        says the nozzle sold nothing. Nothing to add here.
       */}
-      {entry.outcome === 'UNCHANGED' ? (
-        <p className="min-w-0 text-xs text-text-muted">
-          To say it did not run, use nozzle {entry.nozzleNo}’s own menu on the sheet — “This pump
-          did not run today”.
-        </p>
-      ) : null}
 
       <div className="grid min-w-0 gap-1.5">
         <label

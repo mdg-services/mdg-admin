@@ -1,4 +1,4 @@
-import { Trash2, Undo2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import * as React from 'react';
 
 import { HEADING_RIGHT_COLUMN, Menu, MenuItem, type FieldCard } from '@/components/ui';
@@ -152,8 +152,6 @@ export interface ShiftSheetRowModel {
   /** Fields this row offers rather than asks for. See {@link ShiftRowDisclosure}. */
   disclosure?: ShiftRowDisclosure;
   readOnly: boolean;
-  /** Offered only on a meter row that has a previous reading to fill in. */
-  onDidNotRun?: () => void;
   onRemove?: () => void;
   /**
    * What removing this row actually does, in the operator's words.
@@ -444,29 +442,31 @@ function ShiftDisclosure({
 /**
  * Turn one row into the card / table row `FieldCardList` draws.
  *
- * The row menu holds both of the actions that can destroy a figure. Neither is
- * ever a thumb-sized button beside the box it overrides: "This pump did not run
- * today" writes the most dangerous value in the system — a meter that has not
- * moved reports zero litres sold AND drops that nozzle's test draw — and a
- * mis-tap next to the field is exactly how it would get written by accident.
+ * THE MENU HOLDS ONE ITEM NOW, AND IT IS STILL A MENU. It used to hold two: the
+ * removal, and a confirmed "This pump did not run today" that was the only way
+ * past the unmoved-meter block. That block is a warning now — a figure a person
+ * typed saves whatever it equals — so the statement bought nothing and it is
+ * gone.
+ *
+ * What is left is the one act on this row that destroys a figure: removing a
+ * row whose stock or reading is already on the server deletes it the next time
+ * the day is saved. That is exactly the act which must never be a thumb-sized
+ * button beside the box it wipes, and putting it back on the card as a bare icon
+ * would undo the reason the menu was built. So the menu stays, one item and all:
+ * it is two taps rather than one, it opens as a titled bottom sheet on a phone
+ * where the label has room to say what removing really costs, and a mis-tap on
+ * the trigger opens a sheet rather than deleting a morning.
  */
 export function shiftSheetRowCard(
   row: ShiftSheetRowModel,
   handlers: ShiftSheetRowHandlers,
 ): FieldCard {
   const menu =
-    row.readOnly || (!row.onDidNotRun && !row.onRemove) ? undefined : (
+    row.readOnly || !row.onRemove ? undefined : (
       <Menu label={`Actions for ${row.heading}`} align="start" title={row.heading}>
-        {row.onDidNotRun ? (
-          <MenuItem onSelect={row.onDidNotRun} icon={<Undo2 width={14} height={14} />}>
-            This pump did not run today
-          </MenuItem>
-        ) : null}
-        {row.onRemove ? (
-          <MenuItem onSelect={row.onRemove} danger icon={<Trash2 width={14} height={14} />}>
-            {row.removeLabel ?? 'Remove this row'}
-          </MenuItem>
-        ) : null}
+        <MenuItem onSelect={row.onRemove} danger icon={<Trash2 width={14} height={14} />}>
+          {row.removeLabel ?? 'Remove this row'}
+        </MenuItem>
       </Menu>
     );
 

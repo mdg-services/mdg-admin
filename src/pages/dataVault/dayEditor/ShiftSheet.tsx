@@ -19,7 +19,6 @@ import { cn } from '@/lib/cn';
 import { formatLitres, formatYmd } from '@/lib/format';
 import {
   IRAS_ROW_LEVEL_FIELD,
-  irasAcknowledgementsInForce,
   irasCarriedUntouched,
   irasDayCanSave,
   irasDayDateLabel,
@@ -110,10 +109,18 @@ import {
  *    this box yet" is true of all ten boxes the moment a day opens, and a
  *    morning nobody has started is not a morning with ten things wrong with it.
  *    Red is kept for something actually wrong: a reading that has run
- *    backwards, a value nobody can read in a box a PERSON has been in, and the
- *    figure a PERSON typed that means zero litres sold — `METER_UNCHANGED`,
- *    unchanged. The one route to a zero-sales nozzle is still the confirmed
- *    "This pump did not run today".
+ *    backwards, and a value nobody can read in a box a PERSON has been in.
+ *
+ *    A reading a person has TYPED that happens to equal yesterday's is not in
+ *    that list, and that is a change from what this screen used to do. It is
+ *    `METER_UNCHANGED`, and it is now a WARN: one warning-coloured line under
+ *    the box saying the nozzle reports zero litres sold and loses its 5 litre
+ *    test draw, with "Sold 0 L" beside the heading saying the same thing in the
+ *    same colour. The day saves. There used to be one way past it — a confirmed
+ *    "This pump did not run today" on the row's three-dots menu — and it is
+ *    gone: it restored no figure, its record was read back by nothing, and the
+ *    keystroke that put the number in the box was already the deliberate act it
+ *    was asking a person to make a second time.
  *
  * And it is reachable ONLY on a day somebody opened BY HAND — see
  * {@link shiftSheetAvailable}. That is the whole protection for the eight
@@ -124,16 +131,15 @@ import {
 /* ───────────────────────────── constants ───────────────────────────── */
 
 /**
- * Where the carried map and the acknowledgement live inside `PendingState.meta`.
+ * Where the carried map lives inside `PendingState.meta`.
  *
  * In the pending set rather than in this component's own `useState` because
  * `undo` restores a whole `PendingState` snapshot: a map held outside it would
  * survive the undo unchanged, so a carried figure the operator had just put back
- * would come back reading as one they had confirmed themselves — and, since the
+ * would come back reading as one they had typed themselves — and, since the
  * pre-fill, as one the day could be saved on.
  */
 export const SHIFT_CARRIED_META = 'irasShiftCarried';
-export const SHIFT_ACK_META = 'irasShiftAcknowledgedNozzles';
 /**
  * Where the figures that came off a photograph of the outlet's own shift slip
  * live, and how each of them earned its place.
@@ -158,9 +164,9 @@ export const SHIFT_READ_META = 'irasShiftRead';
  *
  * In `meta` and not in this component's state, so it moves with an undo and dies
  * with a discard, and so it survives a switch to the Full grid exactly as the
- * "this pump did not run today" statement does. `meta` never reaches the wire on
- * its own — `toChanges` builds the commit body field by field — so the page
- * reads this off the model and sends it deliberately.
+ * carried map does. `meta` never reaches the wire on its own — `toChanges`
+ * builds the commit body field by field — so the page reads this off the model
+ * and sends it deliberately.
  */
 export const SHIFT_SLIP_READS_META = 'irasShiftSlipReads';
 /**
@@ -580,26 +586,6 @@ export interface ShiftSheetModel {
    * nowhere else.
    */
   slipDateAnswers: SlipDateAnswer[];
-  /**
-   * The nozzles whose "this pump did not run today" statement the typed figures
-   * STILL bear out — what the save dialog prints and what goes on the wire.
-   *
-   * Derived by `@dk/shared`'s `irasAcknowledgementsInForce`, which is the same
-   * function `irasDayFindings` calls to decide which `METER_UNCHANGED` block to
-   * suppress. Three readings of one question, one answer.
-   */
-  acknowledgedUnchangedNozzles: string[];
-  /**
-   * Every nozzle somebody has ever tapped the action on, whether or not the
-   * figures still bear it out — what the action appends to, and nothing else.
-   *
-   * Kept apart from the list above because a statement that stops being true has
-   * to be SUSPENDED, not destroyed. Blanking nozzle 5's reading takes it out of
-   * the in-force list; typing yesterday's figure back in puts it there again.
-   * If the action wrote to the in-force list, one blanked box would have thrown
-   * the operator's statement away for good.
-   */
-  acknowledgedRaw: string[];
   previousDate: string;
   /** What the day is short of, and what putting it back would really give back. */
   missingRows: ShiftMissingRows;
@@ -790,10 +776,6 @@ export function useShiftSheetModel({
     () => (pending.state.meta[SHIFT_SLIP_DATE_META] as SlipDateAnswer[]) ?? [],
     [pending.state.meta],
   );
-  const acknowledgedRaw = React.useMemo<string[]>(
-    () => (pending.state.meta[SHIFT_ACK_META] as string[]) ?? [],
-    [pending.state.meta],
-  );
 
   /*
    * Every row in force, in one flat array whose order the findings index into —
@@ -966,31 +948,6 @@ export function useShiftSheetModel({
     [rows, carried, read],
   );
 
-  /*
-   * Which of the "this pump did not run today" statements the figures on screen
-   * still bear out.
-   *
-   * The raw list goes IN — the shared helper is the thing that decides what
-   * stands, and `irasDayFindings` calls the very same helper to build its own
-   * suppression set. So the block that is hidden, the sentence the save dialog
-   * prints and the field on the wire are one answer, not three. An operator who
-   * taps the action on nozzle 5, then finds the real reading and types it, no
-   * longer has "Nozzle 5 is recorded as not having run today" written into the
-   * audit trail under their name on a day it sold 720 L.
-   */
-  const acknowledgedInForce = React.useMemo(
-    () =>
-      available
-        ? irasAcknowledgementsInForce({
-            rows: findingRows,
-            previousTot,
-            products,
-            acknowledged: acknowledgedRaw,
-          })
-        : [],
-    [available, findingRows, previousTot, products, acknowledgedRaw],
-  );
-
   const findings = React.useMemo(
     () =>
       available
@@ -999,11 +956,10 @@ export function useShiftSheetModel({
             rows: findingRows,
             previousTot,
             previousStk,
-            acknowledgedUnchangedNozzles: acknowledgedRaw,
             previousDate,
           })
         : [],
-    [available, products, findingRows, previousTot, previousStk, acknowledgedRaw, previousDate],
+    [available, products, findingRows, previousTot, previousStk, previousDate],
   );
 
   const progress = React.useMemo(() => irasDayProgress(plan, findingRows), [plan, findingRows]);
@@ -1205,21 +1161,11 @@ export function useShiftSheetModel({
         carried,
         read,
         slipDateAnswers,
-        acknowledgedInForce,
         previousDate,
         pending.state,
         removedSavedRows,
       ),
-    [
-      rows,
-      carried,
-      read,
-      slipDateAnswers,
-      acknowledgedInForce,
-      pending.state,
-      previousDate,
-      removedSavedRows,
-    ],
+    [rows, carried, read, slipDateAnswers, pending.state, previousDate, removedSavedRows],
   );
 
   const rescaffold = React.useCallback(() => scaffold({ replace: true }), [scaffold]);
@@ -1291,8 +1237,6 @@ export function useShiftSheetModel({
     read,
     slipReadIds,
     slipDateAnswers,
-    acknowledgedUnchangedNozzles: acknowledgedInForce,
-    acknowledgedRaw,
     previousDate,
     missingRows,
     putMissingRowsBack,
@@ -1374,7 +1318,6 @@ function buildSaveSummary(
   carried: Record<string, string[]>,
   read: ShiftReadMap,
   slipDateAnswers: readonly SlipDateAnswer[],
-  acknowledged: readonly string[],
   previousDate: string,
   pendingState: PendingState,
   removedSavedRows: readonly RemovedRow[],
@@ -1584,18 +1527,21 @@ function buildSaveSummary(
   const slipDateNote = readOffSlip > 0 ? slipDateSentence(slipDateAnswers) : '';
   if (slipDateNote) lines.push(slipDateNote);
 
-  // Printed straight from `irasAcknowledgementsInForce`'s answer. There used to
-  // be a filter here that kept the nozzles the report layout names — a second,
-  // weaker implementation of "is this statement worth printing", which asked
-  // only whether the nozzle was configured and never whether the reading still
-  // said zero. One rule, one implementation, and the shared one is the rule.
-  if (acknowledged.length > 0) {
-    lines.push(
-      `${acknowledged.length === 1 ? 'Nozzle' : 'Nozzles'} ${joinList(acknowledged)} ${
-        acknowledged.length === 1 ? 'is' : 'are'
-      } recorded as not having run today.`,
-    );
-  }
+  /*
+   * A nozzle that sold nothing is NOT named here, and that is deliberate.
+   *
+   * There used to be a line reading "Nozzle 5 is recorded as not having run
+   * today", printed off a statement the operator made on the row's menu and
+   * written into the commit's audit entry. Both are gone. Nothing on the wire
+   * carries that claim any more, so the dialog must not make it either — a
+   * summary describing a record the save does not write is exactly the kind of
+   * sentence that outlives its own mechanism.
+   *
+   * The fact itself is not lost, and it is said where it can be acted on: the
+   * nozzle's own box carries the `METER_UNCHANGED` warning under it and "Sold
+   * 0 L" beside its heading, both in warning colour, on the sheet the operator
+   * is looking at when they press Check and save.
+   */
   return {
     meters,
     tanks,
@@ -1763,11 +1709,13 @@ function defaultReasonFor(businessDate: string, summary: ShiftSaveSummary): stri
  * The carried map with one field struck off one row — what "a person has
  * answered this box" looks like in the pending set.
  *
- * One helper rather than the same three lines twice, because TWO different acts
- * answer a box and they have to answer it identically: a keystroke in it, and
- * the confirmed "This pump did not run today", which is as much a person's
- * answer to that reading as any figure they type. Written differently, one of
- * them would leave the box dashed and muted and uncounted for ever.
+ * ONE act answers a box and it is a keystroke in it. There used to be a second —
+ * the confirmed "This pump did not run today", which struck the mark without a
+ * digit being typed — and it needed this helper as much as the keystroke did,
+ * because a box left marked carried is dashed, muted and never counted by
+ * `irasDayProgress`. That act is gone; the helper stays, called from the one
+ * place a figure changes, and it is still a named function rather than three
+ * inline lines because getting the whole-map rule below wrong is silent.
  *
  * The WHOLE map comes back, because `meta` is merged one key deep: writing half
  * of it would drop every other row's list, and a tank whose water dip the system
@@ -1868,11 +1816,6 @@ export interface ShiftSheetProps {
 export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheetProps) {
   const isMd = useMediaQuery('(min-width: 768px)');
   const [focusedId, setFocusedId] = React.useState<string | null>(null);
-  const [confirmUnchanged, setConfirmUnchanged] = React.useState<{
-    identity: string;
-    previous: string;
-    apply: () => void;
-  } | null>(null);
   const [confirmRemove, setConfirmRemove] = React.useState<{
     title: string;
     description: string;
@@ -2188,15 +2131,20 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
        */
       previous?: string;
       /**
-       * One more sentence for the carried note, when this box has a second
-       * honest way out of it.
+       * One more sentence for the carried note, when the instruction in it is
+       * not the whole truth for this box.
        *
-       * Exactly one box does: a meter reading on a pump that really did not run
-       * this morning. The shared note tells every carried box to type this
-       * morning's figure over it, which on 16E's two dead pumps is an
-       * instruction to type a reading that did not happen — and the honest
-       * answer, "This pump did not run today", was named only in the block
-       * beside the save button, a whole screen away from the box.
+       * Exactly one box needs it: a meter reading on a pump that really did not
+       * run this morning. The shared note tells every carried box to change it
+       * to this morning's meter reading, which on 16E's two dead pumps reads as
+       * an instruction to type a figure that did not happen. This says the part
+       * that makes it doable — type it anyway, the same digits as yesterday, and
+       * the day saves.
+       *
+       * It used to name a control instead: "say so on its row menu", pointing at
+       * a confirmed statement that was the only way past the block. There is no
+       * control to name now, and there does not need to be — the box is the
+       * whole of it.
        */
       carriedAlso?: string;
     },
@@ -2524,15 +2472,15 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
     const sold = irasNozzleSold(row.row.TOT_READING, previous, irasMeterScale(product, nozzleNo));
     const remove = removalOf(row);
     /*
-     * Whether this row can offer "This pump did not run today" at all — asked
-     * once, and read by the menu item AND by the note under the box.
+     * Whether the extra line under a carried reading is worth printing.
      *
-     * One condition, because a note naming an action the row does not offer is
-     * worse than no note: there is nothing to tap, and the operator is left
-     * hunting a menu that does not have it. A nozzle with no previous reading
-     * cannot make the statement — there is no figure to stand still at.
+     * It tells the operator to type this morning's figure even when it is the
+     * same as yesterday's, so it is owed to somebody who can type: not on a
+     * read-only day, and not on a nozzle with no previous reading, where the box
+     * opens empty and there is no "same as yesterday's" to reassure anybody
+     * about.
      */
-    const canSayDidNotRun = !readOnly && previous !== undefined;
+    const sameFigureIsFine = !readOnly && previous !== undefined;
 
     return {
       key: row.key,
@@ -2583,7 +2531,7 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
               ? 'Yesterday not known — no sales figure for this nozzle yet.'
               : `Yesterday ${groupFigure(previous)}`,
           /*
-           * The way out for a pump that really did not run, said on the pump's
+           * What to do about a pump that really did not run, said on the pump's
            * own box.
            *
            * 16E's nozzles 5 and 6 are out of service and sit at their
@@ -2591,81 +2539,36 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
            * morning's true reading — and the shared carried note then tells
            * their operator to "change it to this morning's meter reading",
            * every morning of their life, about the one box on the sheet where
-           * that is the wrong thing to do. The honest answer was named only in
-           * the block beside the save button, which is a scroll away on a phone
-           * and speaks about the day rather than about this nozzle.
+           * there is nothing to change it to.
            *
-           * The same words the save bar uses, so the two name one act.
+           * This is the whole answer now. Tap the box, type the same digits, and
+           * the reading is theirs: the carried mark is struck by the keystroke,
+           * the box counts as done, and the day saves carrying a warning under
+           * it saying the nozzle sold nothing. There is no menu item, no
+           * confirm and no second act — which is why this sentence names no
+           * control. It used to name one, and that dead end is what this round
+           * removed.
            */
-          carriedAlso: canSayDidNotRun
-            ? 'If this pump did not run at all, say so on its row menu.'
+          carriedAlso: sameFigureIsFine
+            ? 'If this pump did not run at all, type the same figure again — the day will save.'
             : undefined,
         }),
       ],
       footer: rowFooter(row),
       /*
-       * Offered on every nozzle with a previous reading, whether or not anything
-       * is currently blocking.
+       * There is no second action on a meter row, and 16E is the reason it is
+       * safe for there not to be.
        *
-       * It now answers BOTH blocks a zero-sales nozzle can raise — the quiet
-       * "you have not done this box yet" and the red "you typed a number that
-       * means zero litres sold" — because the ruleset consults the statement
-       * before it considers either. It has to: 16E's two dead pumps could
-       * otherwise never be saved without typing a reading that did not happen.
-       *
-       * The blocks it answers fire only on a reading THIS change set puts
-       * there, so a re-opened morning does not ask those two pumps to be
-       * sworn for a second time — that is the whole point of the scoping. What
-       * the action does is unchanged, and it stays available: an operator who
-       * has just typed yesterday's figure into a pump that genuinely stood still
-       * needs it, and one who wants the statement on a day where nothing is
-       * blocking is making a true statement about their outlet. The statement is
-       * never written by the system and never pre-filled — it is made here, by a
-       * named person, one confirm at a time.
+       * A confirmed "This pump did not run today" used to sit in this row's menu
+       * and it was the only way past the unmoved-meter block, which is why that
+       * outlet's two dead pumps needed it every single morning. The block is a
+       * warning now, so the way past it is the box: type the same digits, the
+       * keystroke strikes the carried mark, `irasDayProgress` counts the figure,
+       * and the day saves with the warning printed under the reading and "Sold
+       * 0 L" beside the heading. Nothing the statement used to do is unaccounted
+       * for — it moved no figure on any report, and the record it wrote was read
+       * back by nothing.
        */
-      // The same one condition as the note under the box — see
-      // `canSayDidNotRun`. The second test is TypeScript's rather than a second
-      // rule: it is what narrows `previous` to a figure inside the closure.
-      onDidNotRun:
-        !canSayDidNotRun || previous === undefined
-          ? undefined
-          : () =>
-              setConfirmUnchanged({
-                identity,
-                previous,
-                apply: () => {
-                  // The RAW list, never the in-force one. The in-force list is
-                  // derived from the figures on screen, so writing this
-                  // statement into it would make blanking the box a way of
-                  // deleting the operator's own statement rather than merely
-                  // suspending it — and typing yesterday's figure back in would
-                  // no longer bring it back.
-                  row.set('TOT_READING', previous, {
-                    [SHIFT_ACK_META]: [
-                      ...model.acknowledgedRaw.filter((n) => n !== identity),
-                      identity,
-                    ],
-                    /*
-                     * And the box stops being the system's, in the same
-                     * undoable step as the statement itself.
-                     *
-                     * A named person has just sworn that this reading IS this
-                     * morning's, so it is their figure now, however identical
-                     * to yesterday's it looks. Without this line it stays
-                     * "carried and untouched" for ever: dashed and muted as if
-                     * nobody had been near it, and — much worse — never counted
-                     * by `irasDayProgress`. 16E has two dead pumps EVERY
-                     * morning, so its readout would sit for ever at "8 of 10
-                     * figures typed" over an enabled save button, on a day its
-                     * operator had completely finished. The block itself is
-                     * already gone by then, cleared by the statement before
-                     * either carried or unchanged is considered.
-                     */
-                    [SHIFT_CARRIED_META]: strikeCarried(model.carried, row.planKey, 'TOT_READING'),
-                  });
-                  setConfirmUnchanged(null);
-                },
-              }),
       onRemove: remove?.run,
       removeLabel: remove?.label,
     };
@@ -3046,11 +2949,13 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
                 'The day’s sales are the change since yesterday’s reading for the same nozzle, ' +
                 'so each box opens holding yesterday’s figure for you to type this morning’s ' +
                 'over. Tapping a box selects the whole number, so typing replaces it. Until you ' +
-                'change it the day cannot be saved: a reading left exactly as it was reports ' +
-                'that the nozzle sold nothing. Some pumps count on a different scale, and where ' +
-                'that is set up the report converts it for you. Type what the register says and ' +
-                'check the litres shown beside each nozzle, rather than working back from the ' +
-                'sales figure you expect.'
+                'have typed in a box the day cannot be saved: a box nobody has touched is a ' +
+                'reading nobody has taken. If a pump did not run and its reading really is the ' +
+                'same as yesterday’s, type that same figure again — the day saves, with a note ' +
+                'under the box saying the nozzle sold nothing and lost its 5 litre test draw. ' +
+                'Some pumps count on a different scale, and where that is set up the report ' +
+                'converts it for you. Type what the register says and check the litres shown ' +
+                'beside each nozzle, rather than working back from the sales figure you expect.'
               }
             />
           </div>
@@ -3228,24 +3133,6 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
           onSave={onSave}
         />
       )}
-
-      {confirmUnchanged ? (
-        <ConfirmDialog
-          open
-          title={`Nozzle ${confirmUnchanged.identity} did not run today?`}
-          description={
-            <>
-              Its meter will read {groupFigure(confirmUnchanged.previous)} — the
-              same as yesterday — so the report will show nozzle {confirmUnchanged.identity} sold
-              nothing, and it will not be charged its 5 litre test draw. This is recorded against
-              your name.
-            </>
-          }
-          confirmLabel="Yes, it did not run"
-          onCancel={() => setConfirmUnchanged(null)}
-          onConfirm={confirmUnchanged.apply}
-        />
-      ) : null}
 
       {confirmRemove ? (
         <ConfirmDialog
