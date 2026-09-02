@@ -281,7 +281,14 @@ export function operationalIntent(pct: number): Intent {
  */
 export function scoreDisclosureParts(input: {
   scored: boolean;
-  overallPct: number;
+  /**
+   * Optional because the API now OMITS it rather than zeroing it when the
+   * viewer may not be shown the figure (`kavachScoreIsPublishable`). An admin's
+   * copy always carries it, so this is the unreachable branch from every screen
+   * in this app — but an absent percentage must read the same as an unscored
+   * one, never as the word "undefined" wearing a percent sign.
+   */
+  overallPct?: number;
   notYetVerifiedCount: number;
   heldCount: number;
 }): string[] {
@@ -289,7 +296,11 @@ export function scoreDisclosureParts(input: {
   // fallback, which rendered a fresh outlet as "100% · 40 never checked" beside
   // "0 / 0 points compliant" — a perfect mark, the admission that nothing had
   // been examined, and the arithmetic proving it, all on one line.
-  const parts = [input.scored ? `${Math.round(input.overallPct)}%` : 'Not scored yet'];
+  const parts = [
+    input.scored && input.overallPct !== undefined
+      ? `${Math.round(input.overallPct)}%`
+      : 'Not scored yet',
+  ];
   if (input.notYetVerifiedCount > 0) {
     parts.push(`${input.notYetVerifiedCount} never checked`);
   }
@@ -300,7 +311,7 @@ export function scoreDisclosureParts(input: {
 /** The same disclosure as one line, for anywhere a single string is needed. */
 export function scoreDisclosure(input: {
   scored: boolean;
-  overallPct: number;
+  overallPct?: number;
   notYetVerifiedCount: number;
   heldCount: number;
 }): string {

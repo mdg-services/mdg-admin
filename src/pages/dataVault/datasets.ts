@@ -1,5 +1,6 @@
-import { Database, ReceiptText } from 'lucide-react';
+import { Database, FileUp, ReceiptText } from 'lucide-react';
 
+import { DocumentsActions, DocumentsPane } from './documents/DocumentsPane';
 import { IrasShiftDataActions, IrasShiftDataPane } from './IrasShiftDataPane';
 import { PadLedgerPane } from './PadLedgerPane';
 import type { VaultDataset } from './types';
@@ -40,6 +41,14 @@ const REGISTRY = [
       'Every PAD transaction Credit & DOD monitoring has accumulated, per dealer',
     Icon: ReceiptText,
     Pane: PadLedgerPane,
+  },
+  {
+    id: 'documents',
+    label: 'Documents',
+    description: 'What every dealer owes MDG, and what has come in',
+    Icon: FileUp,
+    Actions: DocumentsActions,
+    Pane: DocumentsPane,
   },
 ] as const satisfies readonly VaultDataset[];
 

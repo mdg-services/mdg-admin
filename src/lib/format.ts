@@ -137,6 +137,37 @@ export function isYmd(v?: string | null): v is string {
 }
 
 /**
+ * Step a `YYYY-MM-DD` by whole days, staying on the calendar and never below
+ * `floor`.
+ *
+ * THE FLOOR IS PART OF THE ARITHMETIC, NOT A POLICY THE CALLER APPLIES
+ * AFTERWARDS. `new Date(y, …)` honours the two-digit-year legacy and reads year
+ * 2 as 1902, so stepping a half-typed `0002-07-12` back a day returned
+ * `1902-07-11` — an arrow that teleported a date-scoped screen 1900 years with
+ * nothing on it to say so. Starting from `floor` whenever the input is not a day
+ * this product could hold keeps the helper correct on its own rather than merely
+ * fenced off from the problem by whoever calls it.
+ *
+ * `floor` is a parameter and not a constant because the one this app uses,
+ * `MIN_SELECTABLE_YMD`, lives in `components/ui/DateRangeFilter` and `lib` must
+ * not reach up into `components`.
+ *
+ * `IrasShiftDataPane` carries a private twin of this (`shiftIso`) that predates
+ * it; fold that one into this when the pane is next touched, so a date step
+ * cannot come to mean two different things in one Vault.
+ */
+export function shiftYmd(ymd: string, days: number, floor: string): string {
+  const from = isYmd(ymd) && ymd >= floor ? ymd : floor;
+  const y = Number(from.slice(0, 4));
+  const m = Number(from.slice(5, 7));
+  const d = Number(from.slice(8, 10));
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  const next = toYmd(dt);
+  return next < floor ? floor : next;
+}
+
+/**
  * A `YYYY-MM-DD` calendar day for a human — `2026-07-23` → `23 Jul 2026`, or
  * `Thu, 23 Jul 2026` with `{ weekday: true }`.
  *

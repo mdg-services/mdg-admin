@@ -16,6 +16,7 @@ import {
   ShieldPlus,
   UserCog,
   Users,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -40,6 +41,14 @@ export interface NavItem {
  */
 export const NAV_ITEMS: NavItem[] = [
   { to: '/inbox', label: 'Inbox', icon: MessageSquare },
+  // The AI first line's turn log, and the whole safety case for it: every answer
+  // the machine has given a dealer, with a verdict button on each. Deliberately
+  // NOT `superAdminOnly` — the people who answer the tickets are the people who
+  // can tell whether an answer was any good, and gating it would mean the
+  // verdicts came from whoever had the rights rather than whoever had the
+  // context. It carries an unreviewed count badge (`AppShell`), because a page
+  // nobody is nudged to open is not a safety case.
+  { to: '/ai-answers', label: 'AI answers', icon: Zap },
   { to: '/overview', label: 'Overview', icon: LayoutDashboard },
   { to: '/dealers', label: 'Dealers', icon: Building2 },
   // The WORK QUEUE is what "Kavach" means to an admin day to day: what has to be

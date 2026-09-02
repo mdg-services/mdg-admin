@@ -16,6 +16,7 @@ import {
 } from 'react-router-dom';
 
 import { Input, Menu, MenuItem } from '@/components/ui';
+import { useAiTurnCountsQuery } from '@/hooks/api/useAiTurns';
 import { useBankHolidayPendingQuery } from '@/hooks/api/useBankHolidays';
 import { useConversations } from '@/hooks/api/useConversations';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -99,10 +100,17 @@ export function AppShell() {
   const unreadCount = (mineQ.data ?? []).filter((c) => c.unreadByAdmin).length;
   const isSuperAdmin = useIsSuperAdmin();
   const navItems = NAV_ITEMS.filter((item) => !item.superAdminOnly || isSuperAdmin);
-  // Nav count badges keyed by route: unread chats + unconfirmed national holidays.
+  // Nav count badges keyed by route: unread chats, AI answers nobody has judged
+  // yet, unconfirmed national holidays.
   const pendingHolidaysQ = useBankHolidayPendingQuery();
+  // The unreviewed figure is the ONLY nudge to open the AI answers page, and the
+  // feature's safety claim is that a person reads what the machine said. It
+  // shares its cache entry with the page, so judging a turn there takes this
+  // number down without a second request.
+  const aiCountsQ = useAiTurnCountsQuery();
   const navBadges: Record<string, number> = {
     '/inbox': unreadCount,
+    '/ai-answers': aiCountsQ.data?.unreviewed ?? 0,
     '/bank-holidays': pendingHolidaysQ.data?.totalCount ?? 0,
   };
 

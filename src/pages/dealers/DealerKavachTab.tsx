@@ -183,7 +183,11 @@ export function DealerKavachTab({ dealer }: Props) {
   const orderedBuckets = CADENCE_BUCKET_ORDER.filter((b) => grouped.has(b));
 
   const score = programme.score;
-  const pct = Math.round(score.overallPct);
+  // The admin's copy always carries both published figures: `programmeToPublic`
+  // drops them only on the DEALER's copy, when `kavachScoreIsPublishable` says
+  // MDG has not stood behind the number yet. The fallback is unreachable from
+  // this screen and exists so the chip below can never be sized off a NaN.
+  const pct = Math.round(score.overallPct ?? 0);
   const disclosure = scoreDisclosureParts({
     scored: score.scored,
     overallPct: score.overallPct,
@@ -269,7 +273,7 @@ export function DealerKavachTab({ dealer }: Props) {
                   {programme.outlet.monthYear}
                 </p>
                 <p className="text-xs text-text-subtle">
-                  {score.scored
+                  {score.scored && score.totalPoints !== undefined
                     ? `${score.validPoints} / ${score.totalPoints} points compliant`
                     : 'Nothing verified yet, so there is nothing to score against'}
                   {score.notYetVerifiedCount > 0

@@ -52,20 +52,46 @@ function formatTime(iso: string): string {
   });
 }
 
-/** Resolution notices and other automated lines render as a centered chip. */
+/**
+ * Resolution notices and other automated lines render as a centered chip, with
+ * whatever the notice carried above it.
+ *
+ * The attachments are not decoration. dsr-report/share.ts posts two card PNGs
+ * on a `system: true` message, kavach/share.ts the score card and
+ * creditDod/share.ts the position card — and this component used to render
+ * `message.body` alone, so an admin watching the thread saw the covering note
+ * and never the card that was shared with the dealer.
+ *
+ * Reactions, delivery ticks, the reply quote and the action menu are all
+ * deliberately absent: a notice about the thread is not a message anyone
+ * replies to, reacts to, or was "delivered" in the sense the ticks mean.
+ */
 function SystemMessage({ message }: { message: Message }) {
-  if (!message.body) return null;
+  // Was a plain `if (!message.body) return null`, which threw the images away
+  // with the empty body. Only an empty notice — no text and no card — is nothing.
+  if (!message.body && message.attachments.length === 0) return null;
   return (
-    <div className="flex w-full justify-center">
+    <div className="flex w-full flex-col items-center gap-1.5">
+      {message.attachments.length > 0 ? (
+        // AttachmentPreview owns its own ImageLightbox, so there is no
+        // open-image handler to thread down from the bubble here.
+        <div className="flex max-w-[85%] flex-wrap justify-center gap-2">
+          {message.attachments.map((a) => (
+            <AttachmentPreview key={a.storageKey} attachment={a} />
+          ))}
+        </div>
+      ) : null}
       {/* `rounded-lg`, not `rounded-full`: the pill shape is only right for a
           one-line note. A system message can run to a dozen lines — a
           bilingual service notice does — and a 9999px radius on a 152px-tall
           box cuts a curve straight through its own first and last lines.
           Left-aligned for the same reason: centred ragged text is fine for
           three words and unreadable for a paragraph. */}
-      <p className="max-w-[85%] rounded-lg bg-surface-2 px-3 py-1.5 text-xs text-text-muted">
-        {message.body}
-      </p>
+      {message.body ? (
+        <p className="max-w-[85%] rounded-lg bg-surface-2 px-3 py-1.5 text-xs text-text-muted">
+          {message.body}
+        </p>
+      ) : null}
     </div>
   );
 }

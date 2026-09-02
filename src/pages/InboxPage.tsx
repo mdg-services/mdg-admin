@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  AlertTriangle,
+  Check,
   CheckCircle2,
   ChevronLeft,
+  CornerUpRight,
   FileText,
   FileUp,
   Flag,
@@ -14,6 +17,7 @@ import {
   Plus,
   RotateCcw,
   UserPlus,
+  type LucideIcon,
 } from 'lucide-react';
 import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -29,7 +33,8 @@ import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
 import { Sheet, SheetItem } from '@/components/ui/Sheet';
 import { Spinner } from '@/components/ui/Spinner';
-import { Composer } from '@/features/chat/Composer';
+import { AiFirstLineStrip } from '@/features/chat/AiFirstLineStrip';
+import { Composer, type ComposerInsert } from '@/features/chat/Composer';
 import { MediaGalleryCard } from '@/features/chat/MediaGalleryCard';
 import { MessageInfoDialog } from '@/features/chat/MessageInfoDialog';
 import { MessageList } from '@/features/chat/MessageList';
@@ -65,8 +70,15 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { Intent } from '@/lib/statusIntent';
 import { useAuthStore } from '@/store/auth';
-import { TICKET_CATEGORIES, TICKET_PRIORITIES, dealerCodeLabel, ticketFlagLevel } from '@dk/shared';
+import {
+  TICKET_CATEGORIES,
+  TICKET_PRIORITIES,
+  aiInboxChip,
+  dealerCodeLabel,
+  ticketFlagLevel,
+} from '@dk/shared';
 import type {
+  AiInboxChip,
   Attachment,
   Conversation,
   Dealer,
@@ -151,7 +163,47 @@ const FILTERS: Array<{ key: InboxFilter; label: string }> = [
   { key: 'mine', label: 'Mine' },
   { key: 'all', label: 'All open' },
   { key: 'resolved', label: 'Resolved' },
+  // A LENS OVER "Unassigned", not a fifth pile. Every row here is also in
+  // Unassigned and in All open, and its `status` is the same `OPEN` it always
+  // was — the tab only narrows the same query to the threads the AI first line
+  // has said something on. Deliberately last, so the four tabs the team has used
+  // for a year keep their positions and their muscle memory.
+  { key: 'ai', label: '⚡ AI' },
 ];
+
+/**
+ * What the machine did on this thread, as a chip on the inbox row.
+ *
+ * SHAPE AND TEXT, never colour alone: each of the three carries its own glyph
+ * and its own words, so the row still reads correctly to somebody who cannot
+ * tell the amber from the red, and on the greyscale a cheap phone in bright sun
+ * effectively is.
+ *
+ * The chip is an ADDITION to the row and replaces nothing. In particular the
+ * preview stays the DEALER'S OWN QUESTION: the backend deliberately never writes
+ * `lastMessagePreview` from an AI message, and putting a machine sentence back
+ * in the UI would undo that — sixty threads previewing the same warm handoff
+ * line turns triage by scanning into triage by opening.
+ */
+const AI_CHIP_ICON: Record<AiInboxChip, LucideIcon> = {
+  replied: Check,
+  passed_on: CornerUpRight,
+  questioned: AlertTriangle,
+};
+
+function AiRowChip({ conversation }: { conversation: Conversation }) {
+  const chip = aiInboxChip(conversation.ai);
+  if (!chip) return null;
+  const Icon = AI_CHIP_ICON[chip.chip];
+  return (
+    <Badge intent={chip.tone} title={chip.hint}>
+      <span className="inline-flex items-center gap-0.5">
+        <Icon width={11} height={11} strokeWidth={2} />
+        {chip.label}
+      </span>
+    </Badge>
+  );
+}
 
 function formatRelative(iso?: string): string {
   if (!iso) return '';
@@ -322,11 +374,47 @@ export function InboxPage() {
     null,
   );
 
-  // Never carry reply/dialog state across threads.
+  /**
+   * The "Put in composer" request from the AI strip.
+   *
+   * A REQUEST WITH AN ID, not the text on its own: pressing the button twice
+   * must insert the sentence twice, and an effect keyed on the string would do
+   * nothing the second time and look broken. The counter is a ref because
+   * nothing renders off it — bumping state for it would be a render per press
+   * for a number nobody sees.
+   *
+   * It CARRIES THE THREAD IT WAS RAISED ON, and the render below refuses to
+   * deliver it anywhere else. Clearing it in the `selectedId` effect is not
+   * enough on its own: effects run after the render, so the first paint of the
+   * next thread would already have handed the old sentence to the newly mounted
+   * composer. One dealer's figures landing in another dealer's box is not a
+   * race worth leaving open.
+   */
+  const [composerInsert, setComposerInsert] = React.useState<
+    (ComposerInsert & { conversationId: string }) | null
+  >(null);
+  const insertSeq = React.useRef(0);
+  const handleUseAiAnswer = React.useCallback(
+    (text: string) => {
+      if (!selectedId) return;
+      insertSeq.current += 1;
+      setComposerInsert({
+        text,
+        id: String(insertSeq.current),
+        conversationId: selectedId,
+      });
+    },
+    [selectedId],
+  );
+
+  // Never carry reply/dialog state across threads. The pending composer insert
+  // goes too: a sentence written about one dealer's density must not follow the
+  // admin into the next dealer's thread.
   React.useEffect(() => {
     setReplyTo(null);
     setInfoForId(null);
     setReactionsForId(null);
+    setComposerInsert(null);
   }, [selectedId]);
 
   const infoMessage = infoForId
@@ -420,6 +508,7 @@ export function InboxPage() {
     all: countsQ.data?.all,
     resolved: countsQ.data?.resolved,
     flagged: countsQ.data?.flagged,
+    ai: countsQ.data?.ai,
   };
 
   // Auto-select first conversation when list loads and nothing selected. Yield
@@ -852,9 +941,16 @@ export function InboxPage() {
                               {formatRelative(c.lastMessageAt ?? c.updatedAt)}
                             </span>
                           </div>
-                          <div className="mt-0.5 flex items-center gap-1.5">
+                          {/* `flex-wrap`: three badges plus a preview is more
+                              than a 360px row holds, and `Badge` refuses to
+                              shrink (it clips its own label instead), so the
+                              pressure has to go somewhere. Wrapping puts the
+                              preview on its own line rather than cutting the
+                              chip that says the machine got this one wrong. */}
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                             {priorityPill(c.priority)}
                             <TicketFlagBadge conversation={c} now={now} />
+                            <AiRowChip conversation={c} />
                             <p className="min-w-0 flex-1 truncate text-sm text-text-muted">
                               {c.lastMessagePreview ?? 'No messages yet'}
                             </p>
@@ -1154,12 +1250,40 @@ export function InboxPage() {
                     />
                   )}
                 </div>
+                {/* Above the composer, below the messages: admin chrome that
+                    is deliberately NOT a bubble in the thread — see
+                    `AiFirstLineStrip`. It renders nothing at all on the
+                    threads the machine never touched, which is most of them. */}
+                <AiFirstLineStrip
+                  conversationId={conversation.id}
+                  onUseAnswer={handleUseAiAnswer}
+                  now={now}
+                />
                 <Composer
+                  /*
+                   * KEYED ON THE THREAD, so the draft box empties when the
+                   * admin moves to another conversation.
+                   *
+                   * `Composer` owns its draft in local state and had no key, so
+                   * the same box — and the same half-typed text — was reused
+                   * across threads. That was already untidy; with "Put in
+                   * composer" it is a leak. An admin who pastes the machine's
+                   * withheld answer about 15E's density, flips to another
+                   * dealer's thread without sending, and types "ok" on top of it
+                   * sends one dealer's figures to another. The remedy is that
+                   * the box belongs to the thread.
+                   */
+                  key={conversation.id}
                   conversationId={conversation.id}
                   onSend={handleSend}
                   disabled={conversation.status === 'RESOLVED'}
                   replyingTo={composerReply}
                   onCancelReply={handleCancelReply}
+                  insert={
+                    composerInsert?.conversationId === conversation.id
+                      ? composerInsert
+                      : null
+                  }
                 />
               </div>
 

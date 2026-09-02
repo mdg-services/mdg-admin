@@ -35,6 +35,13 @@ const ActivityPage = React.lazy(
     import('@/pages/ActivityPage').then((m) => ({ default: m.ActivityPage })),
   ),
 );
+const AiAnswersPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/aiAnswers/AiAnswersPage').then((m) => ({
+      default: m.AiAnswersPage,
+    })),
+  ),
+);
 const AdminsPage = React.lazy(
   retryImport(() =>
     import('@/pages/AdminsPage').then((m) => ({ default: m.AdminsPage })),
@@ -202,6 +209,19 @@ export default function App() {
             element={
               <LazyPage>
                 <OverviewPage />
+              </LazyPage>
+            }
+          />
+          {/* Reading the turn log and passing judgement on it is everyday admin
+              work — the people who answer the tickets are the people who can
+              tell whether an answer was any good — so the ROUTE is not
+              super-admin. Only the two switches inside the page are, and they
+              are hidden and gated separately. */}
+          <Route
+            path="ai-answers"
+            element={
+              <LazyPage>
+                <AiAnswersPage />
               </LazyPage>
             }
           />

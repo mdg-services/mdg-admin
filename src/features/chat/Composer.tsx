@@ -36,6 +36,21 @@ export interface ComposerReplyPreview {
   imageUrl?: string;
 }
 
+/**
+ * A request to drop text into the input from outside it — today, the AI first
+ * line's "Put in composer" button.
+ *
+ * `id` is what makes it a REQUEST and not a value. The same sentence pressed
+ * twice must arrive twice, and a `useEffect` keyed on the text alone would do
+ * nothing the second time and look broken; keyed on a fresh id it always fires.
+ * It is deliberately not a `value` prop either: this composer owns its draft,
+ * and handing that ownership away would put every keystroke through the page.
+ */
+export interface ComposerInsert {
+  text: string;
+  id: string;
+}
+
 interface ComposerProps {
   conversationId: string;
   onSend: (payload: {
@@ -46,6 +61,8 @@ interface ComposerProps {
   /** When set, a reply-quote strip shows above the input. */
   replyingTo?: ComposerReplyPreview | null;
   onCancelReply?: () => void;
+  /** Text pushed in from outside. See {@link ComposerInsert}. */
+  insert?: ComposerInsert | null;
 }
 
 const ACCEPT =
@@ -60,6 +77,7 @@ export function Composer({
   disabled,
   replyingTo,
   onCancelReply,
+  insert,
 }: ComposerProps) {
   const [body, setBody] = React.useState('');
   const [files, setFiles] = React.useState<StagedFile[]>([]);
@@ -82,6 +100,35 @@ export function Composer({
   React.useEffect(() => {
     if (replyingTo) textareaRef.current?.focus();
   }, [replyingTo]);
+
+  /**
+   * Text pushed in from outside: append it, focus, and put the caret at the end.
+   *
+   * APPEND AND NEVER REPLACE. The admin may already be halfway through typing
+   * their own reply when they notice the machine had a usable sentence, and
+   * overwriting a half-written message to save them a paste is a bad trade — the
+   * draft is not recoverable and the sentence is.
+   *
+   * Keyed on `insert?.id`, not on the text, so the same sentence can be pushed
+   * in twice; the effect deliberately does not depend on `body`, which it reads
+   * through the setter instead, or every keystroke would re-run it.
+   */
+  React.useEffect(() => {
+    if (!insert) return;
+    const text = insert.text.trim();
+    if (!text) return;
+    setBody((curr) => (curr.trim() ? `${curr.replace(/\s+$/, '')}\n\n${text}` : text));
+    const ta = textareaRef.current;
+    if (ta) {
+      ta.focus();
+      // After the state has painted, or the caret lands at the old end.
+      window.setTimeout(() => {
+        ta.selectionStart = ta.value.length;
+        ta.selectionEnd = ta.value.length;
+      }, 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insert?.id]);
 
   const hasContent = body.trim().length > 0 || files.length > 0;
   const busy = sending || disabled;
