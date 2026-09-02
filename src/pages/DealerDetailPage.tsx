@@ -5,10 +5,11 @@ import {
   History,
   KeyRound,
   ListChecks,
+  ListTodo,
   RotateCcw,
   Send,
+  ShieldCheck,
   Trash2,
-  Users,
 } from 'lucide-react';
 import * as React from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
@@ -192,11 +193,18 @@ const INFO_TAB: TabDef = {
  * job needs, so the split is by "is this what I opened the dealer to do?":
  *
  * - strip — the daily work: how far onboarding has got, the record itself, the
- *   services it runs, Kavach, its warriors, the work list, and the Data Vault.
- * - menu — the occasional and the administrative: the Password vault, the team
- *   roster, the services-provided ledger, the run history, the engineer-only
- *   custom requests, and delete/restore. None of it is needed to answer "how is
- *   this dealer doing today?".
+ *   services it runs, Kavach, its warriors, its team of app logins, and the
+ *   Data Vault.
+ * - menu — the occasional and the administrative: the two configuration lists
+ *   (which Kavach tasks this outlet has, which paid works its warriors may
+ *   claim), the Password vault, the services-provided ledger, the run history,
+ *   the engineer-only custom requests, and delete/restore. None of it is needed
+ *   to answer "how is this dealer doing today?".
+ *
+ * The two work lists sit in the menu because they are set during setup and
+ * revisited rarely, while Team was promoted out of it because adding or
+ * resetting a member is ordinary support work that used to take two clicks to
+ * find.
  *
  * Demotion is the tool of choice here. `superAdminOnly` is the only thing that
  * takes an entry away from a role, and it is set on internal surfaces only —
@@ -237,11 +245,13 @@ const TABS: TabDef[] = [
   {
     // Which Kavach tasks this outlet actually has: hide the ones that do not
     // apply, add ones only they have, and depart from the global points where
-    // there is a reason to. Sits beside the Kavach panel, not inside it, so the
-    // standing view stays a standing view.
+    // there is a reason to. Set once when the outlet is configured and revisited
+    // rarely, so it answers to the menu rather than holding a permanent slot
+    // beside the Kavach panel it configures.
     id: 'kavach-work-list',
     label: 'Kavach tasks',
-    placement: 'strip',
+    placement: 'menu',
+    icon: <ShieldCheck {...ICON} />,
     body: (dealer) => <DealerKavachWorkListTab dealer={dealer} />,
   },
   {
@@ -251,9 +261,22 @@ const TABS: TabDef[] = [
     body: (dealer) => <DealerStaffTab dealer={dealer} />,
   },
   {
+    // The dealer's app logins — who can sign in, and adding a manager for them.
+    // Next to Warriors & points because both answer "who works here", and on
+    // the strip because adding and resetting a member is routine support work.
+    id: 'members',
+    label: 'Team',
+    placement: 'strip',
+    body: (dealer) => <DealerMembersTab dealer={dealer} />,
+  },
+  {
+    // Which paid works this dealer's warriors may claim, and for how many
+    // points. Configuration, like the Kavach task list above it: set during
+    // setup, reviewed occasionally, not part of the daily read.
     id: 'work-list',
     label: 'Work list',
-    placement: 'strip',
+    placement: 'menu',
+    icon: <ListTodo {...ICON} />,
     body: (dealer) => <DealerWorkListTab dealer={dealer} />,
   },
   {
@@ -277,13 +300,6 @@ const TABS: TabDef[] = [
     // audits every reveal before releasing the plaintext.
     icon: <KeyRound {...ICON} />,
     body: (dealer) => <DealerPasswordVaultTab dealer={dealer} />,
-  },
-  {
-    id: 'members',
-    label: 'Team',
-    placement: 'menu',
-    icon: <Users {...ICON} />,
-    body: (dealer) => <DealerMembersTab dealer={dealer} />,
   },
   {
     id: 'provided',
@@ -334,11 +350,43 @@ export function DealerDetailPage() {
   const [tab, setTab] = React.useState<string | null>(null);
   const [dangerAction, setDangerAction] =
     React.useState<DealerArchiveAction | null>(null);
-  // Stable, so a tab body that memoises on it does not re-render on every
-  // parent render. `setTab` is itself stable, hence the empty dep list.
+  /**
+   * Switch tabs AND record it in the URL.
+   *
+   * The tab used to live only in React state, so every reload threw it away and
+   * dropped the reader back on the default — Onboarding, for a dealer that is
+   * still onboarding — however deep into another tab they were. Writing `?tab=`
+   * on each switch means a refresh, a restored browser session and a pasted
+   * link all come back to the same surface, using the deep-link path that the
+   * mount effect below already reads.
+   *
+   * `replace` rather than a push: the strip switches a view, it does not
+   * navigate, so Back still leaves the dealer instead of walking every tab the
+   * reader glanced at on the way. Any other params (`vault=`, say) are carried
+   * across untouched.
+   */
+  const selectTab = React.useCallback(
+    (id: string) => {
+      setTab(id);
+      setSearchParams(
+        (cur) => {
+          const next = new URLSearchParams(cur);
+          next.set('tab', id);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  // Stable while the query string is, so a tab body that memoises on it does not
+  // re-render on every parent render. `setSearchParams` — and therefore
+  // `selectTab` — only changes identity when the URL itself does, which is the
+  // one moment the bodies are being swapped out anyway.
   const tabContext = React.useMemo<TabContext>(
-    () => ({ goToTab: (id) => setTab(id) }),
-    [],
+    () => ({ goToTab: selectTab }),
+    [selectTab],
   );
 
   React.useEffect(() => {
@@ -523,7 +571,7 @@ export function DealerDetailPage() {
         sticky
         items={stripTabs.map((t) => ({ id: t.id, label: t.label }))}
         value={activeTab}
-        onChange={setTab}
+        onChange={selectTab}
         trailing={
           <>
             {/* The fade hints that the strip scrolls to more tabs. `right-full`
@@ -554,7 +602,7 @@ export function DealerDetailPage() {
                     key={t.id}
                     icon={t.icon}
                     selected={t.id === activeTab}
-                    onSelect={() => setTab(t.id)}
+                    onSelect={() => selectTab(t.id)}
                   >
                     {t.label}
                   </MenuItem>
