@@ -1,9 +1,7 @@
-import { Power } from 'lucide-react';
 import * as React from 'react';
 
 import {
   Badge,
-  Button,
   Callout,
   Card,
   CardContent,
@@ -26,20 +24,35 @@ import {
   useAiFirstLineDealersQuery,
   useAiFirstLineSwitchQuery,
   useSetAiFirstLineSwitch,
+  useSetAiFirstLineWriterSwitch,
   useSetDealerFirstLineMode,
   type AiFirstLineDealerRow,
 } from '@/hooks/api/useAiTurns';
 import { dealerCodeLabel, type DealerFirstLineMode } from '@dk/shared';
 
-import { MODE_HELP, MODE_INTENT, MODE_OPTIONS } from './format';
+import {
+  MODE_HELP,
+  MODE_INTENT,
+  MODE_OPTIONS,
+  SWITCH_POSITIONS,
+  SWITCH_POSITION_HELP,
+  SWITCH_POSITION_LABEL,
+  switchPosition,
+  type AiSwitchPosition,
+} from './format';
 
 /**
  * The two switches, and they are deliberately not the same kind of control.
  *
- * The GLOBAL one is a stop. It is a single button with a confirmation on it,
- * because the only time anybody presses it is the moment they have decided the
- * machine is saying something wrong to customers, and a control you have to
- * think about is the wrong control for that.
+ * The GLOBAL one is a LADDER with three rungs — Off, Templates only, Full — and
+ * the middle rung is the one this version added. Under v2 the likeliest thing an
+ * admin wants to stop at nine at night is THE PROSE, NOT THE SERVICE, and
+ * turning the whole first line off to stop a clumsy sentence throws away a
+ * working product. "Templates only" is exactly what was live before this version
+ * shipped, so it is a known-good place to stand rather than a degraded one.
+ *
+ * Off still confirms, and only Off, because it is the only rung that stops
+ * dealers being answered at all.
  *
  * The PER-DEALER one is an enrolment, walked `OFF → SHADOW → ON` one outlet at
  * a time, so it is a three-way picker with the whole ladder visible.
@@ -102,6 +115,7 @@ export function AiFirstLineSwitches() {
   const switchQ = useAiFirstLineSwitchQuery();
   const dealersQ = useAiFirstLineDealersQuery();
   const setSwitch = useSetAiFirstLineSwitch();
+  const setWriter = useSetAiFirstLineWriterSwitch();
   const setMode = useSetDealerFirstLineMode();
   const [confirmStop, setConfirmStop] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -130,6 +144,41 @@ export function AiFirstLineSwitches() {
 
   const live = switchQ.data;
   const enabled = live?.enabled ?? false;
+  const position = switchPosition(live);
+  const switching = setSwitch.isPending || setWriter.isPending;
+
+  /**
+   * Move the ladder.
+   *
+   * The two fields are sent as TWO requests and SEQUENTIALLY, not as one body,
+   * and both halves of that are deliberate. Two requests because the backend
+   * audits them under two different actions — "somebody stopped the prose" and
+   * "somebody stopped the first line" have different blast radii, and an audit
+   * log that cannot tell them apart is one nobody can read in an incident.
+   * Sequentially because both write the same settings document with `upsert`,
+   * and two concurrent upserts of a document that does not exist yet race on the
+   * unique `_id`.
+   */
+  async function applyPosition(next: AiSwitchPosition) {
+    if (next === position) return;
+    // Off is the one rung that stops dealers being answered at all, so it is the
+    // one rung that asks.
+    if (next === 'off') {
+      setConfirmStop(true);
+      return;
+    }
+    try {
+      if (!enabled) await setSwitch.mutateAsync(true);
+      await setWriter.mutateAsync(next === 'full');
+      toast.success(
+        next === 'full'
+          ? 'It writes its own replies again'
+          : 'It answers with the hand-written sentences only',
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not move the switch');
+    }
+  }
 
   function applyMode(row: AiFirstLineDealerRow, mode: DealerFirstLineMode) {
     if (mode === row.mode) return;
@@ -161,8 +210,16 @@ export function AiFirstLineSwitches() {
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge intent={enabled ? 'success' : 'danger'}>
-                  {enabled ? 'Running' : 'Stopped'}
+                <Badge
+                  intent={
+                    position === 'full'
+                      ? 'success'
+                      : position === 'templates'
+                        ? 'info'
+                        : 'danger'
+                  }
+                >
+                  {SWITCH_POSITION_LABEL[position]}
                 </Badge>
                 <span className="min-w-0 break-words text-sm text-text-muted">
                   {live?.updatedByName || live?.updatedByAdminId ? (
@@ -190,25 +247,39 @@ export function AiFirstLineSwitches() {
                 </Callout>
               ) : null}
 
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant={enabled ? 'danger' : 'primary'}
-                  onClick={() =>
-                    enabled
-                      ? setConfirmStop(true)
-                      : setSwitch.mutate(true, {
-                          onSuccess: () => toast.success('The first line is running'),
-                          onError: (err) =>
-                            toast.error(
-                              err instanceof Error ? err.message : 'Could not start it',
-                            ),
-                        })
-                  }
-                  disabled={setSwitch.isPending}
-                  leftIcon={<Power width={15} height={15} strokeWidth={1.75} />}
-                >
-                  {enabled ? 'Stop the first line' : 'Start the first line'}
-                </Button>
+              {/*
+               * The SAME trap one rung down, and it is reported for the same
+               * reason: with `AI_FIRSTLINE_WRITER_ENABLED` false, moving the
+               * switch to Full changes nothing at all — and somebody would move
+               * it and wait, then read the prose rate above as a fence problem.
+               * Only shown while the service itself is deployed on, so a box
+               * with everything off does not stack two warnings saying the same
+               * thing.
+               */}
+              {live && live.envEnabled && !live.envWriterEnabled ? (
+                <Callout intent="warning">
+                  The server is deployed with the writer switched off
+                  (<code>AI_FIRSTLINE_WRITER_ENABLED</code> is false), so Full and
+                  Templates only behave identically until that changes and the
+                  backend is redeployed.
+                </Callout>
+              ) : null}
+
+              <div className="grid gap-1.5">
+                <div className={switching ? 'pointer-events-none opacity-60' : undefined}>
+                  <SegmentedControl<AiSwitchPosition>
+                    value={position}
+                    onChange={(next) => void applyPosition(next)}
+                    options={SWITCH_POSITIONS.map((v) => ({
+                      value: v,
+                      label: SWITCH_POSITION_LABEL[v],
+                    }))}
+                    aria-label="How much of the first line runs"
+                  />
+                </div>
+                <p className="min-w-0 break-words text-sm text-text-muted">
+                  {SWITCH_POSITION_HELP[position]}
+                </p>
                 {live ? (
                   <span className="text-xs text-text-subtle">
                     Takes effect within {live.takesEffectWithinSeconds} seconds.
@@ -328,7 +399,7 @@ export function AiFirstLineSwitches() {
           })
         }
         title="Stop the AI first line?"
-        description="Every dealer's tickets go straight to a person again, exactly as they did before this shipped. Nothing is lost; the turn log stays."
+        description="Every dealer's tickets go straight to a person again, exactly as they did before this shipped. Nothing is lost; the turn log stays. If the problem is a badly written sentence rather than a wrong one, Templates only stops the writing and keeps the answers."
         confirmLabel="Stop it"
         confirmVariant="danger"
         loading={setSwitch.isPending}

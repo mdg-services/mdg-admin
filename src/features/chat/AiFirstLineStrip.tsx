@@ -1,4 +1,10 @@
-import { ChevronDown, ChevronRight, CornerDownLeft, Zap } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  CornerDownLeft,
+  ShieldAlert,
+  Zap,
+} from 'lucide-react';
 import * as React from 'react';
 
 import { Badge } from '@/components/ui/Badge';
@@ -10,6 +16,12 @@ import {
   AI_OUTCOME_LABEL,
   AI_OUTCOME_TONE,
   aiCostLabel,
+  aiPlanAsks,
+  aiProduction,
+  aiRefusal,
+  aiRuleHint,
+  aiRuleLabel,
+  aiToolLabel,
   aiTurnAge,
   aiWithheldAnswer,
 } from '@dk/shared';
@@ -22,7 +34,7 @@ import type { AiTurn } from '@dk/shared';
  * it exists to stop an admin repeating work the machine already did. Opening a
  * handed-off ticket without it, the admin sees the dealer's question and a warm
  * line saying somebody is coming, and has no way to know the machine had already
- * resolved the date, run the lookup, and — in a shadow week — written the whole
+ * resolved the date, run the lookups, and — in a shadow week — written the whole
  * answer.
  *
  * WHY IT IS NOT A MESSAGE. A bubble in the thread is visible to the DEALER, and
@@ -35,6 +47,13 @@ import type { AiTurn } from '@dk/shared';
  * machine touches need nothing from this panel; an admin who opens sixty tickets
  * a morning should pay one line of vertical space for it, not a panel they close
  * sixty times.
+ *
+ * WHAT v2 PUT IN IT. The machine now writes its own sentences, so the panel has
+ * to answer three questions it never had to before: was this reply WRITTEN or a
+ * fixed sentence; if we refused what it wrote, WHAT WAS IT and which rule
+ * stopped it; and which of the up-to-five lookups actually ran. The first is a
+ * mark on the collapsed line, because an admin who never opens the panel still
+ * needs it. The other two are inside.
  */
 
 /** One label/value line in the expanded panel. Values wrap; nothing is clipped. */
@@ -55,22 +74,75 @@ function Fact({
   );
 }
 
+/** How the reply was made, for the collapsed line and the panel both. */
+function ProductionBadge({ turn }: { turn: AiTurn }) {
+  const view = aiProduction(turn);
+  if (!view) return null;
+  return (
+    <Badge intent={view.tone} title={view.hint}>
+      {view.label}
+    </Badge>
+  );
+}
+
 /**
- * The plan's scalars, in the words the dealer's question was resolved into.
+ * The sentence the machine composed and we refused, with the rules that refused
+ * it.
  *
- * Only the fields the model actually filled — an omitted date is not "no date",
- * it is a question that did not name one, and printing "Date: —" invites the
- * reader to think the machine failed to find something it never looked for.
+ * Shown HERE and not only on the review page, because this is the screen the
+ * admin is standing on when they answer the dealer themselves. Knowing that the
+ * machine drafted "the density register for the 28th is still with you" and that
+ * we stopped it for a date it could not account for is the difference between
+ * writing the reply from scratch and correcting one sentence.
  */
-function planFacts(turn: AiTurn): Array<{ label: string; value: string }> {
-  const out: Array<{ label: string; value: string }> = [];
-  const plan = turn.plan;
-  if (!plan) return out;
-  if (plan.date) out.push({ label: 'Day', value: plan.date });
-  if (plan.month) out.push({ label: 'Month', value: plan.month });
-  if (plan.personName) out.push({ label: 'Name looked up', value: plan.personName });
-  if (plan.productHint) out.push({ label: 'Grade', value: plan.productHint });
-  return out;
+function RefusedProse({ turn }: { turn: AiTurn }) {
+  const refusal = aiRefusal(turn);
+  if (!refusal) return null;
+  return (
+    <div className="grid gap-1.5 rounded-md border border-border bg-surface-2 p-2.5">
+      <p className="text-xs font-medium uppercase tracking-wide text-text-subtle">
+        It wrote this and we refused it
+      </p>
+      {refusal.prose ? (
+        <p className="min-w-0 whitespace-pre-wrap break-words text-sm text-text">
+          {refusal.prose}
+        </p>
+      ) : null}
+      <p className="text-xs text-text-muted">{refusal.headline}</p>
+      {refusal.rules.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {refusal.rules.map((rule, i) => (
+            <Badge key={`${rule}-${i}`} intent="warning" title={aiRuleHint(rule) ?? rule}>
+              {aiRuleLabel(rule)}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+      {/*
+       * NO "Put in composer" BUTTON HERE, and the omission is deliberate. The
+       * withheld-answer button below offers a body that PASSED verification and
+       * nobody read; this text FAILED its own checks. Offering it for one tap
+       * would turn a refusal into a suggestion, and the first sentence anybody
+       * pasted would be the one carrying a figure no lookup returned. It can be
+       * read, and copied by hand if it is genuinely right — which is exactly the
+       * amount of friction the difference deserves.
+       */}
+      {refusal.attack ? (
+        <p className="flex items-start gap-1.5 text-xs font-medium text-text">
+          <ShieldAlert
+            width={13}
+            height={13}
+            strokeWidth={2}
+            className="mt-0.5 shrink-0"
+          />
+          <span>
+            Evidence of an attempt rather than a clumsy sentence — this thread is
+            marked in the AI guard lens.
+          </span>
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function TurnDetail({
@@ -83,7 +155,17 @@ function TurnDetail({
   onUseAnswer: (text: string) => void;
 }) {
   const withheld = aiWithheldAnswer(turn);
-  const facts = planFacts(turn);
+  /**
+   * One line per thing the dealer asked about, with the scalars that belong to
+   * THAT ask.
+   *
+   * A turn used to carry one label and one flat set of scalars. It now carries
+   * up to three asks, and flattening them here would undo the reason they are
+   * per-ask: "22 tarikh ka DSR bhejo aur aaj ki density batao" holds two
+   * different days, and one "Day" line for the turn would show a reviewer a date
+   * the density lookup never read.
+   */
+  const asks = aiPlanAsks(turn.plan);
   return (
     <div className="grid gap-2 border-t border-border px-3 py-2.5">
       <dl className="grid gap-2">
@@ -93,25 +175,64 @@ function TurnDetail({
           </Fact>
         ) : null}
         <Fact label="Read as">
-          {turn.intent ? AI_INTENT_LABEL[turn.intent] : 'It never got that far'}
+          {asks.length > 0 ? (
+            <div className="grid gap-0.5">
+              {asks.map((ask, i) => (
+                <div key={`${ask.intent}-${i}`}>
+                  <span className={ask.primary ? 'font-medium' : undefined}>
+                    {ask.label}
+                  </span>
+                  {ask.scalars.map((s) => (
+                    <span key={s.label} className="text-text-muted">
+                      {` · ${s.label} ${s.value}`}
+                    </span>
+                  ))}
+                  {/* The first ask is the one the reply leads with, so it is the
+                      one to judge the answer against. */}
+                  {ask.primary && asks.length > 1 ? (
+                    <span className="text-xs text-text-subtle"> — led with this</span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : turn.intent ? (
+            AI_INTENT_LABEL[turn.intent]
+          ) : (
+            'It never got that far'
+          )}
         </Fact>
-        {facts.map((f) => (
-          <Fact key={f.label} label={f.label}>
-            {f.value}
-          </Fact>
-        ))}
         {/*
          * NAMES, not payloads. The turn log stores which lookups ran and
          * deliberately not what they returned — "a turn log is not a data
          * export" — so what a lookup found is shown through the answer it fed,
          * below, and not as a dump of a dealer's figures on a support screen.
+         *
+         * Up to five of them now run in one batch, and the SET is the finding:
+         * `Papers open, both ways` alone on a "what do I need to do now" turn
+         * means the DSR half refused, which is a different turn from one where
+         * both ran and reads identically if only a count is printed.
          */}
         <Fact label="Lookups run">
           {turn.toolIds && turn.toolIds.length > 0 ? (
-            <span className="font-mono text-xs">{turn.toolIds.join(' → ')}</span>
+            <span>{turn.toolIds.map((id) => aiToolLabel(id)).join(' · ')}</span>
           ) : (
             <span className="text-text-subtle">None — it stood down first</span>
           )}
+        </Fact>
+        <Fact label="How it replied">
+          <span className="inline-flex flex-wrap items-center gap-1">
+            <ProductionBadge turn={turn} />
+            {turn.partial ? (
+              <Badge intent="warning" title="Part of what they asked was refused or dropped; the reply says so in a hand-written line.">
+                Answered part of it
+              </Badge>
+            ) : null}
+            {turn.quickFollowUp ? (
+              <Badge intent="neutral" title="The dealer wrote again within minutes. It changes nothing about the machine's behaviour — it is a review signal.">
+                Wrote straight back
+              </Badge>
+            ) : null}
+          </span>
         </Fact>
         <Fact label="Why it stopped">
           {turn.reason ? (
@@ -127,6 +248,24 @@ function TurnDetail({
             'The first line was not switched on for this dealer.'
           )}
         </Fact>
+        {turn.guard ? (
+          <Fact label="Guard">
+            {/*
+             * RULE NAMES ONLY, never the dealer's text — the same doctrine the
+             * turn row states. Their words are already on the row in `question`.
+             */}
+            <span className="inline-flex flex-wrap items-center gap-1">
+              <Badge intent={turn.guard.action === 'advisory' ? 'neutral' : 'warning'}>
+                {turn.guard.stage === 'input'
+                  ? 'In their message'
+                  : 'In what the writer produced'}
+              </Badge>
+              <span className="text-text-muted">
+                {turn.guard.rules.map((r) => aiRuleLabel(r)).join(', ')}
+              </span>
+            </span>
+          </Fact>
+        ) : null}
         {turn.templateId ? (
           <Fact label="Template">
             <span className="font-mono text-xs">{turn.templateId}</span>
@@ -143,6 +282,8 @@ function TurnDetail({
           <span className="text-text-subtle">{` · ${aiTurnAge(turn.createdAt, now)}`}</span>
         </Fact>
       </dl>
+
+      <RefusedProse turn={turn} />
 
       {withheld ? (
         <div className="grid gap-2 rounded-md border border-border bg-surface-2 p-2.5">
@@ -200,6 +341,11 @@ export function AiFirstLineStrip({
   const latest = turns[0]!;
   const earlier = turns.slice(1);
   const chipIntent = AI_OUTCOME_TONE[latest.outcome];
+  // The mark goes on the COLLAPSED line, not only inside the panel. "Did a model
+  // write this, or did a person write it months ago?" is the first thing an
+  // admin now needs to know about a reply sitting in the thread above, and an
+  // admin who never opens the panel would otherwise never learn it.
+  const production = aiProduction(latest);
 
   return (
     <div className="border-t border-border bg-surface">
@@ -219,6 +365,17 @@ export function AiFirstLineStrip({
           First line
         </span>
         <Badge intent={chipIntent}>{AI_OUTCOME_LABEL[latest.outcome]}</Badge>
+        {/* The production mark from md up. Below it the row already carries a
+            glyph, a label, an outcome badge, an age and a chevron, and `Badge`
+            refuses to shrink — a fourth pill would push the chevron off a 360px
+            row. The panel carries it at every width. */}
+        {production ? (
+          <span className="hidden md:contents">
+            <Badge intent={production.tone} title={production.hint}>
+              {production.label}
+            </Badge>
+          </span>
+        ) : null}
         {/* The reason in full on a wide screen; the badge carries it below md,
             where a fifteen-word sentence would push the chevron off the row. */}
         <span className="hidden min-w-0 flex-1 truncate text-sm text-text-muted md:block">
@@ -257,6 +414,7 @@ export function AiFirstLineStrip({
                     <Badge intent={AI_OUTCOME_TONE[t.outcome]}>
                       {AI_OUTCOME_LABEL[t.outcome]}
                     </Badge>
+                    <ProductionBadge turn={t} />
                     <span className="min-w-0 break-words">
                       {t.reason
                         ? AI_HANDOFF_REASON_LABEL[t.reason]

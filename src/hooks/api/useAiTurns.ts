@@ -5,10 +5,13 @@ import { api, type QueryParams } from '@/lib/api';
 import type {
   AiTurn,
   AiTurnOutcome,
+  Conversation,
   DealerFirstLineMode,
   Paginated,
 } from '@dk/shared';
 import type { AiTurnListQuery, AiTurnReviewInput } from '@dk/shared/schemas';
+
+import { conversationKey } from './useConversation';
 
 /**
  * The admin's window onto the AI first line: the turn log, the verdicts, the
@@ -41,11 +44,44 @@ export type AiTurnCounts = Record<AiTurnOutcome, number> & {
   wrongIn24h: number;
   /** How many of those trip the breaker and switch the first line off. */
   breakerAt: number;
+  /**
+   * The last day's turns by writer disposition — `prose`, `fallback`, `skipped`,
+   * `off`.
+   *
+   * A LOOSE RECORD ON PURPOSE. It is a Mongo `$group` and the server may one day
+   * emit a fifth disposition; a `Record<AiWriterDisposition, number>` here would
+   * promise this build knows every key, which is exactly the promise
+   * `aiWriterSplit` is written not to need.
+   */
+  writerIn24h: Record<string, number>;
+  /**
+   * The same, split by the language the dealer wrote in.
+   *
+   * Watched SPLIT and not only in aggregate, for the reason the turn row states:
+   * a systematically high rejection rate on Hindi would quietly mean Hindi
+   * dealers get templates while English dealers get prose, and the aggregate
+   * would look fine.
+   */
+  writerByLangIn24h: Record<string, Record<string, number>>;
+  /** Every answered turn in the same window — the prose rate's denominator. */
+  answeredIn24h: number;
+  /** Answers the dealer wrote straight back after. Changes no behaviour. */
+  quickFollowUpIn24h: number;
 };
 
 /** `GET /super-admin/ai-first-line` — where both switches stand. */
 export interface AiFirstLineSwitchView {
   enabled: boolean;
+  /**
+   * THE MIDDLE NOTCH: Off / Templates only / Full.
+   *
+   * `enabled: true, writer: false` is exactly the product that was live before
+   * this version — every answer a hand-written sentence. It exists because the
+   * likeliest thing an admin wants to stop at nine at night is the PROSE, not
+   * the service, and turning the whole first line off to stop a clumsy sentence
+   * throws away a working product.
+   */
+  writer: boolean;
   updatedAt: string | null;
   updatedByAdminId: string | null;
   updatedByName: string | null;
@@ -56,6 +92,8 @@ export interface AiFirstLineSwitchView {
    * somebody would press it and wait.
    */
   envEnabled: boolean;
+  /** The same trap one notch down: with this false, the writer switch does nothing. */
+  envWriterEnabled: boolean;
   /** The switch is cached per process; the screen says so rather than implying instant. */
   takesEffectWithinSeconds: number;
 }
@@ -109,6 +147,13 @@ export function aiTurnParams(params: AiTurnListQuery): QueryParams {
     reason: params.reason,
     intent: params.intent,
     verdict: params.verdict,
+    // `?writer=fallback` is "every reply the fence refused" — the query the
+    // first fortnight is spent inside, and the one that answers which fence is
+    // actually costing us answers. It has to be here as well as in the key
+    // factory: a filter the key remembers and the request never sends is a
+    // screen that caches four different lists under four keys and shows the
+    // same rows in all of them.
+    writer: params.writer,
     reviewed: params.reviewed === undefined ? undefined : params.reviewed,
     from: params.from,
     to: params.to,
@@ -253,6 +298,62 @@ export function useSetAiFirstLineSwitch() {
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: aiFirstLineSwitchKey });
+    },
+  });
+}
+
+/**
+ * The middle notch on the same switch — stop the PROSE and keep the service.
+ *
+ * A SEPARATE HOOK AND A SEPARATE REQUEST, even though the endpoint takes both
+ * fields, because they are different decisions with different blast radii and
+ * the backend audits them under two different actions for exactly that reason.
+ * Sending `{enabled, writer}` together from one control would collapse "somebody
+ * stopped the prose" and "somebody stopped the first line" into one audit row
+ * nobody can read in an incident.
+ *
+ * The counts go too: turning the writer off changes the prose rate the page
+ * leads with, and a headline figure that disagrees with the switch beneath it is
+ * a screen nobody trusts again.
+ */
+export function useSetAiFirstLineWriterSwitch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (writer: boolean) =>
+      api.put<{ writer: boolean; envWriterEnabled: boolean }>(
+        '/super-admin/ai-first-line',
+        { writer },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: aiFirstLineSwitchKey });
+      void qc.invalidateQueries({ queryKey: aiTurnCountsKey });
+    },
+  });
+}
+
+/**
+ * Clear the AI-guard mark on one thread. SUPER-ADMIN ONLY.
+ *
+ * THE ONLY THING THAT CLEARS IT, and that is the whole design of the field.
+ * `Conversation.flagged` is cleared by pickup, by any admin reply, by resolve,
+ * by reopen and by a records post — right for an operational alarm, and
+ * catastrophic for a security observation, because it would mean an admin
+ * ANSWERING THE DEALER silently erases the record that somebody tried to plant a
+ * figure in MDG's mouth. So there is no optimistic patch here either: the
+ * server's decorated conversation is what lands, and the whole `['conversations']`
+ * prefix is invalidated so the guard lens and its badge both drop the row.
+ */
+export function useClearAiGuard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      api.post<Conversation | null>(
+        `/conversations/${conversationId}/ai-guard/clear`,
+        {},
+      ),
+    onSuccess: (conv) => {
+      if (conv) qc.setQueryData(conversationKey(conv.id), conv);
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
 }

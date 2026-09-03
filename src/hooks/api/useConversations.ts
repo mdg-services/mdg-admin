@@ -14,8 +14,27 @@ import type { Conversation } from '@dk/shared';
  * conversation status changes. That is the same reason the machine has no fourth
  * `ConversationStatus`: a fifth status would drop these rows out of every other
  * tab and four of the five counts while the dealer sat waiting.
+ *
+ * `ai-guard` is a SECOND lens on the same argument: the threads where somebody
+ * tried to plant a figure in MDG's mouth or read the system instruction back
+ * out. It is NOT `flagged`, which means one thing — an assigned ticket missed
+ * its reply SLA — and is cleared by pickup, by any admin reply, by resolve, by
+ * reopen and by a records post. An operational alarm should clear when the work
+ * is done; an observation about a person's behaviour must survive being replied
+ * to, so it reads `ai.abuse` and only a super-admin pressing Clear removes it.
+ *
+ * It also includes ASSIGNED where `ai` excludes it, and that is deliberate: an
+ * admin taking the ticket is the RIGHT response to a guard hit, and dropping the
+ * row the moment somebody picks it up would hide the ones being handled.
  */
-export type InboxFilter = 'open' | 'mine' | 'all' | 'resolved' | 'flagged' | 'ai';
+export type InboxFilter =
+  | 'open'
+  | 'mine'
+  | 'all'
+  | 'resolved'
+  | 'flagged'
+  | 'ai'
+  | 'ai-guard';
 
 export const conversationsKey = (filter: InboxFilter) =>
   ['conversations', { filter }] as const;
@@ -40,6 +59,11 @@ export interface InboxCounts {
    * counted in `open` and in `all`, exactly as they are also listed there.
    */
   ai: number;
+  /**
+   * The AI guard lens. A subset of the ACTIVE set (unassigned and assigned
+   * both), on the same terms: nothing leaves another tab to be counted here.
+   */
+  aiGuard: number;
 }
 
 // Shares the ['conversations'] prefix so an inbox invalidation refreshes the

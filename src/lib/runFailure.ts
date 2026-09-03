@@ -46,6 +46,23 @@ const CODE_COPY: Record<string, Omit<RunFailureCopy, 'known'>> = {
       "The shift data this report is built from could not be collected for that day, so the report couldn't be " +
       `produced. ${CONTACT_MDG}`,
   },
+
+  /**
+   * Written by the server's stale-run sweep, not by a plugin: this run's process
+   * died — a restart, a deploy, an out-of-memory kill — while the run was still
+   * going, so nothing ever recorded an outcome for it.
+   *
+   * Deliberately does NOT close with "contact the MDG team". A restart is
+   * routine, nothing was lost, and the schedule picks the day up by itself;
+   * sending an admin to raise it as an incident would be asking them to report
+   * the weather.
+   */
+  RUN_ABANDONED: {
+    title: "This run didn't finish.",
+    hint:
+      'The server restarted while it was still running, so it stopped part-way. Nothing was saved from it and ' +
+      'nothing was lost. The next scheduled run will pick the day up — press Run now if you need it sooner.',
+  },
 };
 
 /**

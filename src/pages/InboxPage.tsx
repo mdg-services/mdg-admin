@@ -16,6 +16,7 @@ import {
   PanelRightOpen,
   Plus,
   RotateCcw,
+  ShieldAlert,
   UserPlus,
   type LucideIcon,
 } from 'lucide-react';
@@ -33,6 +34,7 @@ import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
 import { Sheet, SheetItem } from '@/components/ui/Sheet';
 import { Spinner } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
 import { AiFirstLineStrip } from '@/features/chat/AiFirstLineStrip';
 import { Composer, type ComposerInsert } from '@/features/chat/Composer';
 import { MediaGalleryCard } from '@/features/chat/MediaGalleryCard';
@@ -49,6 +51,10 @@ import { ResolveConversationDialog } from '@/features/chat/ResolveConversationDi
 import { useConversationSocket } from '@/features/chat/useConversationSocket';
 import { useInboxSocket } from '@/features/chat/useInboxSocket';
 import { UploadRecordDialog } from '@/features/records/UploadRecordDialog';
+import {
+  useClearAiGuard,
+  useConversationAiTurnsQuery,
+} from '@/hooks/api/useAiTurns';
 import { useAssignConversation } from '@/hooks/api/useAssignConversation';
 import { useConversation } from '@/hooks/api/useConversation';
 import {
@@ -64,6 +70,7 @@ import { useResolveConversation } from '@/hooks/api/useResolveConversation';
 import { useSendMessage } from '@/hooks/api/useSendMessage';
 import { useServicesQuery } from '@/hooks/api/useServices';
 import { useUpdateTicket } from '@/hooks/api/useUpdateTicket';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useSafeBack } from '@/hooks/useSafeBack';
 import { api } from '@/lib/api';
@@ -74,6 +81,8 @@ import {
   TICKET_CATEGORIES,
   TICKET_PRIORITIES,
   aiInboxChip,
+  aiThreadGuard,
+  aiTurnAge,
   dealerCodeLabel,
   ticketFlagLevel,
 } from '@dk/shared';
@@ -169,7 +178,139 @@ const FILTERS: Array<{ key: InboxFilter; label: string }> = [
   // has said something on. Deliberately last, so the four tabs the team has used
   // for a year keep their positions and their muscle memory.
   { key: 'ai', label: '⚡ AI' },
+  // A SECOND lens, on the same argument as the first: the threads where somebody
+  // tried to plant a figure in MDG's mouth or read the system instruction back
+  // out. Nothing moves into it and nothing leaves another tab to be in it.
+  //
+  // It is NOT the Flagged tab above. Flagged means an assigned ticket missed its
+  // reply SLA and is cleared by pickup, by any admin reply, by resolve, by reopen
+  // and by a records post — right for an operational alarm, and catastrophic for
+  // a security observation, because it would mean ANSWERING THE DEALER silently
+  // erases the record. This one is cleared by exactly one thing: a super-admin
+  // pressing Clear on the thread.
+  { key: 'ai-guard', label: '🛡 AI guard' },
 ];
+
+/**
+ * The guard banner over the composer: somebody tried, on this thread, to plant a
+ * figure in MDG's mouth or to read the system instruction back out.
+ *
+ * HERE, above the composer, because this is where the admin is standing when
+ * they decide what to write back — and what to write back is the whole of the
+ * response. THERE IS NO AUTOMATIC SANCTION OF ANY KIND behind this: no block, no
+ * rate cut, no mode change. A dealer is a paying customer, and one injection
+ * attempt is a curious pump owner poking at something new.
+ *
+ * THE DEALER SEES NOTHING DIFFERENT, EVER. Every input-guard block produces the
+ * same warm line as "the vendor was slow", for the reason the templates state: a
+ * probe that gets a different sentence for "the guard blocked you" and "the
+ * vendor was slow" has been handed a map of the guards. Said out loud on the
+ * banner, because the first question an admin asks is what the dealer was told.
+ *
+ * READ OFF THE TURN LOG, NOT OFF THE CONVERSATION, and that is not a shortcut.
+ * `Conversation.ai.abuse` is deliberately never serialized to anybody —
+ * `conversationToPublic` feeds the DEALER's app as well as this one, and telling
+ * somebody they have been marked is unkind and a map of the guards. The turn log
+ * is admin-only, it carries the rule names, and this component shares the query
+ * key the strip below already uses, so it costs no extra request.
+ *
+ * THE COST OF THAT, STATED: the inbox LIST cannot draw a per-row mark, because
+ * list rows carry no turns. Finding a marked thread is the 🛡 AI guard lens's
+ * job, which is a server-side filter on the real counter and is therefore the
+ * authority. This banner explains a thread; the lens finds one.
+ *
+ * CLEARING IS SUPER-ADMIN AND IS THE ONLY THING THAT CLEARS IT. Replying does
+ * not, resolving does not, reopening does not — which is the entire reason the
+ * mark lives on `ai.abuse` and not on `Conversation.flagged`, where answering
+ * the dealer would silently erase it.
+ */
+function AiGuardBanner({
+  conversationId,
+  now,
+}: {
+  conversationId: string;
+  /** The page's one-minute tick, so this age advances with every other one. */
+  now: number;
+}) {
+  const isSuperAdmin = useIsSuperAdmin();
+  const clear = useClearAiGuard();
+  const toast = useToast();
+  // The SAME query key the strip below uses, so react-query serves both from one
+  // cache entry and one request.
+  const turnsQ = useConversationAiTurnsQuery(conversationId);
+  const guard = aiThreadGuard(turnsQ.data?.items);
+  if (!guard) return null;
+  return (
+    <div className="border-t border-border bg-surface px-3 py-2.5">
+      <div className="flex flex-wrap items-start gap-2">
+        <ShieldAlert
+          width={16}
+          height={16}
+          strokeWidth={2}
+          className="mt-0.5 shrink-0 text-text-muted"
+        />
+        <div className="grid min-w-0 flex-1 gap-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge intent={guard.tone}>{guard.label}</Badge>
+            {/* `aiTurnAge` and not a phrasing of our own: the same "5m / 3h /
+                2d / Jul 01" ladder every other age on the AI surface uses, and
+                it refuses to print a negative one when a phone's clock runs a
+                minute ahead of the server's. */}
+            <span className="text-xs text-text-subtle">
+              {aiTurnAge(guard.at, now)}
+            </span>
+          </div>
+          {guard.labels.length > 0 ? (
+            <p className="min-w-0 break-words text-sm text-text">
+              {guard.labels.join(', ')}
+            </p>
+          ) : null}
+          <p className="text-xs text-text-muted">{guard.hint}</p>
+          <p className="text-xs text-text-muted">
+            The dealer was told nothing different — they got the same warm line as
+            a busy day.
+          </p>
+        </div>
+        {isSuperAdmin ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={clear.isPending}
+            onClick={() =>
+              clear.mutate(conversationId, {
+                onSuccess: () => toast.success('Cleared'),
+                onError: (err) =>
+                  toast.error(
+                    err instanceof Error ? err.message : 'Could not clear it',
+                  ),
+              })
+            }
+          >
+            Clear
+          </Button>
+        ) : (
+          <span className="shrink-0 self-center text-xs text-text-subtle">
+            A super-admin clears this.
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A `?lens=` parameter as a tab, or `null` for anything this build does not
+ * recognise.
+ *
+ * Validated against `FILTERS` rather than cast, because an unknown value would
+ * otherwise reach `GET /conversations?status=…` — which does not reject it, it
+ * simply matches no branch and returns EVERY conversation. A typo in a pasted
+ * link would look like the guard lens holding the whole inbox.
+ */
+function inboxLens(value: string | null): InboxFilter | null {
+  const hit = FILTERS.find((f) => f.key === value);
+  return hit ? hit.key : null;
+}
 
 /**
  * What the machine did on this thread, as a chip on the inbox row.
@@ -274,7 +415,12 @@ export function InboxPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const deepLinkId = searchParams.get('c');
 
-  const [filter, setFilter] = React.useState<InboxFilter>(deepLinkId ? 'all' : 'mine');
+  // `/inbox?lens=ai-guard` — the way in from the AI answers page. A thread wins
+  // over a lens: a link to one conversation is always more specific than a link
+  // to a list.
+  const [filter, setFilter] = React.useState<InboxFilter>(
+    deepLinkId ? 'all' : (inboxLens(searchParams.get('lens')) ?? 'mine'),
+  );
   const [selectedId, setSelectedId] = React.useState<string | null>(deepLinkId);
   const [contextOpen, setContextOpen] = React.useState(true);
   const [newOpen, setNewOpen] = React.useState(false);
@@ -313,6 +459,17 @@ export function InboxPage() {
       if (c) setFilter('all');
     }
   }, [searchParams, setSearchParams, isLg]);
+
+  // The lens seeded the tab above; strip it, exactly as `?c=` is stripped on
+  // desktop. Left in the URL it would survive every later tab change, so a
+  // refresh — or Android's back key — would drop the operator back into the
+  // guard lens from wherever they had moved to.
+  React.useEffect(() => {
+    if (!searchParams.get('lens')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('lens');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Open a conversation. On mobile this pushes `?c=<id>` (a real history entry,
   // so hardware-back returns to the list); on desktop it sets state directly.
@@ -509,6 +666,7 @@ export function InboxPage() {
     resolved: countsQ.data?.resolved,
     flagged: countsQ.data?.flagged,
     ai: countsQ.data?.ai,
+    'ai-guard': countsQ.data?.aiGuard,
   };
 
   // Auto-select first conversation when list loads and nothing selected. Yield
@@ -1252,8 +1410,12 @@ export function InboxPage() {
                 </div>
                 {/* Above the composer, below the messages: admin chrome that
                     is deliberately NOT a bubble in the thread — see
-                    `AiFirstLineStrip`. It renders nothing at all on the
-                    threads the machine never touched, which is most of them. */}
+                    `AiFirstLineStrip`. Both of these render nothing at all on
+                    the threads they have nothing to say about, which is most of
+                    them; the guard banner sits ABOVE the strip because it is
+                    the one an admin must not be able to miss while the strip is
+                    collapsed. */}
+                <AiGuardBanner conversationId={conversation.id} now={now} />
                 <AiFirstLineStrip
                   conversationId={conversation.id}
                   onUseAnswer={handleUseAiAnswer}
