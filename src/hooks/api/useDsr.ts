@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, ApiError } from '@/lib/api';
+import type { AssuranceVerdict } from '@/lib/assurance';
 import type { PnlProductInput } from '@/lib/fuelPnl';
 import type {
   DsrReportDigest,
@@ -116,6 +117,21 @@ export interface DsrReportView {
     by: string;
     supersededAt: string;
   } | null;
+  /**
+   * The pre-send correctness verdict written when this report was generated.
+   *
+   * `null` MEANS NEVER CHECKED — never "passed". Every report generated before
+   * the check existed carries null, and reading a missing field as "fine" is a
+   * silent hole covering the whole back catalogue. Any surface showing this must
+   * say which of the two it is.
+   *
+   * It is also not the last word: `stale` is set on an existing report long
+   * after it was generated (a re-baseline flagged 1E's hours later), so the
+   * Share gate asks `GET /assurance/reports/:id` for a verdict evaluated now.
+   * This field is the generate-time record, useful for `checkedAt` and for the
+   * override that was written onto it.
+   */
+  assurance?: AssuranceVerdict | null;
 }
 
 /** `POST /dsr/reports/:id/share` result. */
@@ -125,7 +141,14 @@ export interface DsrShareResult {
   messageId: string;
 }
 
-/** One report headline in a dealer's history — `GET /dsr/dealers/:id/reports`. */
+/**
+ * One report headline in a dealer's history — `GET /dsr/dealers/:id/reports`.
+ *
+ * Deliberately carries no `assurance`: the server's `toSummary` does not send
+ * one, and a hold is evaluated live rather than read off a stored flag, so a
+ * per-row verdict here would be a field the API never fills. The hold queue at
+ * `GET /assurance/holds` is where "what is being withheld" is answered.
+ */
 export interface DsrReportSummary {
   id: string;
   dealerId: string;
@@ -392,6 +415,11 @@ export function useGenerateDsr() {
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: dsrKeys.all });
+      // The verdict is keyed on the report id, which is STABLE across a
+      // regeneration (reports upsert by dealer+businessDate). Without this the
+      // panel keeps serving the pre-regeneration answer and the Share button
+      // stays dead after the figures were fixed — or stays live after they broke.
+      void qc.invalidateQueries({ queryKey: ['assurance'] });
     },
   });
 }
@@ -410,6 +438,11 @@ export function useRegenerateStaleDsr(dealerId: string) {
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: dsrKeys.all });
+      // The verdict is keyed on the report id, which is STABLE across a
+      // regeneration (reports upsert by dealer+businessDate). Without this the
+      // panel keeps serving the pre-regeneration answer and the Share button
+      // stays dead after the figures were fixed — or stays live after they broke.
+      void qc.invalidateQueries({ queryKey: ['assurance'] });
     },
   });
 }
@@ -425,6 +458,11 @@ export function useShareDsr(reportId: string) {
     mutationFn: () => api.post<DsrShareResult>(`/dsr/reports/${reportId}/share`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: dsrKeys.all });
+      // The verdict is keyed on the report id, which is STABLE across a
+      // regeneration (reports upsert by dealer+businessDate). Without this the
+      // panel keeps serving the pre-regeneration answer and the Share button
+      // stays dead after the figures were fixed — or stays live after they broke.
+      void qc.invalidateQueries({ queryKey: ['assurance'] });
     },
   });
 }

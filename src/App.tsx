@@ -57,6 +57,13 @@ const AssistPage = React.lazy(
     import('@/pages/AssistPage').then((m) => ({ default: m.AssistPage })),
   ),
 );
+const AssuranceQueuePage = React.lazy(
+  retryImport(() =>
+    import('@/pages/assurance/AssuranceQueuePage').then((m) => ({
+      default: m.AssuranceQueuePage,
+    })),
+  ),
+);
 const BankHolidaysPage = React.lazy(
   retryImport(() =>
     import('@/pages/BankHolidaysPage').then((m) => ({
@@ -320,6 +327,20 @@ export default function App() {
             element={
               <LazyPage>
                 <DsrPnlView />
+              </LazyPage>
+            }
+          />
+          {/* Everything the pre-send correctness gate is withholding, across
+              every dealer, plus the per-dealer standing remarks. NOT
+              super-admin: the endpoints behind it are `requireRole('admin')`,
+              and a report withheld on an automatic path — the Kavach digest
+              sends on its own schedule with no admin involved — is seen here or
+              nowhere. */}
+          <Route
+            path="assurance"
+            element={
+              <LazyPage>
+                <AssuranceQueuePage />
               </LazyPage>
             }
           />

@@ -47,6 +47,10 @@ export function useDsrRunWatcher(dealerId: string, successMessage: string) {
     // Lost sight of the run — it is still finishing server-side.
     setRunId(null);
     void qc.invalidateQueries({ queryKey: dsrKeys.all });
+    // A run rewrites the figures, so the stored verdict is replaced too. The
+    // verdict query is keyed on the report id, which does not change across a
+    // regeneration, so nothing else would refetch it.
+    void qc.invalidateQueries({ queryKey: ['assurance'] });
     toast.info(
       'Lost track of that run — it is probably still finishing. Refresh in a moment.',
     );
@@ -56,6 +60,10 @@ export function useDsrRunWatcher(dealerId: string, successMessage: string) {
     const st = poll.data?.status;
     if (!runId || (st !== 'SUCCESS' && st !== 'FAILED')) return;
     void qc.invalidateQueries({ queryKey: dsrKeys.all });
+    // A run rewrites the figures, so the stored verdict is replaced too. The
+    // verdict query is keyed on the report id, which does not change across a
+    // regeneration, so nothing else would refetch it.
+    void qc.invalidateQueries({ queryKey: ['assurance'] });
     if (st === 'SUCCESS') {
       toast.success(successMessage);
     } else {

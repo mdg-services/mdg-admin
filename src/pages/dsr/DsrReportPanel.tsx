@@ -13,6 +13,7 @@ import {
 import * as React from 'react';
 
 
+import { AssurancePanel } from '@/components/dsr/AssurancePanel';
 import {
   Badge,
   Button,
@@ -26,9 +27,11 @@ import {
   useToast,
   type KeyValueItem,
 } from '@/components/ui';
+import { useAssuranceReport } from '@/hooks/api/useAssurance';
 import { useShareDsr, type DsrReportView } from '@/hooks/api/useDsr';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
+import { isHolding, shareBlockedReason } from '@/lib/assurance';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatLitres } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
@@ -636,6 +639,13 @@ function ProductFigures({
  * An admin reviews the images, then Share posts them plus a bilingual summary to
  * the dealer's chat. Idempotent: once shared, the button becomes a disabled
  * "Shared" with a timestamp.
+ *
+ * TWO GATES, NOT ONE. `alreadyShared` has always been here. The second is the
+ * pre-send correctness check, and it exists because nothing posted to a dealer
+ * can be recalled — there is no message delete and no message edit endpoint
+ * anywhere. 1E's 2,646,765 L report was flagged, marked stale, and still one
+ * confirm click from the dealer's phone. So a held report takes the button away
+ * rather than warning beside it.
  */
 function DsrShareSection({
   report,
@@ -649,6 +659,26 @@ function DsrShareSection({
   const [confirmOpen, setConfirmOpen] = React.useState(false);
 
   const alreadyShared = !!report.shared;
+  // Evaluated live rather than read off `report.assurance`: a re-baseline marks
+  // an EXISTING report stale hours after it was generated, which is exactly how
+  // 1E slipped through, so the stored verdict is not the last word. Same query
+  // key as the panel below, so this costs no second request.
+  //
+  // A verdict we could not fetch is deliberately NOT a hold: `isHolding` is
+  // false for a missing one. The server refuses on its own under ENFORCE and the
+  // refusal arrives as a toast carrying the findings; taking Share away from
+  // every dealer because one request failed would be the worse failure.
+  const assuranceQ = useAssuranceReport(report.id);
+  const held = isHolding(assuranceQ.data);
+  // A verdict still IN FLIGHT is a different state from one that failed, and the
+  // rule above covers only the second. While the request is outstanding we do not
+  // yet know whether this report may be sent, and the honest reading of "do not
+  // know" on the last click before something unrecallable is "wait".
+  const verdictPending = assuranceQ.isPending;
+  const shareBlocked = held || verdictPending;
+  const blockedReason = held
+    ? shareBlockedReason(assuranceQ.data)
+    : 'Checking this report before it can be sent…';
   const cards: {
     url?: string;
     label: string;
@@ -688,6 +718,16 @@ function DsrShareSection({
   } | null>(null);
 
   async function onConfirm() {
+    // Re-checked at the moment of the click, not only when the dialog opened.
+    // The verdict refetches on window focus, so a report can become held while
+    // this dialog sits open — and `disabled` on the button that OPENED it does
+    // nothing about the button inside it. The server refuses too, but this is the
+    // last click before a message that cannot be deleted or edited.
+    if (isHolding(assuranceQ.data)) {
+      setConfirmOpen(false);
+      toast.error(shareBlockedReason(assuranceQ.data) ?? 'This report is being withheld.');
+      return;
+    }
     try {
       const result = await share.mutateAsync();
       toast.success(
@@ -792,35 +832,53 @@ function DsrShareSection({
             </div>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-2">
-            {alreadyShared ? (
-              <>
-                <Button
-                  variant="secondary"
-                  disabled
-                  leftIcon={<Check width={14} height={14} strokeWidth={1.75} />}
-                >
-                  Shared
-                </Button>
-                <span className="text-xs text-text-subtle">
-                  {formatDateTime(report.shared?.at)}
-                </span>
-              </>
-            ) : (
-              <>
-                <Button
-                  onClick={() => setConfirmOpen(true)}
-                  leftIcon={<Share2 width={14} height={14} strokeWidth={1.75} />}
-                >
-                  Share with dealer
-                </Button>
-                {!haveImages ? (
+          {/* What the check made of these figures — the detail behind the
+              disabled button below, and the place the release form lives. */}
+          <AssurancePanel report={report} />
+
+          {/* min-w-0: this is a grid item, and a grid track is sized by its
+              item's min-content — a long withheld-reason sentence otherwise
+              widens the card past `main`, which is `overflow-x-hidden`, so the
+              overhang is clipped rather than scrollable. */}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              {alreadyShared ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    disabled
+                    leftIcon={<Check width={14} height={14} strokeWidth={1.75} />}
+                  >
+                    Shared
+                  </Button>
                   <span className="text-xs text-text-subtle">
-                    The cards render when you share.
+                    {formatDateTime(report.shared?.at)}
                   </span>
-                ) : null}
-              </>
-            )}
+                </>
+              ) : (
+                <>
+                  <Button
+                    onClick={() => setConfirmOpen(true)}
+                    disabled={shareBlocked}
+                    leftIcon={<Share2 width={14} height={14} strokeWidth={1.75} />}
+                  >
+                    Share with dealer
+                  </Button>
+                  {!haveImages && !shareBlocked ? (
+                    <span className="text-xs text-text-subtle">
+                      The cards render when you share.
+                    </span>
+                  ) : null}
+                </>
+              )}
+            </div>
+            {/* The reason the button is dead, as TEXT UNDER IT. Not a `title`
+                and not an `aria-disabled` hint: `title` never fires on touch,
+                and this admin is used on phones, so a tooltip is a reason
+                nobody reads. */}
+            {!alreadyShared && blockedReason ? (
+              <p className="mt-2 text-sm text-text-muted">{blockedReason}</p>
+            ) : null}
           </div>
         </CardContent>
       </Card>

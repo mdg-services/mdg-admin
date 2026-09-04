@@ -12,6 +12,7 @@ import {
   PartyPopper,
   Plug,
   ScrollText,
+  ShieldAlert,
   ShieldCheck,
   ShieldPlus,
   UserCog,
@@ -73,6 +74,14 @@ export const NAV_ITEMS: NavItem[] = [
   // The generated day-book each dealer receives — an everyday admin outcome
   // surface, so deliberately NOT `superAdminOnly`.
   { to: '/dsr', label: 'Daily Sales Report', icon: FileBarChart2 },
+  // Everything the pre-send correctness gate is refusing to send, across every
+  // dealer. Deliberately NOT `superAdminOnly` — the endpoint behind it is
+  // `requireRole('admin')`, and more to the point a withheld report on an
+  // automatic path (the Kavach digest sends on its own schedule with nobody
+  // watching) is discovered here or not at all. Not in `BOTTOM_TAB_ROUTES`: the
+  // bar holds four, and this is a once-a-day check rather than a working
+  // surface, so it falls into the More sheet.
+  { to: '/assurance', label: 'Withheld reports', icon: ShieldAlert },
   // The landing-page assistant's console (ADR 0009). Super-admin only: these
   // are strangers' transcripts and, where they left one, their phone number.
   { to: '/assist', label: 'Assistant', icon: Headset, superAdminOnly: true },
