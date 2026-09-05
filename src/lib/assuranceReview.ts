@@ -296,17 +296,19 @@ export function aiReviewBadge(
       };
     case 'UNGROUNDED':
       return {
-        label: 'AI · discarded',
+        // "discarded" read as though the REPORT had been discarded. What was
+        // thrown away is the AI's answer, and the label has to say so on its own.
+        label: 'AI · not used',
         intent: 'danger',
         detail:
-          'Everything the AI review said quoted figures that are not on this report, so all of it was thrown away. The rules ran in full — this is about the AI, not the report.',
+          'The AI review quoted figures it could not point to in this report, so none of what it said was used. Most often it named a pump without citing the pump’s number. The rules ran in full — this is about the AI, not the report.',
       };
     case 'TRUNCATED':
     case 'EMPTY':
     case 'UNPARSEABLE':
     case 'SCHEMA_REJECTED':
       return {
-        label: 'AI · unreadable',
+        label: 'AI · not used',
         intent: 'danger',
         detail:
           'The AI review’s answer could not be read, so none of it was used. The rules ran in full — this is about the AI, not the report.',
