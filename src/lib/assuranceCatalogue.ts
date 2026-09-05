@@ -174,7 +174,7 @@ export const CHECK_CATALOGUE: readonly CheckMeta[] = [
 const BY_CODE = new Map(CHECK_CATALOGUE.map((c) => [c.code, c]));
 
 /**
- * The prefix the backend forces onto every code the second reader invents.
+ * The prefix the backend forces onto every code the AI review invents.
  *
  * Its codes are free text — the shapes it exists for are the ones no rule
  * anticipated — so they cannot be listed here. The prefix is what lets this
@@ -186,7 +186,7 @@ const MODEL_CODE_PREFIX = 'model.';
  * The catalogue entry for a code, or an honest placeholder.
  *
  * Three cases, and the difference between them matters. A known code gets its
- * own entry. A `model.` code is a concern from the second reader: it can never
+ * own entry. A `model.` code is a concern from the AI review: it can never
  * be `BLOCK` (the response schema has no such member) and its floor is always
  * `NOTE`, because a model's opinion is outranked by an admin who has looked at
  * the report and written down why it is fine. Anything else is a backend that
@@ -200,7 +200,7 @@ export function checkMeta(code: string): CheckMeta {
   if (code.startsWith(MODEL_CODE_PREFIX)) {
     return {
       code,
-      title: `Raised by the second reader: ${code.slice(MODEL_CODE_PREFIX.length).replace(/_/g, ' ')}`,
+      title: `Raised by the AI review: ${code.slice(MODEL_CODE_PREFIX.length).replace(/_/g, ' ')}`,
       meaning:
         'Not proved by a rule — a second, fallible reader looked at the same figures and said one of them seems wrong. Every number it cited was checked against the report before this was kept.',
       severity: 'REVIEW',

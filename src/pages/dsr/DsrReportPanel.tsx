@@ -13,7 +13,7 @@ import {
 import * as React from 'react';
 
 
-import { AssurancePanel } from '@/components/dsr/AssurancePanel';
+import { AssurancePanel, AssuranceSummaryStrip } from '@/components/dsr/AssurancePanel';
 import {
   Badge,
   Button,
@@ -124,6 +124,12 @@ export function DsrReportPanel({
       {/* Above the warnings: "these figures no longer match their inputs" is a
           stronger caveat than "this figure was missing a nozzle". */}
       <DsrStaleNotice report={report} />
+
+      {/* The verdict, before the report rather than under it. The full panel and
+          the release form stay beside Share; this is the answer to "can I send
+          this, and did anything look at it?", which an admin needs before they
+          start reading figures. */}
+      <AssuranceSummaryStrip report={report} />
 
       <DsrWarningsBanner warnings={report.warnings} />
 

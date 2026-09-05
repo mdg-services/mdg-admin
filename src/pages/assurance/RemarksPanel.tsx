@@ -442,7 +442,7 @@ function WhatARemarkDoes() {
       <p className="mt-1">
         It lowers a finding to the floor that finding&apos;s own check declares
         — never below — in the verdict recorded when the report is generated,
-        and it is handed to the second reader so a known fault is not raised
+        and it is handed to the AI review so a known fault is not raised
         again as a fresh concern.
       </p>
       <p className="mt-1.5 font-semibold text-text">What it does not do</p>

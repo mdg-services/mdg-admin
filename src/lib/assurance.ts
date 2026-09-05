@@ -112,6 +112,20 @@ export interface AssuranceFinding {
 }
 
 /** What the model contributed, kept apart from what the detectors proved. */
+/** One plain-words account of why a rule finding probably fired. */
+export interface AssuranceExplanation {
+  /** The catalogue code of the finding this explains. */
+  findingCode: string;
+  scope: AssuranceScope;
+  /** A named cause from the backend's closed list. */
+  cause: string;
+  /** One sentence naming the figures that point at that cause. */
+  because: string;
+  /** Optional: the innocent explanation this is NOT. Often the most useful line. */
+  ruledOut?: string;
+  citations: string[];
+}
+
 export interface AssuranceAdjudication {
   outcome:
     | 'ANSWERED'
@@ -129,6 +143,14 @@ export interface AssuranceAdjudication {
     | 'SKIPPED';
   /** Concerns that survived the fence. Never `BLOCK`. */
   concerns: AssuranceFinding[];
+  /**
+   * Why a finding the RULES made probably fired, in plain words.
+   *
+   * Optional on the wire so a report checked before this shipped still parses.
+   * It is reading material and nothing else: it carries no severity, it is not
+   * acknowledged in a release, and deleting every entry changes no decision.
+   */
+  explanations?: AssuranceExplanation[];
   droppedUngrounded: number;
   latencyMs: number | null;
   estPaise: number | null;

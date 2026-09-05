@@ -1,4 +1,4 @@
-import { Info, ServerCrash, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Info, Lightbulb, ServerCrash, ShieldAlert, ShieldCheck } from 'lucide-react';
 import * as React from 'react';
 
 import {
@@ -29,8 +29,18 @@ import {
   summarise,
   MIN_OVERRIDE_REASON,
   SEVERITY_LABEL,
+  type AssuranceExplanation,
   type AssuranceFinding,
+  type AssuranceReportVerdict,
 } from '@/lib/assurance';
+import {
+  attachExplanations,
+  causeLabel,
+  isUnsureCause,
+  reviewNote,
+  reviewTrouble,
+  type ReviewedFinding,
+} from '@/lib/assuranceReview';
 import { cn } from '@/lib/cn';
 import { formatDateTime } from '@/lib/format';
 import { useAuthStore } from '@/store/auth';
@@ -174,7 +184,7 @@ export function AssurancePanel({
             </p>
           ) : null}
           {holding.length > 0 ? (
-            <KeyValueList className="mt-3" items={findingItems(holding)} />
+            <Findings verdict={verdict} findings={holding} />
           ) : (
             <ReasonLines reasons={verdict.reasons} />
           )}
@@ -334,7 +344,7 @@ export function AssurancePanel({
             ]}
           />
           {holding.length > 0 ? (
-            <KeyValueList className="mt-3" items={findingItems(holding)} />
+            <Findings verdict={verdict} findings={holding} />
           ) : null}
         </StatementBlock>
       </div>
@@ -354,7 +364,7 @@ export function AssurancePanel({
           tone="quiet"
         >
           <p className="mt-0.5 text-sm text-text-muted">{summarise(verdict)}</p>
-          <KeyValueList className="mt-3" items={findingItems(holding)} />
+          <Findings verdict={verdict} findings={holding} />
         </StatementBlock>
       </div>
     );
@@ -398,6 +408,12 @@ export function AssurancePanel({
       />
       <span className="min-w-0">
         {summarise(verdict)}
+        {/* Six words, appended to the sentence that is already there — not a
+            badge. A pill present on every report every day carries no
+            information within a week and trains the eye past the one day it
+            changes. It is absent entirely when the AI was never asked. */}
+        {reviewNote(verdict) ? ` ${reviewNote(verdict)}` : ''}
+        {reviewTrouble(verdict) ? ` ${reviewTrouble(verdict)}` : ''}
         {verdict.stored?.checkedAt
           ? ` Last checked ${formatDateTime(verdict.stored.checkedAt)}.`
           : ''}
@@ -414,8 +430,49 @@ export function AssurancePanel({
  * "Meter sales of 2,646,765 L since 12 Aug exceed the 40,000 L these tanks hold",
  * which is eleven wrapped lines in a column beside a two-word label.
  */
-function findingItems(findings: readonly AssuranceFinding[]): KeyValueItem[] {
-  return findings.map((f, i) => {
+/**
+ * The AI's account of why a rule fired, attached under the rule's own sentence.
+ *
+ * Indentation and a rail, never a nested card: a card inside a statement block
+ * inside a panel is three stacked surfaces and most of a 360px screen spent on
+ * padding before a character of prose.
+ *
+ * SUBORDINATION IS CARRIED BY COLOUR, NOT SIZE. The rule's sentence is the only
+ * thing here at full text colour; this sits one step down the same ramp at the
+ * SAME 14px. Shrinking it would make the thing we paid for unreadable in
+ * sunlight, which is the failure where nobody reads the explanation at all.
+ */
+function Explanation({ explanation }: { explanation: AssuranceExplanation }) {
+  return (
+    <div className="mt-1.5 min-w-0 border-l-2 border-border-strong pl-2.5">
+      <p className="flex items-start gap-1 text-xs font-medium text-text-subtle">
+        <Lightbulb
+          width={13}
+          height={13}
+          strokeWidth={1.75}
+          className="mt-0.5 shrink-0"
+          aria-hidden
+        />
+        <span className="min-w-0">
+          AI review · {isUnsureCause(explanation.cause) ? 'not clear' : 'likely cause'}
+        </span>
+      </p>
+      <p className="mt-0.5 text-sm font-medium text-text-muted">
+        {causeLabel(explanation.cause)}
+      </p>
+      <p className="mt-0.5 text-sm text-text-muted">{explanation.because}</p>
+      {explanation.ruledOut ? (
+        <p className="mt-1 text-sm text-text-muted">
+          <span className="text-text-subtle">It does not look like: </span>
+          {explanation.ruledOut}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function findingItems(reviewed: readonly ReviewedFinding[], muted = false): KeyValueItem[] {
+  return reviewed.map(({ finding: f, explanation }, i) => {
     const scope = describeScope(f.scope);
     return {
       // The same code fires once per product, so the code alone is not unique.
@@ -428,7 +485,8 @@ function findingItems(findings: readonly AssuranceFinding[]): KeyValueItem[] {
       ),
       value: (
         <>
-          <span className="block">{f.message}</span>
+          <span className={cn('block', muted && 'text-text-muted')}>{f.message}</span>
+          {explanation ? <Explanation explanation={explanation} /> : null}
           <span className="mt-0.5 block break-all font-mono text-xs text-text-subtle">
             {f.code}
           </span>
@@ -437,6 +495,88 @@ function findingItems(findings: readonly AssuranceFinding[]): KeyValueItem[] {
       block: true,
     };
   });
+}
+
+/**
+ * The findings, with what a rule PROVED kept apart from what the AI SUGGESTED.
+ *
+ * Two groups rather than one list with a badge per row. Answering "what here is
+ * certain?" by reading every row's label is exactly the small print an admin on
+ * a phone does not read; a group boundary answers it at a glance. The AI's group
+ * is always below and never interleaved, whatever the severities say.
+ */
+/**
+ * One line when the AI review did not complete.
+ *
+ * Every sentence names who DID decide in the same breath, so an admin can never
+ * read "the AI review failed" as "this report is wrong" — the rules are what
+ * withhold a report and they ran regardless. No box, no colour, no status code:
+ * the same shape the panel already uses for a never-checked report.
+ */
+function ReviewTrouble({ verdict }: { verdict: AssuranceReportVerdict }) {
+  const trouble = reviewTrouble(verdict);
+  if (!trouble) return null;
+  return (
+    <p className="mt-2 flex min-w-0 items-start gap-1.5 text-xs text-text-subtle">
+      <Lightbulb
+        width={13}
+        height={13}
+        strokeWidth={1.75}
+        className="mt-0.5 shrink-0"
+        aria-hidden
+      />
+      <span className="min-w-0">{trouble}</span>
+    </p>
+  );
+}
+
+function Findings({
+  verdict,
+  findings,
+}: {
+  verdict: AssuranceReportVerdict;
+  findings: readonly AssuranceFinding[];
+}) {
+  const explanations = verdict.stored?.adjudication?.explanations ?? [];
+  const ruled = attachExplanations(
+    findings.filter((f) => f.source !== 'MODEL'),
+    explanations,
+  );
+  const raised = findings.filter((f) => f.source === 'MODEL');
+
+  return (
+    <>
+      {ruled.length > 0 ? <KeyValueList className="mt-3" items={findingItems(ruled)} /> : null}
+      {raised.length > 0 ? (
+        <div className="mt-3 min-w-0">
+          <p className="flex items-start gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-subtle">
+            <Lightbulb
+              width={13}
+              height={13}
+              strokeWidth={1.75}
+              className="mt-px shrink-0"
+              aria-hidden
+            />
+            <span className="min-w-0">
+              AI review · {raised.length} to check
+            </span>
+          </p>
+          <p className="mt-0.5 text-xs text-text-subtle">
+            Suggestions from a fallible reader, not rules. Nothing here was proved.
+          </p>
+          <div className="mt-2 min-w-0 border-l-2 border-border-strong pl-2.5">
+            <KeyValueList
+              items={findingItems(
+                raised.map((f) => ({ finding: f, explanation: null })),
+                true,
+              )}
+            />
+          </div>
+        </div>
+      ) : null}
+      <ReviewTrouble verdict={verdict} />
+    </>
+  );
 }
 
 /** The API's own refusal lines, when there are no structured findings behind them. */
@@ -501,6 +641,73 @@ function StatementBlock({
           {children}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The verdict in one line, ABOVE the report instead of below it.
+ *
+ * The full panel lives beside the Share button, which is the right home for the
+ * release form but the wrong place to LEARN something: it sits under the whole
+ * day book, and an admin reading a report they should not be reading has already
+ * spent a minute on it by the time they scroll that far. So the answer to "can I
+ * send this, and did anything look at it?" goes first, and the detail and the
+ * action stay together at the bottom.
+ *
+ * Deliberately not a fourth red thing. This page already paints a HIGH variation
+ * red and a stale notice amber; a red strip here would be the loudest element on
+ * screen for the commonest possible state. Weight and wording carry it.
+ */
+export function AssuranceSummaryStrip({ report }: { report: DsrReportView }) {
+  const { data: verdict } = useAssuranceReport(report.id);
+  if (!verdict) return null;
+
+  const held = isHolding(verdict);
+  const note = reviewNote(verdict);
+  const trouble = reviewTrouble(verdict);
+  const raised = verdict.holding.filter((f) => f.source === 'MODEL').length;
+  const ruled = verdict.holding.length - raised;
+
+  if (!held) {
+    return (
+      <p className="flex min-w-0 items-start gap-1.5 text-xs text-text-subtle">
+        <ShieldCheck width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden />
+        <span className="min-w-0">
+          {summarise(verdict)}
+          {note ? ` ${note}` : ''}
+          {trouble ? ` ${trouble}` : ''}
+        </span>
+      </p>
+    );
+  }
+
+  return (
+    <div className="min-w-0 rounded-lg border border-border-strong bg-surface-2 px-3 py-2.5">
+      <p className="flex min-w-0 items-start gap-1.5 text-sm font-semibold text-text">
+        {raised > 0 && ruled === 0 ? (
+          <Lightbulb width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden />
+        ) : (
+          <ShieldAlert width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden />
+        )}
+        <span className="min-w-0">This report is not being sent</span>
+      </p>
+      <p className="mt-1 text-sm text-text-muted">{summarise(verdict)}</p>
+      {/* The first reason in full, because a count alone tells an admin nothing
+          they can act on, and the rest are a short scroll away beside Share. */}
+      {verdict.holding[0] ? (
+        <p className="mt-1 text-sm text-text-muted">
+          {verdict.holding[0].source === 'MODEL' ? (
+            <span className="mr-1 whitespace-nowrap text-xs text-text-subtle">AI review ·</span>
+          ) : null}
+          {verdict.holding[0].message}
+        </p>
+      ) : null}
+      {verdict.holding.length > 1 ? (
+        <p className="mt-1 text-xs text-text-subtle">
+          {verdict.holding.length - 1} more below, with the release form.
+        </p>
+      ) : null}
     </div>
   );
 }

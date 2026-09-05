@@ -478,17 +478,32 @@ function Reasons({ row }: { row: AssuranceHoldRow }) {
           the time.
         </span>
       ) : null}
-      {row.reasons.length === 0 ? (
-        <span className="block text-sm text-text-muted">
-          {DECISION_NOTE[row.decision] ?? 'No reason was recorded.'}
-        </span>
+      {/* SOURCE, NOT JUST TEXT. `row.reasons` is a bare array of sentences with
+          no attribution, so a fallible suggestion printed here would sit in the
+          same typeface, weight and position as a proved physical impossibility —
+          on the one screen where a hold on an automatic path is ever seen.
+          `row.findings` already carries `source`, so this costs no wire change. */}
+      {row.findings.length === 0 ? (
+        row.reasons.length === 0 ? (
+          <span className="block text-sm text-text-muted">
+            {DECISION_NOTE[row.decision] ?? 'No reason was recorded.'}
+          </span>
+        ) : (
+          row.reasons.map((reason, i) => (
+            <span key={i} className="mt-0.5 block break-words text-sm text-text-muted">
+              {reason}
+            </span>
+          ))
+        )
       ) : (
-        row.reasons.map((reason, i) => (
-          <span
-            key={i}
-            className="mt-0.5 block break-words text-sm text-text-muted"
-          >
-            {reason}
+        row.findings.map((f, i) => (
+          <span key={i} className="mt-0.5 block break-words text-sm text-text-muted">
+            {f.source === 'MODEL' ? (
+              <span className="mr-1 whitespace-nowrap text-xs text-text-subtle">
+                AI review ·
+              </span>
+            ) : null}
+            {f.message}
           </span>
         ))
       )}
