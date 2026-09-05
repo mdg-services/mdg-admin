@@ -14,6 +14,7 @@ import * as React from 'react';
 
 
 import {
+  AiReviewBadge,
   AssuranceBadge,
   AssurancePanel,
   AssuranceSummaryStrip,
@@ -147,6 +148,7 @@ export function DsrReportPanel({
                   day book. `Badge` refuses to shrink by design, so it pushes the
                   squeeze onto the title, which wraps. */}
               <AssuranceBadge report={report} />
+              <AiReviewBadge report={report} />
             </div>
             <p className="text-xs text-text-subtle">
               {dsrDateLabel(report.businessDate)}

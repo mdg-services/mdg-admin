@@ -38,6 +38,7 @@ import {
   attachExplanations,
   causeLabel,
   isUnsureCause,
+  aiReviewBadge,
   assuranceBadge,
   reviewNote,
   reviewTrouble,
@@ -672,20 +673,31 @@ export function AssuranceSummaryStrip({ report }: { report: DsrReportView }) {
   const ruled = verdict.holding.length - raised;
 
   if (!held) {
+    // The badges lead. A grey sentence is what an admin scrolls past, and the
+    // one fact they want off this line — did anything look at this, and was it
+    // happy — is a colour, not a clause.
     return (
-      <p className="flex min-w-0 items-start gap-1.5 text-xs text-text-subtle">
-        <ShieldCheck width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden />
-        <span className="min-w-0">
-          {summarise(verdict)}
-          {note ? ` ${note}` : ''}
-          {trouble ? ` ${trouble}` : ''}
-        </span>
-      </p>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <AssuranceBadge report={report} />
+        <AiReviewBadge report={report} />
+        <p className="flex min-w-0 flex-1 items-start gap-1.5 text-xs text-text-subtle">
+          <ShieldCheck width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden />
+          <span className="min-w-0">
+            {summarise(verdict)}
+            {note ? ` ${note}` : ''}
+            {trouble ? ` ${trouble}` : ''}
+          </span>
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="min-w-0 rounded-lg border border-border-strong bg-surface-2 px-3 py-2.5">
+      <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
+        <AssuranceBadge report={report} />
+        <AiReviewBadge report={report} />
+      </div>
       <p className="flex min-w-0 items-start gap-1.5 text-sm font-semibold text-text">
         {raised > 0 && ruled === 0 ? (
           <Lightbulb width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden />
@@ -729,6 +741,26 @@ export function AssuranceBadge({ report }: { report: DsrReportView }) {
   return (
     <Badge intent={badge.intent} title={badge.detail}>
       <span className="sr-only">AI verification status: </span>
+      {badge.label}
+    </Badge>
+  );
+}
+
+/**
+ * The AI review's own badge — coloured, and separate from the report's.
+ *
+ * It can afford to be red when the AI's answer was unusable precisely BECAUSE
+ * the report's own badge sits beside it still saying "Checked": a red AI badge
+ * cannot be misread as a condemned report when the thing next to it says the
+ * report is fine. Merged into one pill, that honesty was unaffordable.
+ */
+export function AiReviewBadge({ report }: { report: DsrReportView }) {
+  const { data: verdict } = useAssuranceReport(report.id);
+  const badge = aiReviewBadge(verdict);
+  if (!badge) return null;
+  return (
+    <Badge intent={badge.intent} title={badge.detail}>
+      <span className="sr-only">AI review: </span>
       {badge.label}
     </Badge>
   );

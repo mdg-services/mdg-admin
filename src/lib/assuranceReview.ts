@@ -246,19 +246,93 @@ export function assuranceBadge(
     };
   }
 
-  // Passing. The two cases differ by whether the AI actually looked, and an
-  // admin should be able to tell without opening anything.
-  const a = verdict.stored?.adjudication;
-  const aiLooked = a?.outcome === 'ANSWERED' || a?.outcome === 'ABSTAINED';
-  return aiLooked
-    ? {
-        label: 'Checked · AI',
+  return {
+    label: 'Checked',
+    intent: 'success',
+    detail: 'Every rule passed. This report can be sent.',
+  };
+}
+
+/**
+ * The AI review's own badge, separate from the report's.
+ *
+ * TWO BADGES, NOT ONE, and the split is the point. The rules decide whether a
+ * report may be sent; the AI decides nothing and is often the thing that failed
+ * on a perfectly good report. Merging them produced a single pill that had to
+ * mean both "this report is fine" and "the AI managed to read it", which is how
+ * an admin ends up thinking a model timeout is a bad report.
+ *
+ * Because the report's own badge sits beside this one, THIS one can afford to be
+ * red when the AI's answer was unusable — the neighbour is still saying
+ * "Checked", so a red AI badge cannot be misread as a condemned report. That is
+ * the whole reason the honesty is affordable here and was not before.
+ */
+export function aiReviewBadge(
+  verdict: AssuranceReportVerdict | null | undefined,
+): AssuranceBadge | null {
+  const a = verdict?.stored?.adjudication;
+  if (!a) return null;
+
+  const raised = a.concerns.length;
+
+  switch (a.outcome) {
+    case 'ANSWERED':
+      return raised > 0
+        ? {
+            label: `AI · ${raised} to check`,
+            intent: 'warning',
+            detail: `The AI review raised ${raised} ${raised === 1 ? 'thing' : 'things'} worth a look. None of them withholds this report.`,
+          }
+        : {
+            label: 'AI · clear',
+            intent: 'success',
+            detail: 'The AI review read this report and raised nothing.',
+          };
+    case 'ABSTAINED':
+      return {
+        label: 'AI · clear',
         intent: 'success',
-        detail: 'Every rule passed, and the AI review read this report and raised nothing.',
-      }
-    : {
-        label: 'Rules only',
-        intent: 'neutral',
-        detail: 'Every rule passed. The AI review did not run on this report.',
+        detail: 'The AI review read this report and had nothing to add.',
       };
+    case 'UNGROUNDED':
+      return {
+        label: 'AI · discarded',
+        intent: 'danger',
+        detail:
+          'Everything the AI review said quoted figures that are not on this report, so all of it was thrown away. The rules ran in full — this is about the AI, not the report.',
+      };
+    case 'TRUNCATED':
+    case 'EMPTY':
+    case 'UNPARSEABLE':
+    case 'SCHEMA_REJECTED':
+      return {
+        label: 'AI · unreadable',
+        intent: 'danger',
+        detail:
+          'The AI review’s answer could not be read, so none of it was used. The rules ran in full — this is about the AI, not the report.',
+      };
+    case 'TIMEOUT':
+    case 'TRANSPORT_ERROR':
+      return {
+        label: 'AI · no answer',
+        intent: 'warning',
+        detail:
+          'The AI review did not answer. The rules ran in full, so this report was still checked.',
+      };
+    case 'DECLINED':
+    case 'SAFETY_BLOCKED':
+      return {
+        label: 'AI · no opinion',
+        intent: 'neutral',
+        detail: 'The AI review did not offer an opinion on this report.',
+      };
+    case 'BUDGET':
+    case 'SKIPPED':
+    default:
+      return {
+        label: 'AI · not run',
+        intent: 'neutral',
+        detail: 'The AI review did not run on this report.',
+      };
+  }
 }
