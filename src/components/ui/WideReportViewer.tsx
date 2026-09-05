@@ -84,27 +84,73 @@ export interface WideReportViewerProps {
 }
 
 /**
- * How tall the embedded report says it is, so the frame can stop scrolling.
+ * How tall the embedded report really is, so the frame can stop scrolling.
  *
  * THE PROBLEM. The day book sat in a frame fixed at 72vh, which put a second
  * scrollbar a centimetre inside the page's own — one window inside another,
  * each taking the wheel depending on where the pointer happened to be, and
- * neither showing the whole sheet. The frame's height could not simply be
- * measured: the document is served from S3 under a presigned URL, so it is
- * cross-origin and `contentDocument` is unreachable.
+ * neither showing the whole sheet. Measured on a live report: 1464px of
+ * document inside a 593px frame.
  *
- * So the report says so itself. `renderDigestHtml` posts its own scrollHeight
- * on load, on resize, and after the Devanagari webfont lands; this listens,
- * checks the message really came from THIS frame (any page can post to any
- * window), and hands back a pixel height. Until one arrives — and for any
- * report generated before the sheet learned to say — it returns null and the
- * caller keeps its fixed frame, exactly as before.
+ * TWO WAYS TO LEARN THE HEIGHT, and this uses whichever it can get.
+ *
+ *  1. FETCH IT AND OWN IT (`useInlineHtml`). The report is fetched as text and
+ *     handed to the frame as `srcdoc`, which makes the document SAME-ORIGIN — so
+ *     its height is simply read, and re-read whenever its own box changes. This
+ *     works for every report ever generated, which is the point: (2) only works
+ *     for reports rendered after it shipped, and an admin opening last week's
+ *     day book does not care when the renderer learned a trick. The document is
+ *     self-contained — inline CSS, system fonts, no external assets — so
+ *     `srcdoc` renders it identically to the URL.
+ *
+ *  2. LET IT SAY (`useReportedHeight`). `renderDigestHtml` posts its own
+ *     scrollHeight; this listens, and checks the message really came from THIS
+ *     frame, because any page can post to any window. Kept as the fallback for
+ *     the day the bucket stops answering this origin and (1) becomes impossible.
+ *
+ * If neither yields a number the frame keeps its fixed height, exactly as it
+ * behaves today.
  *
  * The clamp is not decoration. The height sizes an element, and an unbounded
- * number from a document is an unbounded element.
+ * number out of a document is an unbounded element.
  */
 const MIN_REPORT_HEIGHT = 240;
 const MAX_REPORT_HEIGHT = 20000;
+
+function clampHeight(h: number): number {
+  return Math.min(Math.max(Math.round(h), MIN_REPORT_HEIGHT), MAX_REPORT_HEIGHT);
+}
+
+/**
+ * The report's HTML as text, so it can be inlined into the frame.
+ *
+ * `credentials: 'omit'` is required rather than tidy: the URL is presigned, and
+ * a request that carries cookies is one S3's CORS rules will not answer.
+ */
+function useInlineHtml(src: string, enabled: boolean): string | null {
+  const [html, setHtml] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!enabled) {
+      setHtml(null);
+      return;
+    }
+    let alive = true;
+    setHtml(null);
+    fetch(src, { credentials: 'omit' })
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((text) => {
+        if (alive) setHtml(text);
+      })
+      .catch(() => {
+        // Expired link, offline, or a bucket that no longer answers this origin.
+        // The frame falls back to loading the URL itself.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [src, enabled]);
+  return html;
+}
 
 function useReportedHeight(
   frameRef: React.RefObject<HTMLIFrameElement | null>,
@@ -124,7 +170,7 @@ function useReportedHeight(
       if (!data || data.type !== 'mdg:report-height') return;
       const h = Number(data.height);
       if (!Number.isFinite(h)) return;
-      setHeight(Math.min(Math.max(Math.round(h), MIN_REPORT_HEIGHT), MAX_REPORT_HEIGHT));
+      setHeight(clampHeight(h));
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -154,7 +200,44 @@ export function WideReportViewer({
   // Only the INLINE desktop frame grows to fit. The full-screen mobile view is
   // a scaled map of the sheet inside its own pan surface, where a frame taller
   // than the screen is the point rather than a fault.
-  const reportedHeight = useReportedHeight(inlineFrameRef, isMd && kind === 'html');
+  const wantsFit = isMd && kind === 'html';
+  const inlineHtml = useInlineHtml(src, wantsFit);
+  const reportedHeight = useReportedHeight(inlineFrameRef, wantsFit);
+  // Read straight off the document, once it is ours to read.
+  const [measuredHeight, setMeasuredHeight] = React.useState<number | null>(null);
+  React.useEffect(() => setMeasuredHeight(null), [src]);
+
+  /**
+   * Measure the inlined document, and keep measuring it.
+   *
+   * `load` alone is too early by one webfont: the Devanagari face swaps in after
+   * first paint and every ledger row grows a little, so a frame sized on the
+   * load event clips the footer. The observer is what makes the number right in
+   * the end — it also catches the window being resized, which reflows the sheet
+   * and changes its height.
+   */
+  const observerRef = React.useRef<ResizeObserver | null>(null);
+  React.useEffect(() => () => observerRef.current?.disconnect(), []);
+  const onInlineLoad = React.useCallback(() => {
+    const doc = inlineFrameRef.current?.contentDocument;
+    if (!doc) return;
+    const measure = () => {
+      const h = Math.max(
+        doc.documentElement?.scrollHeight ?? 0,
+        doc.body?.scrollHeight ?? 0,
+      );
+      if (h > 0) setMeasuredHeight(clampHeight(h));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (doc.documentElement) ro.observe(doc.documentElement);
+    if (doc.body) ro.observe(doc.body);
+    // Replaces any observer from a previous document in this same frame.
+    observerRef.current?.disconnect();
+    observerRef.current = ro;
+  }, []);
+
+  const fitHeight = measuredHeight ?? reportedHeight;
   const paneRef = React.useRef<HTMLDivElement | null>(null);
   const [paneWidth, setPaneWidth] = React.useState(0);
   // `null` means "fit": the scale is whatever puts the whole frame on screen,
@@ -206,13 +289,14 @@ export function WideReportViewer({
       // are removing, rather than to a truncated deliverable.
       <iframe
         ref={inlineFrameRef}
-        src={src}
+        // `srcDoc` when the report has been fetched — that is what makes the
+        // document same-origin and therefore measurable. `src` is the fallback,
+        // and the only path a report can take if the fetch failed.
+        {...(inlineHtml !== null ? { srcDoc: inlineHtml } : { src })}
         title={title}
-        style={reportedHeight ? { height: reportedHeight + 2 } : undefined}
-        className={cn(
-          'w-full border-0 bg-white',
-          reportedHeight ? 'block' : desktopHeightClass,
-        )}
+        onLoad={inlineHtml !== null ? onInlineLoad : undefined}
+        style={fitHeight ? { height: fitHeight + 2 } : undefined}
+        className={cn('w-full border-0 bg-white', fitHeight ? 'block' : desktopHeightClass)}
         referrerPolicy="no-referrer"
       />
     ) : (
