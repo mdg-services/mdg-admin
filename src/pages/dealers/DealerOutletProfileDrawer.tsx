@@ -218,7 +218,7 @@ export function DealerOutletProfileDrawer({ open, onClose, dealer }: Props) {
             <h3 className="text-sm font-semibold text-text">Other details</h3>
             <p className="text-sm text-text-muted">
               Anything else worth keeping against this outlet. Tick the box to
-              let the dealer ask about it in chat — leave it clear for MDG's own
+              let the dealer ask about it in chat — leave it clear for MDG&apos;s own
               notes.
             </p>
           </div>

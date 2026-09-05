@@ -47,3 +47,25 @@ export function useCollectRoSupplyStatus(dealerId: string | undefined) {
       api.post<{ runId: string }>(`/ro-supply-status/dealers/${dealerId}/collect`),
   });
 }
+
+/** `GET /ro-supply-status/dealers/:id/card` — the shareable picture, signed. */
+export interface RoSupplyCardUrls {
+  viewUrl: string;
+  downloadUrl: string;
+  filename: string;
+  contentType: string;
+  expiresIn: number;
+}
+
+/**
+ * Ask the server for the dealer's pending-work image.
+ *
+ * A mutation rather than a query on purpose: the URLs are short-lived signatures
+ * and the card may have to be drawn first, so this is a thing you DO at the
+ * moment of sharing, not a thing the pane holds and lets go stale.
+ */
+export function useRoSupplyCard(dealerId: string | undefined) {
+  return useMutation({
+    mutationFn: () => api.get<RoSupplyCardUrls>(`/ro-supply-status/dealers/${dealerId}/card`),
+  });
+}

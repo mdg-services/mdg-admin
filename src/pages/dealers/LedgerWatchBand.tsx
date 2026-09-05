@@ -179,10 +179,14 @@ export function LedgerWatchBand({ dealerId }: Props) {
                 aria-hidden
               />
             )}
+            {/* THE MONTH IS NOT IN THIS HEADING, and that is deliberate. The
+                three figures below cover one month; the findings below THEM are
+                a to-do list and carry whatever is still open, which can be
+                older. A heading reading "Other movements — September 2026" over
+                both implied the July licence fee in the list was a September
+                one. Each block now says what it covers, directly above itself. */}
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-text">
-                Other movements — {monthLabel(month)}
-              </h2>
+              <h2 className="text-base font-semibold text-text">Other movements</h2>
               <p className="mt-0.5 text-sm text-text-muted">{tone.headline}</p>
             </div>
           </div>
@@ -200,6 +204,9 @@ export function LedgerWatchBand({ dealerId }: Props) {
             for on three pages. */}
         {figures ? (
           <>
+            <p className="text-xs font-medium uppercase tracking-wide text-text-subtle">
+              {monthLabel(month)}
+            </p>
             <dl className="grid grid-cols-[repeat(auto-fit,minmax(0,12rem))] gap-x-6 gap-y-3">
               {figures.figures.map((f) => (
                 <div key={f.key} className="min-w-0">
@@ -241,11 +248,18 @@ export function LedgerWatchBand({ dealerId }: Props) {
         ) : null}
 
         {flags.length > 0 ? (
-          <ul className="grid gap-2">
-            {flags.map((flag) => (
-              <FindingLine key={flag.id} flag={flag} />
-            ))}
-          </ul>
+          <div className="grid gap-2">
+            {/* Says "open", not the month: these are whatever still needs
+                somebody, which may predate the figures above. */}
+            <p className="text-xs font-medium uppercase tracking-wide text-text-subtle">
+              Open findings
+            </p>
+            <ul className="grid gap-2">
+              {flags.map((flag) => (
+                <FindingLine key={flag.id} flag={flag} />
+              ))}
+            </ul>
+          </div>
         ) : null}
 
         {counts && counts.total > 0 ? (

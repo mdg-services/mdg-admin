@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   CircleHelp,
   DownloadCloud,
+  Share2,
   ShieldCheck,
   Truck,
   XCircle,
@@ -28,13 +29,19 @@ import {
 } from '@/components/ui';
 import {
   useCollectRoSupplyStatus,
+  useRoSupplyCard,
   useRoSupplyStatus,
 } from '@/hooks/api/useRoSupplyStatus';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
+import { shareSavedImage } from '@/lib/shareCard';
 import { StatTile, StatTileRow, StatTileSkeletons } from '@/pages/dataVault/StatTile';
-import { roSupplyHeadlineLabel, type RoComplianceRow } from '@dk/shared';
+import {
+  roSupplyConditionCopy,
+  roSupplyHeadlineLabel,
+  type RoComplianceRow,
+} from '@dk/shared';
 
 import { useRoSupplyRunWatcher } from './roSupply/useRoSupplyRunWatcher';
 import type { DealerVaultPaneProps } from './types';
@@ -74,6 +81,42 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
         toast.error(err instanceof ApiError ? err.message : 'Could not start the check'),
     });
   }
+
+  /**
+   * The picture comes from the SERVER, not from this page.
+   *
+   * The dealer it is meant for is on WhatsApp, not in the admin, and the card
+   * has to be drawable by whatever is awake. Once the server can draw it, having
+   * this page draw its own would mean two renderers of one card quietly drifting
+   * apart — so this asks for the file rather than making one.
+   */
+  const card = useRoSupplyCard(dealer.id);
+  const onShare = React.useCallback(async () => {
+    try {
+      const urls = await card.mutateAsync();
+      const res = await shareSavedImage(urls);
+      if (res.outcome === 'downloaded') toast.success('Image saved to your Downloads.');
+      else if (res.outcome === 'failed') {
+        toast.error(res.reason ?? 'The image could not be saved.');
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : 'The image could not be prepared.',
+      );
+    }
+  }, [card, toast]);
+
+  const shareButton = (
+    <Button
+      variant="secondary"
+      size="sm"
+      loading={card.isPending}
+      leftIcon={<Share2 width={15} height={15} strokeWidth={1.75} />}
+      onClick={() => void onShare()}
+    >
+      Share with dealer
+    </Button>
+  );
 
   const captureButton = (
     <Button
@@ -136,7 +179,12 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
             {summary.capturedAt ? formatDateTime(summary.capturedAt) : 'never'}
           </p>
         </div>
-        {captureButton}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Only offered once there is something to send. Sharing an empty card
+              would put a picture of nothing in front of a dealer. */}
+          {summary.capturedAt ? shareButton : null}
+          {captureButton}
+        </div>
       </div>
 
       {failed ? (
@@ -239,7 +287,9 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
                   Compliance status in RDB/SDMS
                 </p>
                 <p className="text-sm text-text-muted">
-                  The conditions the portal checks before it will allow supply.
+                  {summary.failingCount > 0
+                    ? 'Any ONE of these left unmet is enough for IndianOil to stop this outlet buying fuel.'
+                    : 'The conditions the portal checks before it will allow supply.'}
                 </p>
               </CardHeader>
 
@@ -261,7 +311,16 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
                     <TBody>
                       {summary.rows.map((row, i) => (
                         <TRow key={`${row.description}-${i}`}>
-                          <TD>{row.description}</TD>
+                          <TD>
+                            {row.description}
+                            {/* Only on a failing row. On a clear one it would be
+                                advice about a problem the dealer does not have. */}
+                            {row.mark === 'NO' && roSupplyConditionCopy(row.description)?.actionEn ? (
+                              <span className="mt-0.5 block text-xs text-text-muted">
+                                {roSupplyConditionCopy(row.description)!.actionEn}
+                              </span>
+                            ) : null}
+                          </TD>
                           <TD className="whitespace-nowrap text-right">
                             <MarkPill row={row} />
                           </TD>
@@ -279,6 +338,10 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
                       <span className="block font-medium text-text">{row.description}</span>
                     ),
                     primaryRight: <MarkPill row={row} />,
+                    meta:
+                      row.mark === 'NO' && roSupplyConditionCopy(row.description)?.actionEn ? (
+                        <span>{roSupplyConditionCopy(row.description)!.actionEn}</span>
+                      ) : undefined,
                   }))}
                 />
               )}
