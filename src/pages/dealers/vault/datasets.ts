@@ -6,6 +6,7 @@ import {
   FileBarChart2,
   Gauge,
   ReceiptText,
+  Truck,
 } from 'lucide-react';
 
 import { DealerCreditDodTab } from '../DealerCreditDodTab';
@@ -14,6 +15,7 @@ import { DealerDsrTab } from '../DealerDsrTab';
 
 import { DealerInspectionPane } from './DealerInspectionPane';
 import { DealerPadLedgerPane } from './DealerPadLedgerPane';
+import { DealerRoSupplyStatusPane } from './DealerRoSupplyStatusPane';
 import { DealerTtDensityPane } from './DealerTtDensityPane';
 import { DealerWaterIngressPane } from './DealerWaterIngressPane';
 import type { DealerVaultDataset } from './types';
@@ -82,6 +84,15 @@ const REGISTRY = [
     Icon: Gauge,
     requiresService: 'tt-density',
     Pane: DealerTtDensityPane,
+  },
+  {
+    id: 'ro-supply-status',
+    label: 'RO supply status',
+    description:
+      'Whether the portal is currently blocking supply to this outlet, and the compliance conditions behind it.',
+    Icon: Truck,
+    requiresService: 'ro-supply-status',
+    Pane: DealerRoSupplyStatusPane,
   },
   {
     id: 'water-ingress',
