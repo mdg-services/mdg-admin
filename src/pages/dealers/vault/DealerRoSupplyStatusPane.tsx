@@ -36,6 +36,7 @@ import { formatDateTime } from '@/lib/format';
 import { StatTile, StatTileRow, StatTileSkeletons } from '@/pages/dataVault/StatTile';
 import { roSupplyHeadlineLabel, type RoComplianceRow } from '@dk/shared';
 
+import { useRoSupplyRunWatcher } from './roSupply/useRoSupplyRunWatcher';
 import type { DealerVaultPaneProps } from './types';
 
 /**
@@ -57,15 +58,20 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
   const toast = useToast();
   const summaryQ = useRoSupplyStatus(dealer.id);
   const collect = useCollectRoSupplyStatus(dealer.id);
+  // The check answers 202 and then drives the portal for about a minute, so the
+  // pane watches the run and refreshes when it actually lands rather than
+  // promising a refresh at the moment of the click.
+  const runWatch = useRoSupplyRunWatcher(dealer.id);
+  const busy = collect.isPending || runWatch.busy;
 
   function runCapture() {
     collect.mutate(undefined, {
-      onSuccess: () =>
-        toast.success(
-          'Capture queued — the portal takes about a minute. This section refreshes when it lands.',
-        ),
+      onSuccess: (res) => {
+        runWatch.watch(res.runId);
+        toast.success('Checking — the portal takes about a minute. This section will refresh.');
+      },
       onError: (err) =>
-        toast.error(err instanceof ApiError ? err.message : 'Could not start the capture'),
+        toast.error(err instanceof ApiError ? err.message : 'Could not start the check'),
     });
   }
 
@@ -73,7 +79,7 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
     <Button
       variant="secondary"
       size="sm"
-      loading={collect.isPending}
+      loading={busy}
       leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
       onClick={runCapture}
     >
@@ -113,6 +119,12 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
   const neverCaptured = !summary.capturedAt;
   const failed = summary.status === 'FAILED' || !!summary.failureReason;
   const clearCount = summary.rows.filter((r) => r.mark === 'YES').length;
+  // STALE, not broken: the figures below are real, they are just older than the
+  // two-hourly rhythm implies because the checks since have been failing. That
+  // is a different message from "this has never worked", and the difference is
+  // the whole reason `lastFailure` is carried on the summary.
+  const staleSince =
+    failed && summary.rows.length > 0 && summary.lastFailure ? summary.lastFailure.at : null;
 
   return (
     <div className="grid gap-3 md:gap-4">
@@ -138,12 +150,19 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
             />
             <div>
               <p className="text-sm font-semibold text-text">
-                The latest check did not complete
+                {staleSince
+                  ? `The last check failed — showing what we saw at ${formatDateTime(summary.capturedAt!)}`
+                  : 'The latest check did not complete'}
               </p>
               <p className="text-sm text-text-muted">
                 {summary.failureReason ??
                   'The portal could not be read. Anything captured earlier is kept below.'}
               </p>
+              {staleSince ? (
+                <p className="mt-0.5 text-xs text-text-subtle">
+                  Last failed attempt {formatDateTime(staleSince)}.
+                </p>
+              ) : null}
             </div>
           </CardContent>
         </Card>

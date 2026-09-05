@@ -1,7 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type { RoSupplyStatusSummary } from '@dk/shared';
+
+/**
+ * One prefix for everything this pane caches, so a finished check can clear all
+ * of it with a single invalidate rather than a list of keys someone has to
+ * remember to extend.
+ */
+export const roSupplyStatusKeys = {
+  all: ['roSupplyStatus'] as const,
+  summary: (dealerId: string | undefined) => ['roSupplyStatus', dealerId] as const,
+};
 
 /**
  * A dealer's RO supply status — whether SAP is blocking supply to their outlet,
@@ -15,7 +25,7 @@ import type { RoSupplyStatusSummary } from '@dk/shared';
  */
 export function useRoSupplyStatus(dealerId: string | undefined) {
   return useQuery({
-    queryKey: ['roSupplyStatus', dealerId],
+    queryKey: roSupplyStatusKeys.summary(dealerId),
     enabled: !!dealerId,
     queryFn: () =>
       api.get<RoSupplyStatusSummary>(`/ro-supply-status/dealers/${dealerId}/summary`),
@@ -24,17 +34,16 @@ export function useRoSupplyStatus(dealerId: string | undefined) {
 }
 
 /**
- * Capture the RO supply status now. Reuses the normal run machinery on the
- * backend; on success the summary is invalidated so the pane refreshes once the
- * capture lands.
+ * Ask for the RO supply status to be checked now.
+ *
+ * Answers 202 with a run id and THEN drives the portal, so this deliberately
+ * does not invalidate anything: at the moment it resolves there is nothing new
+ * to read. The caller watches the run (`useRoSupplyRunWatcher`) and refreshes
+ * when it actually lands.
  */
 export function useCollectRoSupplyStatus(dealerId: string | undefined) {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
       api.post<{ runId: string }>(`/ro-supply-status/dealers/${dealerId}/collect`),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['roSupplyStatus', dealerId] });
-    },
   });
 }
