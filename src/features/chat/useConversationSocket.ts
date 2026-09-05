@@ -18,6 +18,7 @@ interface TypingState {
 
 export function useConversationSocket(conversationId: string | null) {
   const qc = useQueryClient();
+  const token = useAuthStore((s) => s.token);
   const [typing, setTyping] = React.useState<TypingState | null>(null);
 
   const applyReceipt = React.useCallback(
@@ -166,7 +167,11 @@ export function useConversationSocket(conversationId: string | null) {
       socket.off('read', onRead);
       socket.emit('conversation:leave', conversationId);
     };
-  }, [conversationId, qc, applyReceipt]);
+    // `token` is a dependency even though the effect never reads it: a token
+    // change is the one event that can swap the instance `getSocket()` returns
+    // out from under these listeners, and a listener on a discarded socket is
+    // a thread that has silently stopped updating.
+  }, [conversationId, qc, applyReceipt, token]);
 
   // Auto-clear typing indicator after 3s.
   React.useEffect(() => {
