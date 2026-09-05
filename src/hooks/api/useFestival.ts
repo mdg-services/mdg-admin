@@ -19,6 +19,10 @@ export function useFestivalQuery() {
     queryKey: festivalKey,
     queryFn: () => api.get<FestivalSettingsView>('/super-admin/festival'),
     staleTime: 0,
+    // Focus refetching is off globally (see lib/queryClient.ts). `staleTime: 0`
+    // marks this stale instantly but nothing would act on it, so the opt-in is
+    // what actually keeps the promise in the comment above.
+    refetchOnWindowFocus: true,
   });
 }
 

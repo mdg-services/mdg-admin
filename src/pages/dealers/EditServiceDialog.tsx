@@ -67,8 +67,10 @@ export function EditServiceDialog({
    * the dialog reads a failed /services as a missing plugin and sends the admin
    * hunting a deploy problem that does not exist. But an errored *refetch* is
    * not that case. query-core keeps `state.data` while flipping `status` to
-   * 'error', and `refetchOnWindowFocus` fires one every time an admin alt-tabs
-   * back to a dialog left open past `staleTime`. Treating that as a lost
+   * 'error', and any refetch of a dialog left open past `staleTime` can produce
+   * one. (Until lib/queryClient.ts turned focus refetching off by default, an
+   * alt-tab back was the everyday way to hit it; invalidation and reconnect
+   * still are.) Treating that as a lost
    * catalog and tearing the config form down was its own bug: `config` kept the
    * schema defaults RJSF had already pushed into it while `baselineConfig` lost
    * them, so a row attached before a defaulted key existed lit Save up and

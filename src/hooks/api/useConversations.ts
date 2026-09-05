@@ -45,6 +45,14 @@ export function useConversations(filter: InboxFilter) {
     queryFn: () =>
       api.get<Conversation[]>('/conversations', { status: filter, limit: 100 }),
     staleTime: 10_000,
+    // Focus refetching is off globally (see lib/queryClient.ts); the inbox is
+    // one of the few places where being stale is silently wrong, so it opts
+    // back in. Sockets cover the connected case, but a socket that dropped
+    // while the tab was hidden loses the events it missed and comes back with
+    // no way to know it — and `refetchOnReconnect` never fires, because the
+    // network itself never went down. This list also feeds the AppShell unread
+    // badge.
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -75,5 +83,8 @@ export function useConversationCounts() {
     queryKey: conversationCountsKey,
     queryFn: () => api.get<InboxCounts>('/conversations/counts'),
     staleTime: 10_000,
+    // Opted back in for the same reason as the list above: the tab badges are
+    // read as fact, and a missed socket event leaves them quietly wrong.
+    refetchOnWindowFocus: true,
   });
 }

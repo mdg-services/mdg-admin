@@ -162,6 +162,10 @@ export function useAssistUsageQuery(days: number) {
     queryFn: () => api.get<AssistUsageView>('/super-admin/assist/usage', { days }),
     enabled: isSuperAdmin,
     staleTime: 0,
+    // Focus refetching is off globally (see lib/queryClient.ts), so `staleTime: 0`
+    // alone would no longer refresh the meter on tab-back — which is the one
+    // moment somebody is looking at it.
+    refetchOnWindowFocus: true,
   });
 }
 

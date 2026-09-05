@@ -688,7 +688,16 @@ export function InboxPage() {
     if (!isLg) setMobileContextOpen(false);
   }, [selectedId, isLg]);
 
-  const dealerId = conversation?.dealerId ?? null;
+  // The list row already carries `dealerId` (it is what groupByDealer keys on),
+  // so the dealer + records fetches can start alongside `/conversations/:id`
+  // instead of waiting for it. Falls back to the fetched conversation for a
+  // deep-linked thread that is not in the current filter's page.
+  const listedDealerId =
+    conversations.find((c) => c.id === selectedId)?.dealerId ?? null;
+  // The detail response stays FIRST: once it lands it is the authority, and a
+  // stale list row winning would point the context panel at another dealer's
+  // GST and documents for a render.
+  const dealerId = conversation?.dealerId ?? listedDealerId;
   const dealerQ = useQuery({
     queryKey: ['dealer', dealerId],
     queryFn: () => api.get<Dealer>(`/dealers/${dealerId}`),

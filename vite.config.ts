@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,8 +56,48 @@ function manualChunks(id: string): string | undefined {
   return pkg ? VENDOR_CHUNKS[pkg] : undefined;
 }
 
+/**
+ * Preconnect to whatever origin VITE_API_BASE_URL points at, read at build time
+ * so no host is hardcoded. Emits nothing when the var is unset, malformed, or
+ * already same-origin — a wrong preconnect costs a wasted socket, a missing one
+ * costs only what it would have saved.
+ *
+ * `crossorigin` is load-bearing, not decoration: every call this app makes to
+ * the API is a CORS fetch, and a connection opened without the attribute lands
+ * in a different pool and is never reused — the preconnect would be theatre.
+ */
+function apiPreconnect(): Plugin {
+  let origin: string | null = null;
+  return {
+    name: 'api-preconnect',
+    configResolved(config) {
+      const raw = config.env.VITE_API_BASE_URL as string | undefined;
+      try {
+        origin = raw ? new URL(raw).origin : null;
+      } catch {
+        origin = null;
+      }
+    },
+    transformIndexHtml() {
+      if (!origin) return [];
+      return [
+        {
+          tag: 'link',
+          attrs: { rel: 'dns-prefetch', href: origin },
+          injectTo: 'head-prepend' as const,
+        },
+        {
+          tag: 'link',
+          attrs: { rel: 'preconnect', href: origin, crossorigin: '' },
+          injectTo: 'head-prepend' as const,
+        },
+      ];
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), apiPreconnect()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

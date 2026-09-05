@@ -25,7 +25,15 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://rsms.me/" />
-    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+    <!-- Inter is loaded off the critical path. As a plain stylesheet this line
+         blocked first paint on a two-hop chain to a third party — DNS, TLS,
+         inter.css, then the font files it pulls. `preload as=style` fetches it
+         without blocking and the onload swap turns it into a stylesheet once it
+         arrives; the tailwind `system-ui` fallback means the cost is a brief
+         FOUT rather than invisible text. The noscript copy keeps the font for a
+         browser with scripting off, where nothing else works anyway. -->
+    <link rel="preload" as="style" href="https://rsms.me/inter/inter.css" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link rel="stylesheet" href="https://rsms.me/inter/inter.css" /></noscript>
     <title>Dealer Kavach</title>
   </head>
   <body class="bg-bg text-text antialiased">

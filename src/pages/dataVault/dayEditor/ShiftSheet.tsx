@@ -619,11 +619,16 @@ export interface ShiftSheetModel {
  * and the seeding effect quietly put one hand-added row per configured nozzle
  * and tank into the pending set — while the page was drawing "Nothing has been
  * collected for this day" and the sheet was never on screen at all. Press
- * "Collect this day", switch tabs and come back: `refetchOnWindowFocus` refetches
- * the day, it arrives `PORTAL`, the sheet becomes unavailable, and the corrector
+ * "Collect this day", switch tabs and come back: the day refetches, it arrives
+ * `PORTAL`, the sheet becomes unavailable, and the corrector
  * is looking at a full grid whose footer says "12 changes pending" over twelve
  * rows nobody typed. That is the correction job changing, which is the one thing
  * that must not happen.
+ *
+ * (Focus refetching became off-by-default in lib/queryClient.ts and this query
+ * did not opt back in, so a tab-switch is no longer the trigger. The guard
+ * stays: a mutation invalidating the day, a reconnect or a manual refresh all
+ * reach the same state by a different road.)
  *
  * The hand-entry journey still costs one press: "Start this day by hand" creates
  * the MANUAL shell, the day refetches, and the sheet lays itself out on the next

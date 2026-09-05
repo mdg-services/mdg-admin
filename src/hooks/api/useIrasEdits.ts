@@ -82,6 +82,11 @@ export function useIrasDay(dealerId: string | undefined, businessDate: string | 
       api.get<IrasDayEditorView>(`/iras-data/dealers/${dealerId}/days/${businessDate}`),
     enabled: !!dealerId && !!businessDate && isYmd(businessDate),
     staleTime: 0,
+    // Focus refetching is off globally (see lib/queryClient.ts). This one must
+    // opt back in: the `revision` token is what a commit is validated against,
+    // and coming back to a tab holding an hour-old token is exactly how the
+    // operator gets "somebody else changed this day" when nobody did.
+    refetchOnWindowFocus: true,
   });
 }
 
