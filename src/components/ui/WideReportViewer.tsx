@@ -83,6 +83,55 @@ export interface WideReportViewerProps {
   className?: string;
 }
 
+/**
+ * How tall the embedded report says it is, so the frame can stop scrolling.
+ *
+ * THE PROBLEM. The day book sat in a frame fixed at 72vh, which put a second
+ * scrollbar a centimetre inside the page's own — one window inside another,
+ * each taking the wheel depending on where the pointer happened to be, and
+ * neither showing the whole sheet. The frame's height could not simply be
+ * measured: the document is served from S3 under a presigned URL, so it is
+ * cross-origin and `contentDocument` is unreachable.
+ *
+ * So the report says so itself. `renderDigestHtml` posts its own scrollHeight
+ * on load, on resize, and after the Devanagari webfont lands; this listens,
+ * checks the message really came from THIS frame (any page can post to any
+ * window), and hands back a pixel height. Until one arrives — and for any
+ * report generated before the sheet learned to say — it returns null and the
+ * caller keeps its fixed frame, exactly as before.
+ *
+ * The clamp is not decoration. The height sizes an element, and an unbounded
+ * number from a document is an unbounded element.
+ */
+const MIN_REPORT_HEIGHT = 240;
+const MAX_REPORT_HEIGHT = 20000;
+
+function useReportedHeight(
+  frameRef: React.RefObject<HTMLIFrameElement | null>,
+  enabled: boolean,
+): number | null {
+  const [height, setHeight] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    if (!enabled) {
+      setHeight(null);
+      return;
+    }
+    const onMessage = (e: MessageEvent) => {
+      // Only the frame we are sizing gets to say how tall it is.
+      const win = frameRef.current?.contentWindow;
+      if (!win || e.source !== win) return;
+      const data = e.data as { type?: unknown; height?: unknown } | null;
+      if (!data || data.type !== 'mdg:report-height') return;
+      const h = Number(data.height);
+      if (!Number.isFinite(h)) return;
+      setHeight(Math.min(Math.max(Math.round(h), MIN_REPORT_HEIGHT), MAX_REPORT_HEIGHT));
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [frameRef, enabled]);
+  return height;
+}
+
 /** Scale steps above "fit". 1 is the report at its own size. */
 const ZOOM_STEPS = [0.5, 0.75, 1];
 
@@ -101,6 +150,11 @@ export function WideReportViewer({
 }: WideReportViewerProps) {
   const isMd = useMediaQuery(fullScreenBelow);
   const [open, setOpen] = React.useState(false);
+  const inlineFrameRef = React.useRef<HTMLIFrameElement | null>(null);
+  // Only the INLINE desktop frame grows to fit. The full-screen mobile view is
+  // a scaled map of the sheet inside its own pan surface, where a frame taller
+  // than the screen is the point rather than a fault.
+  const reportedHeight = useReportedHeight(inlineFrameRef, isMd && kind === 'html');
   const paneRef = React.useRef<HTMLDivElement | null>(null);
   const [paneWidth, setPaneWidth] = React.useState(0);
   // `null` means "fit": the scale is whatever puts the whole frame on screen,
@@ -137,10 +191,28 @@ export function WideReportViewer({
   // whole report fetched and parsed twice on a phone that is regularly on 2G.
   if (isMd) {
     return kind === 'html' ? (
+      // One scroll, not two: once the sheet has said how tall it is, the frame
+      // becomes exactly that tall, nothing overflows, and the page is the only
+      // thing that scrolls. `+2` absorbs sub-pixel rounding that would leave a
+      // scrollbar for two pixels of nothing. A report that never says — one
+      // generated before the sheet learned to — keeps the fixed frame it had.
+      //
+      // Scrolling is NOT disabled, deliberately. The height arrives more than
+      // once (first paint, then again once the Devanagari webfont has swapped
+      // in and the tables have their real row heights), and the early number is
+      // the smaller one. If a later message were ever missed, a frame with
+      // `scrolling="no"` would CUT the report off with no way to reach the rest;
+      // leaving it on means the worst case degrades to the inner scrollbar we
+      // are removing, rather than to a truncated deliverable.
       <iframe
+        ref={inlineFrameRef}
         src={src}
         title={title}
-        className={cn('w-full border-0 bg-white', desktopHeightClass)}
+        style={reportedHeight ? { height: reportedHeight + 2 } : undefined}
+        className={cn(
+          'w-full border-0 bg-white',
+          reportedHeight ? 'block' : desktopHeightClass,
+        )}
         referrerPolicy="no-referrer"
       />
     ) : (

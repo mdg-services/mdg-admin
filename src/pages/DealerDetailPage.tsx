@@ -521,6 +521,11 @@ export function DealerDetailPage() {
   return (
     <div>
       <PageHeader
+        // One row, not four. This page is a shell around a tab strip, a dataset
+        // rail and whatever the admin actually came to read; the title block
+        // used to spend ~110px saying "Dealers › 15E", "15E", and the phone
+        // number before any of that got a pixel.
+        dense
         breadcrumbs={[
           { label: 'Dealers', to: '/dealers' },
           { label: dealerCodeLabel(dealer.code) },

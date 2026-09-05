@@ -123,19 +123,30 @@ export function DsrDateToolbar({
   if (isMd) {
     return (
       <Card className={className}>
-        <CardContent className="flex flex-wrap items-end gap-4">
-          <div>{dateField}</div>
-          <GenerateDsrForDate dealerId={dealerId} onGenerated={onGenerated} />
-          <EditShiftDataButton
-            dealerId={dealerId}
-            businessDate={businessDate}
-          />
-          <FuelPnlButton dealerId={dealerId} />
-          {generatedAt ? (
-            <p className="ml-auto text-xs text-text-subtle">
-              Generated {formatDateTime(generatedAt)}
-            </p>
-          ) : null}
+        {/* Two groups, not five peers. Left is WHICH DAY — the selector and,
+            under it, when that day's report was built; right is what an admin
+            can DO about it. They were one flat wrapping row, with the timestamp
+            pushed to the far edge by `ml-auto`, where it read as a property of
+            the row rather than of the day named at the other end of it. */}
+        <CardContent className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              {dateField}
+              {generatedAt ? (
+                <p className="mt-1 text-xs text-text-subtle">
+                  Generated {formatDateTime(generatedAt)}
+                </p>
+              ) : null}
+            </div>
+            <GenerateDsrForDate dealerId={dealerId} onGenerated={onGenerated} />
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <EditShiftDataButton
+              dealerId={dealerId}
+              businessDate={businessDate}
+            />
+            <FuelPnlButton dealerId={dealerId} />
+          </div>
         </CardContent>
       </Card>
     );

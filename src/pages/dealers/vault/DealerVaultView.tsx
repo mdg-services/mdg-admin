@@ -89,8 +89,16 @@ export function DealerVaultView({ dealer }: DealerVaultPaneProps) {
         activeId={dataset.id}
         hrefFor={hrefFor}
       />
-      <p className="mb-3 mt-3 text-sm text-text-muted">{dataset.description}</p>
-      <Pane dealer={dealer} />
+      {/* The dataset's description is NOT printed here. The rail above already
+          names the dataset, the pane below opens with the thing itself, and a
+          restatement in between ("This dealer's generated Daily Sales
+          Reports — stock variation and the sales ledger") cost a full row on
+          every vault screen to tell an admin what they had just clicked. It
+          survives as the rail item's `title`, where it is available on hover
+          and costs nothing. */}
+      <div className="mt-3">
+        <Pane dealer={dealer} />
+      </div>
     </div>
   );
 }

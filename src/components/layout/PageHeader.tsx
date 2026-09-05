@@ -14,6 +14,21 @@ export interface PageHeaderProps {
    *  default: one action does not need to be 328px wide to be tappable. Ask for
    *  it where the actions are the point of the page. */
   actionsFill?: boolean;
+  /**
+   * One line instead of four.
+   *
+   * The standard block stacks a breadcrumb trail, a 24px title, and a subtitle,
+   * and on a drill-in page that is three rows to say one thing: the dealer page
+   * spent ~110px printing "Dealers › 15E", then "15E" again at 2xl, then the
+   * phone number — above a tab strip, above a dataset rail, above the report
+   * somebody actually came to read. Dense puts the trail, the name and the
+   * subtitle on a single row and keeps the actions beside them.
+   *
+   * For a page whose title is a SHORT identifier — a dealer code, a run id.
+   * A long title in one row with a long subtitle just wraps into the same
+   * height it started from.
+   */
+  dense?: boolean;
 }
 
 /**
@@ -33,7 +48,32 @@ export function PageHeader({
   breadcrumbs,
   actions,
   actionsFill = false,
+  dense = false,
 }: PageHeaderProps) {
+  if (dense) {
+    return (
+      <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 md:mb-4">
+        {breadcrumbs?.length ? (
+          // The trail WITHOUT its last crumb: the crumb and the title are the
+          // same word on a drill-in page, and printing it twice on one line is
+          // worse than printing it twice on two.
+          <div className="hidden md:block">
+            <Breadcrumbs items={breadcrumbs.slice(0, -1)} trailing />
+          </div>
+        ) : null}
+        <h1 className="min-w-0 break-words text-lg font-semibold text-text md:text-xl">
+          {title}
+        </h1>
+        {subtitle ? (
+          <p className="min-w-0 truncate text-sm text-text-muted">{subtitle}</p>
+        ) : null}
+        {actions ? (
+          <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="mb-4 flex flex-col gap-2 md:mb-6 md:flex-row md:items-end md:justify-between md:gap-3">
       <div className="min-w-0">
