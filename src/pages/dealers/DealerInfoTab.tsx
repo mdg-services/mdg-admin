@@ -19,6 +19,8 @@ import type { Dealer } from '@dk/shared';
 
 import { DealerAppLoginCard } from './DealerAppLoginCard';
 import { DealerDangerZone } from './DealerDangerZone';
+import { DealerOutletProfileCards } from './DealerOutletProfileCards';
+import { DealerOutletProfileDrawer } from './DealerOutletProfileDrawer';
 
 interface Props {
   dealer: Dealer;
@@ -33,6 +35,7 @@ interface Props {
 export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
   const isSuperAdmin = useIsSuperAdmin();
   const isArchived = !!dealer.archivedAt;
+  const [editingProfile, setEditingProfile] = React.useState(false);
   return (
     <div className="grid gap-3 md:gap-4">
       {dealer.status === 'ONBOARDING' && !dealer.archivedAt ? (
@@ -58,6 +61,12 @@ export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
         </Card>
       ) : null}
 
+      {/* NO TAX CARD HERE ANY MORE. GST and PAN are catalog fields on the
+          outlet file below, under "Tax and registration", and they read from
+          the SAME `Dealer.gst` / `Dealer.pan` this card used to print. Two
+          cards showing one GSTIN under two headings is the fault this
+          codebase has been audited for once already — one subject, two
+          surfaces — and the one that stays is the one that can be edited. */}
       <div className="grid gap-3 md:grid-cols-2 md:gap-4">
         <Card>
           <CardHeader>
@@ -94,38 +103,6 @@ export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
                   key: 'onboarded',
                   label: 'Onboarded',
                   value: formatDate(dealer.onboardingDate),
-                },
-              ]}
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Tax</CardTitle>
-              <CardSubtitle>Captured during step 5.</CardSubtitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {/* Both are transcribed verbatim into third-party portals, so they
-                are `mono` (which also brings `break-all` — a 15-character GSTIN
-                has no break opportunity of its own and would otherwise push the
-                row past the card, where `main`'s `overflow-x-hidden` cuts it). */}
-            <KeyValueList
-              className="select-text"
-              items={[
-                {
-                  key: 'gst',
-                  label: 'GST',
-                  value: dealer.gst ?? 'Not collected yet',
-                  mono: !!dealer.gst,
-                },
-                {
-                  key: 'pan',
-                  label: 'PAN',
-                  value: dealer.pan ?? 'Not collected yet',
-                  mono: !!dealer.pan,
                 },
               ]}
             />
@@ -198,6 +175,24 @@ export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
           </Card>
         )}
       </div>
+
+      {/* Below the four identity cards, because it is the long section and the
+          things somebody opens this tab for — the code, the status, the phone —
+          must not be pushed off the first screen by twenty-five rows of
+          registration data. */}
+      <DealerOutletProfileCards
+        dealer={dealer}
+        // No editing an archived dealer: every write 409s for one, and this is
+        // the only tab an archived dealer can even reach.
+        onEdit={isArchived ? undefined : () => setEditingProfile(true)}
+      />
+      {!isArchived ? (
+        <DealerOutletProfileDrawer
+          open={editingProfile}
+          onClose={() => setEditingProfile(false)}
+          dealer={dealer}
+        />
+      ) : null}
 
       {isSuperAdmin ? <DealerDangerZone dealer={dealer} /> : null}
 
