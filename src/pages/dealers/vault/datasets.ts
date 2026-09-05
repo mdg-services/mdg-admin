@@ -6,12 +6,14 @@ import {
   FileBarChart2,
   Gauge,
   ReceiptText,
+  ScanLine,
   Truck,
 } from 'lucide-react';
 
 import { DealerCreditDodTab } from '../DealerCreditDodTab';
 import { DealerDataVaultTab } from '../DealerDataVaultTab';
 import { DealerDsrTab } from '../DealerDsrTab';
+import { DealerLedgerWatchPane } from '../DealerLedgerWatchPane';
 
 import { DealerInspectionPane } from './DealerInspectionPane';
 import { DealerPadLedgerPane } from './DealerPadLedgerPane';
@@ -51,6 +53,22 @@ const REGISTRY = [
     // with that service being attached.
     requiresService: 'credit-dod-monitoring',
     Pane: DealerPadLedgerPane,
+  },
+  {
+    id: 'ledger-watch',
+    label: 'Ledger watch',
+    description:
+      "Everything on this dealer's PAD ledger that is not the routine buy-and-pay pair, and every finding raised against it.",
+    // Directly under the PAD ledger, because it is that ledger read a second
+    // way: the same rows, with the 97% that is fuel invoices and deposits
+    // subtracted out. Reading the two the other way round — findings first,
+    // ledger second — means meeting a ₹9,443 charge before seeing the statement
+    // it came off.
+    Icon: ScanLine,
+    // It rides the Credit & DOD run and reads the ledger that run maintains, so
+    // it lives or dies with the same attachment the PAD ledger does.
+    requiresService: 'credit-dod-monitoring',
+    Pane: DealerLedgerWatchPane,
   },
   {
     id: 'credit-dod',

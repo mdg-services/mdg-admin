@@ -133,6 +133,13 @@ const KavachWorkQueuePage = React.lazy(
     })),
   ),
 );
+const LedgerWatchPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/LedgerWatchPage').then((m) => ({
+      default: m.LedgerWatchPage,
+    })),
+  ),
+);
 const OverviewPage = React.lazy(
   retryImport(() =>
     import('@/pages/OverviewPage').then((m) => ({ default: m.OverviewPage })),
@@ -277,6 +284,21 @@ export default function App() {
                   <KavachDefaultsPage />
                 </LazyPage>
               </RequireSuperAdmin>
+            }
+          />
+          {/* Every movement on every dealer's PAD ledger that is not the
+              routine buy-and-pay pair. Deliberately NOT `superAdminOnly`: a fee
+              or an interest posting nobody was told about is discovered by
+              whoever answers the dealer's call, and gating it would mean the
+              findings were read by whoever had the rights rather than by
+              whoever had the context. The screen only ever reads and annotates
+              — nothing on it can move a due amount or a due date. */}
+          <Route
+            path="ledger-watch"
+            element={
+              <LazyPage>
+                <LedgerWatchPage />
+              </LazyPage>
             }
           />
           {/* Plain admins are the audience here — the Vault is where they read

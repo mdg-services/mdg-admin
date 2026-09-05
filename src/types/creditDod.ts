@@ -20,6 +20,27 @@ export interface CreditDodLedgerRow {
   credit: number;
   /** Running balance; negative = advance (dealer in credit), positive = owed. */
   balance: number;
+
+  /**
+   * What Ledger Watch decided this row is — `FUEL_PURCHASE`, `FEE`,
+   * `INTEREST` and the rest of `MovementClass`.
+   *
+   * OPTIONAL, AND IT WILL BE ABSENT FOR A LONG TIME. The classification is
+   * written on the transaction during a Credit & DOD run, so a dealer whose
+   * ledger was synced before Ledger Watch shipped carries none of it until
+   * either their next run or the one-off backfill. Everything that reads this
+   * has to render a row that has no class at all, which is why the ledger table
+   * only offers its "hide the routine pair" toggle once at least one loaded row
+   * carries one.
+   *
+   * Typed `string | null` and not `MovementClass`: it is a stored value from a
+   * run that may predate a class being added or renamed, so it is checked
+   * against the contract at the point of use (`asMovementClass`) rather than
+   * cast on arrival.
+   */
+  movementClass?: string | null;
+  /** The month-masked `doc`, stable across months and dealers. */
+  movementSignature?: string | null;
 }
 
 export interface CreditDodLedgerResponse {

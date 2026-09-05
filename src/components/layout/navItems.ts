@@ -11,6 +11,7 @@ import {
   MessageSquare,
   PartyPopper,
   Plug,
+  ScanLine,
   ScrollText,
   ShieldAlert,
   ShieldCheck,
@@ -68,6 +69,14 @@ export const NAV_ITEMS: NavItem[] = [
   // shell with no address bar: on a phone the screen simply could not be
   // opened. Not in `BOTTOM_TAB_ROUTES`, so it falls into the More sheet.
   { to: '/kavach/dashboard', label: 'Kavach standing', icon: Gauge },
+  // Every movement on every dealer's PAD ledger that is not the routine
+  // buy-and-pay pair: interest, licence-fee recoveries, participation fees, a
+  // card settlement clawed back. All of them silently move the outstanding, and
+  // therefore the due amount and the due date, and until this screen existed
+  // nobody was told. Deliberately NOT `superAdminOnly` — the person who answers
+  // the dealer's call is the person who needs it. Not in `BOTTOM_TAB_ROUTES`
+  // either: the bar holds four, so it falls into the More sheet.
+  { to: '/ledger-watch', label: 'Ledger watch', icon: ScanLine },
   // Every dealer's collected IRAS shift data in one place — an everyday admin
   // surface, so deliberately NOT `superAdminOnly`.
   { to: '/data-vault', label: 'Data Vault', icon: Database },

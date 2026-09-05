@@ -26,17 +26,10 @@ import {
   EmptyState,
   FilterBar,
   Label,
-  MobileCardList,
   Pagination,
   Select,
   Skeleton,
-  Table,
   Tabs,
-  TBody,
-  TD,
-  TH,
-  THead,
-  TRow,
   useToast,
 } from '@/components/ui';
 import {
@@ -141,12 +134,42 @@ const PAGE_SIZE = 20;
 const VERDICT_BUTTONS: ReadonlyArray<{
   verdict: AiTurnVerdict;
   icon: LucideIcon;
-  variant: 'secondary' | 'danger';
+  /**
+   * The word ON the button. The full sentence stays in `AI_VERDICT_LABEL` and
+   * reaches the reviewer twice — in the `title`, and once per screen in the
+   * legend above the list.
+   *
+   * IT USED TO BE THE SENTENCE, and the sentence is what broke the page. A
+   * button cannot wrap, so "Wrong — it stated something untrue" set a ~300px
+   * floor under the last column of a seven-column table; the columns that CAN
+   * wrap paid for it, and the answer being judged was rendered two words to a
+   * line. The meaning is not lost by moving it: a verdict is chosen once, and
+   * the sentence is there at the moment of choosing.
+   */
+  label: string;
+  /** The paint when this verdict is the one standing. */
+  activeVariant: 'primary' | 'danger';
 }> = [
-  { verdict: 'RIGHT', icon: ThumbsUp, variant: 'secondary' },
-  { verdict: 'WRONG', icon: ThumbsDown, variant: 'danger' },
-  { verdict: 'POORLY_WORDED', icon: PenLine, variant: 'secondary' },
-  { verdict: 'SHOULD_HAVE_HANDED_OFF', icon: UserPlus, variant: 'secondary' },
+  { verdict: 'RIGHT', icon: ThumbsUp, label: 'Looks right', activeVariant: 'primary' },
+  /**
+   * RED ONLY ONCE CHOSEN, never at rest. Twenty rows each carrying a filled red
+   * button is a screen whose loudest colour means "not yet decided", and a team
+   * that reads this page daily stops seeing red at all — which is a problem on
+   * the one control that trips the breaker.
+   */
+  { verdict: 'WRONG', icon: ThumbsDown, label: 'Wrong', activeVariant: 'danger' },
+  {
+    verdict: 'POORLY_WORDED',
+    icon: PenLine,
+    label: 'Badly written',
+    activeVariant: 'primary',
+  },
+  {
+    verdict: 'SHOULD_HAVE_HANDED_OFF',
+    icon: UserPlus,
+    label: 'Should have handed off',
+    activeVariant: 'primary',
+  },
 ];
 
 function VerdictButtons({
@@ -161,7 +184,7 @@ function VerdictButtons({
   const current = turn.review?.verdict;
   return (
     <>
-      {VERDICT_BUTTONS.map(({ verdict, icon: Icon, variant }) => {
+      {VERDICT_BUTTONS.map(({ verdict, icon: Icon, label, activeVariant }) => {
         const active = current === verdict;
         return (
           <Button
@@ -171,13 +194,14 @@ function VerdictButtons({
             // colleague who knows the dealer — so the current one is shown as
             // pressed rather than locking the row. The breaker reads the same
             // field, so a corrected verdict corrects the breaker too.
-            variant={active ? 'primary' : variant}
+            variant={active ? activeVariant : 'secondary'}
             aria-pressed={active}
             disabled={busy}
             onClick={() => onReview(verdict)}
+            title={AI_VERDICT_LABEL[verdict]}
             leftIcon={<Icon width={14} height={14} strokeWidth={1.75} />}
           >
-            {AI_VERDICT_LABEL[verdict]}
+            {label}
           </Button>
         );
       })}
@@ -237,7 +261,12 @@ function Lookups({ turn }: { turn: AiTurn }) {
       {ids.map((id, i) => (
         <span
           key={`${id}-${i}`}
-          className="inline-flex items-center rounded-full bg-surface-2 px-2 py-0.5 text-xs text-text-muted"
+          // `whitespace-nowrap` for the reason `Badge` carries it: squeezed by a
+          // flex neighbour these broke a two-word label one word to a line, so
+          // "Papers open, both ways" rendered as a four-line column. Refusing to
+          // wrap pushes the pressure onto the prose beside them, which has
+          // `min-w-0 break-words` and can take it.
+          className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-xs text-text-muted"
           title={id}
         >
           {aiToolLabel(id)}
@@ -323,7 +352,9 @@ function RefusedProse({ turn }: { turn: AiTurn }) {
   const refusal = aiRefusal(turn);
   if (!refusal) return null;
   return (
-    <div className="mt-1.5 grid gap-1.5 rounded-md border border-border bg-surface-2 p-2">
+    // No top margin: this is a grid child of the card now, and the card's own
+    // `gap-3` sets the distance. It used to hang off the bottom of the answer.
+    <div className="grid gap-1.5 rounded-md border border-border bg-surface-2 p-2.5">
       <p className="text-xs font-medium uppercase tracking-wide text-text-subtle">
         It wanted to send this
       </p>
@@ -393,22 +424,28 @@ function OutcomeCell({ turn }: { turn: AiTurn }) {
  */
 function AnswerCell({ turn }: { turn: AiTurn }) {
   const withheld = aiWithheldAnswer(turn);
+  // `RefusedProse` used to hang off the bottom of this. It does not any more:
+  // the refused sentence is the longest thing on the row and it now spans the
+  // whole card, under both columns, where it has the measure to be read.
   return (
-    <>
+    <div className="grid min-w-0 gap-0.5">
       {withheld ? (
-        <div className="grid gap-0.5">
+        <>
           <span className="text-xs font-medium uppercase tracking-wide text-text-subtle">
             Written, not sent
           </span>
-          <ClampedText className="text-sm text-text">{withheld}</ClampedText>
-        </div>
+          <ClampedText className="min-w-0 break-words text-sm text-text">
+            {withheld}
+          </ClampedText>
+        </>
       ) : turn.answer ? (
-        <ClampedText className="text-sm text-text">{turn.answer}</ClampedText>
+        <ClampedText className="min-w-0 break-words text-sm text-text">
+          {turn.answer}
+        </ClampedText>
       ) : (
         <span className="text-sm text-text-subtle">Nothing was posted</span>
       )}
-      <RefusedProse turn={turn} />
-    </>
+    </div>
   );
 }
 
@@ -435,6 +472,105 @@ function AsksCell({ turn }: { turn: AiTurn }) {
         </span>
       ))}
     </div>
+  );
+}
+
+/** The small grey word that names a half of the card. */
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-xs font-medium uppercase tracking-wide text-text-subtle">
+      {children}
+    </span>
+  );
+}
+
+/**
+ * One turn, as a card the whole width of the page.
+ *
+ * WHY THIS IS NOT A TABLE ROW ANY MORE, and it is worth writing down because a
+ * table is the obvious shape for "a list of turns" and it was the wrong one.
+ * A row here holds a question, an answer, a refused sentence, a stack of badges
+ * and four buttons — a document, not a record. In a seven-column `<table>` the
+ * browser hands width to whatever cannot wrap, so the four buttons and the
+ * badges took it and the two things a reviewer actually has to READ were left
+ * around 200px each: an answer rendered two words to a line, a row over 1,000px
+ * tall, and a wide empty band across the middle of the screen where the narrow
+ * columns had nothing to fill it with.
+ *
+ * ONE LAYOUT FOR EVERY WIDTH, so the phone and the desktop cannot drift. The
+ * card stacks below `lg` and splits into "they asked" / "it said" above it; the
+ * table and the `MobileCardList` that used to be maintained side by side are
+ * both gone. `MobileCardList`'s key/value shape was never right for this screen
+ * anyway — its values are meant to be short, and three of these are paragraphs.
+ *
+ * THE PROSE COLUMN IS THE WIDE ONE and the ask column is capped at 20rem: the
+ * question is a sentence, the answer is several. `minmax(0,…)` on both tracks
+ * rather than a bare `20rem`, because a grid track sized by its content refuses
+ * to shrink below `min-content` and overflows the card — the trap this repo has
+ * already paid for on three pages.
+ */
+function TurnCard({
+  turn,
+  now,
+  busy,
+  onReview,
+}: {
+  turn: AiTurn;
+  now: number;
+  busy: boolean;
+  onReview: (verdict: AiTurnVerdict) => void;
+}) {
+  return (
+    <article className="grid gap-3 border-b border-border p-3 last:border-b-0 md:px-4 md:py-3.5">
+      {/*
+       * The identity strip. Everything here is a GLANCE fact — who, when, how it
+       * was made, how it ended, what it cost — so it is one wrapping row above
+       * the reading, rather than four columns beside it.
+       */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <Link
+          to={`/inbox?c=${turn.conversationId}`}
+          className="font-mono text-sm font-medium text-brand hover:underline"
+        >
+          {dealerCodeLabel(turn.dealerCode)}
+        </Link>
+        <span className="text-xs text-text-subtle">{aiTurnAge(turn.createdAt, now)}</span>
+        {/* Hidden below sm, where the strip wraps and a lone 1px rule would
+            start a line of its own. */}
+        <span aria-hidden className="hidden h-3 w-px bg-border sm:inline-block" />
+        <ProductionMark turn={turn} />
+        <OutcomeCell turn={turn} />
+        <TurnMarks turn={turn} />
+        {/* Cost is the one number nobody scans for, so it goes to the far end
+            and stays the quietest thing on the strip. */}
+        <span className="ml-auto shrink-0 tabular-nums text-xs text-text-subtle">
+          {aiCostLabel(turn.estPaise)}
+        </span>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-6">
+        <div className="grid min-w-0 content-start gap-1.5">
+          <FieldLabel>They asked</FieldLabel>
+          <p className="min-w-0 break-words text-sm text-text-muted">
+            {turn.question ? `“${turn.question}”` : '—'}
+          </p>
+          <AsksCell turn={turn} />
+          <Lookups turn={turn} />
+        </div>
+        <div className="grid min-w-0 content-start gap-1.5">
+          <FieldLabel>It said</FieldLabel>
+          <AnswerCell turn={turn} />
+        </div>
+      </div>
+
+      {/* Full width, under both columns — see `RefusedProse`. */}
+      <RefusedProse turn={turn} />
+
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
+        <span className="mr-1 text-xs text-text-subtle">Was this any good?</span>
+        <VerdictButtons turn={turn} busy={busy} onReview={onReview} />
+      </div>
+    </article>
   );
 }
 
@@ -794,134 +930,31 @@ export function AiAnswersPage() {
               />
             ) : (
               <>
-                {/* Desktop: a table, in its own horizontal scroller so a long
-                    answer can never make the page body scroll sideways. */}
-                <div className="hidden overflow-x-auto md:block">
-                  <Table density="compact">
-                    <THead>
-                      <TRow>
-                        <TH>Dealer</TH>
-                        <TH>They asked</TH>
-                        <TH>It said</TH>
-                        <TH>How</TH>
-                        <TH>Outcome</TH>
-                        <TH>Cost</TH>
-                        <TH>Verdict</TH>
-                      </TRow>
-                    </THead>
-                    <TBody>
-                      {turns.map((turn) => (
-                        <TRow key={turn.id}>
-                          <TD>
-                            <div className="grid gap-0.5">
-                              <Link
-                                to={`/inbox?c=${turn.conversationId}`}
-                                className="font-mono text-brand hover:underline"
-                              >
-                                {dealerCodeLabel(turn.dealerCode)}
-                              </Link>
-                              <span className="text-xs text-text-subtle">
-                                {aiTurnAge(turn.createdAt, now)}
-                              </span>
-                            </div>
-                          </TD>
-                          <TD>
-                            <div className="grid max-w-[22rem] gap-1">
-                              <ClampedText className="text-sm text-text-muted">
-                                {turn.question ?? '—'}
-                              </ClampedText>
-                              <AsksCell turn={turn} />
-                            </div>
-                          </TD>
-                          <TD>
-                            <div className="max-w-[26rem]">
-                              <AnswerCell turn={turn} />
-                            </div>
-                          </TD>
-                          <TD>
-                            <div className="grid max-w-[15rem] gap-1">
-                              <div className="flex flex-wrap items-center gap-1">
-                                <ProductionMark turn={turn} />
-                                <TurnMarks turn={turn} />
-                              </div>
-                              <Lookups turn={turn} />
-                            </div>
-                          </TD>
-                          <TD>
-                            <OutcomeCell turn={turn} />
-                          </TD>
-                          <TD>
-                            <span className="tabular-nums text-sm">
-                              {aiCostLabel(turn.estPaise)}
-                            </span>
-                          </TD>
-                          <TD>
-                            <div className="flex flex-wrap gap-1">
-                              <VerdictButtons
-                                turn={turn}
-                                busy={review.isPending && pendingId === turn.id}
-                                onReview={(v) => applyVerdict(turn, v)}
-                              />
-                            </div>
-                          </TD>
-                        </TRow>
-                      ))}
-                    </TBody>
-                  </Table>
+                {/*
+                  * The verdicts explained ONCE, here, instead of inside every
+                  * button on every row. The two that are easy to confuse are the
+                  * two that matter — only `WRONG` trips the breaker — and a
+                  * reviewer who reaches for it because the Hindi was stiff has
+                  * spent one of three lives on a sentence that was entirely true.
+                  */}
+                <p className="border-b border-border bg-surface-2 px-3 py-2 text-xs text-text-muted md:px-4">
+                  <span className="font-medium text-text">Wrong</span> means it
+                  stated something untrue — only that one counts towards the
+                  breaker.{' '}
+                  <span className="font-medium text-text">Badly written</span>{' '}
+                  means the facts were right and the sentence was not.
+                </p>
+                <div>
+                  {turns.map((turn) => (
+                    <TurnCard
+                      key={turn.id}
+                      turn={turn}
+                      now={now}
+                      busy={review.isPending && pendingId === turn.id}
+                      onReview={(v) => applyVerdict(turn, v)}
+                    />
+                  ))}
                 </div>
-
-                {/* Below md: cards, never a sideways-scrolling table. */}
-                <MobileCardList
-                  variant="rows"
-                  cards={turns.map((turn) => ({
-                    key: turn.id,
-                    primary: (
-                      <Link
-                        to={`/inbox?c=${turn.conversationId}`}
-                        className="font-mono font-medium text-brand"
-                      >
-                        {dealerCodeLabel(turn.dealerCode)}
-                      </Link>
-                    ),
-                    // The production mark leads the right rail, above the
-                    // outcome, because "how was this made" is the question the
-                    // phone reader is scanning for and the outcome badge has
-                    // been on this row since v1.
-                    primaryRight: (
-                      <div className="flex flex-wrap justify-end gap-1">
-                        <ProductionMark turn={turn} />
-                        <OutcomeCell turn={turn} />
-                      </div>
-                    ),
-                    primaryRightWidth: 'clamp',
-                    secondary: turn.question ? `“${turn.question}”` : undefined,
-                    kv: [
-                      { label: 'It said', value: <AnswerCell turn={turn} /> },
-                      { label: 'Read as', value: <AsksCell turn={turn} /> },
-                      { label: 'Lookups', value: <Lookups turn={turn} /> },
-                      {
-                        label: 'Cost',
-                        value: aiCostLabel(turn.estPaise),
-                        numeric: true,
-                      },
-                    ],
-                    meta: (
-                      <span className="flex flex-wrap items-center gap-1">
-                        {aiTurnAge(turn.createdAt, now)}
-                        <TurnMarks turn={turn} />
-                      </span>
-                    ),
-                    actions: (
-                      <VerdictButtons
-                        turn={turn}
-                        busy={review.isPending && pendingId === turn.id}
-                        onReview={(v) => applyVerdict(turn, v)}
-                      />
-                    ),
-                    actionsLayout: 'wrap',
-                  }))}
-                />
-
                 <div className="border-t border-border">
                   <Pagination
                     page={page}

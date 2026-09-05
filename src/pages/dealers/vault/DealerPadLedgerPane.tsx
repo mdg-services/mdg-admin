@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  Checkbox,
   EmptyState,
   MobileCardList,
   Skeleton,
@@ -21,6 +22,13 @@ import { useCreditDodLedger, useCreditDodVault } from '@/hooks/api/useCreditDod'
 import { ApiError } from '@/lib/api';
 import { formatDateTime, formatDmy, inrFormat } from '@/lib/format';
 import { Amount, Balance } from '@/pages/dataVault/padLedgerFigures';
+import {
+  asMovementClass,
+  classifiedRowCount,
+  MOVEMENT_CLASS_LABEL,
+  movementClassIntent,
+  visibleLedgerRows,
+} from '@/pages/dealers/ledgerWatchFormat';
 
 import type { DealerVaultPaneProps } from './types';
 
@@ -52,6 +60,24 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
 
   const rows = data?.pages.flatMap((p) => p.rows) ?? [];
   const total = data?.pages[0]?.total ?? 0;
+
+  /**
+   * "Hide the routine pair" — the ledger with the 97% taken out.
+   *
+   * A PAD ledger is meant to be a pair: fuel bought (a debit) and money
+   * deposited (a credit). Across the eleven live outlets that pair plus the
+   * card settlements is 3,016 of 3,163 rows, so an admin looking for the ₹1,062
+   * participation fee or the one fleet-card posting that came through as a
+   * DEBIT is reading past sixty screens of ordinary trading to find it. Ticking
+   * this leaves exactly the movements nobody was ever told about.
+   *
+   * Client-side, over the rows LOADED, and deliberately so: the filter is a way
+   * of reading the page in front of you, not a query. The footer says how many
+   * of how many, so a short filtered list can never be read as a complete one.
+   */
+  const [hidePair, setHidePair] = React.useState(false);
+  const classified = classifiedRowCount(rows);
+  const visibleRows = visibleLedgerRows(rows, hidePair);
 
   return (
     <div className="grid gap-4">
@@ -109,10 +135,25 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
             align="center"
             padding="comfortable"
             action={
-              total > 0 ? (
-                <Badge intent="neutral" className="tabular-nums">
-                  {total.toLocaleString('en-IN')} txns
-                </Badge>
+              total > 0 || classified > 0 ? (
+                <span className="flex flex-wrap items-center gap-3">
+                  {/* Offered only once at least one loaded row carries a
+                      classification. Before Ledger Watch has run for a dealer
+                      every row is unclassified, so the toggle would hide
+                      nothing at all and read as broken. */}
+                  {classified > 0 ? (
+                    <Checkbox
+                      label="Hide the routine pair"
+                      checked={hidePair}
+                      onChange={(e) => setHidePair(e.target.checked)}
+                    />
+                  ) : null}
+                  {total > 0 ? (
+                    <Badge intent="neutral" className="tabular-nums">
+                      {total.toLocaleString('en-IN')} txns
+                    </Badge>
+                  ) : null}
+                </span>
               ) : undefined
             }
           >
@@ -151,6 +192,7 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
                     <TRow>
                       <TH>Date</TH>
                       <TH>Document</TH>
+                      <TH>Movement</TH>
                       <TH>Type</TH>
                       <TH>Terminal</TH>
                       <TH>Product</TH>
@@ -160,12 +202,15 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
                     </TRow>
                   </THead>
                   <TBody>
-                    {rows.map((r) => (
+                    {visibleRows.map((r) => (
                       <TRow key={r.seq}>
                         <TD className="whitespace-nowrap text-text-muted">
                           {formatDmy(r.date)}
                         </TD>
                         <TD className="font-medium">{r.doc || '—'}</TD>
+                        <TD>
+                          <MovementChip movementClass={r.movementClass} />
+                        </TD>
                         <TD className="text-text-muted">{r.txnType || '—'}</TD>
                         <TD className="text-text-muted">{r.terminal || '—'}</TD>
                         <TD className="text-text-muted">{r.product || '—'}</TD>
@@ -188,7 +233,7 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
                   admin scans for — with the descriptive columns as meta. */}
               <MobileCardList
                 className="p-3"
-                cards={rows.map((r) => ({
+                cards={visibleRows.map((r) => ({
                   key: String(r.seq),
                   primary: (
                     <span className="flex min-w-0 items-baseline gap-2">
@@ -215,7 +260,8 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
                     </span>
                   ),
                   meta: (
-                    <span className="flex flex-wrap items-center gap-x-2">
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <MovementChip movementClass={r.movementClass} />
                       <span>{r.txnType || '—'}</span>
                       {r.terminal ? <span>· {r.terminal}</span> : null}
                       {r.product ? <span>· {r.product}</span> : null}
@@ -224,10 +270,26 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
                 }))}
               />
 
+              {/* Every loaded row was part of the pair. Said out loud, because
+                  a table that renders nothing under a heading reads as a
+                  failure to load rather than as a filter doing its job. */}
+              {visibleRows.length === 0 ? (
+                <p className="px-3 py-6 text-center text-sm text-text-muted">
+                  Every one of the {rows.length.toLocaleString('en-IN')} loaded
+                  rows is a fuel purchase or a deposit. Load more, or untick
+                  &ldquo;Hide the routine pair&rdquo;.
+                </p>
+              ) : null}
+
               <div className="flex items-center justify-between gap-3 border-t border-border p-3">
+                {/* Two figures and not one whenever the filter is on: how many
+                    of the loaded rows are being shown, and how much ledger
+                    exists in total. A single "showing 4 of 3,163" would let a
+                    filtered view be read as the whole ledger. */}
                 <span className="text-xs text-text-subtle">
-                  Showing {rows.length.toLocaleString('en-IN')} of{' '}
-                  {total.toLocaleString('en-IN')}
+                  {hidePair
+                    ? `Showing ${visibleRows.length.toLocaleString('en-IN')} movements outside the pair, from ${rows.length.toLocaleString('en-IN')} loaded of ${total.toLocaleString('en-IN')}`
+                    : `Showing ${rows.length.toLocaleString('en-IN')} of ${total.toLocaleString('en-IN')}`}
                 </span>
                 {hasNextPage ? (
                   <Button
@@ -245,6 +307,31 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/**
+ * What Ledger Watch decided this row is.
+ *
+ * An em-dash and not a chip when there is no classification, and the difference
+ * matters: a row with no class has not been read yet — the dealer's ledger was
+ * synced before Ledger Watch shipped, or the run has not reached them — and
+ * that is nothing like a row Ledger Watch looked at and could not name. The
+ * second case has its own class, `UNCLASSIFIED`, its own red chip reading
+ * "Unnamed", and an `ALERT`-level finding beside it in the Ledger watch pane.
+ * Painting both the same colour would hide the one row an admin must open.
+ */
+function MovementChip({ movementClass }: { movementClass?: string | null }) {
+  const cls = asMovementClass(movementClass);
+  if (!cls) {
+    return (
+      <span className="text-text-subtle" title="Not classified yet">
+        —
+      </span>
+    );
+  }
+  return (
+    <Badge intent={movementClassIntent(cls)}>{MOVEMENT_CLASS_LABEL[cls]}</Badge>
   );
 }
 

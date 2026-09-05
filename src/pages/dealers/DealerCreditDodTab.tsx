@@ -47,6 +47,7 @@ import type { Dealer, ServiceRun } from '@dk/shared';
 
 import { CreditDodHelpCta } from './CreditDodHelpCta';
 import { CreditDodReportCard } from './CreditDodReportCard';
+import { LedgerWatchBand } from './LedgerWatchBand';
 
 interface Props {
   dealer: Dealer;
@@ -84,6 +85,12 @@ const STATE_INTENT: Record<string, Intent> = {
 export function DealerCreditDodTab({ dealer }: Props) {
   return (
     <div className="grid gap-4">
+      {/* ABOVE the generate controls, deliberately. This screen exists to get a
+          card out to a dealer saying "deposit ₹X by the 6th", and the movements
+          the band lists — a fee, an interest posting, a licence-fee recovery —
+          are exactly what moved that ₹X without anybody being told. Placed
+          below the controls it would be read after the report had gone out. */}
+      <LedgerWatchBand dealerId={dealer.id} />
       <GenerateCard dealerId={dealer.id} />
       <SnapshotHistoryCard dealerId={dealer.id} />
       <LedgerCard dealerId={dealer.id} />
