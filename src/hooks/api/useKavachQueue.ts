@@ -237,6 +237,6 @@ export function useKavachCatalogLookup() {
   return useQuery<KavachCatalogEntry[]>({
     queryKey: ['kavach', 'catalog'],
     staleTime: 10 * 60_000,
-    queryFn: () => api.get<KavachCatalogEntry[]>('/v1/kavach/catalog'),
+    queryFn: () => api.get<KavachCatalogEntry[]>('/kavach/catalog'),
   });
 }
