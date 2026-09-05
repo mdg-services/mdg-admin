@@ -13,7 +13,11 @@ import {
 import * as React from 'react';
 
 
-import { AssurancePanel, AssuranceSummaryStrip } from '@/components/dsr/AssurancePanel';
+import {
+  AssuranceBadge,
+  AssurancePanel,
+  AssuranceSummaryStrip,
+} from '@/components/dsr/AssurancePanel';
 import {
   Badge,
   Button,
@@ -137,9 +141,13 @@ export function DsrReportPanel({
       <Card className="order-2 overflow-hidden md:order-none">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5 md:px-4">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-text">
-              Daily Sales Report
-            </p>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-text">Daily Sales Report</p>
+              {/* The status at a glance, beside the title rather than below the
+                  day book. `Badge` refuses to shrink by design, so it pushes the
+                  squeeze onto the title, which wraps. */}
+              <AssuranceBadge report={report} />
+            </div>
             <p className="text-xs text-text-subtle">
               {dsrDateLabel(report.businessDate)}
               {report.outletCode ? ` · Outlet ${report.outletCode}` : ''}

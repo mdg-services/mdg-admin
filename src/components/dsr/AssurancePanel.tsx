@@ -2,6 +2,7 @@ import { Info, Lightbulb, ServerCrash, ShieldAlert, ShieldCheck } from 'lucide-r
 import * as React from 'react';
 
 import {
+  Badge,
   Button,
   Callout,
   Checkbox,
@@ -37,6 +38,7 @@ import {
   attachExplanations,
   causeLabel,
   isUnsureCause,
+  assuranceBadge,
   reviewNote,
   reviewTrouble,
   type ReviewedFinding,
@@ -709,5 +711,25 @@ export function AssuranceSummaryStrip({ report }: { report: DsrReportView }) {
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The one-glance status, for the report card header.
+ *
+ * Deliberately five different labels rather than one badge that is always
+ * present saying the same word — see `assuranceBadge`. Renders nothing at all
+ * until the verdict has loaded, because a badge that flickers from one state to
+ * another is worse than one that arrives a moment late.
+ */
+export function AssuranceBadge({ report }: { report: DsrReportView }) {
+  const { data: verdict } = useAssuranceReport(report.id);
+  const badge = assuranceBadge(verdict);
+  if (!badge) return null;
+  return (
+    <Badge intent={badge.intent} title={badge.detail}>
+      <span className="sr-only">AI verification status: </span>
+      {badge.label}
+    </Badge>
   );
 }

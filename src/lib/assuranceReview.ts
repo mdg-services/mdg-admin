@@ -184,3 +184,81 @@ export function causeLabel(cause: string): string {
 export function isUnsureCause(cause: string): boolean {
   return cause === 'CANNOT_TELL';
 }
+
+/** What the header badge says, and how loudly. */
+export interface AssuranceBadge {
+  label: string;
+  intent: 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+  /** The long form, for a screen reader and for the title on a pointer device. */
+  detail: string;
+}
+
+/**
+ * The one-glance status, for the report card header.
+ *
+ * FIVE DISTINCT LABELS, and that is the whole design. A badge that reads the
+ * same words on every report every day carries no information within a week and
+ * trains the eye to skip the one day it changes — so this never says a single
+ * generic "Verified". It says which of five things actually happened, and the
+ * commonest good day ("Checked") is visibly different from the commonest
+ * not-quite day ("Rules only"), which is the distinction an admin needs.
+ *
+ * IT NEVER CLAIMS THE AI LOOKED WHEN IT DID NOT. "Checked · AI" is reachable
+ * only from an adjudication that genuinely ran and returned. A timeout, a
+ * budget skip, or an answer thrown away for quoting figures nobody supplied all
+ * land on "Rules only", which is true and is not alarming.
+ */
+export function assuranceBadge(
+  verdict: AssuranceReportVerdict | null | undefined,
+): AssuranceBadge | null {
+  if (!verdict) return null;
+
+  if (verdict.neverChecked && verdict.holding.length === 0) {
+    return {
+      label: 'Not checked',
+      intent: 'neutral',
+      detail: 'This report was built before these checks existed.',
+    };
+  }
+
+  if (verdict.decision === 'ERROR') {
+    return {
+      label: 'Not checked',
+      intent: 'warning',
+      detail: 'This report could not be checked. That is our fault, not the report’s.',
+    };
+  }
+
+  if (verdict.holding.length > 0) {
+    const released = !!verdict.stored?.override && verdict.releasable;
+    if (released) {
+      return {
+        label: 'Released by hand',
+        intent: 'warning',
+        detail: 'An admin released this report against these exact figures.',
+      };
+    }
+    const n = verdict.holding.length;
+    return {
+      label: verdict.releasable ? 'Would be held' : 'Not sent',
+      intent: verdict.releasable ? 'warning' : 'danger',
+      detail: `${n} ${n === 1 ? 'thing' : 'things'} to clear before this can go to the dealer.`,
+    };
+  }
+
+  // Passing. The two cases differ by whether the AI actually looked, and an
+  // admin should be able to tell without opening anything.
+  const a = verdict.stored?.adjudication;
+  const aiLooked = a?.outcome === 'ANSWERED' || a?.outcome === 'ABSTAINED';
+  return aiLooked
+    ? {
+        label: 'Checked · AI',
+        intent: 'success',
+        detail: 'Every rule passed, and the AI review read this report and raised nothing.',
+      }
+    : {
+        label: 'Rules only',
+        intent: 'neutral',
+        detail: 'Every rule passed. The AI review did not run on this report.',
+      };
+}
