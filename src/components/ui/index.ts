@@ -40,3 +40,4 @@ export * from './ImageLightbox';
 export * from './WideReportViewer';
 export * from './Pagination';
 export * from './DateRangeFilter';
+export * from './HowThisWorks';

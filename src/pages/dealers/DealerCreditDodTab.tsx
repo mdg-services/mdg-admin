@@ -19,6 +19,7 @@ import {
   Card,
   CardContent,
   EmptyState,
+  HowThisWorks,
   InfoBadge,
   Input,
   Label,
@@ -45,7 +46,6 @@ import type { Intent } from '@/lib/statusIntent';
 import type { CreditDodQuota, CreditDodSnapshotRecord } from '@/types/creditDod';
 import type { Dealer, ServiceRun } from '@dk/shared';
 
-import { CreditDodHelpCta } from './CreditDodHelpCta';
 import { CreditDodReportCard } from './CreditDodReportCard';
 import { LedgerWatchBand } from './LedgerWatchBand';
 
@@ -250,7 +250,7 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
               account, so it takes about a minute.
             </p>
           </div>
-          <CreditDodHelpCta />
+          <HowThisWorks surface="admin-credit-dod-card" label="Credit & DOD" />
         </div>
 
         {/* Was a hand-rolled 32px pill pair 4px apart — the gate to back-dated
@@ -719,7 +719,7 @@ function SnapshotHistoryCard({ dealerId }: { dealerId: string }) {
             icon={<History width={28} height={28} strokeWidth={1.75} />}
             title="No reports yet"
             description="Generate one above, or wait for the daily scheduled run."
-            cta={<CreditDodHelpCta />}
+            cta={<HowThisWorks surface="admin-credit-dod-card" label="Credit & DOD" />}
           />
         ) : (
           <>
