@@ -5,6 +5,8 @@ import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
   Badge,
+  DealerChip,
+  EntityRefLink,
   Card,
   CardContent,
   Dialog,
@@ -29,16 +31,21 @@ import {
 } from '@/hooks/api/useAuditLogs';
 import { formatDateTime } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
-import { AUDIT_ACTIONS, AUDIT_ENTITIES, type AuditLog } from '@dk/shared';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_ENTITIES,
+  describeAuditTarget,
+  type AuditLogView,
+} from '@dk/shared';
 
 const PAGE_SIZE = 25;
 
 /**
- * The `GET /audit` response now includes a resolved, human-readable target
- * name (`entityName`) alongside the raw `entityId`. `AuditLog` from `@dk/shared`
- * doesn't declare it, so widen it locally rather than touching the shared type.
+ * `AuditLogView` — the stored row plus what the read API resolved for it. It used
+ * to be widened locally here, which made this page the de facto API contract
+ * with no compiler anywhere able to notice the two drifting apart.
  */
-type AuditRow = AuditLog & { entityName?: string | null };
+type AuditRow = AuditLogView;
 
 /** Colour the action badge by the kind of change, purely for scannability. */
 function actionIntent(action: string): Intent {
@@ -273,7 +280,7 @@ export function ActivityPage() {
                       <TH>Time</TH>
                       <TH>Actor</TH>
                       <TH>Action</TH>
-                      <TH>Entity</TH>
+                      <TH>Outlet</TH>
                       <TH>Target</TH>
                       <TH>IP</TH>
                     </TRow>
@@ -299,22 +306,24 @@ export function ActivityPage() {
                             {humanize(row.action)}
                           </Badge>
                         </TD>
-                        <TD className="text-text-muted">{row.entity}</TD>
-                        {row.entityName ? (
-                          <TD
-                            className="max-w-[10rem] truncate text-text-muted"
-                            title={row.entityId}
-                          >
-                            {row.entityName}
-                          </TD>
-                        ) : (
-                          <TD
-                            className="max-w-[10rem] truncate font-mono text-xs text-text-muted"
-                            title={row.entityId}
-                          >
-                            {row.entityId}
-                          </TD>
-                        )}
+                        <TD>
+                          {row.entityDealerId ? (
+                            <DealerChip
+                              dealerId={row.entityDealerId}
+                              code={row.entityDealerCode}
+                            />
+                          ) : (
+                            <span className="text-text-subtle">—</span>
+                          )}
+                        </TD>
+                        <TD className="max-w-[14rem] truncate">
+                          <EntityRefLink
+                            entity={row.entity}
+                            entityId={row.entityId}
+                            name={row.entityName}
+                            dealerId={row.entityDealerId}
+                          />
+                        </TD>
                         <TD className="font-mono text-xs text-text-subtle">
                           {row.ip ?? '—'}
                         </TD>
@@ -350,9 +359,21 @@ export function ActivityPage() {
                       </span>
                     </span>
                   ),
+                  // TEXT, not an `EntityRefLink`. `MobileCardList` renders a
+                  // card that has an `onClick` as ONE `<button>`, and an `<a>`
+                  // inside a `<button>` is invalid markup that simply does not
+                  // fire on Android — which is where this admin is used. The
+                  // card opens the detail dialog, and the dialog carries the
+                  // link. Same destination, one tap further, and it works.
                   meta: (
-                    <span className="block truncate font-mono">
-                      {row.entity} · {row.entityName ?? row.entityId}
+                    <span className="block truncate">
+                      {describeAuditTarget({
+                        entity: row.entity,
+                        entityId: row.entityId,
+                        name: row.entityName,
+                        dealerId: row.entityDealerId,
+                      }).text}
+                      {row.entityDealerCode ? ` · ${row.entityDealerCode}` : ''}
                     </span>
                   ),
                 }))}
@@ -405,8 +426,15 @@ function AuditDetailDialog({
             <DetailRow label="Actor id" value={row.actorId} mono />
             <DetailRow
               label="Entity"
-              value={`${row.entity} · ${row.entityName ?? row.entityId}`}
-              mono={!row.entityName}
+              value={
+                <EntityRefLink
+                  entity={row.entity}
+                  entityId={row.entityId}
+                  name={row.entityName}
+                  dealerId={row.entityDealerId}
+                />
+              }
+              mono={false}
             />
             {row.entityName ? (
               <DetailRow label="Entity id" value={row.entityId} mono />
@@ -438,7 +466,7 @@ function DetailRow({
   mono,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   mono?: boolean;
 }) {
   return (

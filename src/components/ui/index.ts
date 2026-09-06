@@ -14,6 +14,8 @@ export * from './InfoBadge';
 export * from './Copyable';
 export * from './DownloadButton';
 export * from './StatusChip';
+export * from './DealerChip';
+export * from './EntityRefLink';
 export * from './Dialog';
 export * from './ConfirmDialog';
 export * from './Menu';

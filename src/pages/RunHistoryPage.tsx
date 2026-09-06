@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   CardContent,
+  DealerChip,
   Dialog,
   EmptyState,
   FilterBar,
@@ -18,7 +19,7 @@ import {
   Skeleton,
   StatusChip,
 } from '@/components/ui';
-import { useRunsQuery } from '@/hooks/api/useRuns';
+import { useRunQuery, useRunsQuery } from '@/hooks/api/useRuns';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { formatDateTime, formatDuration, groupByDay } from '@/lib/format';
 import { serviceLabel } from '@/lib/serviceLabel';
@@ -46,6 +47,20 @@ export function RunHistoryPage() {
   const to = search.get('to') ?? undefined;
   const page = Number(search.get('page') ?? '1');
 
+  /**
+   * `?run=<id>` opens one run straight from a link, without the reader first
+   * having to find it in a paginated list they may not even be filtered to.
+   *
+   * The audit trail's ServiceRun rows point here, and a run is very often on a
+   * page other than the first — so fetching the single run by id is the only
+   * thing that actually works. `useRunQuery` already existed and had no caller.
+   */
+  const deepLinkId = search.get('run') ?? undefined;
+  const deepLinked = useRunQuery(open ? undefined : deepLinkId);
+  React.useEffect(() => {
+    if (deepLinked.data && !open) setOpen(deepLinked.data);
+  }, [deepLinked.data, open]);
+
   const { data, isLoading, isError, error, isFetching } = useRunsQuery({
     dealerId,
     serviceId,
@@ -55,6 +70,15 @@ export function RunHistoryPage() {
     page,
     pageSize: PAGE_SIZE,
   });
+
+  function closeDialog() {
+    setOpen(null);
+    if (search.has('run')) {
+      const next = new URLSearchParams(search);
+      next.delete('run');
+      setSearch(next, { replace: true });
+    }
+  }
 
   function update(key: string, value: string | undefined) {
     const next = new URLSearchParams(search);
@@ -204,7 +228,15 @@ export function RunHistoryPage() {
                   </div>
                   <ul className="divide-y divide-border">
                     {g.items.map((r) => (
-                      <li key={r.id}>
+                      <li key={r.id} className="flex items-stretch">
+                        {/* The dealer chip is a SIBLING of the row button, never
+                            inside it: it renders an `<a>`, and an anchor nested
+                            in a button is invalid markup that simply does not
+                            fire on Android — which is where this admin is
+                            actually used. */}
+                        <span className="flex shrink-0 items-center pl-3 md:pl-4">
+                          <DealerChip dealerId={r.dealerId} code={r.dealerCode} />
+                        </span>
                         {/* A real `<button>`, not a `<li onClick>`: the row had
                             no role, no tabIndex and no keyboard handler, so it
                             was invisible to assistive tech and to the WebView's
@@ -213,17 +245,17 @@ export function RunHistoryPage() {
                             never paints. The chevron is that cue. */}
                         <button
                           type="button"
-                          className="block min-h-11 w-full px-3 py-2 text-left text-sm hover:bg-surface-2 md:min-h-0 md:px-4"
+                          className="block min-h-11 w-full min-w-0 flex-1 px-3 py-2 text-left text-sm hover:bg-surface-2 md:min-h-0 md:px-4"
                           onClick={() => setOpen(r)}
                         >
                           {/* Desktop: single dense row (unchanged). */}
                           <div className="hidden items-center gap-3 md:flex">
                             <StatusChip kind="run" value={r.status} />
                             <span className="min-w-0 flex-1 truncate font-medium text-text">
-                              {r.serviceId}
+                              {serviceLabel(r.serviceId)}
                             </span>
-                            <span className="hidden text-xs text-text-muted md:inline">
-                              {r.dealerId.slice(-6)}
+                            <span className="hidden max-w-[12rem] truncate text-xs text-text-subtle md:inline">
+                              {r.serviceId}
                             </span>
                             <span className="text-xs text-text-muted">
                               {formatDateTime(r.startedAt)}
@@ -238,7 +270,7 @@ export function RunHistoryPage() {
                               <div className="flex items-center gap-2">
                                 <StatusChip kind="run" value={r.status} />
                                 <span className="min-w-0 flex-1 truncate font-medium text-text">
-                                  {r.serviceId}
+                                  {serviceLabel(r.serviceId)}
                                 </span>
                               </div>
                               <div className="flex items-center gap-1.5 text-xs text-text-muted">
@@ -281,11 +313,11 @@ export function RunHistoryPage() {
 
       <Dialog
         open={!!open}
-        onClose={() => setOpen(null)}
+        onClose={closeDialog}
         title={open ? `Run ${open.id.slice(-8)}` : ''}
         size="lg"
         footer={
-          <Button variant="secondary" onClick={() => setOpen(null)}>
+          <Button variant="secondary" onClick={closeDialog}>
             Close
           </Button>
         }
@@ -430,8 +462,17 @@ function RunDetail({ run }: { run: ServiceRun }) {
         <Field label="Started" value={formatDateTime(run.startedAt)} />
         <Field label="Finished" value={formatDateTime(run.finishedAt)} />
         <Field label="Duration" value={formatDuration(run.durationMs)} />
+        {/* The code is the identity; the raw ObjectId stays beside it because
+            this screen is super-admin only and the id is what you paste into a
+            query when something is actually wrong. */}
         {isSuperAdmin ? (
-          <Field label="Dealer" value={run.dealerId} identifier />
+          <>
+            <Field
+              label="Dealer"
+              value={<DealerChip dealerId={run.dealerId} code={run.dealerCode} />}
+            />
+            <Field label="Dealer id" value={run.dealerId} identifier />
+          </>
         ) : null}
       </div>
       {isSuperAdmin ? (
