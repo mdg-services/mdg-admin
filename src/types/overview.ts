@@ -22,6 +22,4 @@ export interface OverviewSnapshot {
     avgDurationMs24h: number;
   };
   recentRuns: ServiceRun[];
-  /** Optional: backend may include upcoming runs. */
-  upcomingRuns?: ServiceRun[];
 }

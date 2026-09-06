@@ -172,6 +172,16 @@ const FILTERS: Array<{ key: InboxFilter; label: string }> = [
   { key: 'mine', label: 'Mine' },
   { key: 'all', label: 'All open' },
   { key: 'resolved', label: 'Resolved' },
+  // Tickets the 20-minute sweep pulled back out of somebody's hands after they
+  // missed the reply SLA — nobody is assigned to these any more, so nobody is
+  // answering them.
+  //
+  // Everything else for this tab already existed: `flagged` is in `InboxFilter`,
+  // `GET /conversations?status=flagged` answers it, and `useConversationCounts`
+  // already fetches the number into `countMap`. Only the tab was missing, which
+  // meant `inboxLens('flagged')` rejected the value and every `?lens=flagged`
+  // link in the product silently landed on "Mine" instead.
+  { key: 'flagged', label: 'Dropped' },
   // A LENS OVER "Unassigned", not a fifth pile. Every row here is also in
   // Unassigned and in All open, and its `status` is the same `OPEN` it always
   // was — the tab only narrows the same query to the threads the AI first line
