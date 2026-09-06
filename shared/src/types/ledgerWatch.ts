@@ -791,7 +791,32 @@ export interface LedgerPeriodSummaryDto {
   charged: number;
   /** Σ credits of every NON-pair class, in rupees. Excludes deposits. */
   received: number;
-  /** `received − charged`. Negative means the month took money off the dealer. */
+  /**
+   * Σ `CARD_SETTLEMENT` credits, in rupees — the slice of `received` that is the
+   * dealer's OWN fleet-card sales being routed back through IndianOil.
+   *
+   * CARRIED SEPARATELY BECAUSE IT IS NOT INCOME, and lumping it in made the
+   * headline read as one. Measured on production for August 2026, outlet 5E:
+   * `received` was ₹1,22,92,358.61, of which about ₹30,000 was actual dealer
+   * commission and effectively all the rest was card settlement. A figure
+   * labelled "paid to the dealer" that is 99.8% the dealer's own sales money is
+   * a true sum and a misleading sentence, and this product exists to stop
+   * exactly that.
+   *
+   * `received` still includes it, so nothing here hides money: `received` is the
+   * complete non-pair credit total and reconciles with `netOther`. The screens
+   * subtract this to show what IndianOil actually paid, and print this on its
+   * own line beside it.
+   */
+  cardSettled: number;
+  /**
+   * `received − charged`. Negative means the month took money off the dealer.
+   *
+   * Computed over the COMPLETE `received`, card settlements included, because
+   * this field's job is to reconcile against the ledger rather than to be a
+   * headline. What the screens show as the net is
+   * `(received − cardSettled) − charged`; see {@link cardSettled}.
+   */
   netOther: number;
   /**
    * The breakdown behind `charged` and `received`, one entry per class present.

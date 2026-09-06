@@ -277,7 +277,22 @@ export interface SummaryFigure {
 }
 
 export interface SummaryFigures {
+  /**
+   * The FOUR tiles, unchanged in number.
+   *
+   * Card settlements are deliberately NOT a fifth: the tile row is a 4-column
+   * grid, so a fifth would sit alone on a second row, and more importantly the
+   * four are two matched pairs — what was bought against what was paid in, what
+   * was charged against what was paid out. A settlement belongs to neither pair
+   * and is reported on its own line beneath them, the same way the band does it.
+   */
   figures: SummaryFigure[];
+  /**
+   * Fleet-card settlements for the month — the dealer's own card sales routed
+   * back through IndianOil. Zero on an outlet that takes no fleet card, in which
+   * case both screens omit the line rather than print ₹0.00.
+   */
+  cardSettled: number;
   /** `received − charged`, computed here from the two figures above it. */
   net: number;
   /**
@@ -306,7 +321,21 @@ export interface SummaryFigures {
  * figure, so the hint under each tile answers it before they ask.
  */
 export function summaryFigures(summary: LedgerPeriodSummaryDto): SummaryFigures {
-  const net = summary.received - summary.charged;
+  // WHAT INDIANOIL ACTUALLY PAID, which is not the same as what arrived.
+  //
+  // `received` is every non-pair credit, and on a busy outlet almost all of it
+  // is fleet-card settlement — the dealer's OWN card sales routed back through
+  // IndianOil. Measured on production for August 2026, outlet 5E: ₹1,22,92,358.61
+  // received, of which roughly ₹30,000 was real commission. Printing that whole
+  // figure under "paid to the dealer" is a true sum and a false sentence, and a
+  // screen stating something the calculation behind it does not is the exact
+  // fault this product was built to catch.
+  //
+  // So the headline subtracts the settlements and they get their own line. The
+  // net follows the headline, not `received`: an admin reading "net +₹1.19 crore"
+  // would think IndianOil had a very good month for them.
+  const paid = summary.received - summary.cardSettled;
+  const net = paid - summary.charged;
   return {
     figures: [
       {
@@ -330,12 +359,27 @@ export function summaryFigures(summary: LedgerPeriodSummaryDto): SummaryFigures 
       {
         key: 'received',
         label: 'Paid to the dealer',
-        value: summary.received,
-        hint: 'Commission, card settlements — not deposits',
+        value: paid,
+        hint: 'Commission and rebates — not card sales',
       },
     ],
+    cardSettled: summary.cardSettled,
     net,
-    netAgrees: sameMoney(net, summary.netOther, LEDGER_MONEY_EPSILON),
+    /*
+     * The reconciliation still runs over the COMPLETE figures, not the headline
+     * ones. `netOther` is the server's `received − charged` with settlements
+     * included, so checking the headline net against it would report a mismatch
+     * on every outlet that takes a fleet card — turning a real integrity check
+     * into a permanent false alarm, which is worse than not having one.
+     *
+     * What is checked is what the check is for: that the server's own arithmetic
+     * agrees with ours over the same inputs.
+     */
+    netAgrees: sameMoney(
+      summary.received - summary.charged,
+      summary.netOther,
+      LEDGER_MONEY_EPSILON,
+    ),
     reportedNet: summary.netOther,
   };
 }
@@ -619,9 +663,9 @@ export function ledgerBandTone(counts: LedgerFlagCounts | undefined): LedgerBand
   };
 }
 
-/** One of the three figures the band leads with. */
+/** One of the figures the band leads with. */
 export interface BandFigure {
-  key: 'charged' | 'received' | 'net';
+  key: 'charged' | 'received' | 'net' | 'cardSettled';
   label: string;
   /** Rupees. `net` may be negative; the other two never are. */
   value: number;
@@ -631,6 +675,12 @@ export interface BandFigure {
 
 export interface BandFigures {
   figures: BandFigure[];
+  /**
+   * Fleet-card settlements for the month, shown BESIDE the three figures rather
+   * than inside them. Zero on an outlet that takes no fleet card, in which case
+   * the band omits the line entirely.
+   */
+  cardSettled: number;
   net: number;
   /** See {@link SummaryFigures.netAgrees} — the band inherits the same check. */
   netAgrees: boolean;
@@ -658,6 +708,7 @@ export function bandFigures(summary: LedgerPeriodSummaryDto): BandFigures {
   const charged = full.figures.find((f) => f.key === 'charged');
   const received = full.figures.find((f) => f.key === 'received');
   return {
+    cardSettled: full.cardSettled,
     figures: [
       {
         key: 'charged',
@@ -672,8 +723,11 @@ export function bandFigures(summary: LedgerPeriodSummaryDto): BandFigures {
       {
         key: 'received',
         label: 'Paid to the dealer',
+        // Commission and rebates ONLY — `summaryFigures` has already taken the
+        // fleet-card settlements out. Read the note there for the ₹1.22 crore
+        // that forced it.
         value: received?.value ?? 0,
-        hint: 'Commission, card settlements — not deposits',
+        hint: 'Commission and rebates — not card sales',
         intent: 'neutral',
       },
       {

@@ -233,6 +233,28 @@ export function LedgerWatchBand({ dealerId }: Props) {
               ))}
             </dl>
 
+            {/* CARD SALES, BESIDE THE THREE FIGURES AND NOT INSIDE THEM.
+                A fleet-card settlement is the dealer's OWN sales money routed
+                back through IndianOil, so it is not IndianOil paying them and it
+                is not in "Paid to the dealer" or in the net. It is still real
+                money into the account, so it is stated rather than dropped —
+                what changed is which sentence it is part of.
+
+                Worth what it costs: on outlet 5E in August this was
+                ₹1,21,10,713.61 of a ₹1,22,92,358.61 "received", and taking it
+                out of the headline turned a net of +₹1.19 crore into −₹1,50,795
+                — the same month, read correctly. Omitted entirely on an outlet
+                that takes no fleet card, where a ₹0.00 line is just noise. */}
+            {figures.cardSettled > 0 ? (
+              <p className="text-sm text-text-muted">
+                Card sales settled separately:{' '}
+                <span className="font-medium tabular-nums text-text">
+                  {inrFormat(figures.cardSettled)}
+                </span>{' '}
+                — the dealer&rsquo;s own fleet-card sales routed back, not counted above.
+              </p>
+            ) : null}
+
             {/* The one thing this product exists to stop: a headline the
                 calculation behind it reads differently. When the server's own
                 net disagrees with received − charged, both are shown and
