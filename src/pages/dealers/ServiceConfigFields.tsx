@@ -4,7 +4,7 @@ import validator from '@rjsf/validator-ajv8';
 import { AlertTriangle } from 'lucide-react';
 import * as React from 'react';
 
-import { FieldError, Input, Label, Select } from '@/components/ui';
+import { FieldError, HowThisWorks, Input, Label, Select } from '@/components/ui';
 import { CADENCES, type Cadence } from '@dk/shared';
 import { cronSchema } from '@dk/shared/schemas';
 
@@ -177,9 +177,16 @@ export function ServiceConfigFields({
           sheet, and the uppercase "Config" label already marks the section.
           The box comes back at md. */}
       <div className="rounded-md border-border bg-surface md:border md:p-3">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-          Config
-        </p>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+            Config
+          </p>
+          <HowThisWorks
+            surface="admin-dealer-service-config-json"
+            label="Service config"
+            variant="icon"
+          />
+        </div>
         {schema ? (
           <RJSFContainer>
             <Form

@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Drawer } from '@/components/ui/Drawer';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { HowThisWorks } from '@/components/ui/HowThisWorks';
 import { IconButton } from '@/components/ui/IconButton';
 import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
@@ -810,7 +811,16 @@ export function InboxPage() {
     <>
       {isAdmin ? (
         <Card>
-          <CardHeader>
+          <CardHeader
+            align="center"
+            action={
+              <HowThisWorks
+                surface="admin-inbox-details"
+                label="Details"
+                variant="icon"
+              />
+            }
+          >
             <CardTitle className="text-sm">Ticket</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -980,8 +990,9 @@ export function InboxPage() {
     >
       {/* Left rail */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface md:flex">
-        <div className="px-4 py-3">
+        <div className="flex items-center justify-between gap-2 px-4 py-3">
           <h2 className="text-sm font-semibold text-text">Inbox</h2>
+          <HowThisWorks surface="admin-inbox" label="Inbox" variant="icon" />
         </div>
         <nav className="flex-1 overflow-y-auto px-2 pb-2">
           <ul className="flex flex-col gap-0.5">
@@ -1402,6 +1413,13 @@ export function InboxPage() {
                     />
                   )}
                 </button>
+                {/* The icon and not the words: this row already carries up to
+                    four controls and the header is tight at 360px. */}
+                <HowThisWorks
+                  surface="admin-inbox-thread"
+                  label="Conversation"
+                  variant="icon"
+                />
               </div>
             </header>
 

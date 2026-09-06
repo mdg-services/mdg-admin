@@ -16,6 +16,7 @@ import {
   CardContent,
   Drawer,
   EmptyState,
+  HowThisWorks,
   Label,
   MobileCardList,
   Select,
@@ -133,6 +134,11 @@ export function AssuranceQueuePage() {
             >
               Refresh
             </Button>
+            <HowThisWorks
+              surface="admin-assurance-queue"
+              label="Withheld reports"
+              variant="icon"
+            />
           </>
         }
       />
@@ -262,7 +268,16 @@ function RemarksDrawer({
       open
       onClose={onClose}
       width="lg"
-      title="Standing remarks"
+      title={
+        <span className="inline-flex flex-wrap items-center gap-2">
+          Standing remarks
+          <HowThisWorks
+            surface="admin-standing-remarks"
+            label="Standing remarks"
+            variant="icon"
+          />
+        </span>
+      }
       description="A fault that is real, physical and ongoing — a dead dip gauge, a nozzle out of service — written down once instead of explained on every report."
     >
       <div className="grid gap-4">

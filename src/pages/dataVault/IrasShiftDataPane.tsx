@@ -19,6 +19,7 @@ import {
   CardContent,
   Drawer,
   EmptyState,
+  HowThisWorks,
   IconButton,
   Input,
   MIN_SELECTABLE_YMD,
@@ -145,11 +146,19 @@ function useBusinessDate(params: URLSearchParams): { today: string; businessDate
 export function IrasShiftDataActions({ params, patchParams }: VaultDatasetProps) {
   const { today, businessDate } = useBusinessDate(params);
   return (
-    <BusinessDateControl
-      value={businessDate}
-      max={today}
-      onChange={(next) => patchParams({ date: next, dealer: null })}
-    />
+    <div className="flex items-center gap-2">
+      <BusinessDateControl
+        value={businessDate}
+        max={today}
+        onChange={(next) => patchParams({ date: next, dealer: null })}
+      />
+      <HowThisWorks
+        surface="admin-vault-iras-shift-data"
+        label="IRAS shift data"
+        variant="icon"
+        className="shrink-0"
+      />
+    </div>
   );
 }
 

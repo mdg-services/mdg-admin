@@ -23,6 +23,7 @@ import {
   Button,
   Callout,
   Drawer,
+  HowThisWorks,
   IconButton,
   ImageLightbox,
   Input,
@@ -410,7 +411,16 @@ export function VerifyTaskDrawer({
         open={open}
         onClose={onClose}
         width="lg"
-        title={row.labelEn}
+        title={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {row.labelEn}
+            <HowThisWorks
+              surface="admin-kavach-verify-task"
+              label="Verifying a task"
+              variant="icon"
+            />
+          </span>
+        }
         description={
           position
             ? `${dealerCodeLabel(row.dealerCode)} · ${position.index} of ${position.total} in view`

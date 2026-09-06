@@ -26,6 +26,7 @@ import {
   Dialog,
   EmptyState,
   FieldError,
+  HowThisWorks,
   Input,
   Label,
   MobileCardList,
@@ -124,6 +125,7 @@ export function AllUsersPage() {
             ? 'Every user across all dealers, grouped dealer-wise.'
             : `${liveUsers} users across ${dealerCount} dealers. Full control: email, password, access, role, and archive.`
         }
+        actions={<HowThisWorks surface="admin-all-users" label="All Users" />}
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">

@@ -20,6 +20,7 @@ import {
   CardHeader,
   EmptyState,
   FilterBar,
+  HowThisWorks,
   Label,
   MobileCardList,
   Select,
@@ -300,6 +301,8 @@ export function LedgerWatchPage() {
             >
               Check all outlets
             </Button>
+            {/* Icon: the badge and two buttons already fill this row. */}
+            <HowThisWorks surface="admin-ledger-watch" label="Ledger watch" variant="icon" />
           </>
         }
       />

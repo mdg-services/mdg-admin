@@ -9,6 +9,7 @@ import {
   CardHeader,
   Checkbox,
   EmptyState,
+  HowThisWorks,
   MobileCardList,
   Skeleton,
   Table,
@@ -135,26 +136,33 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
             align="center"
             padding="comfortable"
             action={
-              total > 0 || classified > 0 ? (
-                <span className="flex flex-wrap items-center gap-3">
-                  {/* Offered only once at least one loaded row carries a
-                      classification. Before Ledger Watch has run for a dealer
-                      every row is unclassified, so the toggle would hide
-                      nothing at all and read as broken. */}
-                  {classified > 0 ? (
-                    <Checkbox
-                      label="Hide the routine pair"
-                      checked={hidePair}
-                      onChange={(e) => setHidePair(e.target.checked)}
-                    />
-                  ) : null}
-                  {total > 0 ? (
-                    <Badge intent="neutral" className="tabular-nums">
-                      {total.toLocaleString('en-IN')} txns
-                    </Badge>
-                  ) : null}
-                </span>
-              ) : undefined
+              <span className="flex flex-wrap items-center gap-3">
+                {total > 0 || classified > 0 ? (
+                  <span className="flex flex-wrap items-center gap-3">
+                    {/* Offered only once at least one loaded row carries a
+                        classification. Before Ledger Watch has run for a dealer
+                        every row is unclassified, so the toggle would hide
+                        nothing at all and read as broken. */}
+                    {classified > 0 ? (
+                      <Checkbox
+                        label="Hide the routine pair"
+                        checked={hidePair}
+                        onChange={(e) => setHidePair(e.target.checked)}
+                      />
+                    ) : null}
+                    {total > 0 ? (
+                      <Badge intent="neutral" className="tabular-nums">
+                        {total.toLocaleString('en-IN')} txns
+                      </Badge>
+                    ) : null}
+                  </span>
+                ) : null}
+                <HowThisWorks
+                  surface="admin-dealer-vault-pad-ledger"
+                  label="PAD ledger"
+                  variant="icon"
+                />
+              </span>
             }
           >
             <p className="text-base font-semibold text-text">Maintained PAD ledger</p>

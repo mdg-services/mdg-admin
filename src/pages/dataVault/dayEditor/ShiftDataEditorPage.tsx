@@ -22,6 +22,7 @@ import {
   CardContent,
   Checkbox,
   EmptyState,
+  HowThisWorks,
   MobileCardList,
   SegmentedControl,
   Skeleton,
@@ -567,16 +568,32 @@ export function ShiftDataEditorPage() {
               shown a row this screen proposed. That is the whole protection for
               the eight collected dealers' correction job. */}
           {sheetAvailable ? (
-            <div className="mt-4">
-              <SegmentedControl
-                aria-label="How to enter this day"
-                value={activeMode}
-                onChange={setMode}
-                options={[
-                  { value: 'sheet', label: 'Shift sheet' },
-                  { value: 'grid', label: 'Full grid' },
-                ]}
-              />
+            <div className="mt-4 flex items-center gap-2">
+              {/* The switch is `w-full` below md, so it is given a track of its
+                  own to fill — without it the help button beside it would be
+                  pushed onto a line by itself on a phone. */}
+              <div className="min-w-0 flex-1">
+                <SegmentedControl
+                  aria-label="How to enter this day"
+                  value={activeMode}
+                  onChange={setMode}
+                  options={[
+                    { value: 'sheet', label: 'Shift sheet' },
+                    { value: 'grid', label: 'Full grid' },
+                  ]}
+                />
+              </div>
+              {/* The sheet has no header of its own and this switch is the only
+                  chrome above it. The grid carries its own button on the caption
+                  line below, so only the sheet's help is offered here. */}
+              {activeMode === 'sheet' ? (
+                <HowThisWorks
+                  surface="admin-shift-sheet"
+                  label="Shift sheet"
+                  variant="icon"
+                  className="shrink-0"
+                />
+              ) : null}
             </div>
           ) : null}
 
@@ -603,12 +620,23 @@ export function ShiftDataEditorPage() {
                 Correct what the portal got wrong. Your corrections are what the report uses; the
                 portal’s own values are kept and always visible.
               </p>
-              <Checkbox
-                checked={showAll}
-                onChange={(e) => setShowAll(e.target.checked)}
-                label="Show all portal columns"
-                labelClassName="shrink-0 text-text-muted"
-              />
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={showAll}
+                  onChange={(e) => setShowAll(e.target.checked)}
+                  label="Show all portal columns"
+                  labelClassName="shrink-0 text-text-muted"
+                />
+                {/* The grid has no header of its own; this caption line is the
+                    only chrome above it, and unlike the mode switch it is drawn
+                    on a portal day too. */}
+                <HowThisWorks
+                  surface="admin-iras-edit-grid"
+                  label="Full grid"
+                  variant="icon"
+                  className="shrink-0"
+                />
+              </div>
             </div>
           ) : null}
 
@@ -853,8 +881,11 @@ function Header({
           attachment is accepted and the collection runs, so a collected dealer
           keeps this button through a pause, which is how the eight have always
           had it. */}
-      {canCollect ? (
-        <div className="flex shrink-0 flex-wrap gap-2">
+      {/* The help button sits after Re-collect and never replaces it: this row
+          is the header's only action slot, and the collect button's own rule is
+          untouched. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {canCollect ? (
           <Button
             variant="secondary"
             size="sm"
@@ -864,8 +895,9 @@ function Header({
           >
             Re-collect
           </Button>
-        </div>
-      ) : null}
+        ) : null}
+        <HowThisWorks surface="admin-shift-data-editor" label="Shift data" />
+      </div>
     </div>
   );
 }

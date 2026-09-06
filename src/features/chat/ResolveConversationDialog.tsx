@@ -6,6 +6,7 @@ import {
   Button,
   Dialog,
   FieldError,
+  HowThisWorks,
   Input,
   Label,
   Select,
@@ -78,7 +79,16 @@ export function ResolveConversationDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title="Resolve request"
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="min-w-0 break-words">Resolve request</span>
+          <HowThisWorks
+            surface="admin-inbox-resolve"
+            label="Resolve request"
+            variant="icon"
+          />
+        </span>
+      }
       description="Log the service you provided. This is recorded against the dealer's history."
       footer={
         <>

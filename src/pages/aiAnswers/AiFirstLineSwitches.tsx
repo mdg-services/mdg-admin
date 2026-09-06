@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
   ConfirmDialog,
+  HowThisWorks,
   Input,
   MobileCardList,
   SegmentedControl,
@@ -201,7 +202,15 @@ export function AiFirstLineSwitches() {
   return (
     <div className="grid gap-3">
       <Card>
-        <CardHeader>
+        <CardHeader
+          align="center"
+          action={
+            <HowThisWorks
+              surface="admin-ai-first-line-switches"
+              label="The first line"
+            />
+          }
+        >
           <CardTitle>The first line, everywhere</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3">

@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 
 
 import { PageHeader } from '@/components/layout/PageHeader';
-import { EmptyState, Skeleton } from '@/components/ui';
+import { EmptyState, HowThisWorks, Skeleton } from '@/components/ui';
 import {
   useDsrLatest,
   useDsrReport,
@@ -109,6 +109,12 @@ export function DsrReportView() {
                 .filter(Boolean)
                 .join(' · ') || undefined
             : undefined
+        }
+        actions={
+          <HowThisWorks
+            surface="admin-dsr-report-view"
+            label="Daily Sales Report"
+          />
         }
       />
 

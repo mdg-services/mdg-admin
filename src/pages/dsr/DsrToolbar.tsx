@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   DownloadButton,
+  HowThisWorks,
   IconButton,
   Label,
   Select,
@@ -146,6 +147,11 @@ export function DsrDateToolbar({
               businessDate={businessDate}
             />
             <FuelPnlButton dealerId={dealerId} />
+            <HowThisWorks
+              surface="admin-dsr-toolbar"
+              label="Daily Sales Report"
+              variant="icon"
+            />
           </div>
         </CardContent>
       </Card>
@@ -200,6 +206,11 @@ export function DsrDateToolbar({
               className="w-full"
             />
             <FuelPnlButton dealerId={dealerId} className="w-full" />
+            <HowThisWorks
+              surface="admin-dsr-toolbar"
+              label="Daily Sales Report"
+              className="w-full"
+            />
           </div>
         </Sheet>
       </CardContent>
@@ -288,7 +299,8 @@ export function DsrReportActions({
   // this fragment. React reconciles fixed JSX children by position, so keeping
   // it at the same slot in both shapes means rotating a phone mid-run — which
   // crosses 768px on any handset — does not remount `GenerateDsrButton` and
-  // throw away the "Generating…" watcher polling that run.
+  // throw away the "Generating…" watcher polling that run. Anything added here
+  // goes AFTER it for the same reason.
   return (
     <>
       {isMd ? (
@@ -299,6 +311,13 @@ export function DsrReportActions({
         </>
       ) : null}
       {regenerate}
+      {/* The icon, not the words: this row already carries up to four controls
+          on desktop and sits in the report hero's header on a phone. */}
+      <HowThisWorks
+        surface="admin-dsr-generate"
+        label="Generating a report"
+        variant="icon"
+      />
       {isMd ? null : (
         <>
           <IconButton

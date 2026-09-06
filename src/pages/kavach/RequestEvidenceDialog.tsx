@@ -5,6 +5,7 @@ import {
   Button,
   Callout,
   Dialog,
+  HowThisWorks,
   Label,
   Skeleton,
   Textarea,
@@ -99,7 +100,16 @@ export function RequestEvidenceDialog({
       open={open}
       onClose={onClose}
       size="sm"
-      title="Ask the dealer for evidence"
+      title={
+        <span className="inline-flex flex-wrap items-center gap-2">
+          Ask the dealer for evidence
+          <HowThisWorks
+            surface="admin-kavach-request-evidence"
+            label="Ask the dealer for evidence"
+            variant="icon"
+          />
+        </span>
+      }
       description={`${row.labelEn} — ${dealerCodeLabel(row.dealerCode)}`}
       footer={
         <>

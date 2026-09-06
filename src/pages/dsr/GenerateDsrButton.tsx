@@ -4,6 +4,7 @@ import * as React from 'react';
 
 import {
   Button,
+  HowThisWorks,
   Input,
   Label,
   MIN_SELECTABLE_YMD,
@@ -141,7 +142,16 @@ export function GenerateDsrForDate({
     // report yet was unreachable on a phone. Stacking is the only shape that
     // always fits; every `md:` below restores today's row exactly.
     <div className={cn('w-full md:w-auto', className)}>
-      <Label htmlFor={inputId}>Generate for a date</Label>
+      {/* The label and its help sit on one line so the control row below keeps
+          the stacked shape a 360px screen needs. */}
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor={inputId}>Generate for a date</Label>
+        <HowThisWorks
+          surface="admin-dsr-generate-for-date"
+          label="Generate for a date"
+          variant="icon"
+        />
+      </div>
       <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center">
         <Input
           id={inputId}

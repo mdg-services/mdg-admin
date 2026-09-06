@@ -1,7 +1,7 @@
 import { AlertTriangle } from 'lucide-react';
 import * as React from 'react';
 
-import { Button, Dialog, StatusChip } from '@/components/ui';
+import { Button, Dialog, HowThisWorks, StatusChip } from '@/components/ui';
 import { useServicesQuery } from '@/hooks/api/useServices';
 import { ApiError } from '@/lib/api';
 import type { Cadence, DealerService } from '@dk/shared';
@@ -162,7 +162,16 @@ export function EditServiceDialog({
       open={open}
       onClose={onClose}
       animateIn={animateIn}
-      title="Edit service"
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          Edit service
+          <HowThisWorks
+            surface="admin-dealer-service-edit"
+            label="Edit service"
+            variant="icon"
+          />
+        </span>
+      }
       // The rule this states is worth stating, but `Dialog`'s `description`
       // sits in the sticky header and never scrolls, so it costs ~60px of a
       // 360px sheet for the whole session. It reads below the summary block

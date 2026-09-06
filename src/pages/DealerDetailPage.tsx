@@ -20,6 +20,7 @@ import {
   Card,
   CardContent,
   EmptyState,
+  HowThisWorks,
   Menu,
   MenuItem,
   MenuSeparator,
@@ -536,6 +537,8 @@ export function DealerDetailPage() {
           <div className="flex items-center gap-2">
             {dealer.archivedAt ? <Badge intent="danger">Deleted</Badge> : null}
             <StatusChip kind="dealer" value={dealer.status} />
+            {/* Icon: `dense` keeps the title, subtitle and actions on one row. */}
+            <HowThisWorks surface="admin-dealer-detail" label="Dealer" variant="icon" />
           </div>
         }
       />

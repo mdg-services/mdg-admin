@@ -19,6 +19,7 @@ import {
   Card,
   CardContent,
   EmptyState,
+  HowThisWorks,
   IconButton,
   Input,
   MIN_SELECTABLE_YMD,
@@ -205,6 +206,10 @@ export function DocumentsActions({ params, patchParams }: VaultDatasetProps) {
         >
           Ask for a document
         </Button>
+
+        {/* Icon, not the worded button: this row already carries three controls
+            and a fourth set of words would take a line of its own on a phone. */}
+        <HowThisWorks surface="admin-vault-documents" label="Documents" variant="icon" />
       </div>
 
       <AskDocumentDialog

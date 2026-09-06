@@ -5,6 +5,7 @@ import {
   Button,
   Dialog,
   EmptyState,
+  HowThisWorks,
   Input,
   Label,
   Select,
@@ -224,7 +225,16 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
       open={open}
       onClose={onClose}
       size="lg"
-      title="Award points"
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          Award points
+          <HowThisWorks
+            surface="admin-award-points"
+            label="Award points"
+            variant="icon"
+          />
+        </span>
+      }
       description="Pick the warriors and the work(s) they did. Points are computed server-side from the dealer's effective work list."
       footer={
         <>

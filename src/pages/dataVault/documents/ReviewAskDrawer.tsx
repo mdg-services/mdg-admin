@@ -17,6 +17,7 @@ import {
   Callout,
   DownloadButton,
   Drawer,
+  HowThisWorks,
   ImageLightbox,
   Label,
   Skeleton,
@@ -237,7 +238,19 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
         open={open}
         onClose={onClose}
         width="lg"
-        title={row.document}
+        title={
+          // `min-w-0` on the name: a flex item cannot shrink below its
+          // content, so a long document name has to be allowed to break rather
+          // than push the help button out of the header.
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 break-words">{row.document}</span>
+            <HowThisWorks
+              surface="admin-review-document-ask"
+              label="Review a document"
+              variant="icon"
+            />
+          </span>
+        }
         description={`${dealerCodeLabel(row.dealerCode)} · ${row.periodLabel || 'No period'}`}
         footer={
           <>

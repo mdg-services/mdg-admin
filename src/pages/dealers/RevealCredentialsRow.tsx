@@ -1,7 +1,13 @@
 import { Eye, EyeOff } from 'lucide-react';
 import * as React from 'react';
 
-import { Button, ConfirmDialog, Copyable, useToast } from '@/components/ui';
+import {
+  Button,
+  ConfirmDialog,
+  Copyable,
+  HowThisWorks,
+  useToast,
+} from '@/components/ui';
 import { ApiError } from '@/lib/api';
 import type { RevealedPortalCredentials } from '@/types/serviceRun';
 
@@ -112,7 +118,19 @@ export function RevealCredentialsRow({
           onConfirm={() => void show()}
           title={`Show the ${portalLabel} password?`}
           confirmLabel="Show it"
-          description={`The ${portalLabel} ID and password will be shown in plain text on this screen. It is recorded in the activity log against your account, and it counts against your hourly limit.`}
+          description={
+            <>
+              {`The ${portalLabel} ID and password will be shown in plain text on this screen. It is recorded in the activity log against your account, and it counts against your hourly limit.`}
+              {/* `ConfirmDialog` carries its own string title, so the help
+                  button lives at the foot of the description. */}
+              <span className="mt-3 block">
+                <HowThisWorks
+                  surface="admin-reveal-portal-password"
+                  label="Revealing a portal password"
+                />
+              </span>
+            </>
+          }
         />
       </>
     );

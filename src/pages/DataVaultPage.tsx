@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
+import { HowThisWorks } from '@/components/ui';
 
 import { DatasetRail } from './dataVault/DatasetRail';
 import {
@@ -66,9 +67,12 @@ export function DataVaultPage() {
         title="Data Vault"
         subtitle={dataset.description}
         actions={
-          Actions ? (
-            <Actions params={search} patchParams={patchParams} />
-          ) : undefined
+          <>
+            {Actions ? <Actions params={search} patchParams={patchParams} /> : null}
+            {/* Icon, not words: the Documents dataset already hangs three
+                controls and a button off this same slot. */}
+            <HowThisWorks surface="admin-data-vault" label="Data Vault" variant="icon" />
+          </>
         }
       />
 

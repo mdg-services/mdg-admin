@@ -27,6 +27,7 @@ import {
   DateRangeFilter,
   Dialog,
   EmptyState,
+  HowThisWorks,
   ImageLightbox,
   MobileCardList,
   Skeleton,
@@ -403,7 +404,15 @@ export function DealerStaffTab({ dealer }: Props) {
 
       {/* Leaderboard */}
       <Card>
-        <CardHeader>
+        <CardHeader
+          action={
+            <HowThisWorks
+              surface="admin-dealer-staff"
+              label="Warriors & points"
+              variant="icon"
+            />
+          }
+        >
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Trophy width={16} height={16} strokeWidth={1.75} />
@@ -1211,7 +1220,16 @@ export function DealerStaffTab({ dealer }: Props) {
       <Dialog
         open={!!undoTarget}
         onClose={() => setUndoTarget(null)}
-        title="Undo award"
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            Undo award
+            <HowThisWorks
+              surface="admin-undo-award"
+              label="Undo award"
+              variant="icon"
+            />
+          </span>
+        }
         description={
           undoTarget
             ? `Reverse ${fmtPoints(undoTarget.points)} pts for “${undoTarget.workLabelEn}”?`

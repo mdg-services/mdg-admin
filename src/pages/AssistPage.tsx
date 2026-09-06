@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Tabs } from '@/components/ui';
+import { HowThisWorks, Tabs } from '@/components/ui';
 import {
   PAGE_SIZE,
   TABS,
@@ -115,6 +115,7 @@ export function AssistPage() {
       <PageHeader
         title="Assistant"
         subtitle="Every conversation the landing-page assistant has had — what was asked, what we answered, and who is waiting for a call back."
+        actions={<HowThisWorks surface="admin-assistant-console" label="Assistant" />}
       />
 
       <Tabs

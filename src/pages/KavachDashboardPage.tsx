@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   EmptyState,
+  HowThisWorks,
   MobileCardList,
   Skeleton,
   Table,
@@ -70,21 +71,29 @@ export function KavachDashboardPage() {
         title="Kavach standing"
         subtitle="Where each dealer stands, and how long since we last verified them."
         actions={
-          rows.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge intent={atRisk > 0 ? 'danger' : 'success'} className="h-7 px-3">
-                {atRisk > 0
-                  ? `${atRisk} ${atRisk === 1 ? 'dealer' : 'dealers'} below ${RISK_THRESHOLD}%`
-                  : `All dealers at or above ${RISK_THRESHOLD}%`}
-              </Badge>
-              {/* Ours, not theirs — and stated separately for exactly that reason. */}
-              <Badge intent={stale > 0 ? 'warning' : 'success'} className="h-7 px-3">
-                {stale > 0
-                  ? `${stale} not verified by us in ${STALE_DAYS}+ days`
-                  : 'Every dealer verified recently'}
-              </Badge>
-            </div>
-          ) : null
+          <>
+            {rows.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge intent={atRisk > 0 ? 'danger' : 'success'} className="h-7 px-3">
+                  {atRisk > 0
+                    ? `${atRisk} ${atRisk === 1 ? 'dealer' : 'dealers'} below ${RISK_THRESHOLD}%`
+                    : `All dealers at or above ${RISK_THRESHOLD}%`}
+                </Badge>
+                {/* Ours, not theirs — and stated separately for exactly that reason. */}
+                <Badge intent={stale > 0 ? 'warning' : 'success'} className="h-7 px-3">
+                  {stale > 0
+                    ? `${stale} not verified by us in ${STALE_DAYS}+ days`
+                    : 'Every dealer verified recently'}
+                </Badge>
+              </div>
+            ) : null}
+            {/* Icon: two full sentences of badge already occupy this row. */}
+            <HowThisWorks
+              surface="admin-kavach-standing"
+              label="Kavach standing"
+              variant="icon"
+            />
+          </>
         }
       />
 

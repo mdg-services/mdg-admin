@@ -9,6 +9,7 @@ import {
   Checkbox,
   Drawer,
   FieldError,
+  HowThisWorks,
   IconButton,
   Input,
   Label,
@@ -174,7 +175,16 @@ export function DealerOutletProfileDrawer({ open, onClose, dealer }: Props) {
     <Drawer
       open={open}
       onClose={onClose}
-      title="Outlet details"
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          Outlet details
+          <HowThisWorks
+            surface="admin-dealer-outlet-profile"
+            label="Outlet details"
+            variant="icon"
+          />
+        </span>
+      }
       description="The pump's registration file."
       width="lg"
       footer={

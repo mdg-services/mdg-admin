@@ -12,6 +12,7 @@ import {
   Dialog,
   EmptyState,
   FilterBar,
+  HowThisWorks,
   Input,
   MobileCardList,
   Pagination,
@@ -231,6 +232,7 @@ export function ActivityPage() {
       <PageHeader
         title="Activity"
         subtitle="Audit trail of every action taken across the portal."
+        actions={<HowThisWorks surface="admin-activity" label="Activity" />}
       />
 
       {/* Five stacked label+control pairs cost ~360px of a 640px screen before

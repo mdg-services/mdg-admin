@@ -20,6 +20,7 @@ import {
   CardContent,
   EmptyState,
   FilterBar,
+  HowThisWorks,
   Label,
   MobileCardList,
   Select,
@@ -420,6 +421,8 @@ export function KavachWorkQueuePage() {
             >
               Refresh
             </Button>
+            {/* Icon: the badge and two buttons already fill this row. */}
+            <HowThisWorks surface="admin-kavach-work-queue" label="Work queue" variant="icon" />
           </>
         }
       />

@@ -14,6 +14,7 @@ import {
   Dialog,
   EmptyState,
   FieldError,
+  HowThisWorks,
   Input,
   Label,
   Skeleton,
@@ -149,12 +150,15 @@ export function AdminsPage() {
         title="Team"
         subtitle="Admins can manage dealers, run the support inbox, and add other admins."
         actions={
-          <Button
-            onClick={() => setAddOpen(true)}
-            leftIcon={<ShieldPlus width={16} height={16} strokeWidth={1.75} />}
-          >
-            Add admin
-          </Button>
+          <>
+            <Button
+              onClick={() => setAddOpen(true)}
+              leftIcon={<ShieldPlus width={16} height={16} strokeWidth={1.75} />}
+            >
+              Add admin
+            </Button>
+            <HowThisWorks surface="admin-team" label="Team" />
+          </>
         }
       />
 

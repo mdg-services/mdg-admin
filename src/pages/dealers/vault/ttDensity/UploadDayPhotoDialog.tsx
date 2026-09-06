@@ -5,6 +5,7 @@ import {
   Button,
   Callout,
   Dialog,
+  HowThisWorks,
   IconButton,
   Label,
   Textarea,
@@ -170,7 +171,16 @@ export function UploadDayPhotoDialog({
       open={open}
       onClose={handleClose}
       size="sm"
-      title={`${replacing ? 'Replace' : 'Upload'} register photo — ${dayLabel}`}
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          {`${replacing ? 'Replace' : 'Upload'} register photo — ${dayLabel}`}
+          <HowThisWorks
+            surface="admin-tt-density-upload-day-photo"
+            label="Filing a register photo"
+            variant="icon"
+          />
+        </span>
+      }
       footer={
         <>
           <Button variant="secondary" onClick={handleClose} disabled={submitting}>

@@ -2,7 +2,13 @@ import { Database } from 'lucide-react';
 import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
 
-import { Card, CardContent, EmptyState, Skeleton } from '@/components/ui';
+import {
+  Card,
+  CardContent,
+  EmptyState,
+  HowThisWorks,
+  Skeleton,
+} from '@/components/ui';
 import { useDealerServicesQuery } from '@/hooks/api/useDealerServices';
 import { DatasetRail } from '@/pages/dataVault/DatasetRail';
 
@@ -83,12 +89,24 @@ export function DealerVaultView({ dealer }: DealerVaultPaneProps) {
 
   return (
     <div className="min-w-0">
-      <DatasetRail
-        orientation="horizontal"
-        datasets={visible}
-        activeId={dataset.id}
-        hrefFor={hrefFor}
-      />
+      {/* The help button sits BESIDE the rail, not above the pane: the rail is
+          what a reader is choosing from, and the `min-w-0 flex-1` wrapper
+          leaves it exactly the width it has today. */}
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <DatasetRail
+            orientation="horizontal"
+            datasets={visible}
+            activeId={dataset.id}
+            hrefFor={hrefFor}
+          />
+        </div>
+        <HowThisWorks
+          surface="admin-dealer-vault"
+          label="Data Vault"
+          variant="icon"
+        />
+      </div>
       {/* The dataset's description is NOT printed here. The rail above already
           names the dataset, the pane below opens with the thing itself, and a
           restatement in between ("This dealer's generated Daily Sales

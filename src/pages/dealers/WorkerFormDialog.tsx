@@ -6,6 +6,7 @@ import {
   Button,
   Dialog,
   FieldError,
+  HowThisWorks,
   Input,
   Label,
   useToast,
@@ -82,7 +83,16 @@ export function WorkerFormDialog({ dealerId, open, onClose, employee }: Props) {
     <Dialog
       open={open}
       onClose={onClose}
-      title={isEdit ? 'Edit warrior' : 'Add warrior'}
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          {isEdit ? 'Edit warrior' : 'Add warrior'}
+          <HowThisWorks
+            surface="admin-worker-form"
+            label="Warriors"
+            variant="icon"
+          />
+        </span>
+      }
       description={
         isEdit
           ? 'Update this warrior’s details.'

@@ -2,7 +2,13 @@ import { AlertCircle, FileBarChart2 } from 'lucide-react';
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { Card, CardContent, EmptyState, Skeleton } from '@/components/ui';
+import {
+  Card,
+  CardContent,
+  EmptyState,
+  HowThisWorks,
+  Skeleton,
+} from '@/components/ui';
 import { useDsrLatest, useDsrReport, useDsrReports } from '@/hooks/api/useDsr';
 import { ApiError } from '@/lib/api';
 import type { Dealer } from '@dk/shared';
@@ -80,6 +86,15 @@ export function DealerDsrTab({ dealer }: Props) {
 
   return (
     <div className="grid gap-4">
+      {/* A grid child with no wrapper: the toolbar it explains lives in
+          `../dsr/DsrToolbar`, which this tab shares with the standalone DSR
+          page, so the button sits above it here. `justify-self-start` keeps it
+          at its own width, and a null render costs the grid nothing. */}
+      <HowThisWorks
+        surface="admin-dealer-vault-dsr"
+        label="Daily Sales Report"
+        className="justify-self-start"
+      />
       {/* Business-date selector — the way back through previous days — plus a
           date picker to originate a brand-new back-dated report. */}
       {reports.length > 0 ? (

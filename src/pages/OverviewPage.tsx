@@ -11,6 +11,7 @@ import {
   CardSubtitle,
   CardTitle,
   EmptyState,
+  HowThisWorks,
   IconButton,
   Skeleton,
 } from '@/components/ui';
@@ -82,14 +83,17 @@ export function OverviewPage() {
         title="Today"
         subtitle={subtitle}
         actions={
-          <IconButton
-            variant="ghost"
-            aria-label="Refresh"
-            loading={refreshing}
-            onClick={() => void refresh()}
-          >
-            <RefreshCw width={18} height={18} strokeWidth={1.75} />
-          </IconButton>
+          <>
+            <IconButton
+              variant="ghost"
+              aria-label="Refresh"
+              loading={refreshing}
+              onClick={() => void refresh()}
+            >
+              <RefreshCw width={18} height={18} strokeWidth={1.75} />
+            </IconButton>
+            <HowThisWorks surface="admin-overview-today" label="Today" />
+          </>
         }
       />
 
@@ -141,7 +145,15 @@ export function OverviewPage() {
           <HolidayConfirmBanner />
 
           <Card className="mt-4">
-            <CardHeader>
+            <CardHeader
+              action={
+                <HowThisWorks
+                  surface="admin-overview-needs-a-person"
+                  label="Needs a person"
+                  variant="icon"
+                />
+              }
+            >
               <div>
                 <CardTitle>Needs a person</CardTitle>
                 <CardSubtitle>
@@ -161,7 +173,15 @@ export function OverviewPage() {
           </Card>
 
           <Card className="mt-3 md:mt-4">
-            <CardHeader>
+            <CardHeader
+              action={
+                <HowThisWorks
+                  surface="admin-overview-todays-board"
+                  label="Today's board"
+                  variant="icon"
+                />
+              }
+            >
               <div>
                 <CardTitle>Today&apos;s board</CardTitle>
                 <CardSubtitle>

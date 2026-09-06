@@ -16,6 +16,7 @@ import {
   CardSubtitle,
   CardTitle,
   EmptyState,
+  HowThisWorks,
   Skeleton,
   useToast,
 } from '@/components/ui';
@@ -171,7 +172,9 @@ export function UsageTab() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader
+          action={<HowThisWorks surface="admin-assistant-usage" label="Assistant usage" />}
+        >
           <div>
             <CardTitle>Today&apos;s spend</CardTitle>
             <CardSubtitle>

@@ -18,6 +18,7 @@ import {
   Card,
   CardContent,
   EmptyState,
+  HowThisWorks,
   Input,
   MobileCardList,
   Select,
@@ -123,6 +124,7 @@ export function DsrVaultPage() {
       <PageHeader
         title="Daily Sales Report"
         subtitle="The generated day-book each dealer receives, with stock variation at a glance"
+        actions={<HowThisWorks surface="admin-dsr-vault" label="Daily Sales Report" />}
       />
 
       <Card>

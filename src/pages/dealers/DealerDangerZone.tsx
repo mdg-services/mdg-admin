@@ -10,6 +10,7 @@ import {
   CardSubtitle,
   CardTitle,
   ConfirmDialog,
+  HowThisWorks,
   useToast,
 } from '@/components/ui';
 import { useArchiveDealer, useRestoreDealer } from '@/hooks/api/useDealers';
@@ -188,6 +189,15 @@ export function DealerDangerZone({ dealer }: Props) {
                 Restore dealer
               </Button>
             </ActionRow>
+            {/* Outside the `ActionRow` on purpose: that row is
+                `flex-col-reverse` below md, so a help button last in the DOM
+                would land ON TOP of the real action on a phone. As a direct
+                child of this wrapping row it sits after it at every width, and
+                costs nothing on the day it renders null. */}
+            <HowThisWorks
+              surface="admin-dealer-danger-zone"
+              label="Archived dealers"
+            />
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -205,6 +215,10 @@ export function DealerDangerZone({ dealer }: Props) {
                 Delete dealer
               </Button>
             </ActionRow>
+            <HowThisWorks
+              surface="admin-dealer-danger-zone"
+              label="Deleting a dealer"
+            />
           </div>
         )}
       </CardContent>

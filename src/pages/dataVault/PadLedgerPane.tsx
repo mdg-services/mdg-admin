@@ -17,6 +17,7 @@ import {
   CardContent,
   CardHeader,
   EmptyState,
+  HowThisWorks,
   Input,
   MobileCardList,
   Select,
@@ -284,22 +285,31 @@ function DealerList({
                 className="pl-9"
               />
             </div>
-            <Select
-              value={status}
-              aria-label="Filter by ledger state"
-              onChange={(e) =>
-                patchParams({
-                  status: e.target.value === 'all' ? null : e.target.value,
-                })
-              }
-              className="w-full md:w-44"
-            >
-              {STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
+            <div className="flex items-center gap-2">
+              <Select
+                value={status}
+                aria-label="Filter by ledger state"
+                onChange={(e) =>
+                  patchParams({
+                    status: e.target.value === 'all' ? null : e.target.value,
+                  })
+                }
+                className="w-full md:w-44"
+              >
+                {STATUS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+              {/* Icon, so the filter keeps the width it has on a phone. */}
+              <HowThisWorks
+                surface="admin-vault-pad-ledger"
+                label="PAD ledger"
+                variant="icon"
+                className="shrink-0"
+              />
+            </div>
           </div>
 
           {isLoading ? (

@@ -12,6 +12,7 @@ import {
   CardTitle,
   ConfirmDialog,
   FieldError,
+  HowThisWorks,
   Input,
   KeyValueList,
   Label,
@@ -325,7 +326,20 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
         confirmLabel="Clear credentials"
         confirmVariant="danger"
         loading={clearing}
-        description={`The stored ${portal} ID and password are removed. Every service that signs in with them stops running until a new pair is saved.`}
+        description={
+          <>
+            {`The stored ${portal} ID and password are removed. Every service that signs in with them stops running until a new pair is saved.`}
+            {/* `ConfirmDialog`'s title is a plain string, so the help button
+                sits at the foot of the description rather than in a header
+                slot. */}
+            <span className="mt-3 block">
+              <HowThisWorks
+                surface="admin-clear-portal-credentials"
+                label="Portal credentials"
+              />
+            </span>
+          </>
+        }
       />
     </Card>
   );

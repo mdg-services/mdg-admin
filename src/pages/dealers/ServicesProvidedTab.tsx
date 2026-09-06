@@ -8,6 +8,7 @@ import {
   CardTitle,
   DataList,
   EmptyState,
+  HowThisWorks,
   Skeleton,
 } from '@/components/ui';
 import { useServiceLogs } from '@/hooks/api/useServiceLogs';
@@ -23,7 +24,15 @@ export function ServicesProvidedTab({ dealer }: Props) {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader
+        action={
+          <HowThisWorks
+            surface="admin-dealer-services-provided"
+            label="Services provided"
+            variant="icon"
+          />
+        }
+      >
         <div>
           <CardTitle>Services provided</CardTitle>
           <CardSubtitle>

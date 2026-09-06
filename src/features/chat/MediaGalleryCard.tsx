@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Drawer } from '@/components/ui/Drawer';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { HowThisWorks } from '@/components/ui/HowThisWorks';
 import { ImageLightbox } from '@/components/ui/ImageLightbox';
 import { Spinner } from '@/components/ui/Spinner';
 import { Tabs } from '@/components/ui/Tabs';
@@ -230,7 +231,21 @@ function MediaGalleryDrawer({
   }
 
   return (
-    <Drawer open={open} onClose={onClose} title="Media, links, docs" width="md">
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="min-w-0 break-words">Media, links, docs</span>
+          <HowThisWorks
+            surface="admin-inbox-media-gallery"
+            label="Media, links, docs"
+            variant="icon"
+          />
+        </span>
+      }
+      width="md"
+    >
       <Tabs
         items={TAB_ITEMS}
         value={tab}

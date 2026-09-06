@@ -11,6 +11,7 @@ import {
   CardHeader,
   Drawer,
   EmptyState,
+  HowThisWorks,
   ImageLightbox,
   Skeleton,
   useToast,
@@ -332,10 +333,17 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
               align="center"
               padding="comfortable"
               action={
-                <Badge intent="neutral" className="tabular-nums">
-                  {summary.invoiceCount.toLocaleString('en-IN')}{' '}
-                  {summary.invoiceCount === 1 ? 'invoice' : 'invoices'}
-                </Badge>
+                <span className="flex flex-wrap items-center gap-2">
+                  <Badge intent="neutral" className="tabular-nums">
+                    {summary.invoiceCount.toLocaleString('en-IN')}{' '}
+                    {summary.invoiceCount === 1 ? 'invoice' : 'invoices'}
+                  </Badge>
+                  <HowThisWorks
+                    surface="admin-dealer-vault-tt-density"
+                    label="TT Density"
+                    variant="icon"
+                  />
+                </span>
               }
             >
               <p className="text-base font-semibold text-text">Tanker invoices</p>

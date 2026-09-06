@@ -1,6 +1,6 @@
 import { History, RefreshCw } from 'lucide-react';
 
-import { Button, useToast } from '@/components/ui';
+import { Button, HowThisWorks, useToast } from '@/components/ui';
 import {
   useDsrStaleReports,
   useRegenerateStaleDsr,
@@ -50,7 +50,14 @@ export function DsrStaleNotice({ report }: { report: DsrReportView }) {
     <div className="flex flex-wrap items-start gap-3 rounded-md border border-warning bg-warning-soft px-3 py-2.5 text-sm text-warning">
       <History width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
       <div className="min-w-0 flex-1">
-        <p className="font-medium">This report is out of date</p>
+        <div className="flex flex-wrap items-center gap-x-2">
+          <p className="font-medium">This report is out of date</p>
+          <HowThisWorks
+            surface="admin-dsr-stale-notice"
+            label="Out-of-date reports"
+            variant="icon"
+          />
+        </div>
         <p className="mt-0.5">{report.stale.reason}</p>
         {/* No `opacity-90`. This is amber text on an amber ground already, and
             the list it carries — which OTHER days this correction invalidated —

@@ -21,6 +21,7 @@ import {
   Dialog,
   Drawer,
   EmptyState,
+  HowThisWorks,
   Input,
   Label,
   MIN_SELECTABLE_YMD,
@@ -366,13 +367,20 @@ function HistoryCard({
           align="center"
           padding="comfortable"
           action={
-            <SegmentedControl
-              value={days}
-              onChange={onDaysChange}
-              fullWidthOnMobile={false}
-              aria-label="How far back to show"
-              options={DAY_WINDOWS.map((d) => ({ value: d, label: `${d}d` }))}
-            />
+            <div className="flex items-center gap-2">
+              <SegmentedControl
+                value={days}
+                onChange={onDaysChange}
+                fullWidthOnMobile={false}
+                aria-label="How far back to show"
+                options={DAY_WINDOWS.map((d) => ({ value: d, label: `${d}d` }))}
+              />
+              <HowThisWorks
+                surface="admin-dealer-vault-iras"
+                label="IRAS shift data"
+                variant="icon"
+              />
+            </div>
           }
         >
           <p className="text-base font-semibold text-text">Capture history</p>

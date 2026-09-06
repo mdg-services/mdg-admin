@@ -18,6 +18,7 @@ import {
   Dialog,
   EmptyState,
   FieldError,
+  HowThisWorks,
   Input,
   Label,
   MobileCardList,
@@ -132,15 +133,22 @@ export function DealerMembersTab({ dealer }: Props) {
           column gap. */}
       <CardHeader
         action={
-          hasMembers || isLoading || isMd ? (
-            <Button
-              size="sm"
-              onClick={() => setAddOpen(true)}
-              leftIcon={<UserPlus width={14} height={14} strokeWidth={1.75} />}
-            >
-              Add member
-            </Button>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            {hasMembers || isLoading || isMd ? (
+              <Button
+                size="sm"
+                onClick={() => setAddOpen(true)}
+                leftIcon={<UserPlus width={14} height={14} strokeWidth={1.75} />}
+              >
+                Add member
+              </Button>
+            ) : null}
+            <HowThisWorks
+              surface="admin-dealer-members"
+              label="Team / Members"
+              variant="icon"
+            />
+          </div>
         }
       >
         {/* Wrapped, not two loose children: with no `action` the header is a

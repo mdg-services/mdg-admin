@@ -25,6 +25,7 @@ import {
   ClampedText,
   EmptyState,
   FilterBar,
+  HowThisWorks,
   Label,
   Pagination,
   Select,
@@ -845,6 +846,7 @@ export function AiAnswersPage() {
       <PageHeader
         title="AI answers"
         subtitle="Every reply the first line has given a dealer, newest first. Judging one takes a second and is the only thing that makes the feature safe to leave on."
+        actions={<HowThisWorks surface="admin-ai-answers" label="AI answers" />}
       />
 
       {/* The breaker's position, stated before the list. "Two of three" is

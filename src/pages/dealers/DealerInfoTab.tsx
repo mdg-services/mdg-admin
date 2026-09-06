@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardSubtitle,
   CardTitle,
+  HowThisWorks,
   KeyValueList,
   Skeleton,
   StatusChip,
@@ -69,7 +70,15 @@ export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
           surfaces — and the one that stays is the one that can be edited. */}
       <div className="grid gap-3 md:grid-cols-2 md:gap-4">
         <Card>
-          <CardHeader>
+          <CardHeader
+            action={
+              <HowThisWorks
+                surface="admin-dealer-info"
+                label="Dealer info"
+                variant="icon"
+              />
+            }
+          >
             <div>
               <CardTitle>Identity</CardTitle>
               <CardSubtitle>Phone, code, status.</CardSubtitle>

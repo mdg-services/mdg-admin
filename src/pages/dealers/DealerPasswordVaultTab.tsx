@@ -1,6 +1,6 @@
 import { Archive } from 'lucide-react';
 
-import { Card, CardContent } from '@/components/ui';
+import { Card, CardContent, HowThisWorks } from '@/components/ui';
 import type { Dealer } from '@dk/shared';
 
 import { DealerAppLoginCard } from './DealerAppLoginCard';
@@ -37,6 +37,15 @@ export function DealerPasswordVaultTab({ dealer }: Props) {
 
   return (
     <div className="grid gap-3 md:gap-4">
+      {/* A grid child in its own right, with no wrapper: on the day this
+          surface has no video it renders nothing at all, and an empty wrapping
+          div would still spend a row and a 12px gap on it. `justify-self-start`
+          keeps it at its own width instead of stretching across the tab. */}
+      <HowThisWorks
+        surface="admin-dealer-password-vault"
+        label="Password vault"
+        className="justify-self-start"
+      />
       {isArchived ? (
         <Card>
           <CardContent className="flex items-start gap-3">

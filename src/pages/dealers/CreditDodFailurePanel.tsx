@@ -1,7 +1,7 @@
 import { AlertTriangle, Maximize2 } from 'lucide-react';
 import * as React from 'react';
 
-import { Button, ImageLightbox } from '@/components/ui';
+import { Button, HowThisWorks, ImageLightbox } from '@/components/ui';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { describeCreditDodFailure } from '@/lib/creditDodFailure';
 import type { ServiceRunWithSteps } from '@/types/serviceRun';
@@ -84,6 +84,14 @@ export function CreditDodFailurePanel({
             </details>
           ) : null}
         </div>
+        {/* A direct child of the panel's own header row, so a null render
+            leaves the row untouched. */}
+        <HowThisWorks
+          surface="admin-credit-dod-failure"
+          label="A failed Credit & DOD run"
+          variant="icon"
+          className="shrink-0"
+        />
       </div>
 
       {shot ? (

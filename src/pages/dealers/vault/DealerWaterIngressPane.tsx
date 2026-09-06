@@ -11,6 +11,7 @@ import {
   Callout,
   DataList,
   EmptyState,
+  HowThisWorks,
   Label,
   Select,
   Skeleton,
@@ -252,14 +253,21 @@ export function DealerWaterIngressPane({ dealer }: DealerVaultPaneProps) {
       <Card>
         <CardHeader
           action={
-            <Button
-              variant="secondary"
-              leftIcon={<Share2 width={16} height={16} strokeWidth={1.75} />}
-              onClick={() => void onShare(day.businessDate)}
-              loading={pending === day.businessDate}
-            >
-              {shareActionLabel()}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                leftIcon={<Share2 width={16} height={16} strokeWidth={1.75} />}
+                onClick={() => void onShare(day.businessDate)}
+                loading={pending === day.businessDate}
+              >
+                {shareActionLabel()}
+              </Button>
+              <HowThisWorks
+                surface="admin-dealer-vault-water-ingress"
+                label="Water ingress"
+                variant="icon"
+              />
+            </div>
           }
         >
           <CardTitle>{dealerCodeLabel(q.data?.outletCode)} · water ingress</CardTitle>

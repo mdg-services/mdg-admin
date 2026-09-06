@@ -11,6 +11,7 @@ import {
   CardTitle,
   Dialog,
   EmptyState,
+  HowThisWorks,
   MobileCardList,
   Skeleton,
   Table,
@@ -40,7 +41,11 @@ export function BlockedTab() {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader
+        action={
+          <HowThisWorks surface="admin-assistant-blocked" label="Blocked visitors" />
+        }
+      >
         <div>
           <CardTitle>Visitors we have turned away</CardTitle>
           <CardSubtitle>

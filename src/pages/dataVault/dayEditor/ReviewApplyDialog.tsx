@@ -8,6 +8,7 @@ import {
   Checkbox,
   Dialog,
   FieldError,
+  HowThisWorks,
   Label,
   Skeleton,
   Textarea,
@@ -458,7 +459,18 @@ export function ReviewApplyDialog({
       open={open}
       onClose={onClose}
       size="lg"
-      title={manual ? manual.title : `Apply ${pending.count} change${pending.count === 1 ? '' : 's'}`}
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="min-w-0 break-words">
+            {manual ? manual.title : `Apply ${pending.count} change${pending.count === 1 ? '' : 's'}`}
+          </span>
+          <HowThisWorks
+            surface="admin-review-apply-corrections"
+            label="Applying corrections"
+            variant="icon"
+          />
+        </span>
+      }
       description={`${dealerCodeLabel(day.dealer.code)} · ${formatYmd(day.businessDate)}`}
       footer={
         <>

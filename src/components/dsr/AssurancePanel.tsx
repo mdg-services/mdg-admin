@@ -7,6 +7,7 @@ import {
   Callout,
   Checkbox,
   Dialog,
+  HowThisWorks,
   KeyValueList,
   Label,
   Skeleton,
@@ -199,14 +200,21 @@ export function AssurancePanel({
             </p>
           ) : null}
           {codes.length > 0 ? (
-            <Button
-              className="mt-3 w-full md:w-auto"
-              variant="secondary"
-              size="sm"
-              onClick={openForm}
-            >
-              Release with a reason
-            </Button>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                className="w-full md:w-auto"
+                variant="secondary"
+                size="sm"
+                onClick={openForm}
+              >
+                Release with a reason
+              </Button>
+              <HowThisWorks
+                surface="admin-dsr-assurance-panel"
+                label="Withheld reports"
+                variant="icon"
+              />
+            </div>
           ) : null}
         </StatementBlock>
 

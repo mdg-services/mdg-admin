@@ -1,7 +1,7 @@
 import { Camera, ImageIcon } from 'lucide-react';
 import * as React from 'react';
 
-import { ActionRow, Button, Callout, InfoBadge, useToast } from '@/components/ui';
+import { ActionRow, Button, Callout, HowThisWorks, InfoBadge, useToast } from '@/components/ui';
 import { useReadSlip, type SlipReadResponse } from '@/hooks/api/useIrasEdits';
 import { ApiError } from '@/lib/api';
 import { formatYmd } from '@/lib/format';
@@ -320,6 +320,12 @@ export function SlipPanel({
             'Typing always wins — a figure you have typed is never replaced, and you can type ' +
             'over anything the slip filled in.'
           }
+        />
+        <HowThisWorks
+          surface="admin-slip-panel"
+          label="Readings from a slip"
+          variant="icon"
+          className="shrink-0"
         />
       </div>
 

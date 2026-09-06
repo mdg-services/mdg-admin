@@ -12,6 +12,7 @@ import {
   CardSubtitle,
   CardTitle,
   Checkbox,
+  HowThisWorks,
   Input,
   Label,
   Select,
@@ -326,6 +327,7 @@ export function FestivalPage() {
       <PageHeader
         title="Festival greeting"
         subtitle="A seasonal greeting band on the report images shared with dealers."
+        actions={<HowThisWorks surface="admin-festival-greeting" label="Festival greeting" />}
       />
 
       {festivalQ.isLoading ? (

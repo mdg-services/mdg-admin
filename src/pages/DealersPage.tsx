@@ -10,6 +10,7 @@ import {
   CardContent,
   Checkbox,
   EmptyState,
+  HowThisWorks,
   Input,
   MobileCardList,
   Pagination,
@@ -146,12 +147,15 @@ export function DealersPage() {
         title="Dealers"
         subtitle="Onboard new dealers and manage their lifecycle."
         actions={
-          <Button
-            leftIcon={<Plus width={16} height={16} strokeWidth={1.75} />}
-            onClick={() => setDrawerOpen(true)}
-          >
-            Add dealer
-          </Button>
+          <>
+            <Button
+              leftIcon={<Plus width={16} height={16} strokeWidth={1.75} />}
+              onClick={() => setDrawerOpen(true)}
+            >
+              Add dealer
+            </Button>
+            <HowThisWorks surface="admin-dealers-list" label="Dealers" />
+          </>
         }
       />
 

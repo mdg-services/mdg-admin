@@ -12,6 +12,7 @@ import {
   Dialog,
   EmptyState,
   FilterBar,
+  HowThisWorks,
   Input,
   Label,
   Pagination,
@@ -106,6 +107,7 @@ export function RunHistoryPage() {
       <PageHeader
         title="Run history"
         subtitle="Timeline of every service execution."
+        actions={<HowThisWorks surface="admin-run-history" label="Run history" />}
       />
 
       {/* Five stacked filters were ~330px of a 640px screen, so the first run

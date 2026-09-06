@@ -20,6 +20,7 @@ import {
   ClampedText,
   Dialog,
   EmptyState,
+  HowThisWorks,
   Select,
   Skeleton,
   useToast,
@@ -359,6 +360,15 @@ export function DealerKavachTab({ dealer }: Props) {
                 <ClipboardCheck width={16} height={16} strokeWidth={1.75} />
                 Open work queue
               </Link>
+              {/* A direct flex child, not wrapped: the row already carries a
+                  select and two full-width-below-md controls, so this is the
+                  icon rather than a fourth worded button — and an unwrapped
+                  child that renders `null` costs the row nothing at all. */}
+              <HowThisWorks
+                surface="admin-dealer-kavach"
+                label="Kavach"
+                variant="icon"
+              />
             </div>
           </div>
 

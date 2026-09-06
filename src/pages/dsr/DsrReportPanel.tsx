@@ -26,6 +26,7 @@ import {
   CardContent,
   Dialog,
   DownloadButton,
+  HowThisWorks,
   ImageLightbox,
   KeyValueList,
   WideReportViewer,
@@ -759,9 +760,16 @@ function DsrShareSection({
 
   return (
     <div className={className}>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-        Share with dealer
-      </p>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+          Share with dealer
+        </p>
+        <HowThisWorks
+          surface="admin-dsr-share"
+          label="Share with dealer"
+          variant="icon"
+        />
+      </div>
       <Card>
         <CardContent className="grid gap-3 md:gap-4">
           <div className="grid gap-3 md:grid-cols-2">

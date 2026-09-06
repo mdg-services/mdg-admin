@@ -21,6 +21,7 @@ import {
   Copyable,
   Dialog,
   FieldError,
+  HowThisWorks,
   Input,
   Label,
   Spinner,
@@ -100,6 +101,14 @@ export function OnboardingTab({ dealer }: Props) {
                   You can still reopen any reopenable step below to amend artifacts.
                 </div>
               </div>
+              {/* `ml-auto` rather than a wrapper: an unwrapped child that
+                  renders null leaves the row exactly as it is today. */}
+              <HowThisWorks
+                surface="admin-dealer-onboarding"
+                label="Onboarding"
+                variant="icon"
+                className="ml-auto shrink-0"
+              />
             </div>
           </CardContent>
         </Card>
@@ -110,9 +119,16 @@ export function OnboardingTab({ dealer }: Props) {
               <div className="text-sm font-medium text-text">
                 Onboarding progress
               </div>
-              <Badge intent="info">
-                {done} of {total}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge intent="info">
+                  {done} of {total}
+                </Badge>
+                <HowThisWorks
+                  surface="admin-dealer-onboarding"
+                  label="Onboarding"
+                  variant="icon"
+                />
+              </div>
             </div>
             <div className="mt-3 h-2 w-full rounded-full bg-surface-2">
               <div

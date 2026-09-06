@@ -7,6 +7,7 @@ import {
   Checkbox,
   Dialog,
   FieldError,
+  HowThisWorks,
   Input,
   Label,
   ReadonlyField,
@@ -129,7 +130,16 @@ export function CustomWorkItemDialog({ open, onClose, item, onSubmit }: Props) {
     <Dialog
       open={open}
       onClose={onClose}
-      title={item ? 'Edit custom work' : 'Add custom work'}
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          {item ? 'Edit custom work' : 'Add custom work'}
+          <HowThisWorks
+            surface="admin-dealer-custom-work"
+            label="Custom work"
+            variant="icon"
+          />
+        </span>
+      }
       description="Custom works are awardable exactly like default items, only for this dealer."
       footer={
         <>

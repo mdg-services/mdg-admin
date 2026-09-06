@@ -68,7 +68,11 @@ export function PageHeader({
           <p className="min-w-0 truncate text-sm text-text-muted">{subtitle}</p>
         ) : null}
         {actions ? (
-          <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>
+          // `empty:hidden` for the same reason as the block below: an action
+          // that renders nothing must not leave a gap behind.
+          <div className="ml-auto flex flex-wrap items-center gap-2 empty:hidden">
+            {actions}
+          </div>
         ) : null}
       </div>
     );
@@ -117,6 +121,22 @@ export function PageHeader({
         <div
           className={cn(
             'flex flex-wrap items-center gap-2 md:flex-nowrap md:[&>button]:flex-none',
+            // `empty:hidden` because an element that renders NOTHING is still a
+            // truthy prop. <HowThisWorks/> returns null on a screen whose video
+            // is not made yet — that is the whole reason its button could be
+            // placed across the portal before the videos existed — but React
+            // cannot tell a parent that in advance, so `actions` is truthy and
+            // this wrapper renders anyway. Empty, it is still a flex child, so
+            // the `gap-2` above puts 8px between the title and nothing at all,
+            // on every such page, below md.
+            //
+            // `:empty` is the one thing that CAN tell: a component returning
+            // null leaves no DOM node behind, so the wrapper genuinely matches
+            // it — including when `actions` is a fragment whose every member
+            // rendered null. A truthiness helper at 98 call sites would have
+            // fixed the same bug and would have had to be remembered at the
+            // 99th.
+            'empty:hidden',
             actionsFill && '[&>button]:flex-auto',
           )}
         >

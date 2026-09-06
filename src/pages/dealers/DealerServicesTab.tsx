@@ -21,6 +21,7 @@ import {
   ConfirmDialog,
   Dialog,
   EmptyState,
+  HowThisWorks,
   Menu,
   MenuItem,
   MenuSeparator,
@@ -257,7 +258,19 @@ export function DealerServicesTab({ dealer }: Props) {
       {/* `CardHeader` rather than a hand-rolled `p-4` row: the header already
           knows how to put its action under the title below md and back on the
           right at md, which the wrapped flex row it replaces did not. */}
-      <CardHeader padding="comfortable" action={headerAction}>
+      <CardHeader
+        padding="comfortable"
+        action={
+          <div className="flex items-center gap-2">
+            {headerAction}
+            <HowThisWorks
+              surface="admin-dealer-services"
+              label="Attached services"
+              variant="icon"
+            />
+          </div>
+        }
+      >
         {/* Wrapped, not two loose children: with no `action` the header is a
             `justify-between` row, and an unwrapped title and subtitle would
             fly to opposite ends of it. */}
@@ -572,6 +585,15 @@ export function DealerServicesTab({ dealer }: Props) {
               : null}{' '}
             This removes the plugin and its schedule from the dealer. Past run
             history is kept. You can re-attach it later.
+            {/* `ConfirmDialog`'s title is a plain string, so the help button
+                lives at the foot of the description rather than in the header
+                slot every other surface uses. */}
+            <span className="mt-3 block">
+              <HowThisWorks
+                surface="admin-dealer-service-detach"
+                label="Detach service"
+              />
+            </span>
           </>
         }
       />

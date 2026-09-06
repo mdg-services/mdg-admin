@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Dialog } from '@/components/ui/Dialog';
+import { HowThisWorks } from '@/components/ui/HowThisWorks';
 import { IconButton } from '@/components/ui/IconButton';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
@@ -130,7 +131,16 @@ export function UploadRecordDialog({
     <Dialog
       open={open}
       onClose={handleClose}
-      title="Upload report"
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="min-w-0 break-words">Upload report</span>
+          <HowThisWorks
+            surface="admin-inbox-upload-report"
+            label="Upload report"
+            variant="icon"
+          />
+        </span>
+      }
       description={dealerCode ? `Deliver a record to ${dealerCode}` : undefined}
       footer={
         <>

@@ -6,6 +6,7 @@ import {
   Callout,
   Checkbox,
   Dialog,
+  HowThisWorks,
   Input,
   Label,
   MIN_SELECTABLE_YMD,
@@ -223,7 +224,12 @@ export function AskDocumentDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title="Ask for a document"
+      title={
+        <span className="inline-flex flex-wrap items-center gap-2">
+          Ask for a document
+          <HowThisWorks surface="admin-ask-document" label="Ask for a document" variant="icon" />
+        </span>
+      }
       description="The dealer gets a notification straight away, in Hindi, with your words under it."
       size="lg"
       footer={

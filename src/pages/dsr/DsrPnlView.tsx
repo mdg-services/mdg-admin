@@ -12,6 +12,7 @@ import {
   CardTitle,
   DateRangeFilter,
   EmptyState,
+  HowThisWorks,
   SegmentedControl,
   Skeleton,
   dateRangeForPreset,
@@ -57,6 +58,15 @@ function storageKey(dealerId: string | undefined): string {
 }
 
 const EMPTY_SETTINGS: FuelPnlSettings = { rates: {}, testing: 'RETURNED', lossBasis: 'COST' };
+
+/**
+ * The guided-video button, once — this page draws its header on four separate
+ * branches (loading, error, nothing to show, loaded) and the help belongs on
+ * all of them, not only on the one an admin reaches when everything worked.
+ */
+function FuelPnlHelp() {
+  return <HowThisWorks surface="admin-fuel-pnl" label={'Fuel P&L'} />;
+}
 
 /**
  * The testing switch lives HERE, beside the two answers it chooses between —
@@ -267,7 +277,7 @@ export function DsrPnlView() {
   if (q.isLoading) {
     return (
       <>
-        <PageHeader title="Fuel P&L" />
+        <PageHeader title="Fuel P&L" actions={<FuelPnlHelp />} />
         <div className="space-y-4">
           <Skeleton className="h-28 w-full" />
           <Skeleton className="h-64 w-full" />
@@ -280,7 +290,7 @@ export function DsrPnlView() {
     const notConfigured = q.error instanceof ApiError && q.error.status === 404;
     return (
       <>
-        <PageHeader title="Fuel P&L" />
+        <PageHeader title="Fuel P&L" actions={<FuelPnlHelp />} />
         <EmptyState
           // Sized like every other empty state in this admin: lucide's own
           // default is 24px at stroke 2, which reads heavier and smaller than
@@ -310,7 +320,7 @@ export function DsrPnlView() {
   if (!data || !primary || !alternate || data.products.length === 0) {
     return (
       <>
-        <PageHeader title={title} />
+        <PageHeader title={title} actions={<FuelPnlHelp />} />
         <EmptyState
           icon={<IndianRupee width={28} height={28} strokeWidth={1.75} />}
           title="No fuel moved in this period"
@@ -343,14 +353,17 @@ export function DsrPnlView() {
           { label: 'Fuel P&L' },
         ]}
         actions={
-          <Button
-            variant="secondary"
-            leftIcon={<Share2 width={16} height={16} strokeWidth={1.75} />}
-            onClick={onShare}
-            loading={sharing}
-          >
-            {shareActionLabel()}
-          </Button>
+          <>
+            <Button
+              variant="secondary"
+              leftIcon={<Share2 width={16} height={16} strokeWidth={1.75} />}
+              onClick={onShare}
+              loading={sharing}
+            >
+              {shareActionLabel()}
+            </Button>
+            <FuelPnlHelp />
+          </>
         }
       />
 

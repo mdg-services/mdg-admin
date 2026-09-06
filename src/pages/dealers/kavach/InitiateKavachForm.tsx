@@ -2,7 +2,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { ShieldCheck } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 
-import { Button, Card, CardContent, FieldError, Input, Label } from '@/components/ui';
+import {
+  Button,
+  Card,
+  CardContent,
+  FieldError,
+  HowThisWorks,
+  Input,
+  Label,
+} from '@/components/ui';
 import { dealerCodeLabel } from '@dk/shared';
 import {
   initiateKavachProgrammeSchema,
@@ -84,10 +92,14 @@ export function InitiateKavachForm({ dealerCode, loading, onSubmit }: Props) {
             </div>
           </div>
 
-          <div>
+          <div className="flex flex-wrap items-center gap-2">
             <Button type="submit" onClick={submit} loading={loading}>
               Initiate programme
             </Button>
+            <HowThisWorks
+              surface="admin-dealer-kavach-initiate"
+              label="Starting Kavach"
+            />
           </div>
         </form>
       </CardContent>

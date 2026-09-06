@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { Badge, Button, Dialog } from '@/components/ui';
+import { Badge, Button, Dialog, HowThisWorks } from '@/components/ui';
 import { useServicesQuery } from '@/hooks/api/useServices';
 import { statusIntent } from '@/lib/statusIntent';
 import type { ServicePluginCatalogEntry } from '@dk/shared';
@@ -99,7 +99,16 @@ export function AttachServiceDialog({
       open={open}
       onClose={onClose}
       animateIn={animateIn}
-      title="Attach service"
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          Attach service
+          <HowThisWorks
+            surface="admin-dealer-service-attach"
+            label="Attach service"
+            variant="icon"
+          />
+        </span>
+      }
       // Kept to one line: `Dialog` puts `description` in the sticky,
       // non-scrolling header, so every extra sentence is permanent height in a
       // sheet that also holds the form, the footer and the keyboard. The

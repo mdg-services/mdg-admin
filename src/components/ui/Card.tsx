@@ -98,6 +98,14 @@ export function CardHeader({
       <div
         className={cn(
           'shrink-0 md:[&>button]:w-auto',
+          // An `action` that renders NOTHING must not cost the header a row.
+          // This branch is chosen on `action !== undefined`, and a React element
+          // is defined even when it returns null — which <HowThisWorks/> does on
+          // every card whose video is not made yet. Without this the card takes
+          // the two-column layout, and below md the `gap-2` on the parent puts
+          // 8px under the title for an action slot nobody can see. `:empty`
+          // catches it because a component returning null leaves no DOM node.
+          'empty:hidden',
           actionWidth === 'full' && '[&>button]:w-full',
         )}
       >

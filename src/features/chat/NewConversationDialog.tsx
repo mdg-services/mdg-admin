@@ -1,7 +1,15 @@
 import { Inbox } from 'lucide-react';
 import * as React from 'react';
 
-import { Button, Dialog, Label, Select, Spinner, useToast } from '@/components/ui';
+import {
+  Button,
+  Dialog,
+  HowThisWorks,
+  Label,
+  Select,
+  Spinner,
+  useToast,
+} from '@/components/ui';
 import { useDealersQuery } from '@/hooks/api/useDealers';
 import { useDealerUsers } from '@/hooks/api/useDealerUsers';
 import { useStartConversation } from '@/hooks/api/useStartConversation';
@@ -74,7 +82,16 @@ export function NewConversationDialog({ open, onClose, onStarted }: Props) {
     <Dialog
       open={open}
       onClose={onClose}
-      title="New message"
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="min-w-0 break-words">New message</span>
+          <HowThisWorks
+            surface="admin-inbox-new-conversation"
+            label="New message"
+            variant="icon"
+          />
+        </span>
+      }
       description="Start a chat with a dealer member — even if they haven't written in yet."
       footer={
         <>

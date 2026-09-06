@@ -9,6 +9,7 @@ import {
   CardContent,
   Drawer,
   EmptyState,
+  HowThisWorks,
   Skeleton,
 } from '@/components/ui';
 import { useServicesQuery } from '@/hooks/api/useServices';
@@ -28,6 +29,7 @@ export function ServiceCatalogPage() {
       <PageHeader
         title="Service catalog"
         subtitle="Plugins available to attach to dealers."
+        actions={<HowThisWorks surface="admin-service-catalog" label="Service catalog" />}
       />
 
       {isLoading ? (

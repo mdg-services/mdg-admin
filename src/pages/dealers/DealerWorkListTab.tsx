@@ -20,6 +20,7 @@ import {
   CardSubtitle,
   CardTitle,
   EmptyState,
+  HowThisWorks,
   IconButton,
   Input,
   MobileCardList,
@@ -466,16 +467,23 @@ export function DealerWorkListTab({ dealer }: Props) {
             field visible at md would be one that types into nothing. */}
         <CardHeader
           action={
-            <div className="md:hidden">
-              <Input
-                type="search"
-                inputMode="search"
-                autoComplete="off"
-                autoCapitalize="none"
-                aria-label="Search default works"
-                placeholder="Search works, Hindi labels or codes…"
-                value={defaultQuery}
-                onChange={(e) => setDefaultQuery(e.target.value)}
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1 md:hidden">
+                <Input
+                  type="search"
+                  inputMode="search"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  aria-label="Search default works"
+                  placeholder="Search works, Hindi labels or codes…"
+                  value={defaultQuery}
+                  onChange={(e) => setDefaultQuery(e.target.value)}
+                />
+              </div>
+              <HowThisWorks
+                surface="admin-dealer-work-list"
+                label="Work list"
+                variant="icon"
               />
             </div>
           }

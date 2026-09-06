@@ -4,6 +4,7 @@ import * as React from 'react';
 import {
   ActionRow,
   EmptyState,
+  HowThisWorks,
   ImageLightbox,
   MobileCardList,
   Skeleton,
@@ -167,7 +168,16 @@ export function RunsListInline({ dealerId, serviceId }: Props) {
       <Dialog
         open={!!openRunId}
         onClose={() => setOpenRunId(null)}
-        title={openRun ? `Run ${openRun.id.slice(-8)}` : ''}
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {openRun ? `Run ${openRun.id.slice(-8)}` : ''}
+            <HowThisWorks
+              surface="admin-dealer-runs"
+              label="Run history"
+              variant="icon"
+            />
+          </span>
+        }
         size="lg"
         footer={
           <Button variant="secondary" onClick={() => setOpenRunId(null)}>

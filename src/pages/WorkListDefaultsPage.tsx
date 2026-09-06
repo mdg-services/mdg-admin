@@ -20,6 +20,7 @@ import {
   Dialog,
   EmptyState,
   FieldError,
+  HowThisWorks,
   Input,
   Label,
   MobileCardList,
@@ -114,12 +115,15 @@ export function WorkListDefaultsPage() {
         title="Work list defaults"
         subtitle="The global default work catalog every dealer starts from. Per-dealer hide/show and custom works are managed separately, on each dealer's Work list tab."
         actions={
-          <Button
-            onClick={() => setCreateOpen(true)}
-            leftIcon={<Plus width={16} height={16} strokeWidth={1.75} />}
-          >
-            Add work item
-          </Button>
+          <>
+            <Button
+              onClick={() => setCreateOpen(true)}
+              leftIcon={<Plus width={16} height={16} strokeWidth={1.75} />}
+            >
+              Add work item
+            </Button>
+            <HowThisWorks surface="admin-work-list-defaults" label="Work list defaults" />
+          </>
         }
       />
 

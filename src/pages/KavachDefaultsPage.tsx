@@ -22,6 +22,7 @@ import {
   Dialog,
   EmptyState,
   FieldError,
+  HowThisWorks,
   Input,
   Label,
   MobileCardList,
@@ -132,12 +133,15 @@ export function KavachDefaultsPage() {
         title="Kavach task defaults"
         subtitle="The global task catalog every dealer is scored against. Per-dealer hides, dealer-only tasks and point overrides live on each dealer's Kavach work list tab."
         actions={
-          <Button
-            onClick={() => setCreateOpen(true)}
-            leftIcon={<Plus width={16} height={16} strokeWidth={1.75} />}
-          >
-            Add task
-          </Button>
+          <>
+            <Button
+              onClick={() => setCreateOpen(true)}
+              leftIcon={<Plus width={16} height={16} strokeWidth={1.75} />}
+            >
+              Add task
+            </Button>
+            <HowThisWorks surface="admin-kavach-defaults" label="Kavach task defaults" />
+          </>
         }
       />
 

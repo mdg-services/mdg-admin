@@ -16,6 +16,7 @@ import {
   Dialog,
   DownloadButton,
   filenameFromUrl,
+  HowThisWorks,
   ImageLightbox,
   useToast,
 } from '@/components/ui';
@@ -285,7 +286,16 @@ export function CreditDodReportCard({
       <Dialog
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        title="Share with dealer"
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            Share with dealer
+            <HowThisWorks
+              surface="admin-credit-dod-report-card"
+              label="The Credit & DOD card"
+              variant="icon"
+            />
+          </span>
+        }
         description="Share this Credit & DOD card with the dealer's chat? This will message the dealer."
         size="sm"
         footer={

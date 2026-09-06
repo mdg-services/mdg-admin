@@ -22,6 +22,7 @@ import {
   CardSubtitle,
   CardTitle,
   EmptyState,
+  HowThisWorks,
   IconButton,
   Input,
   MobileCardList,
@@ -542,15 +543,24 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
       <Card>
         <CardHeader
           action={
-            <Input
-              type="search"
-              inputMode="search"
-              aria-label="Search catalog tasks"
-              placeholder="Search tasks"
-              className="md:w-56"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <Input
+                  type="search"
+                  inputMode="search"
+                  aria-label="Search catalog tasks"
+                  placeholder="Search tasks"
+                  className="md:w-56"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <HowThisWorks
+                surface="admin-dealer-kavach-tasks"
+                label="Kavach tasks"
+                variant="icon"
+              />
+            </div>
           }
         >
           <div>

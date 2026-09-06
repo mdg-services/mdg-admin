@@ -17,6 +17,7 @@ import {
   CardContent,
   CardHeader,
   EmptyState,
+  HowThisWorks,
   MobileCardList,
   Skeleton,
   Table,
@@ -273,14 +274,21 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
                 align="center"
                 padding="comfortable"
                 action={
-                  summary.rows.length > 0 ? (
-                    <Badge
-                      intent={summary.failingCount > 0 ? 'danger' : 'success'}
-                      className="tabular-nums"
-                    >
-                      {clearCount} of {summary.rows.length} clear
-                    </Badge>
-                  ) : undefined
+                  <span className="flex flex-wrap items-center gap-2">
+                    {summary.rows.length > 0 ? (
+                      <Badge
+                        intent={summary.failingCount > 0 ? 'danger' : 'success'}
+                        className="tabular-nums"
+                      >
+                        {clearCount} of {summary.rows.length} clear
+                      </Badge>
+                    ) : null}
+                    <HowThisWorks
+                      surface="admin-dealer-vault-ro-supply"
+                      label="RO supply status"
+                      variant="icon"
+                    />
+                  </span>
                 }
               >
                 <p className="text-base font-semibold text-text">

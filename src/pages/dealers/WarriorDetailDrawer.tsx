@@ -30,6 +30,7 @@ import {
   CardTitle,
   Drawer,
   EmptyState,
+  HowThisWorks,
   MobileCardList,
   Skeleton,
   Table,
@@ -148,6 +149,12 @@ export function WarriorDetailDrawer({
             {initials(name)}
           </span>
           <span className="min-w-0 truncate">{name}</span>
+          <HowThisWorks
+            surface="admin-warrior-detail"
+            label="Warrior detail"
+            variant="icon"
+            className="shrink-0"
+          />
         </span>
       }
       description={

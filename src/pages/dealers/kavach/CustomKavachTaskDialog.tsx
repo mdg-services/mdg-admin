@@ -7,6 +7,7 @@ import {
   Checkbox,
   Dialog,
   FieldError,
+  HowThisWorks,
   Input,
   Label,
   Select,
@@ -88,7 +89,16 @@ export function CustomKavachTaskDialog({ open, onClose, item, onSubmit }: Props)
       open={open}
       onClose={onClose}
       size="lg"
-      title={item ? 'Edit dealer-only task' : 'Add a dealer-only task'}
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          {item ? 'Edit dealer-only task' : 'Add a dealer-only task'}
+          <HowThisWorks
+            surface="admin-dealer-custom-kavach-task"
+            label="Dealer-only Kavach tasks"
+            variant="icon"
+          />
+        </span>
+      }
       description="Scored exactly like a catalog task, but only this dealer has it."
       footer={
         <>

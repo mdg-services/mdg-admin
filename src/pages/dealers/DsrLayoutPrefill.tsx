@@ -1,7 +1,7 @@
 import { AlertTriangle, ChevronDown, ChevronRight, Download } from 'lucide-react';
 import * as React from 'react';
 
-import { Button, KeyValueList } from '@/components/ui';
+import { Button, HowThisWorks, KeyValueList } from '@/components/ui';
 import {
   useDsrSetupDraft,
   type DsrDiscoveredProduct,
@@ -314,16 +314,26 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
             report. Check the figures, then add any receipts and testing since that inspection.
           </p>
         </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={handleRead}
-          loading={draft.isFetching}
-          className="w-full shrink-0 md:w-auto"
-        >
-          <Download className="mr-1.5 h-3.5 w-3.5" />
-          Read layout
-        </Button>
+        {/* The button and its help travel together in one shrink-0 column, so
+            the row above stays a two-item `justify-between` and the paragraph
+            keeps the width it has today. */}
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleRead}
+            loading={draft.isFetching}
+            className="w-full shrink-0 md:w-auto"
+          >
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            Read layout
+          </Button>
+          <HowThisWorks
+            surface="admin-dsr-layout-prefill"
+            label="Fill from portal data"
+            variant="icon"
+          />
+        </div>
       </div>
 
       {existingProducts > 0 && !applied && (

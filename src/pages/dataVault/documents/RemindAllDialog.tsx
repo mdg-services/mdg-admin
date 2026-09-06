@@ -1,7 +1,7 @@
 import { BellRing } from 'lucide-react';
 import * as React from 'react';
 
-import { Button, Callout, Dialog, useToast } from '@/components/ui';
+import { Button, Callout, Dialog, HowThisWorks, useToast } from '@/components/ui';
 import { useCreateDocumentAsk, useRemindDocumentAsk } from '@/hooks/api/useDocumentAsks';
 import { ApiError } from '@/lib/api';
 import { dealerCodeLabel } from '@dk/shared';
@@ -130,7 +130,16 @@ export function RemindAllDialog({ open, onClose, rows }: RemindAllDialogProps) {
     <Dialog
       open={open}
       onClose={onClose}
-      title="Remind everyone who has not sent it"
+      title={
+        <span className="inline-flex flex-wrap items-center gap-2">
+          Remind everyone who has not sent it
+          <HowThisWorks
+            surface="admin-remind-all-documents"
+            label="Remind everyone who has not sent it"
+            variant="icon"
+          />
+        </span>
+      }
       size="md"
       footer={
         <>

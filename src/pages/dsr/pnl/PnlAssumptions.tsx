@@ -1,7 +1,7 @@
 import { Info } from 'lucide-react';
 import * as React from 'react';
 
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, SegmentedControl } from '@/components/ui';
+import { Card, CardContent, CardHeader, CardTitle, HowThisWorks, Input, Label, SegmentedControl } from '@/components/ui';
 import type { DsrPnlResponse } from '@/hooks/api/useDsr';
 import { formatLitres, formatYmd } from '@/lib/format';
 import { defaultRatesFor, RATE_DEFAULTS_SOURCE, type FuelPnlSettings, type LossBasis } from '@/lib/fuelPnl';
@@ -116,8 +116,13 @@ export function PnlAssumptions({ data, settings, onChange }: PnlAssumptionsProps
 
   return (
     <Card>
-      <CardHeader>
+      {/* Second child rather than `action`: the title is one short word, and the
+          `action` slot renders its wrapper even when `HowThisWorks` returns
+          nothing, which would add a column gap to every header that has no
+          video yet. A null child adds nothing at all. */}
+      <CardHeader align="center">
         <CardTitle>Assumptions</CardTitle>
+        <HowThisWorks surface="admin-fuel-pnl-assumptions" label="Assumptions" />
       </CardHeader>
       <CardContent className="space-y-4 md:space-y-6">
         <p className="flex items-start gap-2 text-sm text-text-muted">

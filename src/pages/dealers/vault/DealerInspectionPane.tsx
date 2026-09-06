@@ -16,6 +16,7 @@ import {
   CardHeader,
   Drawer,
   EmptyState,
+  HowThisWorks,
   KeyValueList,
   MobileCardList,
   Skeleton,
@@ -260,11 +261,18 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
                 align="center"
                 padding="comfortable"
                 action={
-                  summary.total > 0 ? (
-                    <Badge intent="neutral" className="tabular-nums">
-                      {summary.latest.length} of {summary.total.toLocaleString('en-IN')}
-                    </Badge>
-                  ) : undefined
+                  <span className="flex flex-wrap items-center gap-2">
+                    {summary.total > 0 ? (
+                      <Badge intent="neutral" className="tabular-nums">
+                        {summary.latest.length} of {summary.total.toLocaleString('en-IN')}
+                      </Badge>
+                    ) : null}
+                    <HowThisWorks
+                      surface="admin-dealer-vault-inspection"
+                      label="Inspection Reports"
+                      variant="icon"
+                    />
+                  </span>
                 }
               >
                 <p className="text-base font-semibold text-text">

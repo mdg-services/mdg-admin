@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardSubtitle,
   CardTitle,
+  HowThisWorks,
   KeyValueList,
   type KeyValueItem,
 } from '@/components/ui';
@@ -103,26 +104,28 @@ export function DealerOutletProfileCards({ dealer, onEdit }: Props) {
             edge — where `main`'s `overflow-x-hidden` cuts it. */}
         <CardHeader
           action={
-            onEdit ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={onEdit}
-                // `leftIcon`, not a child: `Button` wraps its children in one
-                // `<span>`, so an icon passed as a child sits inside that span
-                // and never gets the flex `gap` between glyph and label.
-                leftIcon={<Pencil width={14} height={14} strokeWidth={1.75} />}
-              >
-                {filled.length > 0 ? 'Edit' : 'Add details'}
-              </Button>
-            ) : (
-              <ScrollText
-                width={18}
-                height={18}
-                strokeWidth={1.75}
-                className="text-text-muted"
+            <div className="flex items-center gap-2">
+              {onEdit ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onEdit}
+                  // `leftIcon`, not a child: `Button` wraps its children in one
+                  // `<span>`, so an icon passed as a child sits inside that span
+                  // and never gets the flex `gap` between glyph and label.
+                  leftIcon={<Pencil width={14} height={14} strokeWidth={1.75} />}
+                >
+                  {filled.length > 0 ? 'Edit' : 'Add details'}
+                </Button>
+              ) : (
+                <ScrollText width={18} height={18} strokeWidth={1.75} className="text-text-muted" />
+              )}
+              <HowThisWorks
+                surface="admin-dealer-outlet-profile"
+                label="Outlet details"
+                variant="icon"
               />
-            )
+            </div>
           }
         >
           <div className="min-w-0">

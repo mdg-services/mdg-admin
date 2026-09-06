@@ -20,6 +20,7 @@ import {
   ClampedText,
   Dialog,
   EmptyState,
+  HowThisWorks,
   IconButton,
   Input,
   Label,
@@ -183,17 +184,21 @@ export function BankHolidaysPage() {
         title="Bank holidays"
         subtitle="Confirm the bank & national holidays the Credit & DOD engine treats as non-working days."
         actions={
-          // Below md this moves to the StickyActionBar at the foot of the page;
-          // `hidden` beats `Button`'s own `inline-flex` (Tailwind emits
-          // `.hidden` last), and `md:inline-flex` puts it back at md.
-          <Button
-            className="hidden md:inline-flex"
-            onClick={save}
-            loading={confirm.isPending}
-            disabled={monthQ.isLoading || !monthQ.data}
-          >
-            Save {monthLabel}
-          </Button>
+          <>
+            {/* Below md this moves to the StickyActionBar at the foot of the
+                page; `hidden` beats `Button`'s own `inline-flex` (Tailwind
+                emits `.hidden` last), and `md:inline-flex` puts it back at
+                md. */}
+            <Button
+              className="hidden md:inline-flex"
+              onClick={save}
+              loading={confirm.isPending}
+              disabled={monthQ.isLoading || !monthQ.data}
+            >
+              Save {monthLabel}
+            </Button>
+            <HowThisWorks surface="admin-bank-holidays" label="Bank holidays" />
+          </>
         }
       />
 

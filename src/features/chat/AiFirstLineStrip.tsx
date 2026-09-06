@@ -9,6 +9,7 @@ import * as React from 'react';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { HowThisWorks } from '@/components/ui/HowThisWorks';
 import { useConversationAiTurnsQuery } from '@/hooks/api/useAiTurns';
 import {
   AI_HANDOFF_REASON_LABEL,
@@ -349,48 +350,60 @@ export function AiFirstLineStrip({
 
   return (
     <div className="border-t border-border bg-surface">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left"
-      >
-        <Zap
-          width={14}
-          height={14}
-          strokeWidth={2}
-          className="shrink-0 text-text-muted"
-        />
-        <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-text-subtle">
-          First line
-        </span>
-        <Badge intent={chipIntent}>{AI_OUTCOME_LABEL[latest.outcome]}</Badge>
-        {/* The production mark from md up. Below it the row already carries a
-            glyph, a label, an outcome badge, an age and a chevron, and `Badge`
-            refuses to shrink — a fourth pill would push the chevron off a 360px
-            row. The panel carries it at every width. */}
-        {production ? (
-          <span className="hidden md:contents">
-            <Badge intent={production.tone} title={production.hint}>
-              {production.label}
-            </Badge>
+      {/* The help glyph is a SIBLING of the toggle, not a child: the collapsed
+          line is itself a button, and a button inside a button is not a thing.
+          With no video for this surface `HowThisWorks` renders nothing and the
+          row is exactly the row it has always been. */}
+      <div className="flex items-center">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
+        >
+          <Zap
+            width={14}
+            height={14}
+            strokeWidth={2}
+            className="shrink-0 text-text-muted"
+          />
+          <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-text-subtle">
+            First line
           </span>
-        ) : null}
-        {/* The reason in full on a wide screen; the badge carries it below md,
-            where a fifteen-word sentence would push the chevron off the row. */}
-        <span className="hidden min-w-0 flex-1 truncate text-sm text-text-muted md:block">
-          {latest.reason ? AI_HANDOFF_REASON_LABEL[latest.reason] : ''}
-        </span>
-        <span className="flex-1 md:hidden" />
-        <span className="shrink-0 text-xs text-text-subtle">
-          {aiTurnAge(latest.createdAt, now)}
-        </span>
-        {open ? (
-          <ChevronDown width={16} height={16} strokeWidth={1.75} className="shrink-0 text-text-muted" />
-        ) : (
-          <ChevronRight width={16} height={16} strokeWidth={1.75} className="shrink-0 text-text-muted" />
-        )}
-      </button>
+          <Badge intent={chipIntent}>{AI_OUTCOME_LABEL[latest.outcome]}</Badge>
+          {/* The production mark from md up. Below it the row already carries a
+              glyph, a label, an outcome badge, an age and a chevron, and `Badge`
+              refuses to shrink — a fourth pill would push the chevron off a 360px
+              row. The panel carries it at every width. */}
+          {production ? (
+            <span className="hidden md:contents">
+              <Badge intent={production.tone} title={production.hint}>
+                {production.label}
+              </Badge>
+            </span>
+          ) : null}
+          {/* The reason in full on a wide screen; the badge carries it below md,
+              where a fifteen-word sentence would push the chevron off the row. */}
+          <span className="hidden min-w-0 flex-1 truncate text-sm text-text-muted md:block">
+            {latest.reason ? AI_HANDOFF_REASON_LABEL[latest.reason] : ''}
+          </span>
+          <span className="flex-1 md:hidden" />
+          <span className="shrink-0 text-xs text-text-subtle">
+            {aiTurnAge(latest.createdAt, now)}
+          </span>
+          {open ? (
+            <ChevronDown width={16} height={16} strokeWidth={1.75} className="shrink-0 text-text-muted" />
+          ) : (
+            <ChevronRight width={16} height={16} strokeWidth={1.75} className="shrink-0 text-text-muted" />
+          )}
+        </button>
+        <HowThisWorks
+          surface="admin-inbox-ai-first-line-strip"
+          label="What the first line did"
+          variant="icon"
+          className="mr-2 shrink-0"
+        />
+      </div>
 
       {open ? (
         <div

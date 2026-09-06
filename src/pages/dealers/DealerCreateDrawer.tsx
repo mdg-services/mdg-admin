@@ -2,7 +2,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { Button, Drawer, FieldError, Input, Label } from '@/components/ui';
+import {
+  Button,
+  Drawer,
+  FieldError,
+  HowThisWorks,
+  Input,
+  Label,
+} from '@/components/ui';
 import { useNextDealerCodeQuery } from '@/hooks/api/useDealers';
 import { dealerCreateSchema, type DealerCreateInput } from '@dk/shared/schemas';
 
@@ -49,7 +56,16 @@ export function DealerCreateDrawer({ open, onClose, loading, onSubmit }: Props) 
         onClose();
         reset();
       }}
-      title="Add dealer"
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          Add dealer
+          <HowThisWorks
+            surface="admin-dealer-create"
+            label="Add dealer"
+            variant="icon"
+          />
+        </span>
+      }
       // One short sentence only. `Drawer` renders `description` in the panel's
       // NON-scrolling header, above the `flex-1 overflow-y-auto` body: the
       // three-sentence version was ~110px of a `max-h-[95dvh]` sheet that also
