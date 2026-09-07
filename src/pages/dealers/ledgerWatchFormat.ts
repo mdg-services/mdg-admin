@@ -33,7 +33,7 @@
  */
 import type { Intent } from '@/lib/statusIntent';
 import {
-  isPairedClass,
+  isRoutineClass,
   LEDGER_MONEY_EPSILON,
   MOVEMENT_CLASSES,
   sameMoney,
@@ -268,7 +268,7 @@ export function sortFlags(flags: readonly LedgerFlagDto[]): LedgerFlagDto[] {
 
 /** One of the figures the pane prints across the top of a dealer's month. */
 export interface SummaryFigure {
-  key: 'fuelPurchased' | 'deposited' | 'charged' | 'received';
+  key: 'fuelPurchased' | 'deposited' | 'cardSettled' | 'charged' | 'received';
   label: string;
   /** Rupees. Always positive — the direction is in the label, not in the sign. */
   value: number;
@@ -278,13 +278,14 @@ export interface SummaryFigure {
 
 export interface SummaryFigures {
   /**
-   * The FOUR tiles, unchanged in number.
+   * FIVE tiles, in reading order: the three ROUTINE figures a pump's ledger
+   * carries every month — fuel bought, money paid in, card sales settled — then
+   * the two this feature is actually about, charged and paid.
    *
-   * Card settlements are deliberately NOT a fifth: the tile row is a 4-column
-   * grid, so a fifth would sit alone on a second row, and more importantly the
-   * four are two matched pairs — what was bought against what was paid in, what
-   * was charged against what was paid out. A settlement belongs to neither pair
-   * and is reported on its own line beneath them, the same way the band does it.
+   * The settlement sits with the routine three because that is what it is: the
+   * dealer's own card sales paid through, not IndianOil doing anything to the
+   * account. It was briefly folded into "paid to the dealer", where on outlet 5E
+   * in August 2026 it made a ₹30,000 commission read as ₹1,22,92,358.61.
    */
   figures: SummaryFigure[];
   /**
@@ -321,21 +322,12 @@ export interface SummaryFigures {
  * figure, so the hint under each tile answers it before they ask.
  */
 export function summaryFigures(summary: LedgerPeriodSummaryDto): SummaryFigures {
-  // WHAT INDIANOIL ACTUALLY PAID, which is not the same as what arrived.
-  //
-  // `received` is every non-pair credit, and on a busy outlet almost all of it
-  // is fleet-card settlement — the dealer's OWN card sales routed back through
-  // IndianOil. Measured on production for August 2026, outlet 5E: ₹1,22,92,358.61
-  // received, of which roughly ₹30,000 was real commission. Printing that whole
-  // figure under "paid to the dealer" is a true sum and a false sentence, and a
-  // screen stating something the calculation behind it does not is the exact
-  // fault this product was built to catch.
-  //
-  // So the headline subtracts the settlements and they get their own line. The
-  // net follows the headline, not `received`: an admin reading "net +₹1.19 crore"
-  // would think IndianOil had a very good month for them.
-  const paid = summary.received - summary.cardSettled;
-  const net = paid - summary.charged;
+  // NO SUBTRACTION HERE ANY MORE. `received` used to carry fleet-card
+  // settlements and this function took them out; the contract now treats a
+  // settlement as ROUTINE traffic — like fuel bought and money paid in — so the
+  // server excludes it from both `charged` and `received` before either reaches
+  // a screen. The arithmetic lives in one place again.
+  const net = summary.received - summary.charged;
   return {
     figures: [
       {
@@ -351,6 +343,12 @@ export function summaryFigures(summary: LedgerPeriodSummaryDto): SummaryFigures 
         hint: "The dealer's own money paid in",
       },
       {
+        key: 'cardSettled',
+        label: 'Card sales settled',
+        value: summary.cardSettled,
+        hint: "The dealer's own fleet-card sales, routed back",
+      },
+      {
         key: 'charged',
         label: 'Charged to the dealer',
         value: summary.charged,
@@ -359,27 +357,13 @@ export function summaryFigures(summary: LedgerPeriodSummaryDto): SummaryFigures 
       {
         key: 'received',
         label: 'Paid to the dealer',
-        value: paid,
+        value: summary.received,
         hint: 'Commission and rebates — not card sales',
       },
     ],
     cardSettled: summary.cardSettled,
     net,
-    /*
-     * The reconciliation still runs over the COMPLETE figures, not the headline
-     * ones. `netOther` is the server's `received − charged` with settlements
-     * included, so checking the headline net against it would report a mismatch
-     * on every outlet that takes a fleet card — turning a real integrity check
-     * into a permanent false alarm, which is worse than not having one.
-     *
-     * What is checked is what the check is for: that the server's own arithmetic
-     * agrees with ours over the same inputs.
-     */
-    netAgrees: sameMoney(
-      summary.received - summary.charged,
-      summary.netOther,
-      LEDGER_MONEY_EPSILON,
-    ),
+    netAgrees: sameMoney(net, summary.netOther, LEDGER_MONEY_EPSILON),
     reportedNet: summary.netOther,
   };
 }
@@ -426,7 +410,7 @@ export function orderedClassTotals(
     MOVEMENT_CLASSES.map((c, i) => [c, i]),
   );
   return summary.byClass
-    .filter((t) => !isPairedClass(t.movementClass))
+    .filter((t) => !isRoutineClass(t.movementClass))
     .slice()
     .sort(
       (a, b) =>
@@ -546,9 +530,9 @@ export function asMovementClass(
 }
 
 /** Is this row part of the routine buy/pay pair? Unclassified rows are not. */
-export function isPairRow(row: ClassifiedLedgerRowLike): boolean {
+export function isRoutineRow(row: ClassifiedLedgerRowLike): boolean {
   const cls = asMovementClass(row.movementClass);
-  return cls !== null && isPairedClass(cls);
+  return cls !== null && isRoutineClass(cls);
 }
 
 /**
@@ -556,7 +540,8 @@ export function isPairRow(row: ClassifiedLedgerRowLike): boolean {
  * toggle.
  *
  * With the toggle off this is the identity — the ledger is the ledger. With it
- * on, the 97% that is fuel invoices and deposits drops out and what remains is
+ * on, the routine traffic drops out — fuel invoices, deposits and fleet-card
+ * settlements, 3,016 of the 3,163 rows production holds — and what remains is
  * every fee, every interest posting and every line nobody could name. A row
  * with NO classification survives the filter deliberately: "we do not know what
  * this is" is the single most important thing on this screen, and a filter that
@@ -564,10 +549,10 @@ export function isPairRow(row: ClassifiedLedgerRowLike): boolean {
  */
 export function visibleLedgerRows<T extends ClassifiedLedgerRowLike>(
   rows: readonly T[],
-  hidePair: boolean,
+  hideRoutine: boolean,
 ): T[] {
-  if (!hidePair) return [...rows];
-  return rows.filter((r) => !isPairRow(r));
+  if (!hideRoutine) return [...rows];
+  return rows.filter((r) => !isRoutineRow(r));
 }
 
 /**
@@ -582,178 +567,4 @@ export function classifiedRowCount(
   rows: readonly ClassifiedLedgerRowLike[],
 ): number {
   return rows.reduce((n, r) => n + (asMovementClass(r.movementClass) ? 1 : 0), 0);
-}
-
-/* ──────────────── The highlighted band on the Credit & DOD screen ────────── */
-
-/** The severity tallies both flag listings return, as the server computes them. */
-export interface LedgerFlagCounts {
-  total: number;
-  alerts: number;
-  notices: number;
-  infos: number;
-}
-
-/**
- * The band's headline and how loud it should be.
- *
- * THE BAND HAS TO BE ABLE TO BE QUIET, and this function is where that is
- * decided. It sits at the top of the screen an admin opens to get a report out
- * to a dealer, so it is in front of them whether or not anything is wrong. A
- * band that is red every day is a band nobody reads by the second week — and
- * `CARD_SETTLEMENT` alone puts an INFO on this ledger most days, so "there is
- * something in the list" is close to always true and cannot be the trigger for
- * alarm.
- *
- * So the tone follows the WORST thing present, not the count:
- *
- *   an ALERT           the ledger is saying something impossible — a line nobody
- *                      can name, a class on a side it has never used, a balance
- *                      that will not reconcile. Red.
- *   only NOTICEs       a charge outside this dealer's pattern, or outside what
- *                      the other outlets paid. Worth a look, not an emergency.
- *   only INFO          the ordinary fees and settlements. Stated, not shouted.
- *   nothing            said plainly rather than by hiding the band, because an
- *                      absent band is indistinguishable from one that failed to
- *                      load, and on a money screen those must not look alike.
- */
-export interface LedgerBandTone {
-  intent: Intent;
-  headline: string;
-  /** True when the loudest thing present is an ALERT — the band leads with an icon. */
-  urgent: boolean;
-}
-
-export function ledgerBandTone(counts: LedgerFlagCounts | undefined): LedgerBandTone {
-  const c = counts ?? { total: 0, alerts: 0, notices: 0, infos: 0 };
-  if (c.alerts > 0) {
-    return {
-      intent: 'danger',
-      headline:
-        c.alerts === 1
-          ? '1 entry on this ledger does not make sense'
-          : `${c.alerts} entries on this ledger do not make sense`,
-      urgent: true,
-    };
-  }
-  if (c.notices > 0) {
-    return {
-      intent: 'warning',
-      headline:
-        c.notices === 1
-          ? '1 charge is outside the usual pattern'
-          : `${c.notices} charges are outside the usual pattern`,
-      urgent: false,
-    };
-  }
-  if (c.total > 0) {
-    return {
-      intent: 'neutral',
-      headline:
-        c.total === 1
-          ? '1 movement outside buying fuel and paying for it'
-          : `${c.total} movements outside buying fuel and paying for it`,
-      urgent: false,
-    };
-  }
-  return {
-    intent: 'success',
-    headline: 'Nothing on this ledger but fuel bought and money paid in',
-    urgent: false,
-  };
-}
-
-/** One of the figures the band leads with. */
-export interface BandFigure {
-  key: 'charged' | 'received' | 'net' | 'cardSettled';
-  label: string;
-  /** Rupees. `net` may be negative; the other two never are. */
-  value: number;
-  hint: string;
-  intent: Intent;
-}
-
-export interface BandFigures {
-  figures: BandFigure[];
-  /**
-   * Fleet-card settlements for the month, shown BESIDE the three figures rather
-   * than inside them. Zero on an outlet that takes no fleet card, in which case
-   * the band omits the line entirely.
-   */
-  cardSettled: number;
-  net: number;
-  /** See {@link SummaryFigures.netAgrees} — the band inherits the same check. */
-  netAgrees: boolean;
-  reportedNet: number;
-}
-
-/**
- * The band's three figures: what came off the dealer, what went back, and the
- * net of the two.
- *
- * THREE AND NOT THE PANE'S FOUR. Fuel bought and deposited are the pair, and
- * the band exists precisely to show what is NOT the pair — printing ₹12,00,000
- * of fuel invoices beside ₹1,062 of fees puts the eye on the wrong number and
- * makes the fee look like a rounding error. The full four-figure breakdown is
- * one click away in Ledger watch, where the pair is the context rather than the
- * competition.
- *
- * It DELEGATES to {@link summaryFigures} rather than re-summing, so the band and
- * the pane cannot come to different answers about the same month — including
- * the `netAgrees` check, which is the whole reason that function does not simply
- * print the server's `netOther`.
- */
-export function bandFigures(summary: LedgerPeriodSummaryDto): BandFigures {
-  const full = summaryFigures(summary);
-  const charged = full.figures.find((f) => f.key === 'charged');
-  const received = full.figures.find((f) => f.key === 'received');
-  return {
-    cardSettled: full.cardSettled,
-    figures: [
-      {
-        key: 'charged',
-        label: 'Charged to the dealer',
-        value: charged?.value ?? 0,
-        hint: 'Fees, interest, recoveries — not fuel',
-        // Money leaving is never GOOD news, but it is not an alarm either: a
-        // participation fee is simply a fact of the month. `neutral` keeps the
-        // colour budget for the findings below, which are the part that needs it.
-        intent: 'neutral',
-      },
-      {
-        key: 'received',
-        label: 'Paid to the dealer',
-        // Commission and rebates ONLY — `summaryFigures` has already taken the
-        // fleet-card settlements out. Read the note there for the ₹1.22 crore
-        // that forced it.
-        value: received?.value ?? 0,
-        hint: 'Commission and rebates — not card sales',
-        intent: 'neutral',
-      },
-      {
-        key: 'net',
-        label: 'Net',
-        value: full.net,
-        hint: netOtherSentence(full.net),
-        intent: netOtherIntent(full.net),
-      },
-    ],
-    net: full.net,
-    netAgrees: full.netAgrees,
-    reportedNet: full.reportedNet,
-  };
-}
-
-/**
- * The findings the band shows before "See all".
- *
- * Worst first, via the same {@link sortFlags} both listings use, then the first
- * `limit`. Three by default: enough that an admin reads the shape of the month
- * without the band growing into a second copy of the pane below it.
- */
-export function bandFlags(
-  flags: readonly LedgerFlagDto[],
-  limit = 3,
-): LedgerFlagDto[] {
-  return sortFlags(flags).slice(0, limit);
 }

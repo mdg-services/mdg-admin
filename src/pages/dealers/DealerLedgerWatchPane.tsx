@@ -416,7 +416,7 @@ function MonthSummary({
     );
   }
 
-  const { figures, cardSettled, net, netAgrees, reportedNet } = summaryFigures(summary);
+  const { figures, net, netAgrees, reportedNet } = summaryFigures(summary);
   const classTotals = orderedClassTotals(summary);
 
   return (
@@ -427,21 +427,6 @@ function MonthSummary({
         ))}
       </StatTileRow>
 
-      {/* NOT a fifth tile. The four above are two matched pairs — bought against
-          paid in, charged against paid out — and a fleet-card settlement belongs
-          to neither: it is the dealer's OWN card sales routed back through
-          IndianOil, not IndianOil paying them. It is stated because it is real
-          money into the account, and stated HERE because putting it in "Paid to
-          the dealer" made that figure read as income when, on outlet 5E in
-          August, ₹1,21,10,713.61 of a ₹1,22,92,358.61 total was this. */}
-      {cardSettled > 0 ? (
-        <p className="text-sm text-text-muted">
-          Card sales settled separately:{' '}
-          <span className="font-medium tabular-nums text-text">{inrFormat(cardSettled)}</span>{' '}
-          — the dealer&rsquo;s own fleet-card sales routed back, not counted above
-          and not in the net.
-        </p>
-      ) : null}
 
       <Card>
         <CardContent className="grid gap-3">

@@ -63,22 +63,23 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
   const total = data?.pages[0]?.total ?? 0;
 
   /**
-   * "Hide the routine pair" — the ledger with the 97% taken out.
+   * "Hide routine traffic" — the ledger with the 95% taken out.
    *
-   * A PAD ledger is meant to be a pair: fuel bought (a debit) and money
-   * deposited (a credit). Across the eleven live outlets that pair plus the
-   * card settlements is 3,016 of 3,163 rows, so an admin looking for the ₹1,062
-   * participation fee or the one fleet-card posting that came through as a
-   * DEBIT is reading past sixty screens of ordinary trading to find it. Ticking
-   * this leaves exactly the movements nobody was ever told about.
+   * A PAD ledger's ordinary traffic is three things: fuel bought (a debit),
+   * money deposited (a credit) and the dealer's own fleet-card sales settled
+   * back (a credit). Across the eleven live outlets that is 3,016 of 3,163
+   * rows, so an admin looking for the ₹1,062 participation fee or the one
+   * fleet-card posting that came through as a DEBIT is reading past sixty
+   * screens of ordinary trading to find it. Ticking this leaves exactly the
+   * movements nobody was ever told about.
    *
    * Client-side, over the rows LOADED, and deliberately so: the filter is a way
    * of reading the page in front of you, not a query. The footer says how many
    * of how many, so a short filtered list can never be read as a complete one.
    */
-  const [hidePair, setHidePair] = React.useState(false);
+  const [hideRoutine, setHideRoutine] = React.useState(false);
   const classified = classifiedRowCount(rows);
-  const visibleRows = visibleLedgerRows(rows, hidePair);
+  const visibleRows = visibleLedgerRows(rows, hideRoutine);
 
   return (
     <div className="grid gap-4">
@@ -145,9 +146,9 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
                         nothing at all and read as broken. */}
                     {classified > 0 ? (
                       <Checkbox
-                        label="Hide the routine pair"
-                        checked={hidePair}
-                        onChange={(e) => setHidePair(e.target.checked)}
+                        label="Hide routine traffic"
+                        checked={hideRoutine}
+                        onChange={(e) => setHideRoutine(e.target.checked)}
                       />
                     ) : null}
                     {total > 0 ? (
@@ -295,8 +296,8 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
                     exists in total. A single "showing 4 of 3,163" would let a
                     filtered view be read as the whole ledger. */}
                 <span className="text-xs text-text-subtle">
-                  {hidePair
-                    ? `Showing ${visibleRows.length.toLocaleString('en-IN')} movements outside the pair, from ${rows.length.toLocaleString('en-IN')} loaded of ${total.toLocaleString('en-IN')}`
+                  {hideRoutine
+                    ? `Showing ${visibleRows.length.toLocaleString('en-IN')} movements outside the routine traffic, from ${rows.length.toLocaleString('en-IN')} loaded of ${total.toLocaleString('en-IN')}`
                     : `Showing ${rows.length.toLocaleString('en-IN')} of ${total.toLocaleString('en-IN')}`}
                 </span>
                 {hasNextPage ? (
