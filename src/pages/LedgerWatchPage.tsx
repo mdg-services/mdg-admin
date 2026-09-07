@@ -419,7 +419,7 @@ export function LedgerWatchPage() {
               description={
                 filtersActive
                   ? 'Every finding under this filter has been dealt with.'
-                  : 'Every movement outside the routine pair has been looked at, across every outlet.'
+                  : 'Every movement outside the routine traffic has been looked at, across every outlet.'
               }
               cta={
                 filtersActive ? (

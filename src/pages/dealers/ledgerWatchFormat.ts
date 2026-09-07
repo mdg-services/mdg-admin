@@ -536,7 +536,7 @@ export function isRoutineRow(row: ClassifiedLedgerRowLike): boolean {
 }
 
 /**
- * The ledger rows an admin wants to see, given the "hide the routine pair"
+ * The ledger rows an admin wants to see, given the "hide routine traffic"
  * toggle.
  *
  * With the toggle off this is the identity — the ledger is the ledger. With it
@@ -559,7 +559,7 @@ export function visibleLedgerRows<T extends ClassifiedLedgerRowLike>(
  * How many of the loaded rows carry a classification at all.
  *
  * The toggle is only offered once this is above zero. Before Ledger Watch has
- * run for a dealer every row is unclassified, so "hide the routine pair" would
+ * run for a dealer every row is unclassified, so "hide routine traffic" would
  * hide nothing and read as broken; the table says the rows are not classified
  * yet instead of offering a control that cannot work.
  */

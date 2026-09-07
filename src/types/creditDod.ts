@@ -30,7 +30,7 @@ export interface CreditDodLedgerRow {
    * ledger was synced before Ledger Watch shipped carries none of it until
    * either their next run or the one-off backfill. Everything that reads this
    * has to render a row that has no class at all, which is why the ledger table
-   * only offers its "hide the routine pair" toggle once at least one loaded row
+   * only offers its "hide routine traffic" toggle once at least one loaded row
    * carries one.
    *
    * Typed `string | null` and not `MovementClass`: it is a stored value from a

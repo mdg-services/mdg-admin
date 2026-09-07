@@ -246,8 +246,8 @@ export function DealerLedgerWatchPane({ dealer }: DealerVaultPaneProps) {
               ) : null}
             </p>
             <p className="text-sm text-text-muted">
-              One line per movement outside the pair, with the figures the
-              sentence was built from.
+              One line per movement outside the routine traffic, with the
+              figures the sentence was built from.
             </p>
           </CardHeader>
 
@@ -280,7 +280,7 @@ export function DealerLedgerWatchPane({ dealer }: DealerVaultPaneProps) {
               }
               description={
                 scope === 'open'
-                  ? 'Every movement outside the routine pair has been looked at.'
+                  ? 'Every movement outside the routine traffic has been looked at.'
                   : 'Findings appear here once Credit & DOD monitoring has run for this dealer and classified its ledger.'
               }
             />
@@ -433,7 +433,7 @@ function MonthSummary({
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
-                Net, outside the pair
+                Net, outside routine traffic
               </p>
               <p className="mt-0.5 break-words text-sm text-text-muted">
                 {netOtherSentence(net)}
@@ -473,7 +473,7 @@ function MonthSummary({
             <span>
               {summary.rows.toLocaleString('en-IN')} rows in{' '}
               {monthLabel(summary.month)}, {summary.otherRows.toLocaleString('en-IN')}{' '}
-              outside the pair
+              outside the routine traffic
             </span>
             {summary.firstDate && summary.lastDate ? (
               <span>
@@ -516,7 +516,7 @@ function MonthSummary({
             </ul>
           ) : (
             <p className="text-sm text-text-muted">
-              Nothing outside the routine pair landed in this month.
+              Nothing outside the routine traffic landed in this month.
             </p>
           )}
         </CardContent>

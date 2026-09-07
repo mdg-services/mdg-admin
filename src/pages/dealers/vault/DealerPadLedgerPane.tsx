@@ -285,8 +285,9 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
               {visibleRows.length === 0 ? (
                 <p className="px-3 py-6 text-center text-sm text-text-muted">
                   Every one of the {rows.length.toLocaleString('en-IN')} loaded
-                  rows is a fuel purchase or a deposit. Load more, or untick
-                  &ldquo;Hide the routine pair&rdquo;.
+                  rows is routine — a fuel purchase, a deposit, or fleet-card
+                  sales settled. Load more, or untick &ldquo;Hide routine
+                  traffic&rdquo;.
                 </p>
               ) : null}
 
