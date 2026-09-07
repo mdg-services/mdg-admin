@@ -3,43 +3,37 @@
  *
  * ── WHY A REGISTRY AND NOT A PROP ──────────────────────────────────────────
  *
- * The portal is about ninety-five distinct surfaces once you count tabs,
- * drawers, dialogs and sheets — the dealer page alone is a shell over thirteen
- * tab bodies, one of which is a rail over nine more. Passing each screen its own
- * video list inline is how the first version of this worked, and it produced a
- * component that hardcoded two videos and got used exactly twice. Everywhere
- * else, the help simply never arrived.
+ * The portal is about a hundred distinct surfaces once you count tabs, drawers,
+ * dialogs and sheets. Passing each screen its own video list inline is how the
+ * first version worked, and it produced a component that hardcoded two videos
+ * and got used exactly twice; everywhere else the help simply never arrived.
  *
- * So the surfaces declare an IDENTITY (`<HowThisWorks surface="admin-dsr-generate" />`)
- * and this file decides what that identity is worth. Two consequences, both of
- * which are the point:
+ * So a surface declares an IDENTITY — `<HowThisWorks surface="admin-dsr-generate" />`
+ * — and this file decides what that identity is worth. Shipping a new video then
+ * needs no admin deploy: the video lives on the guide site and this holds a slug.
  *
- *   1. **A button can be placed before its video exists.** An unknown surface,
- *      or one whose entry is an empty list, renders NOTHING — not a disabled
- *      button, not a "coming soon", nothing at all. So the buttons can go in
- *      everywhere in one pass, and each one appears on its own the day its
- *      video ships. Placement and production stop blocking each other.
+ * ── EVERY SURFACE RESOLVES TO SOMETHING ────────────────────────────────────
  *
- *   2. **Shipping a video needs no admin deploy.** The video lives on the guide
- *      site; this file only holds a slug. Adding a row here is the only admin
- *      change a new video ever needs, and re-recording one is no change at all.
+ * The first version of this returned an empty list for a surface with no video
+ * and the button rendered nothing at all, so that buttons could be placed across
+ * the portal before the videos existed. That was the wrong trade, and the
+ * founder found it immediately: "the How this works are not visible on the admin
+ * portal". Ninety-odd invisible buttons is indistinguishable from no buttons.
  *
- * ── ONE VIDEO, MANY SURFACES ───────────────────────────────────────────────
+ * Now the lookup always returns at least one row, in three tiers:
  *
- * The mapping is deliberately many-to-one. "Generate a DSR", "Generate for a
- * date" and the stale-report banner are three controls a person meets in three
- * places, and they are one thing to understand — so all three point at the same
- * video rather than justifying three thin ones. Roughly a hundred surfaces
- * resolve to a few dozen videos.
+ *   1. An EXACT entry in `BY_SURFACE`, where a video really is about that
+ *      screen. Most precise, and always listed first.
+ *   2. A TOPIC rule, where a video covers the subject even though it was not
+ *      recorded on that exact screen — the three-day clock explains what the
+ *      bank-holiday calendar is FOR, and knowing that is most of what an admin
+ *      editing it needs.
+ *   3. The LIBRARY row, which opens the guide. Honest rather than apologetic:
+ *      it does not claim to answer the screen, it offers everything we have.
  *
- * ── THE SLUG IS A URL ──────────────────────────────────────────────────────
- *
- * `video` is the guide site's own page id: `https://guide.mdgservices.in/<video>`.
- * Nothing validates that at build time, because the two deploy separately and a
- * portal that refused to build because a video was not published yet would be
- * the tail wagging the dog. What protects it instead is that the slugs are
- * generated from the guide's own catalogue — see `npm run guide:catalog` in
- * mdg-demo — so a typo shows up as a missing row rather than a dead link.
+ * A row is never a lie about its own relevance — `LIBRARY` says what it is, and
+ * a topic match says the subject rather than the screen. As real walkthroughs
+ * for each surface are recorded, they land in tier 1 and displace the rest.
  */
 
 /** Where the guide site lives. */
@@ -49,107 +43,176 @@ export const GUIDE_BASE: string = (
 ).replace(/\/$/, '');
 
 export interface GuideVideo {
-  /** The guide site's page id. `GUIDE_BASE/<video>` is the watch page. */
+  /** The guide site's page id. `GUIDE_BASE/<video>` is the watch page, or '' for the library. */
   video: string;
-  /** Shown as the row's title in the chooser. English — this is the ops team. */
   title: string;
-  /** One line on what it covers, so nobody watches four minutes to find out. */
   blurb: string;
-  /** Runtime, rounded. Written out rather than measured: the portal does not
-   *  fetch the guide's manifest, and a minute either way costs nothing. */
   minutes: string;
-  /**
-   * Jump straight to a moment, in seconds. The guide's player reads `#t=<n>`.
-   * Use it where one surface is a two-minute passage of a longer video rather
-   * than its subject — otherwise the viewer pays for the whole thing to reach
-   * the part that answers their question.
-   */
+  /** Jump to a moment — the guide's player reads `#t=<seconds>`. */
   at?: number;
+  /** How closely this answers the screen the button is on. Drives the caption. */
+  fit?: 'screen' | 'subject' | 'library';
 }
 
-/**
- * Surface id → the videos that explain it.
- *
- * Ids are kebab-case and stable; they are the contract between a screen and
- * this file, so renaming one means editing both. They match the slugs used by
- * the guide catalogue so a single name identifies a subject everywhere.
- *
- * An entry may be an empty array. That is not the same as a missing entry in
- * intent — a missing one means nobody has thought about this screen, an empty
- * one means somebody decided it needs a video and it is not made yet — but it
- * is the same to the component, which renders nothing either way.
- */
-export const GUIDE_VIDEOS: Record<string, GuideVideo[]> = {
-  /* ── Credit & DOD ─────────────────────────────────────────────────────── */
-  'admin-credit-dod-card': [
-    {
-      video: 'admin-credit-dod',
-      title: 'What Credit & DOD Monitoring does',
-      blurb:
-        'How the report is built from the dealer’s SDMS account, what each figure means, and how the due date is worked out.',
-      minutes: '3 min',
-    },
-    {
-      video: 'admin-credit-dod-portal',
-      title: 'Using it in the admin portal',
-      blurb:
-        'Generate a report, read the checks before you trust it, share it with the dealer, and handle a run that fails.',
-      minutes: '3 min',
-    },
-  ],
+const CREDIT_DOD: readonly GuideVideo[] = [
+  {
+    video: 'admin-credit-dod',
+    title: 'What Credit & DOD Monitoring does',
+    blurb:
+      'How the report is built from the dealer’s SDMS account, what each figure means, and how the due date is worked out.',
+    minutes: '3 min',
+    fit: 'screen',
+  },
+  {
+    video: 'admin-credit-dod-portal',
+    title: 'Using it in the admin portal',
+    blurb:
+      'Generate a report, read the checks before you trust it, share it with the dealer, and handle a run that fails.',
+    minutes: '3 min',
+    fit: 'screen',
+  },
+];
 
-  /* ── Shift data ───────────────────────────────────────────────────────── */
-  'admin-shift-editor': [
-    {
-      video: 'admin-manual-shift-data',
-      title: 'A DSR for an outlet with no portal',
-      blurb:
-        'Open the day from the Data Vault, start it by hand, type the readings, review and apply, then generate.',
-      minutes: '4 min',
-    },
-  ],
+const DSR: readonly GuideVideo[] = [
+  {
+    video: 'admin-dsr-receipts',
+    title: 'Receipts on a Daily Sales Report',
+    blurb:
+      'Where a delivery on the report comes from, and which day a tanker actually lands on.',
+    minutes: '4 min',
+    fit: 'screen',
+  },
+];
+
+const SHIFT_DATA: readonly GuideVideo[] = [
+  {
+    video: 'admin-manual-shift-data',
+    title: 'A day typed in by hand',
+    blurb:
+      'Open the day from the Data Vault, start it by hand, type the readings, review and apply, then generate.',
+    minutes: '4 min',
+    fit: 'screen',
+  },
+];
+
+const DOD_CLOCK: GuideVideo = {
+  video: 'gen-dod-clock-hi',
+  title: 'The three-day deposit clock',
+  blurb:
+    'Why the due date moves: three days from the credit, pushed on by Sundays and the 2nd and 4th Saturdays.',
+  minutes: '1 min',
+  fit: 'subject',
+};
+
+const STAFF: readonly GuideVideo[] = [
+  {
+    video: 'points-system',
+    title: 'How points are worked out',
+    blurb: 'What decides a work’s points, and how a day’s total is arrived at.',
+    minutes: '3 min',
+    fit: 'subject',
+  },
+  {
+    video: 'give-points',
+    title: 'What the dealer sees',
+    blurb: 'The give-points flow on the dealer’s own phone — useful when answering a question about it.',
+    minutes: '3 min',
+    fit: 'subject',
+  },
+];
+
+const STOCK: readonly GuideVideo[] = [
+  {
+    video: 'stock-variation-sheet',
+    title: 'Reading a stock variation sheet',
+    blurb: 'The difference, the allowance, and how much is outside the limit.',
+    minutes: '4 min',
+    fit: 'subject',
+  },
+];
+
+/** The last resort, and never a lie: it offers the library, not an answer. */
+const LIBRARY: GuideVideo = {
+  video: '',
+  title: 'All guide videos',
+  blurb:
+    'A walkthrough for this screen has not been recorded yet. The library has the dealer course, the team walkthroughs and the explainers.',
+  minutes: '',
+  fit: 'library',
+};
+
+/** Tier 1: a video that is genuinely about this exact screen. */
+const BY_SURFACE: Record<string, readonly GuideVideo[]> = {
+  'admin-credit-dod-card': CREDIT_DOD,
+  'admin-credit-dod-report-card': CREDIT_DOD,
+  'admin-credit-dod-failure': CREDIT_DOD,
+  'admin-dealer-vault-credit-dod': CREDIT_DOD,
+  'admin-shift-editor': SHIFT_DATA,
+  'admin-shift-data-editor': SHIFT_DATA,
   'admin-shift-sheet': [
-    {
-      video: 'admin-manual-shift-data',
-      title: 'Typing a day in by hand',
-      blurb: 'The shift sheet laid out from the dealer’s own DSR layout.',
-      minutes: '4 min',
-      at: 96,
-    },
+    { ...(SHIFT_DATA[0] as GuideVideo), title: 'Typing a day in by hand', at: 96 },
   ],
-
-  /* ── DSR ──────────────────────────────────────────────────────────────── */
-  'admin-dsr-report': [
-    {
-      video: 'admin-dsr-receipts',
-      title: 'Receipts on a Daily Sales Report',
-      blurb:
-        'Where a delivery on the report comes from, and which day a tanker actually lands on.',
-      minutes: '4 min',
-    },
-  ],
-  'admin-dsr-generate': [
-    {
-      video: 'admin-dsr-receipts',
-      title: 'Generating and re-generating a report',
-      blurb: 'What “Generate” does with no date, and what back-filling a date really creates.',
-      minutes: '4 min',
-    },
-  ],
+  'admin-iras-edit-grid': SHIFT_DATA,
+  'admin-dsr-report': DSR,
+  'admin-dsr-report-view': DSR,
+  'admin-dsr-generate': DSR,
+  'admin-dsr-vault': DSR,
+  'admin-dealer-vault-dsr': DSR,
+  // The calendar an admin edits here is the input to the due-date engine, so the
+  // explainer about that clock is the most useful thing we have for it.
+  'admin-bank-holidays': [DOD_CLOCK, ...CREDIT_DOD],
 };
 
 /**
- * The videos for a surface, or an empty list.
+ * Tier 2: subject matches, tried in order, first hit wins.
  *
- * Total by design. An unknown surface is not an error worth showing anybody:
- * the honest response to "I have no video for this screen" is to say nothing,
- * which is exactly what an empty list makes the component do.
+ * Substring rules rather than a hundred more rows. They are ordered most
+ * specific first, because `admin-dealer-vault-credit-dod` contains both `vault`
+ * and `credit`.
+ */
+const BY_TOPIC: { match: string; videos: readonly GuideVideo[] }[] = [
+  { match: 'credit-dod', videos: CREDIT_DOD },
+  { match: 'dsr', videos: DSR },
+  { match: 'shift', videos: SHIFT_DATA },
+  { match: 'iras', videos: SHIFT_DATA },
+  { match: 'ledger', videos: [DOD_CLOCK, ...CREDIT_DOD] },
+  { match: 'pad', videos: [DOD_CLOCK, ...CREDIT_DOD] },
+  { match: 'holiday', videos: [DOD_CLOCK] },
+  { match: 'staff', videos: STAFF },
+  { match: 'points', videos: STAFF },
+  { match: 'warrior', videos: STAFF },
+  { match: 'work-list', videos: STAFF },
+  { match: 'custom-work', videos: STAFF },
+  { match: 'stock', videos: STOCK },
+  { match: 'variation', videos: STOCK },
+  { match: 'vault', videos: [...SHIFT_DATA, ...DSR] },
+  { match: 'assurance', videos: DSR },
+];
+
+/**
+ * The videos for a surface. Never empty.
+ *
+ * Tier 1, then tier 2, then the library — and the library row is appended to
+ * every result, because "there is more where this came from" is true on every
+ * screen and costs one line in a dialog somebody opened on purpose.
  */
 export function videosForSurface(surface: string): GuideVideo[] {
-  return GUIDE_VIDEOS[surface] ?? [];
+  const exact = BY_SURFACE[surface];
+  if (exact?.length) return [...exact, LIBRARY];
+
+  const topic = BY_TOPIC.find((r) => surface.includes(r.match));
+  if (topic) return [...topic.videos, LIBRARY];
+
+  return [LIBRARY];
 }
 
-/** The watch URL for a video, with its optional deep link into a moment. */
+/** Whether this surface has a video genuinely about it, rather than a fallback. */
+export function hasDedicatedVideo(surface: string): boolean {
+  return Boolean(BY_SURFACE[surface]?.length);
+}
+
+/** The watch URL for a row — or the library itself, for the fallback. */
 export function guideUrl(v: GuideVideo): string {
+  if (!v.video) return `${GUIDE_BASE}/`;
   return `${GUIDE_BASE}/${v.video}${v.at ? `#t=${v.at}` : ''}`;
 }

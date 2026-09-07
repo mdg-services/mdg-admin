@@ -17,15 +17,18 @@ import { IconButton } from './IconButton';
  * have had to fork it. Here the screen names itself and `guideVideos.ts` decides
  * what that name is worth.
  *
- * ── IT RENDERS NOTHING WHEN THERE IS NOTHING ───────────────────────────────
+ * ── IT ALWAYS RENDERS ──────────────────────────────────────────────────────
  *
- * A surface with no videos returns `null` — not a disabled button, not a
- * tooltip explaining that help is coming. That is what lets the button be
- * placed on every screen in one pass while the videos are still being made:
- * each one appears by itself on the day its video ships, and until then the
- * screen looks exactly as it does today. A disabled control would be worse than
- * nothing, because it spends a person's attention to tell them they cannot have
- * what it is offering.
+ * It used to return `null` for a surface with no video yet, so that buttons
+ * could be placed across the portal before the videos existed. That was the
+ * wrong trade: ninety-odd invisible buttons are indistinguishable from no
+ * buttons, and the founder said so as soon as they looked — "the How this works
+ * are not visible on the admin portal".
+ *
+ * `videosForSurface` is now total. A screen with no walkthrough of its own gets
+ * the closest video on the SUBJECT, and failing that a row that opens the
+ * library and says plainly that this screen has not been recorded yet. Neither
+ * pretends to be an answer it is not, and both beat a control that is not there.
  *
  * ── ONE VIDEO STILL OPENS THE CHOOSER ──────────────────────────────────────
  *
@@ -79,9 +82,18 @@ function VideoRow({ v }: { v: GuideVideo }) {
         </span>
         <span className="mt-0.5 block text-sm text-text-muted">{v.blurb}</span>
         <span className="mt-1 block text-xs text-text-subtle">
-          {v.minutes}
-          {v.at ? ' · starts at the relevant part' : ''} · opens the MDG guide in a new
-          tab
+          {/* Say which of the three kinds of row this is. A subject match that
+              silently posed as a walkthrough of this screen would waste four
+              minutes of somebody's time and teach them not to press the button
+              again. */}
+          {[
+            v.minutes,
+            v.at ? 'starts at the relevant part' : null,
+            v.fit === 'subject' ? 'about the subject, not this screen' : null,
+            'opens the MDG guide in a new tab',
+          ]
+            .filter(Boolean)
+            .join(' · ')}
         </span>
       </span>
     </a>
@@ -96,9 +108,6 @@ export function HowThisWorks({
 }: HowThisWorksProps) {
   const [open, setOpen] = React.useState(false);
   const videos = videosForSurface(surface);
-
-  // The whole reason a button can be placed before its video exists.
-  if (videos.length === 0) return null;
 
   return (
     <>
