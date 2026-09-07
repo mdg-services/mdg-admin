@@ -406,9 +406,18 @@ export function AssurancePanel({
 
   // A pass is the normal case. One line, and no celebration: the report below is
   // what the admin came to read.
+  //
+  // But a pass is NOT necessarily silent. Since the AI review became advisory its
+  // concerns arrive as NOTEs, and NOTEs do not withhold — so they fell through
+  // every branch above and rendered nowhere at all, while the header badge went
+  // on counting them. "AI · 7 to check" with nothing to check is worse than no
+  // badge: it tells an admin something is there and then hides it. They live here,
+  // folded shut, because most days they are worth recording and not reading.
+  const notes = verdict.findings.filter((f) => f.severity === 'NOTE');
   return (
+    <div className={cn('min-w-0', className)}>
     <p
-      className={cn('flex min-w-0 items-start gap-1.5 text-xs text-text-subtle', className)}
+      className={cn('flex min-w-0 items-start gap-1.5 text-xs text-text-subtle')}
     >
       <ShieldCheck
         width={13}
@@ -430,6 +439,23 @@ export function AssurancePanel({
           : ''}
       </span>
     </p>
+    {notes.length > 0 ? (
+      // `<details>`, not a toggle we own: the browser's own disclosure gives a
+      // keyboard-operable control and a visible triangle for free, and this is
+      // the pattern the admin already uses elsewhere. `block` on the summary and
+      // not `flex` — a flex summary loses the native triangle, which is the only
+      // cue that the line opens at all.
+      <details className="mt-2 min-w-0">
+        <summary className="min-h-11 cursor-pointer select-none py-2 text-xs text-text-subtle">
+          {notes.length} {notes.length === 1 ? 'note' : 'notes'} — nothing is
+          withholding this report
+        </summary>
+        <div className="min-w-0 pb-1">
+          <Findings verdict={verdict} findings={notes} />
+        </div>
+      </details>
+    ) : null}
+    </div>
   );
 }
 
