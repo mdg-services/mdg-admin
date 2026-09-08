@@ -162,6 +162,62 @@ export const CHECK_CATALOGUE: readonly CheckMeta[] = [
     maxDowngrade: 'REVIEW',
   },
   {
+    code: 'dsr.tank.went_silent',
+    title: 'A tank that was holding fuel has gone quiet',
+    meaning:
+      'A tank reads empty with no dip today but held fuel earlier in the window. Either it was emptied, or it was not measured — and if it was not measured, this product’s stock is short by whatever is still in it.',
+    severity: 'REVIEW',
+    maxDowngrade: 'NOTE',
+  },
+  {
+    code: 'dsr.stock.converted',
+    title: 'Stock worked out from the dip',
+    meaning:
+      'The litres did not arrive but the dip did, so the litres were read off this tank’s own dip chart. The measurement is still the dealer’s dipstick; only the conversion is ours, and it is accurate to a fraction of a litre.',
+    severity: 'NOTE',
+    maxDowngrade: 'NOTE',
+  },
+  {
+    code: 'dsr.stock.wide_bracket',
+    title: 'A dip converted across a wide gap',
+    meaning:
+      'The two nearest past readings for this tank are more than 300 dip units apart, so the conversion drew a straight line across a curve. Replayed over 720 fills, a gap that wide costs a median of 61 L.',
+    severity: 'REVIEW',
+    maxDowngrade: 'NOTE',
+  },
+  {
+    code: 'dsr.stock.carried',
+    title: 'Stock carried from the last confirmed day',
+    meaning:
+      'The portal reports this tank as out of service and sends no figures for it, so the last confirmed stock was carried forward. Better than the zero that used to stand there, but nothing was measured today.',
+    severity: 'NOTE',
+    maxDowngrade: 'NOTE',
+  },
+  {
+    code: 'dsr.stock.carried_stale',
+    title: 'A carried figure nobody has confirmed in a month',
+    meaning:
+      'An out-of-service tank’s stock has been carried forward for 30 days or more. The figure may be perfectly right — nothing on the report can say so. Dip the tank, or write a remark confirming it is unchanged.',
+    severity: 'REVIEW',
+    maxDowngrade: 'NOTE',
+  },
+  {
+    code: 'dsr.stock.not_converted',
+    title: 'A tank’s fuel is being counted as zero',
+    meaning:
+      'A dip arrived and could not be turned into litres, so this tank counts as empty and the product’s stock is short by whatever is standing in it. The dip itself proves the fuel is there.',
+    severity: 'REVIEW',
+    maxDowngrade: 'NOTE',
+  },
+  {
+    code: 'dsr.stock.not_measured',
+    title: 'A tank was not measured at all',
+    meaning:
+      'Neither a stock figure nor a dip arrived for this tank, so its fuel is not counted today. Usually a tank that is genuinely dry — the dangerous shape, a tank that was holding fuel and stopped reporting, is caught separately.',
+    severity: 'NOTE',
+    maxDowngrade: 'NOTE',
+  },
+  {
     code: 'assurance.check_failed',
     title: 'A check could not be evaluated',
     meaning:
