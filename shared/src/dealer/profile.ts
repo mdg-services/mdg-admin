@@ -779,9 +779,7 @@ export function profileDraftToPatch(
 }
 
 /** The stored profile, back in the shape the editor's boxes read from. */
-export function profileToDraft(
-  dealer: ProfileSource,
-): Record<string, DealerProfileDraftRow> {
+export function profileToDraft(dealer: ProfileSource): Record<string, DealerProfileDraftRow> {
   const draft: Record<string, DealerProfileDraftRow> = {};
   for (const field of resolveDealerProfile(dealer)) {
     if (field.custom) continue;

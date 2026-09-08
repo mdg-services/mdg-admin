@@ -4,7 +4,7 @@
  * ONE DEFINITION, BECAUSE THIS IS WHERE COMPLIANCE VERDICTS COME FROM. Two
  * subsystems now count days to an expiry — the outlet profile's licence fields
  * (`dealer/profile.ts`) and the document filing cabinet
- * (`types/dealerDocument.ts`) — and both paint a badge a dealer acts on. A
+ * (`types/documentValidity.ts`) — and both paint a badge a dealer acts on. A
  * second copy of this subtraction is how one screen comes to call a licence
  * valid on the morning another calls it lapsed.
  *
@@ -70,7 +70,7 @@ export function shiftIsoDay(isoDay: string, days: number): string {
  *
  * This only ever PREFILLS a form box. The date that governs is the one printed
  * on the paper, which a person reads and confirms — see
- * `DealerDocument.validUntil`.
+ * `DocumentAsk.validUntil`.
  */
 export function addIsoMonths(isoDay: string, months: number): string {
   const t = Date.parse(`${isoDay}T00:00:00.000Z`);
@@ -79,9 +79,7 @@ export function addIsoMonths(isoDay: string, months: number): string {
   const day = d.getUTCDate();
   d.setUTCDate(1);
   d.setUTCMonth(d.getUTCMonth() + months);
-  const lastOfTarget = new Date(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0),
-  ).getUTCDate();
+  const lastOfTarget = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
   d.setUTCDate(Math.min(day, lastOfTarget));
   return d.toISOString().slice(0, 10);
 }

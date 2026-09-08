@@ -186,10 +186,7 @@ export function documentValidityState(input: {
 }
 
 /** Whole days until this paper lapses; negative once it has. `null` when unknowable. */
-export function documentDaysToExpiry(
-  validUntil: string | undefined,
-  today: string,
-): number | null {
+export function documentDaysToExpiry(validUntil: string | undefined, today: string): number | null {
   return daysToExpiry(validUntil, today);
 }
 
