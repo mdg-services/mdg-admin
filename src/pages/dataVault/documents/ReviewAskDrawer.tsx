@@ -19,7 +19,9 @@ import {
   Drawer,
   HowThisWorks,
   ImageLightbox,
+  Input,
   Label,
+  MIN_SELECTABLE_YMD,
   Skeleton,
   Textarea,
   useToast,
@@ -32,11 +34,21 @@ import {
   useRemindDocumentAsk,
   useWithdrawDocumentAsk,
 } from '@/hooks/api/useDocumentAsks';
+import { useDocumentKindCatalog } from '@/hooks/api/useDocumentKinds';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
-import { formatDateTime, formatYmd } from '@/lib/format';
+import { formatDateTime, formatYmd, istTodayYmd } from '@/lib/format';
 import { isNativeShell, requestNativeDownload } from '@/lib/nativeBridge';
-import { dealerCodeLabel, documentAskAge } from '@dk/shared';
+import {
+  addIsoMonths,
+  dealerCodeLabel,
+  dealerProfileDateLabel,
+  documentAskAge,
+  documentDaysToExpiry,
+  documentValidityLabel,
+  isIsoDay,
+} from '@dk/shared';
+import { DOCUMENT_VALIDITY_MAX_DAY } from '@dk/shared/schemas';
 
 import type { DocumentRow } from './format';
 import { StatusPip } from './StatusPip';
@@ -83,7 +95,12 @@ export interface ReviewAskDrawerProps {
 export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawerProps) {
   const toast = useToast();
   const wideEnoughToEmbed = useMediaQuery('(min-width: 768px)');
+  const today = istTodayYmd();
+  // The catalog decides whether this paper runs out, which is what decides
+  // whether Accept needs a date. Live where possible, shipped seed where not.
+  const { kinds } = useDocumentKindCatalog();
 
+  const [validUntil, setValidUntil] = React.useState('');
   const [reason, setReason] = React.useState('');
   const [sendBackOpen, setSendBackOpen] = React.useState(false);
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
@@ -94,6 +111,7 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
   // paper onto the next is the one mistake this screen could make that nobody
   // would notice until a dealer read somebody else's sentence.
   React.useEffect(() => {
+    setValidUntil('');
     setReason('');
     setSendBackOpen(false);
     setLightboxOpen(false);
@@ -113,6 +131,42 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
   });
   const ask = row?.detail ?? detailQ.data ?? null;
 
+  const kind = kinds.find((k) => k.code === row?.kindCode);
+  const tracksValidity = kind?.tracksValidity ?? false;
+
+  /**
+   * What the date box starts at.
+   *
+   * THE DEALER'S OWN TYPED VALUE WINS OVER THE CATALOG'S TERM, and neither is
+   * authoritative. A dealer photographing a certificate at a forecourt may type
+   * the date off it, which is a courtesy that saves a squint; `validityMonths`
+   * is a guess from the catalog. ADR 0011 is explicit that admin or automation
+   * certifies and never the dealer, so whichever arrives here is only a prefill
+   * — the person accepting confirms or corrects it, and THEIR value governs.
+   */
+  const prefillValidUntil = !tracksValidity
+    ? ''
+    : (ask?.validUntil ??
+      (kind?.validityMonths ? addIsoMonths(today, kind.validityMonths) : ''));
+
+  /**
+   * Fill the date box, and only ever while it is EMPTY.
+   *
+   * The full ask arrives a moment after the drawer opens, so this has to be able
+   * to run late — but re-seeding on its arrival would put the catalog's guess
+   * back over a date somebody had already read off the paper, which is the one
+   * thing this box must never do.
+   *
+   * `row?.key` is in the deps as well as the prefill, and it is not redundant:
+   * two rows of the same kind with no dealer-typed date produce the SAME prefill
+   * string, so without the row key the effect would not re-run after the reset
+   * above emptied the box, and the second certificate would open with nothing in
+   * it. Declared after that reset so React runs them in that order.
+   */
+  React.useEffect(() => {
+    setValidUntil((prev) => (prev === '' ? prefillValidUntil : prev));
+  }, [prefillValidUntil, row?.key]);
+
   const fileQ = useDocumentAskFileUrl(row?.askId, open && !!row?.hasFile);
 
   const accept = useAcceptDocumentAsk();
@@ -130,9 +184,21 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
 
   async function handleAccept(): Promise<void> {
     if (!row?.askId) return;
+    // The route refuses the accept outright — "This paper runs out. Enter the
+    // date printed on it before accepting." — when the kind tracks validity and
+    // no date was sent. Checked here so that 400 is UNREACHABLE through the UI
+    // rather than merely handled: a reviewer who has just read a certificate
+    // should not be told off by a server for pressing the only button on screen.
+    if (tracksValidity && !isIsoDay(validUntil)) {
+      setError('This paper runs out. Enter the date printed on it before accepting.');
+      return;
+    }
     setError(null);
     try {
-      await accept.mutateAsync(row.askId);
+      await accept.mutateAsync({
+        askId: row.askId,
+        ...(validUntil ? { validUntil } : {}),
+      });
       toast.success(`Accepted from ${dealerCodeLabel(row.dealerCode)}`);
       onClose();
     } catch (err) {
@@ -285,7 +351,10 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
               <Button
                 onClick={() => void handleAccept()}
                 loading={accept.isPending}
-                disabled={busy}
+                // Inert until the date is there, for a paper that carries one.
+                // A button that goes to the server to be refused is a button
+                // that reads as broken.
+                disabled={busy || (tracksValidity && !isIsoDay(validUntil))}
                 leftIcon={<Check width={16} height={16} strokeWidth={1.75} />}
               >
                 Accept
@@ -307,10 +376,61 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
                 {age.basis === 'sent' ? 'Waiting on us' : 'Waiting'} {age.label.toLowerCase()}
               </Badge>
             ) : null}
+            {ask?.validUntil && row.status === 'ACCEPTED' ? (
+              // `dealerProfileDateLabel`, which carries the YEAR — never
+              // `documentPeriodLabel`, which omits it: a licence good until
+              // 31 December 2027 shown as "31 Dec" reads as this year.
+              <Badge intent="neutral">
+                Valid until {dealerProfileDateLabel(ask.validUntil, 'en')}
+              </Badge>
+            ) : null}
             {row.dueOn ? (
               <span className="text-xs text-text-muted">Due {formatYmd(row.dueOn)}</span>
             ) : null}
           </div>
+
+          {/* ── When does this paper run out? ──
+              Shown only while there is a verdict to make and only for a kind
+              that carries a date. It sits ABOVE the photograph deliberately: the
+              reviewer reads the certificate, types what is printed on it, and
+              only then reaches the Accept button in the footer.
+
+              EMPHASIS FROM THE BORDER, NOT FROM A TINTED BACKGROUND. The only
+              theme-safe foreground on `bg-warning-soft` is `text-warning`
+              (#d97706 on #fef3c7, about 3.1:1), because the soft tint is a fixed
+              hex while `text-text` inverts to near-white in dark mode. This box
+              is read on a cheap screen under a forecourt canopy, so it keeps the
+              ordinary surface and its ordinary high-contrast text, and takes its
+              weight from a warning-coloured rule instead. */}
+          {canReview && tracksValidity ? (
+            <div className="rounded-md border border-warning bg-surface-2 p-3">
+              <Label htmlFor="ask-valid-until" required>
+                The date printed on this paper
+              </Label>
+              <Input
+                id="ask-valid-until"
+                type="date"
+                value={validUntil}
+                min={MIN_SELECTABLE_YMD}
+                max={DOCUMENT_VALIDITY_MAX_DAY}
+                disabled={busy}
+                onChange={(e) => setValidUntil(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-text-muted">
+                {ask?.validUntil
+                  ? 'The dealer typed this when they sent it. Check it against the paper — what you accept is what governs.'
+                  : kind?.validityMonths
+                    ? `Started at the catalog's usual ${kind.validityMonths} months. The date that governs is the one on the certificate.`
+                    : 'Read it off the certificate. It decides when this dealer is chased about renewing it.'}
+              </p>
+              {isIsoDay(validUntil) ? (
+                <p className="mt-1 text-xs text-text-subtle">
+                  {dealerProfileDateLabel(validUntil, 'en')} ·{' '}
+                  {documentValidityLabel(documentDaysToExpiry(validUntil, today), 'en')}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           {advice ? (
             <Callout intent="warning">

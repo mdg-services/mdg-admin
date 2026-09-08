@@ -30,31 +30,57 @@ import {
  * the flattening of the API's TWO row shapes into the one row the table draws.
  * It stays free of JSX for the same reason `lib/kavach.ts` does: a module of
  * words and data can be read, diffed and reasoned about without a renderer.
+ *
+ * THE VALIDITY HALF OF THE FEATURE LIVES NEXT DOOR, in `pages/documents/`. This
+ * screen answers *whose move is it* — who has not sent what, and what is waiting
+ * on MDG — and stops at `ACCEPTED`. The validity register starts there and
+ * answers *when does it stop being good*. Two questions about the same rows, and
+ * neither file has an opinion about the other's states.
  */
 
 /* ────────────────────────────── The catalog ─────────────────────────────── */
 
 /**
- * The document kinds this screen can offer.
+ * The document kinds this screen can offer, when the live catalog cannot be
+ * reached.
  *
- * Read from the SHIPPED SEED rather than from an API, because there is no
- * catalog endpoint yet: the backend seeds `DocumentKind` from this same constant
- * at boot and exposes no route to read it back. The model's own header says a
- * kind can also be added later from a catalog editor with no deploy — the day
+ * THIS USED TO BE THE ONLY ANSWER, AND THE COMMENT HERE SAID SO: there was no
+ * catalog endpoint, the backend seeded `DocumentKind` from this same constant at
+ * boot and exposed no route to read it back, and the note recorded that "the day
  * that editor and its route exist, this constant becomes a fallback and the
- * picker reads the live catalog instead. Until then, offering the seed is the
- * honest thing: it is exactly the set of kinds the server will accept.
+ * picker reads the live catalog instead". `GET /v1/document-kinds` and the
+ * cadence editor at `/document-kinds` now both exist, so that day has come and
+ * this is what it became.
+ *
+ * Every picker now reads `useDocumentKindCatalog()`, which serves the live rows
+ * and falls back to this list while the request is in flight or if it fails.
+ * The fallback can only be INCOMPLETE — missing a kind an admin added later —
+ * never wrong about what the server will accept, and a missing option is a
+ * recoverable annoyance where an empty picker is a dead end.
  *
  * Retired kinds are dropped. A `DocumentAsk` filed under one still resolves its
  * title, because the ask froze the wording at the time — but MDG must not be
  * able to ask for one again.
  */
-export const DOCUMENT_KINDS: readonly DocumentKind[] = DOCUMENT_KIND_SEED.filter((k) => k.active);
+export const DOCUMENT_KINDS_FALLBACK: readonly DocumentKind[] = DOCUMENT_KIND_SEED.filter(
+  (k) => k.active,
+);
 
-/** One kind by code, or `undefined`. Total — an unknown `?kind=` opens "All documents". */
-export function resolveDocumentKind(code: string | null): DocumentKind | undefined {
+/**
+ * One kind by code, or `undefined`. Total — an unknown `?kind=` opens "All
+ * documents".
+ *
+ * The catalog is an ARGUMENT rather than a module constant, because it is now
+ * data fetched at render time. Reading a module-level copy here while the picker
+ * above rendered a live one is precisely how a `?kind=` deep link would open a
+ * screen scoped to a kind the dropdown does not contain.
+ */
+export function resolveDocumentKind(
+  kinds: readonly DocumentKind[],
+  code: string | null,
+): DocumentKind | undefined {
   if (!code) return undefined;
-  return DOCUMENT_KINDS.find((k) => k.code === code);
+  return kinds.find((k) => k.code === code);
 }
 
 /**

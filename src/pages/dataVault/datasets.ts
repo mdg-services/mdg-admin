@@ -45,6 +45,9 @@ const REGISTRY = [
   {
     id: 'documents',
     label: 'Documents',
+    // What is still owed. When a paper MDG already holds runs out is the
+    // top-level /documents register — a different question, over the accepted
+    // rows this shelf has nothing left to do with.
     description: 'What every dealer owes MDG, and what has come in',
     Icon: FileUp,
     Actions: DocumentsActions,

@@ -17,13 +17,14 @@ import {
 } from '@/components/ui';
 import { useDealersQuery } from '@/hooks/api/useDealers';
 import { useCreateDocumentAsk } from '@/hooks/api/useDocumentAsks';
+import { useDocumentKindCatalog } from '@/hooks/api/useDocumentKinds';
 import { ApiError } from '@/lib/api';
 import { istTodayYmd, isYmd } from '@/lib/format';
 import { compareDealerCodes, dealerCodeLabel, DOCUMENT_PERIOD_SLUG_MAX } from '@dk/shared';
 import { DOCUMENT_ASK_NOTE_MAX } from '@dk/shared/schemas';
 
 import { BulkOutcomeList } from './BulkOutcomeList';
-import { DOCUMENT_KINDS, summariseBulk, type BulkOutcome } from './format';
+import { summariseBulk, type BulkOutcome } from './format';
 
 /**
  * "We need this paper from you" — for one dealer or for a dozen.
@@ -70,8 +71,12 @@ export function AskDocumentDialog({
 }: AskDocumentDialogProps) {
   const toast = useToast();
   const today = istTodayYmd();
+  // Live catalog, shipped seed as the fallback — see `format.ts`. A picker with
+  // no options is a screen saying MDG cannot ask for anything, which is why the
+  // fallback exists at all.
+  const { kinds: documentKinds } = useDocumentKindCatalog();
 
-  const [kindCode, setKindCode] = React.useState(initialKindCode ?? DOCUMENT_KINDS[0]?.code ?? '');
+  const [kindCode, setKindCode] = React.useState(initialKindCode ?? '');
   const [date, setDate] = React.useState(initialDate ?? today);
   const [label, setLabel] = React.useState('');
   const [note, setNote] = React.useState('');
@@ -98,7 +103,7 @@ export function AskDocumentDialog({
   // nobody notices until a dealer rings to say they have already sent it.
   React.useEffect(() => {
     if (!open) return;
-    setKindCode(initialKindCode ?? DOCUMENT_KINDS[0]?.code ?? '');
+    setKindCode(initialKindCode ?? documentKinds[0]?.code ?? '');
     setDate(initialDate ?? today);
     setLabel('');
     setNote('');
@@ -108,12 +113,28 @@ export function AskDocumentDialog({
     setError(null);
     setOutcomes(null);
     setRunning(false);
+    // `documentKinds` is deliberately absent from the deps. The catalog is now
+    // fetched, so its contents change once when the live rows replace the
+    // shipped fallback — and re-running THIS effect on that would wipe a
+    // half-made dealer selection a second after the dialog opened. The kind box
+    // is looked after by the effect below instead, which only ever fills an
+    // EMPTY one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialKindCode, initialDate, today, initialDealerKey]);
+
+  // The safety net for an empty box: the catalog fallback means there is almost
+  // always a first kind, but a picker showing nothing selected while the list
+  // underneath it has options is a dialog whose Ask button refuses for a reason
+  // nobody can see. It never MOVES a choice somebody has made.
+  const firstKindCode = documentKinds[0]?.code ?? '';
+  React.useEffect(() => {
+    setKindCode((prev) => (prev === '' ? (initialKindCode ?? firstKindCode) : prev));
+  }, [firstKindCode, initialKindCode]);
 
   const dealersQ = useDealersQuery({ pageSize: DEALER_PAGE_SIZE });
   const create = useCreateDocumentAsk();
 
-  const kind = DOCUMENT_KINDS.find((k) => k.code === kindCode);
+  const kind = documentKinds.find((k) => k.code === kindCode);
   const needsLabel = kind?.freeform ?? false;
 
   const dealers = React.useMemo(() => {
@@ -265,7 +286,7 @@ export function AskDocumentDialog({
               onChange={(e) => setKindCode(e.target.value)}
               disabled={running}
             >
-              {DOCUMENT_KINDS.map((k) => (
+              {documentKinds.map((k) => (
                 <option key={k.code} value={k.code}>
                   {k.titleEn}
                 </option>

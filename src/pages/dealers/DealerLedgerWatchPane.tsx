@@ -1,4 +1,12 @@
-import { AlertCircle, Check, EyeOff, RotateCw, ScanLine } from 'lucide-react';
+import {
+  AlertCircle,
+  Check,
+  EyeOff,
+  Image as ImageIcon,
+  RotateCw,
+  ScanLine,
+  Send,
+} from 'lucide-react';
 import * as React from 'react';
 
 import {
@@ -8,6 +16,7 @@ import {
   CardContent,
   CardHeader,
   Dialog,
+  DownloadButton,
   EmptyState,
   HowThisWorks,
   Label,
@@ -19,6 +28,8 @@ import {
 } from '@/components/ui';
 import {
   useDealerLedgerFlags,
+  useLedgerWatchCard,
+  useShareLedgerWatchCard,
   useLedgerPeriodSummary,
   useUpdateLedgerFlag,
   type LedgerFlagFilters,
@@ -211,6 +222,8 @@ export function DealerLedgerWatchPane({ dealer }: DealerVaultPaneProps) {
         summary={summaryQ.data}
         month={month}
       />
+
+      <DealerCard dealerId={dealer.id} />
 
       <Card>
         <CardContent padding="none" className="md:p-4">
@@ -642,5 +655,175 @@ function FlagRow({
         </div>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * The dealer's own copy: the last four entries, as a picture to download or send.
+ *
+ * BEHIND A BUTTON, NOT ON MOUNT. Asking for the card can cost a Chromium launch
+ * on a box whose browser budget is one, so nothing here fetches until an admin
+ * says they want it. That is also why the empty state is a button and not a
+ * spinner: opening this pane must stay free.
+ *
+ * THE ROWS ARE LISTED BESIDE THE PICTURE, in text. An admin approving something
+ * that goes to a dealer should be able to read exactly what is on it without
+ * waiting for an image to load — and on a phone, over a bad connection, the
+ * image is the part that does not arrive.
+ */
+function DealerCard({ dealerId }: { dealerId: string }) {
+  const toast = useToast();
+  const [open, setOpen] = React.useState(false);
+  const cardQ = useLedgerWatchCard(dealerId, open);
+  const share = useShareLedgerWatchCard();
+
+  if (!open) {
+    return (
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-base font-semibold text-text">Card for the dealer</p>
+            <p className="mt-0.5 text-sm text-text-muted">
+              The last 4 entries outside the routine traffic, with their dates —
+              as a PNG you can download or send into their chat.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setOpen(true)}
+            leftIcon={<ImageIcon width={14} height={14} strokeWidth={1.75} aria-hidden />}
+          >
+            Make the card
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (cardQ.isLoading) {
+    return (
+      <Card>
+        <CardContent className="grid gap-3">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-64 w-full max-w-md" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (cardQ.isError || !cardQ.data) {
+    return (
+      <Card>
+        <CardContent>
+          <EmptyState
+            icon={<AlertCircle width={20} height={20} strokeWidth={1.75} aria-hidden />}
+            title="The card could not be drawn"
+            description={
+              cardQ.error instanceof ApiError
+                ? cardQ.error.message
+                : 'Try again in a moment — the server may be busy reading a portal.'
+            }
+            cta={
+              <Button variant="secondary" size="sm" onClick={() => void cardQ.refetch()}>
+                Try again
+              </Button>
+            }
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const card = cardQ.data;
+  const empty = card.movements.length === 0;
+
+  function sendIt() {
+    share.mutate(dealerId, {
+      onSuccess: (r) =>
+        toast.success(
+          r.alreadyShared
+            ? 'This exact card has already gone to the dealer.'
+            : 'Sent — it is in the dealer’s chat now.',
+        ),
+      onError: (err) =>
+        toast.error(err instanceof ApiError ? err.message : 'Could not send the card'),
+    });
+  }
+
+  return (
+    <Card>
+      <CardContent className="grid gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-base font-semibold text-text">Card for the dealer</p>
+            <p className="mt-0.5 text-sm text-text-muted">
+              {empty
+                ? 'Nothing outside the routine traffic, so there is nothing to send.'
+                : `The last ${card.movements.length} of ${card.totalMovements} ${
+                    card.totalMovements === 1 ? 'entry' : 'entries'
+                  }, with their dates. Drawn ${formatDateTime(card.renderedAt)}.`}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {/* `downloadUrl`, never `viewUrl` + a `download` attribute: that
+                attribute is ignored cross-origin, so the click would open the
+                image in a tab instead of saving it. The disposition is signed
+                into this URL. */}
+            <DownloadButton
+              url={card.downloadUrl}
+              filename={card.filename}
+              contentType={card.contentType}
+              // `image`, so the admin shell routes it into the phone's gallery —
+              // which is where a card somebody is about to forward belongs.
+              kind="image"
+              label="Download PNG"
+              variant="secondary"
+              size="sm"
+            />
+            <Button
+              size="sm"
+              onClick={sendIt}
+              disabled={empty}
+              loading={share.isPending}
+              leftIcon={<Send width={14} height={14} strokeWidth={1.75} aria-hidden />}
+            >
+              Send to dealer
+            </Button>
+          </div>
+        </div>
+
+        {/* What is ON the card, in words. An admin approving something that goes
+            to a dealer should not have to squint at a thumbnail. */}
+        {!empty ? (
+          <ul className="grid gap-1.5 rounded-md border border-border bg-surface-subtle p-3">
+            {card.movements.map((m) => (
+              <li
+                key={`${m.date}-${m.titleEn}-${m.amount}`}
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-2 text-sm"
+              >
+                <span className="tabular-nums text-text-muted">{formatDmy(m.date)}</span>
+                <span className="min-w-0 truncate text-text">{m.titleEn}</span>
+                <span
+                  className={cn(
+                    'tabular-nums font-medium',
+                    m.direction === 'CHARGED' ? 'text-danger' : 'text-success',
+                  )}
+                >
+                  {inrFormat(m.amount)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <img
+          src={card.viewUrl}
+          alt="The dealer's other-movements card"
+          className="w-full max-w-md rounded-md border border-border"
+          loading="lazy"
+        />
+      </CardContent>
+    </Card>
   );
 }

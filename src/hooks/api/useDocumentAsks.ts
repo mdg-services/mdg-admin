@@ -35,6 +35,36 @@ export interface DocumentAskRowsParams {
   waitingOn?: 'dealer' | 'mdg' | 'none';
   late?: boolean;
   limit?: number;
+  /**
+   * THE TWO VALIDITY FILTERS, AND THE THREE THINGS EITHER OF THEM CHANGES.
+   *
+   *  1. **The rows.** Both narrow to papers that carry a `validUntil`, and — if
+   *     no state was named — to `ACCEPTED`, because a validity only exists once
+   *     MDG holds the paper.
+   *  2. **The ORDER.** The list otherwise sorts `periodKey desc`, and every kind
+   *     that carries an expiry is `periodKind: 'NONE'`, so its key is the empty
+   *     string and it sorts LAST. Either of these flips the sort to `validUntil`
+   *     ascending — soonest to run out first. A validity screen that sends
+   *     neither gets a first page of register pages and not one licence.
+   *  3. **The cursor.** It now carries the ordering it was minted under, and one
+   *     from the other ordering is REFUSED rather than applied — so a query that
+   *     changes its mind about the sort between pages cannot silently skip a
+   *     slice of the estate. In practice that costs nothing here:
+   *     `documentAskKeys.rows()` puts the params in the key, so changing a facet
+   *     is a different query with its own fresh first page.
+   *
+   * They do NOT compose. The route ASSIGNS `filter.validUntil` rather than
+   * merging, so a `validityState` replaces the range an `expiringWithinDays`
+   * set — send one or the other. `pages/documents/format.ts`'s `validityQuery`
+   * owns that choice so no screen has to remember it.
+   *
+   * And a page can come back SHORT while `nextCursor` still points at more: the
+   * `valid` / `expiring` boundary is each row's own first ladder step, so the
+   * route filters the exact band after paging. Never conclude the list has ended
+   * by counting rows; read `nextCursor`.
+   */
+  validityState?: 'expired' | 'expiring' | 'valid';
+  expiringWithinDays?: number;
 }
 
 export const documentAskKeys = {
@@ -117,6 +147,10 @@ export function useDocumentAskRowsQuery(params: DocumentAskRowsParams, enabled =
         state: params.state,
         waitingOn: params.waitingOn,
         late: params.late,
+        // Either of these flips the route to `validUntil` ascending — see the
+        // field comments on `DocumentAskRowsParams`.
+        validityState: params.validityState,
+        expiringWithinDays: params.expiringWithinDays,
         limit: params.limit ?? DOCUMENT_ASK_ROWS_PAGE_SIZE,
         cursor: pageParam,
       }),
@@ -212,6 +246,27 @@ export interface CreateAskVars {
   label?: string;
   note?: string;
   dueInDays?: number;
+  /**
+   * This one paper's reminder ladder, decided at the moment MDG asks for it.
+   *
+   * There is deliberately NO `validUntil` here and there never will be: you
+   * cannot know the date printed on a certificate before you have the
+   * certificate, and a date on a row still waiting for its photograph would be a
+   * number nobody read, sitting on a screen looking authoritative. It is taken
+   * at accept or file time, by the person looking at the scan.
+   */
+  reminderOffsetDays?: number[];
+  /**
+   * Skip the "MDG needs a paper from you" push for this one request.
+   *
+   * FOR ONE CALLER: `FileForDealerDialog`, which has to create the ask before
+   * there is anywhere to put the file and then closes it a second later. Without
+   * this the dealer's phone buzzes asking for a certificate that was already on
+   * file before the buzz finished. The row, the audit trail and the socket event
+   * all happen exactly as they would otherwise — this suppresses the push, not
+   * the record.
+   */
+  silent?: boolean;
 }
 
 /**
@@ -254,10 +309,109 @@ export function useRemindDocumentAsk() {
   });
 }
 
+/**
+ * "This is good" — and, for a paper that runs out, the date it runs out on.
+ *
+ * ACCEPT USED TO BE A BARE POST AND STILL IS FOR MOST KINDS. The body is
+ * optional in the schema because the schema cannot see the catalog; the ROUTE
+ * refuses the accept with a 400 — "This paper runs out. Enter the date printed
+ * on it before accepting." — whenever the kind carries `tracksValidity` and no
+ * `validUntil` was sent. `ReviewAskDrawer` therefore collects the date before it
+ * enables the button, so that refusal is unreachable through the UI rather than
+ * merely handled: a reviewer who has already looked at a certificate should not
+ * be told off by a server for pressing the only button on screen.
+ */
+export interface AcceptAskVars {
+  askId: string;
+  /** `YYYY-MM-DD`, read off the paper. Required by the route for a kind that tracks validity. */
+  validUntil?: string;
+  /** This one paper's ladder, overriding its kind's. `[]` means never remind about it. */
+  reminderOffsetDays?: number[];
+}
+
 export function useAcceptDocumentAsk() {
   const invalidate = useInvalidateAsks();
   return useMutation({
-    mutationFn: (askId: string) => api.post<AdminDocumentAskRow>(`/asks/${askId}/accept`),
+    mutationFn: ({ askId, ...body }: AcceptAskVars) =>
+      api.post<AdminDocumentAskRow>(`/asks/${askId}/accept`, body),
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * MDG already holds the paper; here it is.
+ *
+ * THE UPLOAD-ON-BEHALF VERB. It submits AND accepts in one call, because filing
+ * a paper MDG already has means the submission and the verdict on it are made by
+ * the same person in the same second — there is no second reader to ask for.
+ * The row records `submission.byKind: 'admin'` and the audit action is
+ * `DOCUMENT_ASK_FILE_FOR_DEALER`, so nothing anywhere claims the dealer sent it.
+ *
+ * THE ASK MUST EXIST FIRST. An upload is filed under `ask/<dealerId>/<askId>/`,
+ * so there is nowhere to put the file until the row is there — which is exactly
+ * how the dealer's own volunteer flow works. The order is create → shrink →
+ * presign → PUT → this. See `FileForDealerDialog`, which owns that sequence and
+ * the retry rule that keeps a failed upload from minting a second ask.
+ */
+export interface FileForDealerVars {
+  askId: string;
+  attachment: {
+    storageKey: string;
+    filename: string;
+    contentType: string;
+    size: number;
+    kind: 'image' | 'file';
+  };
+  note?: string;
+  validUntil?: string;
+  reminderOffsetDays?: number[];
+}
+
+export function useFileDocumentForDealer() {
+  const invalidate = useInvalidateAsks();
+  return useMutation({
+    mutationFn: ({ askId, ...body }: FileForDealerVars) =>
+      api.post<AdminDocumentAskRow>(`/asks/${askId}/file-for-dealer`, body),
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * Correct a mistyped date, or quieten the reminders on ONE certificate.
+ *
+ * SEPARATE FROM ACCEPT because the two are different acts with different audit
+ * rows: accepting is a verdict on a paper, this is fixing a number. Folding it
+ * in would mean reopening a closed compliance record every time somebody fixed a
+ * typo — and `ACCEPTED` is the one state that refuses to reopen precisely
+ * because reopening erases the reviewer's name and the time.
+ *
+ * THE THREE VALUES OF `reminderOffsetDays` ARE THREE DIFFERENT INSTRUCTIONS, and
+ * the middle one is the one that bites:
+ *
+ *   omitted   → leave the ladder alone; the kind's stays in force.
+ *   `[30, 7]` → this ladder, for this paper only.
+ *   `[]`      → NEVER REMIND about this paper. A real, deliberate setting.
+ *
+ * `validUntil: null` clears the date outright, which also clears the mirrored
+ * date on the outlet Info tab where the kind names a profile field. Both are why
+ * the drawer's ladder control makes the empty list an explicit, confirmed choice
+ * rather than what happens when somebody clears the box to retype it.
+ *
+ * ACCEPTED ROWS ONLY — the route refuses anything else, because a validity
+ * belongs to a paper MDG holds.
+ */
+export interface SetValidityVars {
+  askId: string;
+  /** `null` clears the date. Omit to leave it untouched. */
+  validUntil?: string | null;
+  reminderOffsetDays?: number[];
+}
+
+export function useSetDocumentValidity() {
+  const invalidate = useInvalidateAsks();
+  return useMutation({
+    mutationFn: ({ askId, ...body }: SetValidityVars) =>
+      api.patch<AdminDocumentAskRow>(`/asks/${askId}/validity`, body),
     onSuccess: invalidate,
   });
 }

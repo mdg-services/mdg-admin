@@ -329,3 +329,90 @@ export function useRunLedgerWatchSweep() {
     },
   });
 }
+
+/* ───────────────────────── The dealer's card ────────────────────────────── */
+
+/** One entry as it appears on the card. */
+export interface LedgerWatchCardMovement {
+  /** The row's own value date, `dd-mm-yyyy`. */
+  date: string;
+  titleEn: string;
+  titleHi: string;
+  amount: number;
+  direction: 'CHARGED' | 'RECEIVED';
+}
+
+/**
+ * The rendered card, plus the rows it drew.
+ *
+ * The movements come back with the URLs on purpose: a confirm dialog can then
+ * name the four entries it is about to send rather than asking somebody to
+ * approve a thumbnail they may not have loaded.
+ */
+export interface LedgerWatchCard {
+  /** Signed `inline` — safe to put straight in an `<img src>`. */
+  viewUrl: string;
+  /**
+   * Signed `attachment`. Use THIS for the download button: the browser's
+   * `download` attribute is ignored cross-origin, so the disposition has to be
+   * signed into the URL or the click opens the image in a tab.
+   */
+  downloadUrl: string;
+  filename: string;
+  contentType: string;
+  /** Seconds the two URLs stay valid. */
+  expiresIn: number;
+  renderedAt: string;
+  charged: number;
+  received: number;
+  /** Every open movement the dealer has — the card draws at most four of them. */
+  totalMovements: number;
+  movements: LedgerWatchCardMovement[];
+}
+
+export interface LedgerWatchShareResult {
+  alreadyShared: boolean;
+  conversationId: string;
+  messageId: string;
+}
+
+/**
+ * Fetch (and, server-side, draw) the dealer's card.
+ *
+ * `enabled` is the caller's, and every caller should keep it false until the
+ * admin actually opens the card. A fetch here can cost a Chromium launch on a
+ * box with a browser budget of one, so this must never fire just because a pane
+ * mounted.
+ *
+ * `staleTime: 0` and no window-focus refetch: the URLs are short-lived signed
+ * links, so a cached copy that outlived its signature would 403 on click — the
+ * failure this codebase has already shipped once. Re-asking is cheap when the
+ * findings have not moved, because the server reuses the stored PNG.
+ */
+export function useLedgerWatchCard(dealerId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: [...ledgerWatchKeys.all, 'card', dealerId] as const,
+    enabled: !!dealerId && enabled,
+    queryFn: () => api.get<LedgerWatchCard>(`/ledger-watch/dealers/${dealerId}/card`),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * Send the card into the dealer's chat.
+ *
+ * Idempotent per picture: sending the identical card twice returns the original
+ * message with `alreadyShared`, while a card that has changed because a new fee
+ * landed can be sent again.
+ */
+export function useShareLedgerWatchCard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dealerId: string) =>
+      api.post<LedgerWatchShareResult>(`/ledger-watch/dealers/${dealerId}/card/share`, {}),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ledgerWatchKeys.all });
+    },
+  });
+}

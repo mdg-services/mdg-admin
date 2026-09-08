@@ -37,6 +37,7 @@ import {
   useDocumentAskEstateQuery,
   useDocumentAskRowsQuery,
 } from '@/hooks/api/useDocumentAsks';
+import { useDocumentKindCatalog } from '@/hooks/api/useDocumentKinds';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, formatYmd, istTodayYmd, isYmd, shiftYmd } from '@/lib/format';
 import {
@@ -46,6 +47,7 @@ import {
   documentAskAge,
   documentAskEstateTally,
   documentAskListCaveat,
+  type DocumentKind,
 } from '@dk/shared';
 
 import { StatTile, StatTileRow, StatTileSkeletons } from '../StatTile';
@@ -53,7 +55,6 @@ import type { VaultDatasetProps } from '../types';
 
 import { AskDocumentDialog } from './AskDocumentDialog';
 import {
-  DOCUMENT_KINDS,
   estatePeriodKey,
   kindHasEstate,
   matchesStatusFilter,
@@ -88,8 +89,8 @@ import { MarkLegend, StatusPip } from './StatusPip';
  * estate about whether a paper had arrived. So `?status=sent` IS the review
  * queue: the same rows, sorted oldest-wait-first instead of problems-first.
  *
- * NO NEW ROUTE, NO NEW NAV ITEM
- * -----------------------------
+ * NO NEW ROUTE, NO NEW NAV ITEM — FOR THIS QUESTION
+ * -------------------------------------------------
  * The admin already has 21 routes and 17 nav items, and the right shelf already
  * exists. The Data Vault's registry says adding a dataset is a data-only change,
  * so this is one descriptor in `datasets.ts` and this pane. `/data-vault` is
@@ -97,6 +98,16 @@ import { MarkLegend, StatusPip } from './StatusPip';
  * shape this question needs — the per-dealer vault under `pages/dealers/vault/`
  * is a different surface answering a different question, and reaching this
  * through it would be the five-click path this replaces.
+ *
+ * There IS a top-level `/documents` now, and it does not overturn the paragraph
+ * above: it answers a DIFFERENT question about a DISJOINT set of rows. This
+ * screen is about whether a paper has arrived and whose move it is, and it stops
+ * at `ACCEPTED` — an accepted row is the one with nothing left to do on it. The
+ * validity register starts exactly there and asks when the paper stops being
+ * good. No state has an opinion on both screens, so there is nothing the two can
+ * come to disagree about, which is the failure this header exists to prevent.
+ * If a future change gives either screen an opinion about the other's states,
+ * one of them has to go.
  *
  * EVERY VIEW IS A LINK
  * --------------------
@@ -113,6 +124,8 @@ import { MarkLegend, StatusPip } from './StatusPip';
 
 /** Everything both halves of this dataset read out of the query string. */
 interface DocumentsScope {
+  /** Every kind that may be offered, live where possible and shipped where not. */
+  kinds: readonly DocumentKind[];
   /** The selected kind, or `undefined` for "All documents". */
   kind: ReturnType<typeof resolveDocumentKind>;
   /** IST today, recomputed each render so it advances past IST midnight. */
@@ -142,11 +155,18 @@ interface DocumentsScope {
  */
 function useDocumentsScope(params: URLSearchParams): DocumentsScope {
   const today = istTodayYmd();
-  const kind = resolveDocumentKind(params.get('kind'));
+  // The catalog is now read from the server (`GET /v1/document-kinds`), with the
+  // shipped seed as a fallback while that request is in flight or if it fails.
+  // Both halves of this dataset call this hook, so both resolve `?kind=` against
+  // exactly the same list — a module constant here and a live list in the picker
+  // is how a deep link opens a scope the dropdown does not contain.
+  const { kinds } = useDocumentKindCatalog();
+  const kind = resolveDocumentKind(kinds, params.get('kind'));
   const raw = params.get('date');
   const date = isYmd(raw) && raw >= MIN_SELECTABLE_YMD && raw <= today ? raw : today;
   const estate = kindHasEstate(kind);
   return {
+    kinds,
     kind,
     today,
     date,
@@ -190,7 +210,7 @@ export function DocumentsActions({ params, patchParams }: VaultDatasetProps) {
           }
         >
           <option value="all">All documents</option>
-          {DOCUMENT_KINDS.map((k) => (
+          {scope.kinds.map((k) => (
             <option key={k.code} value={k.code}>
               {k.titleEn}
             </option>

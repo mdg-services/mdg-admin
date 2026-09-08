@@ -2,6 +2,7 @@ import {
   AlertCircle,
   Archive,
   ClipboardList,
+  FileClock,
   History,
   KeyRound,
   ListChecks,
@@ -60,6 +61,13 @@ const CustomRequestTab = React.lazy(
   retryImport(() =>
     import('./dealers/CustomRequestTab').then((m) => ({
       default: m.CustomRequestTab,
+    })),
+  ),
+);
+const DealerDocumentsTab = React.lazy(
+  retryImport(() =>
+    import('./dealers/DealerDocumentsTab').then((m) => ({
+      default: m.DealerDocumentsTab,
     })),
   ),
 );
@@ -289,6 +297,24 @@ const TABS: TabDef[] = [
     // rail now (as gated datasets) rather than as their own tabs, alongside IRAS
     // shift data, the PAD ledger and Inspection Reports.
     body: (dealer) => <DealerVaultView dealer={dealer} />,
+  },
+  {
+    // Every paper MDG holds for this outlet, and when each one runs out — plus
+    // the verb this surface exists for: filing a paper somebody handed over at a
+    // visit. In the MENU rather than the strip because it is the occasional job
+    // (a licence is renewed once a year, not read every morning) and the strip
+    // already carries seven entries, which the tab registry's own header calls
+    // more than a phone can show.
+    //
+    // Deliberately NOT `superAdminOnly`: the routes behind it are
+    // `requireRole('admin')`, and this is exactly the work an account manager
+    // does. And deliberately NOT `requiresService`: papers span services — a
+    // Fire NOC belongs to no plugin at all.
+    id: 'documents',
+    label: 'Documents',
+    placement: 'menu',
+    icon: <FileClock {...ICON} />,
+    body: (dealer) => <DealerDocumentsTab dealer={dealer} />,
   },
   {
     id: PASSWORDS_TAB_ID,

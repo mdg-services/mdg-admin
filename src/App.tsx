@@ -88,6 +88,18 @@ const DealersPage = React.lazy(
     import('@/pages/DealersPage').then((m) => ({ default: m.DealersPage })),
   ),
 );
+const DocumentKindsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/DocumentKindsPage').then((m) => ({
+      default: m.DocumentKindsPage,
+    })),
+  ),
+);
+const DocumentsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/DocumentsPage').then((m) => ({ default: m.DocumentsPage })),
+  ),
+);
 const DsrReportView = React.lazy(
   retryImport(() =>
     import('@/pages/dsr/DsrReportView').then((m) => ({
@@ -311,6 +323,23 @@ export default function App() {
               </LazyPage>
             }
           />
+          {/* Which papers across the estate are running out. Deliberately NOT
+              `RequireSuperAdmin`: the endpoints behind it are
+              `requireRole('admin')`, and chasing a licence before it lapses is
+              the account manager's everyday job, not an engineer's errand — the
+              same call as /data-vault, /dsr, /assurance and /ledger-watch.
+
+              It does NOT duplicate the Vault's Documents shelf. That shelf ends
+              at ACCEPTED and answers "whose move is it"; this starts there and
+              answers "when does it stop being good". */}
+          <Route
+            path="documents"
+            element={
+              <LazyPage>
+                <DocumentsPage />
+              </LazyPage>
+            }
+          />
           {/* Correcting a day's collected figures. A full page, not a drawer:
               these reports run to 36 columns. Same audience as the Vault it
               hangs off — the audit trail on every correction is the control
@@ -429,6 +458,22 @@ export default function App() {
               <RequireSuperAdmin>
                 <LazyPage>
                   <WorkListDefaultsPage />
+                </LazyPage>
+              </RequireSuperAdmin>
+            }
+          />
+          {/* The document catalog and its reminder ladders. Super-admin, because
+              a ladder edited here moves every outlet with no override for that
+              paper — the same blast radius as the Kavach defaults, and the same
+              gate the route itself uses (`/v1/super-admin/document-kinds`). The
+              flag in `navItems.ts` only hides the link; this wrapper is what
+              guards the URL. */}
+          <Route
+            path="document-kinds"
+            element={
+              <RequireSuperAdmin>
+                <LazyPage>
+                  <DocumentKindsPage />
                 </LazyPage>
               </RequireSuperAdmin>
             }

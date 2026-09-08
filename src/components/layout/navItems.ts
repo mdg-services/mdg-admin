@@ -4,6 +4,8 @@ import {
   CalendarDays,
   Database,
   FileBarChart2,
+  FileClock,
+  FileCog,
   Gauge,
   Headset,
   LayoutDashboard,
@@ -80,6 +82,13 @@ export const NAV_ITEMS: NavItem[] = [
   // Every dealer's collected IRAS shift data in one place — an everyday admin
   // surface, so deliberately NOT `superAdminOnly`.
   { to: '/data-vault', label: 'Data Vault', icon: Database },
+  // Every paper MDG holds for every outlet, and when each one stops being good.
+  // Deliberately NOT `superAdminOnly`: the endpoints behind it are
+  // `requireRole('admin')`, and a licence that lapses unnoticed is caught by
+  // whoever manages the account, not by an engineer. Not in `BOTTOM_TAB_ROUTES`
+  // either — the bar holds four and is already full, so this falls into the
+  // mobile More sheet.
+  { to: '/documents', label: 'Documents', icon: FileClock },
   // The generated day-book each dealer receives — an everyday admin outcome
   // surface, so deliberately NOT `superAdminOnly`.
   { to: '/dsr', label: 'Daily Sales Report', icon: FileBarChart2 },
@@ -101,6 +110,12 @@ export const NAV_ITEMS: NavItem[] = [
   // The global Kavach task catalog. Editing points here moves every dealer who
   // has no override, so it sits with the other super-admin-only defaults.
   { to: '/kavach/defaults', label: 'Kavach defaults', icon: ShieldPlus, superAdminOnly: true },
+  // The document catalog: what MDG can ask any dealer for, and how far ahead
+  // each expiring paper is chased. Editing a ladder here moves every outlet with
+  // no override for that paper, so it sits with the other super-admin defaults —
+  // and, as the comment on `superAdminOnly` says, the route in `App.tsx` is
+  // wrapped in `RequireSuperAdmin` to match.
+  { to: '/document-kinds', label: 'Document catalog', icon: FileCog, superAdminOnly: true },
   { to: '/bank-holidays', label: 'Bank holidays', icon: CalendarDays, superAdminOnly: true },
   { to: '/festival', label: 'Festival greeting', icon: PartyPopper, superAdminOnly: true },
   { to: '/activity', label: 'Activity', icon: ScrollText, superAdminOnly: true },
