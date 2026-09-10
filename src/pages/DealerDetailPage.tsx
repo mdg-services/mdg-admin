@@ -301,10 +301,19 @@ const TABS: TabDef[] = [
   {
     // Every paper MDG holds for this outlet, and when each one runs out — plus
     // the verb this surface exists for: filing a paper somebody handed over at a
-    // visit. In the MENU rather than the strip because it is the occasional job
-    // (a licence is renewed once a year, not read every morning) and the strip
-    // already carries seven entries, which the tab registry's own header calls
-    // more than a phone can show.
+    // visit.
+    //
+    // IN THE STRIP, and it was in the menu for exactly one release. The argument
+    // for the menu was that a licence is renewed once a year rather than read
+    // every morning, so it is occasional work. That reasoning was wrong about
+    // WHO reads it: the point of this surface is to notice a certificate running
+    // out BEFORE it does, and a surface you have to remember to go looking for is
+    // one nobody looks at until somebody is already chasing a lapsed paper.
+    //
+    // It is the eighth strip entry, which the registry header warns about — but
+    // the strip scrolls (see the fade in `trailing`), so the cost is a swipe on a
+    // phone rather than a hidden surface. Thirteen is still too many; eight is
+    // not.
     //
     // Deliberately NOT `superAdminOnly`: the routes behind it are
     // `requireRole('admin')`, and this is exactly the work an account manager
@@ -312,7 +321,7 @@ const TABS: TabDef[] = [
     // Fire NOC belongs to no plugin at all.
     id: 'documents',
     label: 'Documents',
-    placement: 'menu',
+    placement: 'strip',
     icon: <FileClock {...ICON} />,
     body: (dealer) => <DealerDocumentsTab dealer={dealer} />,
   },
