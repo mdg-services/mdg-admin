@@ -51,6 +51,7 @@ import {
 } from '@dk/shared';
 
 import { DsrStaleNotice } from './DsrStaleNotice';
+import { describeChange, supersededHeadline, supersededSeverity } from './supersededShare';
 
 /** `YYYY-MM-DD` → `Thu, 23 Jul 2026`, read as a calendar date, not an instant. */
 export function dsrDateLabel(iso: string): string {
@@ -841,19 +842,41 @@ function DsrShareSection({
               the difference between the operator remembering to re-share a
               corrected report and the dealer acting on the old figures. */}
           {!alreadyShared && report.sharedSuperseded ? (
-            <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning">
-              <History width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-              <div>
-                <p className="font-medium">
-                  The dealer already has an older version of this report
-                </p>
-                <p className="mt-0.5">
-                  Shared {formatDateTime(report.sharedSuperseded.at)}, and rebuilt since
-                  ({formatDateTime(report.sharedSuperseded.supersededAt)}). Share it again so they
-                  are looking at the corrected figures — and tell them what changed.
-                </p>
-              </div>
-            </div>
+            (() => {
+              // WHAT moved, not just that something did. A cosmetic rebuild and
+              // a correction that flips a dealer's 5.1.11 verdict used to read
+              // identically here, so neither got acted on.
+              const changed = report.sharedSuperseded.changed;
+              const severity = supersededSeverity(changed);
+              const urgent = severity === 'verdict-flipped' || severity === 'figures-moved';
+              return (
+                <div
+                  className={cn(
+                    'flex items-start gap-2 rounded-md px-3 py-2.5 text-sm',
+                    urgent ? 'bg-danger-soft text-danger' : 'bg-warning-soft text-warning',
+                  )}
+                >
+                  <History width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="font-medium">{supersededHeadline(severity)}</p>
+                    {changed && changed.length > 0 ? (
+                      <ul className="mt-1 space-y-0.5">
+                        {changed.map((c) => (
+                          <li key={c.productKey}>{describeChange(c)}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <p className="mt-1">
+                      Shared {formatDateTime(report.sharedSuperseded.at)}, and rebuilt since (
+                      {formatDateTime(report.sharedSuperseded.supersededAt)}).{' '}
+                      {severity === 'unchanged'
+                        ? 'Their copy still reads true, so re-sharing is optional.'
+                        : 'Share it again so they are looking at the corrected figures.'}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()
           ) : null}
 
           {/* What the check made of these figures — the detail behind the

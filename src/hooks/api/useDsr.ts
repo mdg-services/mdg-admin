@@ -116,6 +116,21 @@ export interface DsrReportView {
     at: string;
     by: string;
     supersededAt: string;
+    /**
+     * Which products' stock variation actually MOVED between the figures the
+     * dealer was sent and the ones that replaced them.
+     *
+     * An EMPTY array is a real answer — "rebuilt, but their copy still reads
+     * true". `undefined` means the report predates the field and nothing is
+     * known either way; the two must not be shown the same.
+     */
+    changed?: Array<{
+      productKey: string;
+      fromVariation: number;
+      toVariation: number;
+      wasWithinLimit: boolean;
+      isWithinLimit: boolean;
+    }>;
   } | null;
   /**
    * The pre-send correctness verdict written when this report was generated.
