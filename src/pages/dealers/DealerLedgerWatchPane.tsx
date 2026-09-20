@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  CalendarRange,
   Check,
   EyeOff,
   Image as ImageIcon,
@@ -15,9 +16,12 @@ import {
   Card,
   CardContent,
   CardHeader,
+  DateRangeFilter,
+  dateRangeForPreset,
   Dialog,
   DownloadButton,
   EmptyState,
+  formatDateRangeLabel,
   HowThisWorks,
   Label,
   SegmentedControl,
@@ -25,6 +29,7 @@ import {
   Skeleton,
   Textarea,
   useToast,
+  type DateRangeValue,
 } from '@/components/ui';
 import {
   useDealerLedgerFlags,
@@ -33,10 +38,11 @@ import {
   useLedgerPeriodSummary,
   useUpdateLedgerFlag,
   type LedgerFlagFilters,
+  type LedgerWatchCardWindow,
 } from '@/hooks/api/useLedgerWatch';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { formatDateTime, formatDmy, inrFormat, istTodayYmd } from '@/lib/format';
+import { formatDate, formatDateTime, formatDmy, inrFormat, istTodayYmd } from '@/lib/format';
 import { StatTileRow } from '@/pages/dataVault/StatTile';
 import type { LedgerFlagDto, LedgerFlagStatus } from '@dk/shared';
 
@@ -659,12 +665,53 @@ function FlagRow({
 }
 
 /**
- * The dealer's own copy: the last four entries, as a picture to download or send.
+ * Longest window a card may cover, in inclusive days.
  *
- * BEHIND A BUTTON, NOT ON MOUNT. Asking for the card can cost a Chromium launch
+ * MIRRORS `CARD_WINDOW_MAX_DAYS` in `routes/v1/ledgerWatch.ts`, which is the
+ * authority: this copy exists only so the fields refuse a year-and-a-day
+ * in place rather than letting it come back a 400 after a round trip. If the
+ * server's number changes and this one does not, the worst that happens is the
+ * old message arrives from the server — never a card covering a period the
+ * server refused.
+ */
+const CARD_WINDOW_MAX_DAYS = 366;
+
+/**
+ * A drawn window, said the way the card says it.
+ *
+ * MIRRORS `periodWords().en` in the backend's `services/ledgerWatch/card.ts`.
+ * The split matters more than the wording: a single day is "on 26 Aug 2026",
+ * never "between 26 Aug 2026 and 26 Aug 2026", which is what a plain range
+ * template produces and what reads to anybody as a broken screen.
+ */
+function periodPhrase(w: LedgerWatchCardWindow): string {
+  return w.from === w.to
+    ? `on ${formatDateRangeLabel(w)}`
+    : `between ${formatDate(w.from)} and ${formatDate(w.to)}`;
+}
+
+/** Which card the admin is asking for. `latest` is the default and always was. */
+type CardMode = 'latest' | 'range';
+
+/**
+ * The dealer's own copy, as a picture to download or send.
+ *
+ * TWO CARDS BEHIND ONE CONTROL, and the default one is the one that must never
+ * get slower or stranger:
+ *
+ *   Latest    the last four entries outside the routine traffic. Unchanged —
+ *             same rows, same totals ("of these 4"), same cached PNG.
+ *   Dates     everything between two days an admin picks, totalled over that
+ *             whole period. A different picture with a different scope, cached
+ *             in its own slot server-side so it can never delay or replace the
+ *             daily one.
+ *
+ * BEHIND A BUTTON, NOT ON MOUNT. Asking for either can cost a Chromium launch
  * on a box whose browser budget is one, so nothing here fetches until an admin
  * says they want it. That is also why the empty state is a button and not a
- * spinner: opening this pane must stay free.
+ * spinner: opening this pane must stay free. The same rule is why switching to
+ * Dates does NOT fetch on its own — the window is only sent once the pair is
+ * complete and the admin presses for it.
  *
  * THE ROWS ARE LISTED BESIDE THE PICTURE, in text. An admin approving something
  * that goes to a dealer should be able to read exactly what is on it without
@@ -674,8 +721,48 @@ function FlagRow({
 function DealerCard({ dealerId }: { dealerId: string }) {
   const toast = useToast();
   const [open, setOpen] = React.useState(false);
-  const cardQ = useLedgerWatchCard(dealerId, open);
+  const [mode, setMode] = React.useState<CardMode>('latest');
+
+  /**
+   * The window the admin is editing. Seeded to this month, never queried until
+   * they ask: `DateRangeFilter` already refuses to emit a half-typed or
+   * backwards pair, and `asked` below is what turns a complete one into a fetch.
+   */
+  const [range, setRange] = React.useState<DateRangeValue>(() =>
+    dateRangeForPreset('month'),
+  );
+  /**
+   * The window a card was actually asked for, which is NOT the one in the
+   * fields.
+   *
+   * Two states, because every keystroke in a date field would otherwise be a
+   * Chromium launch on a box with a budget of one. The fields move freely; the
+   * picture only moves when somebody presses Draw.
+   */
+  const [asked, setAsked] = React.useState<LedgerWatchCardWindow | null>(null);
+
+  const wanted: LedgerWatchCardWindow = { from: range.from, to: range.to };
+  // NOT called `window`: that shadows the global inside this component, and the
+  // next person to reach for `window.scrollTo` here would get a date range.
+  const activeWindow = mode === 'range' ? asked : null;
+  const pending =
+    mode === 'range' &&
+    (!asked || asked.from !== wanted.from || asked.to !== wanted.to);
+
+  const cardQ = useLedgerWatchCard(
+    dealerId,
+    open && (mode === 'latest' || !!asked),
+    activeWindow,
+  );
   const share = useShareLedgerWatchCard();
+
+  function chooseMode(next: CardMode) {
+    setMode(next);
+    // Leaving Dates does not forget them: an admin who flicks back to compare
+    // should not have to retype the range they were just looking at.
+    if (next === 'latest') return;
+    setOpen(true);
+  }
 
   if (!open) {
     return (
@@ -685,85 +772,200 @@ function DealerCard({ dealerId }: { dealerId: string }) {
             <p className="text-base font-semibold text-text">Card for the dealer</p>
             <p className="mt-0.5 text-sm text-text-muted">
               The last 4 entries outside the routine traffic, with their dates —
-              as a PNG you can download or send into their chat.
+              as a PNG you can download or send into their chat. Or pick two
+              dates and get everything between them.
             </p>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setOpen(true)}
-            leftIcon={<ImageIcon width={14} height={14} strokeWidth={1.75} aria-hidden />}
-          >
-            Make the card
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setOpen(true)}
+              leftIcon={<ImageIcon width={14} height={14} strokeWidth={1.75} aria-hidden />}
+            >
+              Make the card
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => chooseMode('range')}
+              leftIcon={<CalendarRange width={14} height={14} strokeWidth={1.75} aria-hidden />}
+            >
+              Pick dates
+            </Button>
+          </div>
         </CardContent>
       </Card>
+    );
+  }
+
+  /**
+   * The mode switch and, in Dates, the fields and the Draw button.
+   *
+   * Rendered above every branch below — loading, error, empty and drawn — so an
+   * admin can always change the window, including out of one that produced an
+   * error or an empty card. A control that disappears while the thing it
+   * controls is failing is how somebody gets stuck.
+   */
+  const controls = (
+    <div className="grid gap-3">
+      <SegmentedControl
+        aria-label="Which card to make"
+        fullWidthOnMobile={false}
+        value={mode}
+        onChange={chooseMode}
+        options={[
+          { value: 'latest', label: 'Latest 4' },
+          { value: 'range', label: 'Chosen dates' },
+        ]}
+      />
+      {mode === 'range' ? (
+        <div className="grid gap-2 rounded-md border border-border bg-surface-subtle p-3">
+          <DateRangeFilter
+            value={range}
+            onChange={setRange}
+            label="Period on the card"
+            maxRangeDays={CARD_WINDOW_MAX_DAYS}
+            mobilePresets="menu"
+            mobileCustomInSheet
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant={pending ? 'primary' : 'secondary'}
+              disabled={cardQ.isFetching}
+              loading={cardQ.isFetching}
+              onClick={() => setAsked(wanted)}
+              leftIcon={<ImageIcon width={14} height={14} strokeWidth={1.75} aria-hidden />}
+            >
+              {/* The window the press will ACTUALLY draw, named in the button.
+                  `DateRangeFilter` only emits a complete, clamped, in-order
+                  pair, so while somebody is mid-type the pane still holds the
+                  last good one — and a button reading "Draw these dates" over a
+                  half-typed field is promising the wrong thing. */}
+              Draw {formatDateRangeLabel(wanted)}
+            </Button>
+            {pending && asked ? (
+              <p className="text-xs text-text-muted">
+                Showing {formatDateRangeLabel(asked)} — press to redraw for{' '}
+                {formatDateRangeLabel(wanted)}.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  /** Wraps every state below, so the controls never leave the screen. */
+  function shell(body: React.ReactNode) {
+    return (
+      <Card>
+        <CardContent className="grid gap-3">
+          {controls}
+          {body}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (mode === 'range' && !asked) {
+    return shell(
+      <p className="text-sm text-text-muted">
+        Pick the two days you want on the card, then press Draw. Every open
+        finding between them goes on it — what was not fuel, not a deposit and
+        not a card sale — and the totals cover the whole period. Anything you
+        have already ignored or resolved stays off, exactly as on the Latest
+        card.
+      </p>,
     );
   }
 
   if (cardQ.isLoading) {
-    return (
-      <Card>
-        <CardContent className="grid gap-3">
-          <Skeleton className="h-5 w-48" />
-          <Skeleton className="h-64 w-full max-w-md" />
-        </CardContent>
-      </Card>
+    return shell(
+      <>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-64 w-full max-w-md" />
+      </>,
     );
   }
 
   if (cardQ.isError || !cardQ.data) {
-    return (
-      <Card>
-        <CardContent>
-          <EmptyState
-            icon={<AlertCircle width={20} height={20} strokeWidth={1.75} aria-hidden />}
-            title="The card could not be drawn"
-            description={
-              cardQ.error instanceof ApiError
-                ? cardQ.error.message
-                : 'Try again in a moment — the server may be busy reading a portal.'
-            }
-            cta={
-              <Button variant="secondary" size="sm" onClick={() => void cardQ.refetch()}>
-                Try again
-              </Button>
-            }
-          />
-        </CardContent>
-      </Card>
+    return shell(
+      <EmptyState
+        icon={<AlertCircle width={20} height={20} strokeWidth={1.75} aria-hidden />}
+        title="The card could not be drawn"
+        description={
+          cardQ.error instanceof ApiError
+            ? cardQ.error.message
+            : 'Try again in a moment — the server may be busy reading a portal.'
+        }
+        cta={
+          <Button variant="secondary" size="sm" onClick={() => void cardQ.refetch()}>
+            Try again
+          </Button>
+        }
+      />,
     );
   }
 
   const card = cardQ.data;
   const empty = card.movements.length === 0;
+  /**
+   * The period the SERVER drew, never the one in the fields.
+   *
+   * The fields keep moving while an admin types; captioning the figures from
+   * them would put September's dates over August's card — the exact fault this
+   * product exists to catch, committed by the screen that reports it.
+   */
+  const drawnWindow = card.window;
+  const truncated = card.movements.length < card.totalMovements;
 
   function sendIt() {
-    share.mutate(dealerId, {
-      onSuccess: (r) =>
-        toast.success(
-          r.alreadyShared
-            ? 'This exact card has already gone to the dealer.'
-            : 'Sent — it is in the dealer’s chat now.',
-        ),
-      onError: (err) =>
-        toast.error(err instanceof ApiError ? err.message : 'Could not send the card'),
-    });
+    share.mutate(
+      { dealerId, window: drawnWindow },
+      {
+        onSuccess: (r) =>
+          toast.success(
+            r.alreadyShared
+              ? 'This exact card has already gone to the dealer.'
+              : 'Sent — it is in the dealer’s chat now.',
+          ),
+        onError: (err) =>
+          toast.error(err instanceof ApiError ? err.message : 'Could not send the card'),
+      },
+    );
+  }
+
+  /** One sentence saying what is on the card and what its figures cover. */
+  function describe(): string {
+    const drawn = formatDateTime(card.renderedAt);
+    if (drawnWindow) {
+      // "on 26 Aug 2026", not "between 26 Aug 2026 and 26 Aug 2026" — the card
+      // itself makes this split, and a caption that phrased a one-day window
+      // differently from the picture beside it would read as a fault in one of
+      // them.
+      const period = periodPhrase(drawnWindow);
+      if (empty) return `Nothing outside the routine traffic ${period}, so there is nothing to send.`;
+      const n = card.totalMovements;
+      return truncated
+        ? `${n} entries ${period}. The card shows the ${card.movements.length} most recent; its totals cover all ${n}. Drawn ${drawn}.`
+        : `${n} ${n === 1 ? 'entry' : 'entries'} ${period}, with their dates. The totals cover the period. Drawn ${drawn}.`;
+    }
+    if (empty) return 'Nothing outside the routine traffic, so there is nothing to send.';
+    return `The last ${card.movements.length} of ${card.totalMovements} ${
+      card.totalMovements === 1 ? 'entry' : 'entries'
+    }, with their dates. Drawn ${drawn}.`;
   }
 
   return (
     <Card>
       <CardContent className="grid gap-3">
+        {controls}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-base font-semibold text-text">Card for the dealer</p>
-            <p className="mt-0.5 text-sm text-text-muted">
-              {empty
-                ? 'Nothing outside the routine traffic, so there is nothing to send.'
-                : `The last ${card.movements.length} of ${card.totalMovements} ${
-                    card.totalMovements === 1 ? 'entry' : 'entries'
-                  }, with their dates. Drawn ${formatDateTime(card.renderedAt)}.`}
-            </p>
+            <p className="mt-0.5 text-sm text-text-muted">{describe()}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {/* `downloadUrl`, never `viewUrl` + a `download` attribute: that
@@ -797,9 +999,12 @@ function DealerCard({ dealerId }: { dealerId: string }) {
             to a dealer should not have to squint at a thumbnail. */}
         {!empty ? (
           <ul className="grid gap-1.5 rounded-md border border-border bg-surface-subtle p-3">
-            {card.movements.map((m) => (
+            {card.movements.map((m, i) => (
               <li
-                key={`${m.date}-${m.titleEn}-${m.amount}`}
+                // The index is in the key because a window card can carry thirty
+                // rows, and two identical fees on one day — the same ₹1,062
+                // charged twice on 12-08 — are a real shape on these ledgers.
+                key={`${m.date}-${m.titleEn}-${m.amount}-${i}`}
                 className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-2 text-sm"
               >
                 <span className="tabular-nums text-text-muted">{formatDmy(m.date)}</span>

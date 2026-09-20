@@ -343,6 +343,17 @@ export interface LedgerWatchCardMovement {
 }
 
 /**
+ * The dates a card covers, inclusive, `yyyy-mm-dd`.
+ *
+ * `null` everywhere means the default card — the rolling last four — and that
+ * path is untouched by any of this.
+ */
+export interface LedgerWatchCardWindow {
+  from: string;
+  to: string;
+}
+
+/**
  * The rendered card, plus the rows it drew.
  *
  * The movements come back with the URLs on purpose: a confirm dialog can then
@@ -363,10 +374,26 @@ export interface LedgerWatchCard {
   /** Seconds the two URLs stay valid. */
   expiresIn: number;
   renderedAt: string;
+  /**
+   * Σ charged IN THE SCOPE THE CARD ANNOUNCES, which is not the same scope in
+   * both modes — read `window` before captioning it:
+   *
+   *   `window === null` — the rows in `movements` and nothing wider.
+   *   `window !== null` — the whole period, including rows past the ones drawn.
+   */
   charged: number;
+  /** Σ received, in the same scope as `charged`. */
   received: number;
-  /** Every open movement the dealer has — the card draws at most four of them. */
+  /** Every open movement in scope. The card may draw fewer — see `charged`. */
   totalMovements: number;
+  /**
+   * The window the SERVER drew, echoed back — not the one the screen asked for.
+   *
+   * Caption the figures from this and never from the date fields: those keep
+   * moving while an admin types, and a caption taken from them would label a
+   * card with a period it does not cover.
+   */
+  window: LedgerWatchCardWindow | null;
   movements: LedgerWatchCardMovement[];
 }
 
@@ -389,11 +416,23 @@ export interface LedgerWatchShareResult {
  * failure this codebase has already shipped once. Re-asking is cheap when the
  * findings have not moved, because the server reuses the stored PNG.
  */
-export function useLedgerWatchCard(dealerId: string | undefined, enabled: boolean) {
+export function useLedgerWatchCard(
+  dealerId: string | undefined,
+  enabled: boolean,
+  window?: LedgerWatchCardWindow | null,
+) {
+  // The window is IN THE KEY. Without it, switching from August to September
+  // would serve August's cached URLs under September's caption — the cache
+  // holding the picture right and the screen labelling it wrong.
+  const w = window ?? null;
   return useQuery({
-    queryKey: [...ledgerWatchKeys.all, 'card', dealerId] as const,
+    queryKey: [...ledgerWatchKeys.all, 'card', dealerId, w?.from ?? null, w?.to ?? null] as const,
     enabled: !!dealerId && enabled,
-    queryFn: () => api.get<LedgerWatchCard>(`/ledger-watch/dealers/${dealerId}/card`),
+    queryFn: () =>
+      api.get<LedgerWatchCard>(
+        `/ledger-watch/dealers/${dealerId}/card`,
+        w ? { from: w.from, to: w.to } : undefined,
+      ),
     staleTime: 0,
     refetchOnWindowFocus: false,
   });
@@ -409,8 +448,22 @@ export function useLedgerWatchCard(dealerId: string | undefined, enabled: boolea
 export function useShareLedgerWatchCard() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (dealerId: string) =>
-      api.post<LedgerWatchShareResult>(`/ledger-watch/dealers/${dealerId}/card/share`, {}),
+    // The window rides the QUERY STRING, exactly as it does on the view, because
+    // the server parses both with one validator. Passing it in the body instead
+    // would send the default card while the screen showed a dated one.
+    mutationFn: ({
+      dealerId,
+      window,
+    }: {
+      dealerId: string;
+      window?: LedgerWatchCardWindow | null;
+    }) =>
+      api.post<LedgerWatchShareResult>(
+        window
+          ? `/ledger-watch/dealers/${dealerId}/card/share?from=${encodeURIComponent(window.from)}&to=${encodeURIComponent(window.to)}`
+          : `/ledger-watch/dealers/${dealerId}/card/share`,
+        {},
+      ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ledgerWatchKeys.all });
     },
