@@ -2,6 +2,7 @@ import {
   Activity,
   Building2,
   CalendarDays,
+  Clapperboard,
   Database,
   FileBarChart2,
   FileClock,
@@ -103,6 +104,9 @@ export const NAV_ITEMS: NavItem[] = [
   // The landing-page assistant's console (ADR 0009). Super-admin only: these
   // are strangers' transcripts and, where they left one, their phone number.
   { to: '/assist', label: 'Assistant', icon: Headset, superAdminOnly: true },
+  // The two Dealer Kavach films on mdgservices.in: views, how far people get,
+  // where they stop, and the share links that send people there (ADR 0015).
+  { to: '/films', label: 'Films', icon: Clapperboard, superAdminOnly: true },
   { to: '/services', label: 'Service Catalog', icon: Plug, superAdminOnly: true },
   { to: '/runs', label: 'Run History', icon: Activity, superAdminOnly: true },
   { to: '/users', label: 'All Users', icon: Users, superAdminOnly: true },

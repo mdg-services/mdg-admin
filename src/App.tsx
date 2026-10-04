@@ -119,6 +119,11 @@ const DsrVaultPage = React.lazy(
     import('@/pages/DsrVaultPage').then((m) => ({ default: m.DsrVaultPage })),
   ),
 );
+const FilmsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/FilmsPage').then((m) => ({ default: m.FilmsPage })),
+  ),
+);
 const FestivalPage = React.lazy(
   retryImport(() =>
     import('@/pages/FestivalPage').then((m) => ({ default: m.FestivalPage })),
@@ -405,6 +410,21 @@ export default function App() {
               <RequireSuperAdmin>
                 <LazyPage>
                   <AssistPage />
+                </LazyPage>
+              </RequireSuperAdmin>
+            }
+          />
+          {/* The two films on mdgservices.in and how they are watched (ADR
+              0015). Super-admin, the same gate as the assistant console: it is
+              the company's marketing funnel, and the API behind it is
+              `requireSuperAdmin`. Keep in step with `superAdminOnly` in
+              navItems.ts — the flag only hides the link, this guards the URL. */}
+          <Route
+            path="films"
+            element={
+              <RequireSuperAdmin>
+                <LazyPage>
+                  <FilmsPage />
                 </LazyPage>
               </RequireSuperAdmin>
             }
