@@ -2,18 +2,26 @@ import { X } from 'lucide-react';
 import * as React from 'react';
 
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { useOverlayEntry, useOverlayFocus } from '@/hooks/useOverlayStack';
 import { cn } from '@/lib/cn';
 
-import { ActionRow } from './ActionRow';
+import { OverlayFooter, type OverlayFooterBelow, OverlayHeading } from './OverlayParts';
 import { Portal } from './Portal';
 
 export interface DrawerProps {
   open: boolean;
   onClose: () => void;
   title?: React.ReactNode;
+  /** A control for the title line — `<HowThisWorks variant="icon" … />`. Same
+   *  contract as `Dialog`'s: beside the title's first line below md, the
+   *  hand-rolled `flex flex-wrap items-center gap-2` row at md. */
+  help?: React.ReactNode;
   description?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** The footer's layout below md, as on `Dialog`: `'stack'` (default),
+   *  `'wrap'` or `'row'`. The same right-aligned row at md whichever you pick. */
+  footerBelow?: OverlayFooterBelow;
   width?: 'sm' | 'md' | 'lg';
   /**
    * Below md only. `'sheet'` (default) is the bottom sheet capped at 95dvh.
@@ -44,28 +52,26 @@ const WIDTH_CLASSES: Record<NonNullable<DrawerProps['width']>, string> = {
  * original desktop layout so desktop is unchanged; only mobile is additive.
  *
  * Renders through `Portal` and locks the page behind it, for the same reasons
- * as `Dialog`.
+ * as `Dialog`, and shares its overlay stack (Escape and Back close only the top
+ * overlay), its focus handling and its accessible name.
  */
 export function Drawer({
   open,
   onClose,
   title,
+  help,
   description,
   children,
   footer,
+  footerBelow = 'stack',
   width = 'md',
   presentation = 'sheet',
   bodyPadding = 'default',
 }: DrawerProps) {
-  React.useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
+  const titleId = React.useId();
+  const panelRef = React.useRef<HTMLDivElement | null>(null);
+  useOverlayEntry(open, onClose);
+  useOverlayFocus(open, panelRef);
   useBodyScrollLock(open);
 
   if (!open) return null;
@@ -80,10 +86,15 @@ export function Drawer({
         }}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
       >
         <div
+          ref={panelRef}
+          // Focus lands on the panel when it opens — never on its first field,
+          // which on a phone would raise the keyboard over an unread sheet.
+          tabIndex={-1}
           className={cn(
-            'flex flex-col bg-surface shadow-lg',
+            'flex flex-col bg-surface shadow-lg focus:outline-none',
             'w-full md:rounded-none',
             // The 95dvh sheet leaves the status bar showing above it; a
             // full-height one does not, and the overlay is `fixed`, so it is
@@ -106,23 +117,12 @@ export function Drawer({
             <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-border-strong md:hidden" />
           ) : null}
           <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-surface px-4 py-3">
-            {/* min-w-0: without it a long unbroken title cannot shrink and
-                squeezes the close button to nothing. */}
-            <div className="min-w-0 flex-1">
-              {title ? (
-                <h2 className="break-words text-lg font-semibold text-text">
-                  {title}
-                </h2>
-              ) : null}
-              {description ? (
-                // Clamped below md: this header is sticky above the body and
-                // does not scroll, so a long description is height the reader
-                // can never get past to reach the content.
-                <p className="mt-1 line-clamp-2 break-words text-sm text-text-muted md:line-clamp-none">
-                  {description}
-                </p>
-              ) : null}
-            </div>
+            <OverlayHeading
+              titleId={titleId}
+              title={title}
+              help={help}
+              description={description}
+            />
             <button
               type="button"
               onClick={onClose}
@@ -133,6 +133,9 @@ export function Drawer({
             </button>
           </div>
           <div
+            // Lets index.css's grid min-width rule reach this portalled body
+            // below md, the way it reaches everything inside `main`.
+            data-overlay-body
             className={cn(
               'flex-1 overflow-y-auto overscroll-contain',
               bodyPadding === 'none' ? '' : 'p-4',
@@ -141,16 +144,7 @@ export function Drawer({
             {children}
           </div>
           {footer ? (
-            // The same `ActionRow below="stack"` footer as `Dialog`: stacked
-            // full-width below md, the right-aligned row it has always been at
-            // md. Only the sticky chrome and the safe-area padding are local.
-            <ActionRow
-              below="stack"
-              align="end"
-              className="sticky bottom-0 z-10 border-t border-border bg-surface px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] md:pb-3"
-            >
-              {footer}
-            </ActionRow>
+            <OverlayFooter below={footerBelow}>{footer}</OverlayFooter>
           ) : null}
         </div>
       </div>

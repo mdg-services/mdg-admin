@@ -32,6 +32,14 @@ Two more, smaller but load-bearing:
 
 - **`sm:` is 640px.** It fires on no phone in our target set. Reading `sm:` as "phone" is the
   single most common misreading in this codebase. **The only breakpoint is `md` (768px).**
+- **`<main>` is `relative`.** It is the containing block for every absolutely positioned thing
+  inside it that has no positioned ancestor of its own — the `sr-only` labels above all. Before,
+  they resolved against the initial containing block, escaped `main`'s clip and made the
+  DOCUMENT scroll (4,796px on a 740px phone on a Daily Sales Report), so a fling past the end of
+  `main` scrolled the whole shell away.
+- **The shell gives up chrome on demand.** In an open Inbox thread below md there is no app
+  header (the thread's own header carries Back); while the on-screen keyboard is up there is no
+  tab bar (`useSoftKeyboard`), and `--tab-bar-h` reads 0 for as long as it is gone.
 - **A landscape phone is already `≥ md`** (852×393). Anything gated on `useMediaQuery('(min-width: 768px)')`
   flips when the device rotates. `Sheet` handles this; your screen may need to.
 
@@ -62,7 +70,9 @@ export function useBodyScrollLock(active: boolean, opts?: BodyScrollLockOptions)
 **Use it when** a surface of yours covers the page. The trap it exists to avoid: the app's
 scroller is **not** `document.body`, it is `<main data-app-scroller>`, so the usual
 `body { overflow: hidden }` recipe is a no-op here. Reference-counted, so a Dialog inside a
-Drawer does not unlock the page when only the Dialog closes.
+Drawer does not unlock the page when only the Dialog closes. While anything holds the lock it
+sets `data-overlay-open` on `<html>`, which is how the toast viewport knows to drop from the top
+of a phone instead of landing on a sheet's footer (see `Toast` under [Overlays](#overlays)).
 
 #### `useSafeInsets` — `@/hooks/useSafeInsets`
 ```ts
@@ -98,6 +108,82 @@ export function useSafeBack(fallback: string): () => void
 **Use it instead of `navigate(-1)`, always.** A push notification deep-links straight into a
 thread or a dealer, making it the *first* history entry — a blind back pops the user out of
 the app. Pops when `history.state.idx > 0`, otherwise replaces with `fallback`.
+
+#### `useOverlayEntry` / `useOverlayFocus` — `@/hooks/useOverlayStack`
+```ts
+export function useOverlayEntry(open: boolean, onClose: () => void, opts?: { dismissOnPop?: boolean }): void
+export function useOverlayFocus(open: boolean, panelRef: React.RefObject<HTMLElement | null>): void
+export function focusQuietly(el: HTMLElement | null | undefined): void
+```
+**Already inside `Dialog`, `Drawer`, `Sheet` and `Menu` — you call these only if a fifth
+overlay is unavoidable** (rule 9 says it is not). `useOverlayEntry` puts an open overlay on one
+module-level stack: one keydown listener sends Escape to the top entry only, so a confirm over a
+drawer no longer takes the drawer down with it. Below md, or anywhere in the native shell, the
+first overlay to open also pushes one history entry of its own (a *marker*), so Android's Back —
+which the shell maps to `WebView.goBack()` — closes the top overlay instead of leaving the screen
+and discarding what was typed in the sheet. At md in a browser nothing is pushed.
+
+The part that is not obvious: a marker is a second history entry with the page's own URL, and on
+this app the URL moves under it all the time — filter sheets rewrite the query string with
+`replace`, and Documents (`?open=`), Run history (`?run=`) and the Assistant (`?session=`) are
+URL-driven overlays that close themselves with a `replace`. So the module wraps
+`history.replaceState` (keep the marker flag, remember what the router wrote) and
+`history.pushState` (a navigation from inside an overlay takes the marker's place rather than
+leaving a dead entry under the new page), and every popstate it causes or consumes is swallowed
+before React Router hears it, with the landed entry rewritten to be the one it left. The router
+never sees a navigation, because none happened: an overlay closed. `useSafeBack` is unaffected —
+the marker spreads the router's own `idx`.
+
+`useOverlayFocus` moves focus to the PANEL (give it `tabIndex={-1}`) on open — never to the
+first field, which on a phone raises the keyboard over a sheet nobody has read — and returns it
+to the opener on close. An `autoFocus` child is left where it is. The opener is read during
+render, because a child's `autoFocus` runs before any effect could look.
+
+#### `usePublishBottomBar` — `@/hooks/usePublishBottomBar`
+```ts
+export function usePublishBottomBar(ref: React.RefObject<HTMLElement | null>, active?: boolean): void
+```
+**Use it on anything pinned to the bottom of a phone screen** that a toast must not cover.
+Publishes the element's height as `--bottom-bar-h` on `<html>` below md (tallest wins, removed
+on unmount); the toast viewport adds it to its bottom offset. `StickyActionBar` already calls it.
+
+#### `useSoftKeyboard` — `@/hooks/useSoftKeyboard`
+```ts
+export function useSoftKeyboard(): boolean
+```
+True while a text field has focus AND the visible viewport has shrunk to under 80% of the tallest
+it has been at this width. Compared against the tallest seen, not `innerHeight`, because
+`interactive-widget=resizes-content` and the native shell both shrink the layout viewport with
+the keyboard. `AppShell` uses it to take the tab bar away while typing. Moving focus between two
+fields does not flicker: `focusout` is read a task later.
+
+#### `useNavBadges` — `@/hooks/useNavBadges`
+```ts
+export function useNavBadges(): Record<string, number> // keyed by route
+```
+The nav count badges — unread chats, unjudged AI answers, unconfirmed holidays — for the
+sidebar AND the tab bar. There were two copies and the phone's had never learned about bank
+holidays. Add a new badge here and both get it.
+
+#### Dates — `@/lib/format`
+```ts
+export function formatTime(iso?: string | null): string   // the clock half of formatDateTime
+```
+The formatters still take the DEVICE's locale, so a phone set to English (US) prints
+"Oct 05, 2026, 04:58 AM" where an en-GB one prints "05 Oct 2026, 04:58" and an en-IN one
+"05 Oct 2026, 04:58 am". Pinning one shape everywhere was tried in this pass and backed out: it
+would also have changed every desktop whose locale is not en-GB, which is an owner's decision,
+not a layout fix. Use these formatters, not a fresh `toLocale*` call, so that decision stays a
+one-file change.
+
+#### `copyText` — `@/lib/clipboard`
+```ts
+export async function copyText(value: string): Promise<boolean>
+```
+**Use it for every copy.** Clipboard API, then a hidden read-only textarea and
+`execCommand('copy')`; returns `false` when both refuse, and never throws. `false` means the
+caller owes the admin a visible next step (select the value and say so, or put it in a message) —
+a copy button that appears to do nothing is never acceptable. Focus is handed back afterwards.
 
 #### `downloadFile` — `@/lib/downloadFile`
 ```ts
@@ -145,6 +231,11 @@ from the phone card. `primaryRightWidth="clamp"` when the right rail carries two
 badges. `visibility="all"` only when the breakpoint has already been decided in JS.
 Every text slot now carries `min-w-0 break-words`.
 
+A card with `onClick` carries a 16px chevron on its right edge below md (`pr-8 md:pr-3` makes
+room for it) and a pressed paint on a touch screen. Before it, a card that opens something and a
+card that does not looked identical on a phone, and two screens had started drawing their own
+cue.
+
 `actions` is **dropped, not rendered**, on a card that also has `onClick`. A button inside a
 button is invalid HTML and on Android the inner one never fires, so the rule is enforced in the
 primitive rather than left to each caller. Give a card one or the other.
@@ -177,6 +268,12 @@ no column claims `'primary'`.
 Note: with both `onRowClick` and `rowActions`, the card's **title** is the tap target and the
 menu sits beside it — buttons do not nest. Whole-card tap survives whenever there is no menu.
 
+`desktop: false` on a column keeps it out of the md table — header, cells, skeleton — while the
+card still renders it in its `mobile` slot. It is the other half of `mobile: 'hidden'`: one drops a
+column from the card, the other from the table. Today's board needs both — five halo'd status
+badges as table cells at md, and one tile grid in their place on the card, where the five stacked
+badges overlapped so a tap on one opened the next.
+
 `rowTone` dims one row — a retired catalog task, an already-handled queue row. Both tables that
 needed it carried `opacity-60` on the `<tr>`, which `DataList` could not express, so neither
 could adopt it. It maps onto the table row's own dim at md+ and onto `MobileCard.tone` below.
@@ -199,6 +296,14 @@ third of a 294px card on labels and leave ~142px for an email, which CSS will no
 or `.`. `collapseAfter` is for a 36-field dataset row.
 Requires a `ToastProvider` ancestor when any item is `copyable` (the app root has one).
 A `copyable` item's `<dd>` carries `select-text` itself — no caller has to pass it down.
+
+`inlineBelowMd` puts each non-`block` pair on one line below md — label left, value right,
+`numeric` values right-aligned so a column of figures ends on the same digit. For short labels and
+short figures only (a tank's dip, water and stock: 48px a pair stacked, a three-figure box 172px).
+When a label does run long, the LABEL wraps and a `numeric` figure stays whole (`whitespace-nowrap`
+below md) — before, "6,06,12,345 L" broke as "6,06,12,345" over "L". A label long enough to crowd
+the figure is still better as a `block` item. At md the list is exactly what `layout` draws
+without it.
 
 Known limit: `dt` typography is fixed (`text-sm text-text-muted`). Three existing field lists
 render `text-xs uppercase tracking-wide text-text-subtle` labels, so they cannot adopt this
@@ -240,6 +345,8 @@ because on a drill-in nothing else does (fact 5).
   hand-rolling this, each with its own spelling of the safe-area inset.
 - `visibility="below-md"` instead of `className="md:hidden"`, which only worked because the
   root happens to have no display class of its own.
+- It publishes its own height (`usePublishBottomBar`), so below md a toast lands above the bar
+  instead of on its Save button.
 
 #### `FilterBar` — new (this absorbed the proposed `FilterSheet`)
 ```ts
@@ -278,10 +385,41 @@ child it is just another item in a `justify-between` row that cannot wrap, and a
 `whitespace-nowrap` Button in a 296px card then squeezes the title to nothing. With `action`,
 `align` and `padding` all left alone the emitted classes are byte-identical to today.
 
+Below md the header with an `action` is a **wrapping row**, not a column: the title asks for
+`12rem` and takes what is left, so a 44px glyph (the "How this works" play icon on ~14 cards)
+sits on the title's line instead of costing a 52px row of its own, and a text button that does
+not fit beside a 12rem title wraps under it as it always did. `actionWidth="full"` keeps the
+column. Without an `action`, a trailing `<svg>` child no longer shrinks below md — long subtitles
+had squashed the 18px icons to 4px slivers. Both are restored exactly at md.
+
 `align="center"` and `padding="comfortable"` (`py-4`) exist because five call sites were passing
 `className="py-4 md:items-center"` and getting the right answer only by accident of emission
 order — `items-center` happens to be emitted after `items-start`, and `py-4` after `py-3`. They
 are the shape a hand-rolled `p-4` section header had.
+
+#### `PageHeader` — extended (`@/components/layout/PageHeader`)
+```ts
+tools?: React.ReactNode;   // icon-only utilities: a Refresh IconButton, <HowThisWorks variant="icon">
+```
+**Use `tools` for icon-only utilities, not `actions`.** Below md they sit at the right end of the
+title's line (`-my-2` keeps a 28px title line from growing); in `actions` they wrapped onto a
+44px row of their own under everything else — on the Kavach work queue that row was part of why
+the first queue row started at 470px of a 676px screen. At md they are appended to the END of the
+actions row, so moving a trailing Refresh + help pair out of `actions` and into `tools` is a no-op
+on a desktop. Decided in JS (`useMediaQuery`), so the icons mount once. In `dense` mode they join
+the actions on the title row at every width.
+
+The `dense` subtitle wraps to two lines below md (`line-clamp-2`) and is the single truncated
+line it was at md. On a dealer it carries the outlet's address, which is printed nowhere else.
+
+#### `Tabs` — `pinnedActiveBelowMd`
+```ts
+pinnedActive?: TabItem;          // the active tab when it lives in the overflow menu
+pinnedActiveBelowMd?: boolean;   // show that chip below md only
+```
+When the open tab is one the strip does not show (it is in the ⋮ menu), `pinnedActive` pins a
+selected chip naming it beside the menu. `pinnedActiveBelowMd` keeps that a phone-only chip, so
+a desktop strip is byte-identical.
 
 ---
 
@@ -323,6 +461,10 @@ that keep no local state in their fields. Do not adopt it in one that does. Disp
 needs — which box has focus, so its value can be shown grouped or plain — belongs to the caller
 for the same reason: held in the field, a rotation would remount it into the wrong shape.
 
+The card's heading row centres its items and pulls the action's vertical margin in (`-my-2`),
+so a 44px menu trigger beside a 20px heading no longer sets a 44px row: about 18px back on every
+card of the shift sheet, the 44px hit area unchanged.
+
 Four or five columns is the ceiling: `main` is `overflow-x-hidden`, so a wider table is cut off,
 not scrolled. `scrollHint` and `freezeFirstColumn` are deliberately off — a frozen identity column
 would paint a cell on top of a live field.
@@ -337,6 +479,20 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   padding?: 'default'|'none'; align?: 'center'|'start';
 }
 ```
+```ts
+tone?: 'default' | 'brand';   // brand-coloured label on ghost/secondary; ignored on filled variants
+```
+`tone="brand"` exists because `className="text-brand"` on a ghost Button never applied — the
+variant's own `text-text` is emitted later — and four link-like actions rendered black.
+
+Every variant also carries a **touch** paint: on `(hover: none)` screens the hover tint is
+cancelled and the same colour is painted while the finger is down (`:active`). Android leaves
+`:hover` on whatever was tapped last, so a "Filters" button stayed tinted after its sheet closed
+and read as "filters on". The desktop `hover:` classes are untouched — they were NOT moved into a
+`(hover: hover)` query, because a media-wrapped variant is emitted after every plain one and would
+start beating hover colours call sites pass in. `SheetItem`, `MenuItem` and tappable
+`MobileCardList` cards do the same.
+
 `padding="none"` and `align="start"` exist because neither can be reached from a call site: a
 `className="px-0"` is emitted **before** `px-3` and silently loses, and `justify-start` happens
 to win only because it is emitted after `justify-center`. Three call sites — `KeyValueList`'s
@@ -417,8 +573,13 @@ native shell's `contextmenu` allow-list is `closest('input, textarea, [contented
 long-press callout, which made the component's own "long-press it and choose Copy" untrue in
 the shell. `KeyValueList` applies `select-text` to a `copyable` value's `<dd>` for the same
 reason. **Wherever text must be selectable, write `select-text`.**
-The copy itself has three rungs and never fails silently: Clipboard API → `execCommand` →
-select the text and say so.
+The copy itself has three rungs and never fails silently: `copyText` (Clipboard API →
+`execCommand`) → select the text and say so.
+
+Below md `mode="field"` is a read-only **textarea** that grows to show the whole value
+(`break-all`), not a one-line input: a revealed portal login is often a 52-character email, and
+in a 232px field the admin reading it out saw 22 characters. A textarea is on the same selection
+and long-press allow-lists as an input. At md it is the `<Input>` it always was.
 
 #### `InfoBadge` — new
 ```ts
@@ -462,6 +623,25 @@ export function ReadonlyField(props: React.HTMLAttributes<HTMLDivElement>): JSX.
 ```
 **Use it for** a computed value shown where a field would be (`h-11 md:h-9`, the same box the
 fields draw), so a derived readout does not sit 8px short of the `Input`s beside it.
+
+#### Small changes to existing controls
+
+- **The More sheet** (`MobileTabBar`) is two headed sections, "Daily work" and "Setup" (the
+  super-admin catalogs and settings), when both have items. The labels are the sidebar's and
+  were not changed.
+- **`HowThisWorks`** — the icon variant is named after its guide (`How this works: <label>`); two
+  side by side used to read out identically. The dialog's sentence now says what the list is: a
+  video of this screen, one on the subject (`fit: 'subject'` — a topic match is always restated as
+  subject), or only the library. It used to promise "this exact screen" on ~94 screens that have
+  no such video.
+- **`DealerChip`** — the link is a 44px square floor below md (`min-h-11 min-w-11`), not a
+  36×34 / 28×34 chip; `md:` resets give a desktop row its 34px chip back.
+- **`StatusChip`** — sentence case below md ("Active", "On demand"), today's capitals at md.
+- **`Badge` / `StatusChip` / toast glyphs (`INTENT_CLASSES`) and `Callout`** — the text is the
+  `strong` shade below md, today's shade from md. Measured on a 12px label: amber 2.9:1, green
+  3.0:1, red 3.95:1, blue 4.24:1, against 4.5:1 needed; the strong shades are 6.4 / 6.8 / 6.5 /
+  7.2:1. A hand-rolled `bg-*-soft` box in a page should do the same:
+  `text-warning-strong md:text-warning`.
 
 ---
 
@@ -545,7 +725,10 @@ export interface WideReportViewerProps {
 }
 ```
 **Use it for** a wide artifact we did not author and cannot restyle — the DSR day book. Inline
-at `≥ md` exactly as today; below md a tappable card that opens a full-screen `Drawer`.
+at `≥ md` exactly as today; below md a tappable card that opens a full-screen `Drawer`. The
+`figures` slot (the native figure list) renders BELOW the frame in that drawer: the button that
+opens it promises the report, and with the figures first the day book started ~3,800px down a
+360px screen, its zoom buttons with it.
 **It is only half the answer.** Full screen does not make third-party HTML narrow. Pair it
 with a native figure list built from the report's own digest — one stacked `KeyValueList`
 block per product — so no figure is lost when the frame is useless.
@@ -561,8 +744,38 @@ internally with `overscroll-contain`, and share `z-[var(--z-overlay)]`. Because 
 siblings in the body, **the one opened last paints on top** — the old hand-picked 50/60 split
 is gone.
 
+All four share **one overlay stack** (`useOverlayEntry`, under Foundation): Escape closes only
+the top overlay, and below md (or in the native shell) Android's Back does too, through a history
+marker the stack manages. Dialog, Drawer and Sheet are named by their title (`aria-labelledby`)
+and move focus onto their panel when they open, back to the opener when they close. Their
+scrolling body carries `data-overlay-body`, which lets index.css's grid min-width rule reach a
+portalled body below md — without it one long unbroken error line widened a run's detail dialog
+to ~1,500px.
+
+**Toasts** sit above anything published as `--bottom-bar-h` (the composer, a `StickyActionBar`)
+and above the tab bar; while an overlay is open below md they drop from the TOP of the screen,
+because the bottom belongs to the sheet's own footer.
+
 - `Dialog` — centred modal at `≥ md`, full-height bottom sheet below. Footer is an
-  `ActionRow below="stack"`. New prop `animateIn?: boolean` (default `true`) — pass `false`
+  `ActionRow below="stack"`.
+- `Dialog` and `Drawer` share three props:
+  - `help?: ReactNode` — the title line's control, in practice `<HowThisWorks variant="icon">`.
+    Below md it stays beside the title's FIRST line (the title takes `flex-1` and wraps); at md it
+    is the `flex flex-wrap items-center gap-2` row two dozen call sites hand-rolled inside
+    `title`, so moving one onto `help` is a no-op on a desktop. Five used `inline-flex` instead
+    (`RequestEvidenceDialog`, `VerifyTaskDrawer`, the Standing remarks drawer,
+    `AskDocumentDialog`, `RemindAllDialog`); the one measured, Standing remarks at 1280, came out
+    pixel-identical on `help` too — check the other four with a pixel diff of the open overlay.
+    `Sheet` takes the same `help` prop for its title row (the thread's kebab sheet is the live
+    case), kept outside the element the sheet's `aria-labelledby` points at, so the sheet is
+    named "Actions" and not "Actions How this works: Conversation".
+  - `footerBelow?: 'stack' | 'wrap' | 'row'` — the footer's layout below md (default `'stack'`).
+    Pass `'wrap'` or `'row'` for short labels over a form the keyboard will be up for: three
+    stacked buttons are 165px, and with the keyboard open the send-back reason box had 32px of
+    body. Every value is the same right-aligned row at md.
+  - `description` renders through `ClampedText`: two lines and a "more" below md (the header does
+    not scroll), unclamped at md. It used to be a bare `line-clamp-2` that cut "This will message
+    the dealer" before "the dealer". New prop `animateIn?: boolean` (default `true`) — pass `false`
   only from a Dialog that is replacing another Dialog already on screen. The bottom-sheet
   entrance is mount-driven, so a lazily-loaded dialog taking over from its Suspense fallback
   sheet would otherwise start at `translateY(100%)` again and the panel would drop off the
@@ -573,7 +786,9 @@ is gone.
   only below md, because a landscape phone is already `≥ md` and would otherwise be frozen
   behind a sheet it can no longer see.
 - `Menu` / `MenuItem` / `MenuSeparator` — anchored popover at `≥ md`, bottom sheet below, with
-  Escape, roving arrow-key focus and focus return. New prop
+  Escape, roving arrow-key focus and focus return. Below md its title and rows are styled like
+  `Sheet`'s (14px title, 48px rows, `px-4`), so the two bottom sheets in the app look like one
+  thing; the popover's caption and 36px rows are restored at md. New prop
   `triggerShape?: 'icon' | 'auto'` — `'icon'` (default) is the square 44/36px hit area,
   `'auto'` sizes to a labelled trigger. Do not try to widen the trigger with
   `triggerClassName`; `cn` is clsx (fact 2).
@@ -698,6 +913,8 @@ utility, so a `md:`-prefixed override always wins.
 | `w-auto` on a `w-full` control | `w-full` | **`w-full`** | |
 | `text-sm` on `Input`/`Select`/`Textarea` | `text-base md:text-sm` | **`text-sm`** | 14px at every width, under the iOS focus-zoom floor. Never re-add it; that includes an arbitrary `[&_input]:text-sm`, which is a (0,1,1) selector and beats `index.css`'s 16px element rule. |
 | `.tap-target` on an `.absolute` element | — | **`.tap-target`** | It sets `position: relative` and unpins the control. Use `.tap-halo`. |
+| `text-brand` on a ghost/secondary `Button` | `text-text` | **`text-text`** | Four link-like actions rendered black. Use `tone="brand"`. |
+| `bg-surface-2/60`, `bg-brand/60` (any `/NN` on a token colour) | — | **nothing** | The token colours are `var(--color-…)` strings, and Tailwind 3 cannot put an opacity on a colour it cannot parse, so the class is never generated. `MobileCardList`'s `hover:bg-surface-2/60` and `Button`'s `disabled:bg-brand/60` have never painted anything. Hex colours (`danger`, `success`…) do take a modifier. |
 
 Leave a dead override in place where making it live would change desktop; delete it or route it
 through a prop where the intent is clear. Do not add new ones.
@@ -751,6 +968,15 @@ the safe area, and use the z tokens.
 
 Nested scrollers inside an overlay body (`<pre>`, a picker list, a code block) need their own
 `.scroll-pane` (`overscroll-behavior: contain`), or reaching their end drags the sheet.
+
+The grid min-content rule (`[data-app-scroller] :where(.grid) > * { min-width: 0 }`) reaches an
+overlay's body below md through `data-overlay-body`; a fifth overlay would have to carry it too.
+It makes grid ITEMS shrinkable, not their text — an unbroken token still needs `break-words` /
+`break-all` on its own element.
+
+Never add an Escape listener of your own inside an overlay. If a control inside one needs Escape
+for itself (an inline editor cancelling its edit), `preventDefault()` it: the overlay stack skips
+an Escape something already used.
 
 **Use `dvh`, never `vh`.** `70vh` is the *large* viewport on mobile and overshoots a `92dvh`
 sheet. Four `vh` values survive on purpose: `Dialog`'s and `ImageLightbox`'s `md:max-h-[70vh]`,
@@ -822,6 +1048,12 @@ Real, current, and deliberately not closed. Do not assume otherwise.
   owed on every screen.
 - **The dev-only overflow assertion** (`scrollWidth > clientWidth` in `main.tsx`) is still
   unwritten. It is the cheapest way to catch mechanically what this programme found by hand.
+- **Back closing an overlay was verified in headless Chrome, not in the shell.** With
+  `page.goBack()` standing in for the hardware key: Back closes only the top overlay and keeps
+  the URL, a filter typed in a sheet survives it, closing a URL-driven drawer by its X leaves no
+  entry for Back to reopen it from, and a navigation from the More sheet leaves no dead entry.
+  The shell's `WebView.goBack()` on a real device is still owed. So is the press paint and the
+  missing sticky hover, which headless Chrome only shows when the state is forced.
 
 ### Primitive gaps recorded rather than closed
 
@@ -835,12 +1067,11 @@ re-derive it.
 | `MobileCardList` has no sections | The per-domain grouping in `DealerWorkListTab` and `WorkListDefaultsPage` is one list per group inside a hand-written `<details>`. `visibility="all"` makes the nesting clean, but `sections?: { key; header; cards }[]` would remove it. |
 | `SegmentedControl` has no `subtle` variant | Adopting it on the DSR/Credit "Today / Past date" tabs was mandated and is a **real ≥768px visual change**: the old `ModeTab` drew a raised `bg-surface` chip on a `bg-surface-2` track, the primitive draws a brand-filled pill on a bordered track. A `variant="subtle"` reproducing the track-and-chip look would make that swap desktop-neutral. |
 | `DownloadButton` has no `disabledReason` | A run artifact whose signed URL is still in flight renders a hand-rolled disabled `Button` plus a `md:hidden` sentence. The prop wants the same shape `DefRow hint` ended up with: visible text below md, `title` at md. |
-| `WideReportViewer` has no `figures` slot | Its own doc says it is "only half the answer" and must be paired with a native figure list, but nothing in the API makes that structural. Every future caller can forget the half that makes the artifact readable. |
 | `StickyActionBar` has no content-width cap | In `sticky` mode the bar spans the page column. A `contentClassName` (or `maxWidth`) would let a caller keep a centred `max-w-6xl` content column, which the shift-data editor's old fixed bar had. |
-| `Drawer`/`Dialog` `description` has no clamp | It renders in the sticky, non-scrolling header, so a 230-character paragraph eats ~110px of a `95dvh` sheet. Three call sites hand-moved their prose into the body. `line-clamp-2 md:line-clamp-none`, or a `descriptionInBody` prop, would fix it centrally. |
 | `Drawer` has no `mobileFooterExtra` | The Assist drawer gets a second footer child with `md:hidden`, which works only because `.md\:hidden` is emitted after `.inline-flex` — exactly the ordering dependence fact 2 says not to rely on. |
 | No progress-bar primitive | `SlipPanel` draws its upload bar by hand: a `h-1.5 rounded-full bg-surface-2` track with a `bg-brand` fill, `role="progressbar"` and the percentage in a **non-live** sibling of the `aria-live` sentence (a live percentage talks over the operator for the whole upload). It is the first determinate progress in the admin. A second caller should extract `ProgressBar` rather than copy it. |
-| `Drawer` has no way to keep a nested overlay's Escape to itself | No live call site any more — the slip's review drawer, which opened `ImageLightbox` over itself so one Escape closed both, was deleted when reading a slip stopped being a conversation. Recorded because the gap in `Drawer` is still there for the next nested overlay: a `Dialog` that stopped Escape at the topmost overlay would fix it centrally. |
+| The overlay stack's history marker has three blind spots | (1) A reload while an overlay is open leaves the page on its marker entry; the marker is cleared on load, but the entry stays, so one Back after that reload changes nothing on screen. (2) A Back that jumps more than one entry (a desktop browser's long-press history list) is left to the router as a navigation. (3) Nothing is pushed at md in a browser, so a desktop's Back still navigates with a dialog open, as it always did. All three are inherent to doing this with history entries; none is reachable from the shell's single-step Back. |
+| `PageHeader dense` does not reorder its subtitle | Below md a long dense subtitle (a dealer's address) still takes the middle row, pushing the status and help onto a third. `order-last basis-full md:order-none md:basis-auto` would fix it — but it would also put a short phone-number subtitle on a row of its own on every dealer without an address. Needs a decision, or a `subtitlePlacement` prop. |
 | `Tabs.tsx` has no edge fades | The strip scrolls and auto-centres correctly — **do not touch that logic**; the naive `scrollIntoView` fix was tried and reverted, and the comment at the top of the file records it. Only the visual cue that it scrolls is missing. Two packets worked around it by shortening a label below md instead. |
 
 ### Product decisions still open

@@ -3,9 +3,8 @@ import * as React from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 
 import { Sheet, SheetItem } from '@/components/ui';
-import { useAiTurnCountsQuery } from '@/hooks/api/useAiTurns';
-import { useConversations } from '@/hooks/api/useConversations';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { useNavBadges } from '@/hooks/useNavBadges';
 import { cn } from '@/lib/cn';
 
 import { BOTTOM_TAB_ROUTES, NAV_ITEMS } from './navItems';
@@ -23,27 +22,18 @@ export function MobileTabBar({ className }: { className?: string }) {
   const isSuperAdmin = useIsSuperAdmin();
   const [moreOpen, setMoreOpen] = React.useState(false);
 
-  // Same unread computation the sidebar badge uses.
-  const mineQ = useConversations('mine');
-  const unreadCount = (mineQ.data ?? []).filter((c) => c.unreadByAdmin).length;
-
   /**
-   * The count badges the More sheet carries, keyed by route — the phone half of
-   * `AppShell`'s `navBadges`.
+   * The count badges, keyed by route — the same hook the desktop sidebar reads.
    *
-   * `/ai-answers` is not a bottom tab, so on a phone it lives inside the sheet,
-   * and a sheet nobody opens shows nobody anything. The whole safety claim for
-   * the AI first line is that a person reads what it said, so the number has to
-   * survive the trip into the sheet AND be visible on the closed More button —
-   * otherwise the nudge exists only on a desktop the team does not always use.
-   *
-   * It shares its cache entry with the sidebar's badge, so this is the same
-   * request, not a second one.
+   * Most counted destinations are not bottom tabs, so on a phone they live
+   * inside the More sheet, and a sheet nobody opens shows nobody anything. The
+   * whole safety claim for the AI first line is that a person reads what it
+   * said, so a count has to survive the trip into the sheet AND be visible on
+   * the closed More button — otherwise the nudge exists only on a desktop the
+   * team does not always use.
    */
-  const aiCountsQ = useAiTurnCountsQuery();
-  const sheetBadges: Record<string, number> = {
-    '/ai-answers': aiCountsQ.data?.unreviewed ?? 0,
-  };
+  const badges = useNavBadges();
+  const unreadCount = badges['/inbox'] ?? 0;
 
   const bottomItems = BOTTOM_TAB_ROUTES.map((route) =>
     NAV_ITEMS.find((i) => i.to === route),
@@ -53,8 +43,16 @@ export function MobileTabBar({ className }: { className?: string }) {
     (i) => !BOTTOM_TAB_ROUTES.includes(i.to) && (!i.superAdminOnly || isSuperAdmin),
   );
 
+  // Two sections in the sheet: what is opened every day, and the super-admin
+  // catalogs and settings opened rarely. The nav labels stay as they are — they
+  // are the desktop sidebar's too.
+  const moreSections = [
+    { title: 'Daily work', items: moreItems.filter((i) => !i.superAdminOnly) },
+    { title: 'Setup', items: moreItems.filter((i) => i.superAdminOnly) },
+  ].filter((section) => section.items.length > 0);
+
   // What the closed More button has to advertise: everything waiting behind it.
-  const morePending = moreItems.reduce((n, i) => n + (sheetBadges[i.to] ?? 0), 0);
+  const morePending = moreItems.reduce((n, i) => n + (badges[i.to] ?? 0), 0);
 
   const moreActive = moreItems.some((i) =>
     location.pathname.startsWith(i.to),
@@ -99,7 +97,10 @@ export function MobileTabBar({ className }: { className?: string }) {
         <button
           type="button"
           onClick={() => setMoreOpen(true)}
-          aria-label="More"
+          // The count in the name, not only on the dot: an `aria-label` on the
+          // button replaces its content, so the dot's own "87 pending" was
+          // never read and TalkBack said just "More".
+          aria-label={morePending > 0 ? `More, ${morePending} pending` : 'More'}
           aria-expanded={moreOpen}
           className={cn(
             'flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5',
@@ -122,36 +123,50 @@ export function MobileTabBar({ className }: { className?: string }) {
       </nav>
 
       <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="More">
-        {moreItems.map((item) => {
-          const badge = sheetBadges[item.to] ?? 0;
-          return (
-            <SheetItem
-              key={item.to}
-              icon={<item.icon width={20} height={20} strokeWidth={1.75} />}
-              active={location.pathname.startsWith(item.to)}
-              onClick={() => {
-                setMoreOpen(false);
-                navigate(item.to);
-              }}
-            >
-              {/* `SheetItem` wraps its children in `flex-1 truncate`, so the
-                  count has to live inside that box or it is the thing that gets
-                  clipped. `min-w-0` on the row and `truncate` on the label keep
-                  the pressure on the words rather than on the number. */}
-              <span className="flex min-w-0 items-center justify-between gap-2">
-                <span className="truncate">{item.label}</span>
-                {badge > 0 ? (
-                  <span
-                    aria-label={`${badge} pending`}
-                    className="inline-flex min-w-[18px] shrink-0 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-text-inverse"
-                  >
-                    {badge}
+        {moreSections.map((section) => (
+          <div key={section.title} role="group" aria-label={section.title}>
+            {/* Headed only when there are two sections to tell apart. A
+                super-admin's sheet holds ~19 rows, and with daily work
+                interleaved with one-off setup the four screens opened every
+                day were scattered among catalogs opened once a quarter. */}
+            {moreSections.length > 1 ? (
+              <div aria-hidden className="px-4 pt-3 text-xs font-semibold text-text-subtle">
+                {section.title}
+              </div>
+            ) : null}
+            {section.items.map((item) => {
+              const badge = badges[item.to] ?? 0;
+              return (
+                <SheetItem
+                  key={item.to}
+                  icon={<item.icon width={20} height={20} strokeWidth={1.75} />}
+                  active={location.pathname.startsWith(item.to)}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    navigate(item.to);
+                  }}
+                >
+                  {/* `SheetItem` wraps its children in `flex-1 truncate`, so the
+                      count has to live inside that box or it is the thing that
+                      gets clipped. `min-w-0` on the row and `truncate` on the
+                      label keep the pressure on the words rather than on the
+                      number. */}
+                  <span className="flex min-w-0 items-center justify-between gap-2">
+                    <span className="truncate">{item.label}</span>
+                    {badge > 0 ? (
+                      <span
+                        aria-label={`${badge} pending`}
+                        className="inline-flex min-w-[18px] shrink-0 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-text-inverse"
+                      >
+                        {badge}
+                      </span>
+                    ) : null}
                   </span>
-                ) : null}
-              </span>
-            </SheetItem>
-          );
-        })}
+                </SheetItem>
+              );
+            })}
+          </div>
+        ))}
       </Sheet>
     </>
   );

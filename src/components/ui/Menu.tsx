@@ -3,6 +3,7 @@ import * as React from 'react';
 
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { focusQuietly, useOverlayEntry } from '@/hooks/useOverlayStack';
 import { cn } from '@/lib/cn';
 
 import { Portal } from './Portal';
@@ -54,6 +55,10 @@ const TRIGGER_SHAPES: Record<NonNullable<MenuProps['triggerShape']>, string> = {
  * Keyboard: Enter/Space or Arrow keys open it, arrows/Home/End move between
  * items, Esc closes. Focus moves into the list on open and returns to the
  * trigger on close, so a keyboard user never loses their place.
+ *
+ * Open, it is an entry on the shared overlay stack at both widths: Escape and
+ * Android's Back close the menu and nothing under it, and at md a history
+ * navigation still closes the popover (`dismissOnPop`), as it always has.
  */
 export function Menu({
   label = 'More',
@@ -75,8 +80,12 @@ export function Menu({
   const close = React.useCallback((restoreFocus = true) => {
     setOpen(false);
     setPos(null);
-    if (restoreFocus) triggerRef.current?.focus();
+    if (restoreFocus) focusQuietly(triggerRef.current);
   }, []);
+
+  // Escape when focus has wandered out of the panel, and Back. The panel's own
+  // key handler takes Escape first while focus is inside it.
+  useOverlayEntry(open, close, { dismissOnPop: true });
 
   const ctx = React.useMemo<MenuContextValue>(() => ({ close }), [close]);
 
@@ -154,17 +163,9 @@ export function Menu({
       if (triggerRef.current?.contains(target)) return;
       close(false);
     };
-    // Backstop for Esc when focus has wandered outside the panel.
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    // Back/forward navigation: the menu is stale once the view changes. An
-    // in-app route change made *from* the menu is already covered, because
-    // selecting an item closes it.
-    const onPopState = () => close(false);
+    // Escape with focus outside the panel, and Back/forward, are the overlay
+    // stack's: `useOverlayEntry` above.
     document.addEventListener('pointerdown', onPointerDown, true);
-    document.addEventListener('keydown', onKeyDown);
-    window.addEventListener('popstate', onPopState);
     // The popover is positioned against the trigger, so a scroll or resize
     // invalidates it. The mobile sheet is a fixed overlay — leave it alone.
     //
@@ -186,8 +187,6 @@ export function Menu({
     }
     return () => {
       document.removeEventListener('pointerdown', onPointerDown, true);
-      document.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('popstate', onPopState);
       window.removeEventListener('scroll', onDetach, true);
       window.removeEventListener('resize', onDetach);
     };
@@ -237,10 +236,13 @@ export function Menu({
     <MenuContext.Provider value={ctx}>
       {title ? (
         // Decorative: the menu already carries `aria-label`, and a bare <p>
-        // inside role="menu" is not a valid child.
+        // inside role="menu" is not a valid child. Below md it is styled like
+        // `Sheet`'s title, because below md this list IS a bottom sheet and
+        // two sheets side by side said "More" and "MORE"; the md classes are
+        // the popover's caption as it always was.
         <p
           aria-hidden="true"
-          className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-text-subtle"
+          className="px-4 pb-1 pt-3 text-sm font-semibold normal-case tracking-normal text-text md:px-3 md:pt-2 md:text-xs md:uppercase md:tracking-wide md:text-text-subtle"
         >
           {title}
         </p>
@@ -367,10 +369,19 @@ export function MenuItem({
         onSelect?.();
       }}
       className={cn(
-        'flex min-h-11 w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors md:min-h-9',
+        // `SheetItem`'s row below md (48px, `px-4`, `gap-3`), the popover's
+        // denser row from md up.
+        'flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors md:min-h-9 md:gap-2.5 md:px-3',
         'focus-visible:outline-none focus-visible:bg-surface-2',
         disabled && 'cursor-not-allowed text-text-subtle',
         !disabled && 'hover:bg-surface-2',
+        // Touch: no tint left on the row after the tap, a press paint during
+        // it. The selected row's own tint is what hover falls back to.
+        !disabled &&
+          (selected && !danger
+            ? '[@media(hover:none)]:hover:bg-brand-soft'
+            : '[@media(hover:none)]:hover:bg-transparent'),
+        !disabled && '[@media(hover:none)]:active:bg-surface-2',
         !disabled && danger && 'text-danger',
         !disabled && !danger && (selected ? 'bg-brand-soft text-brand' : 'text-text'),
       )}

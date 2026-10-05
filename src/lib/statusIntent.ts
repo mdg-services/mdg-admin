@@ -84,10 +84,23 @@ export function statusIntent(kind: string, v: string): Intent {
   }
 }
 
+/**
+ * The soft-background + foreground pair for each intent — every `Badge`,
+ * `StatusChip` and toast glyph.
+ *
+ * Below md the foreground is the `strong` shade. The pairing that shipped,
+ * `text-*` on `bg-*-soft`, measures 2.9:1 for amber, 3.0:1 for green, 3.95:1
+ * for red and 4.24:1 for blue, against the 4.5:1 a 12px label needs — and the
+ * phone is the device read outdoors under a forecourt canopy. The strong shades
+ * measure 6.4:1, 6.8:1, 6.5:1 and 7.2:1 on the same backgrounds. From md the
+ * original shade is restored, so a desktop badge is unchanged; whether to take
+ * the darker shades to desktop too is a separate decision. `neutral` already
+ * measures 6.15:1 and is left alone.
+ */
 export const INTENT_CLASSES: Record<Intent, string> = {
-  success: 'bg-success-soft text-success',
-  warning: 'bg-warning-soft text-warning',
-  danger: 'bg-danger-soft text-danger',
-  info: 'bg-info-soft text-info',
+  success: 'bg-success-soft text-success-strong md:text-success',
+  warning: 'bg-warning-soft text-warning-strong md:text-warning',
+  danger: 'bg-danger-soft text-danger-strong md:text-danger',
+  info: 'bg-info-soft text-info-strong md:text-info',
   neutral: 'bg-neutral-soft text-neutral',
 };

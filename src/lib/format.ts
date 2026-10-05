@@ -25,6 +25,13 @@ const DATE_TIME_FMT = new Intl.DateTimeFormat(undefined, {
   minute: '2-digit',
 });
 
+/** `formatTime` — the clock half of `formatDateTime`, on its own, in the same
+ *  locale, so a row's time reads exactly as it would after a date. */
+const TIME_FMT = new Intl.DateTimeFormat(undefined, {
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
 const DATE_FMT = new Intl.DateTimeFormat(undefined, {
   year: 'numeric',
   month: 'short',
@@ -74,6 +81,17 @@ export function formatDateTime(iso?: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return DATE_TIME_FMT.format(d);
+}
+
+/**
+ * The time of day — the same clock `formatDateTime` prints after the date, for
+ * a row whose date is already in its heading.
+ */
+export function formatTime(iso?: string | null): string {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return TIME_FMT.format(d);
 }
 
 export function formatDate(iso?: string | null): string {

@@ -56,8 +56,10 @@ export interface WideReportViewerProps {
   preview?: React.ReactNode;
   /** Extra footer actions inside the mobile full-screen view (`html` only). */
   actions?: React.ReactNode;
-  /** The report's own numbers, in native markup, shown above the frame in the
-   *  mobile full-screen view. This is the part that stays readable. */
+  /** The report's own numbers, in native markup, shown BELOW the frame in the
+   *  mobile full-screen view. This is the part that stays readable — but the
+   *  view is opened by a button that promises the report, so the report is
+   *  what fills its first screen and the figures are a scroll away. */
   figures?: React.ReactNode;
   /** Desktop inline height of the `html` frame. Default `h-[72vh] min-h-[520px]`. */
   desktopHeightClass?: string;
@@ -382,7 +384,10 @@ export function WideReportViewer({
           )
         }
       >
-        {figures ? <div className="p-3">{figures}</div> : null}
+        {/* The frame FIRST. With the figures above it, "Open the day book full
+            screen" opened on the same figure list the page had just shown, and
+            the day book — with its zoom buttons, which float at the bottom of
+            the pane — started ~3,800px down a 360px screen. */}
         {/* An explicit height, not `h-full`: the Drawer body's height comes
             from its content, so a percentage inside it resolves against an
             indefinite height and collapses the frame to nothing. The 11rem is
@@ -444,6 +449,7 @@ export function WideReportViewer({
             </IconButton>
           </div>
         </div>
+        {figures ? <div className="p-3">{figures}</div> : null}
       </Drawer>
     </>
   );

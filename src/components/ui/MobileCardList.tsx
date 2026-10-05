@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react';
 import * as React from 'react';
 
 import { cn } from '@/lib/cn';
@@ -188,13 +189,31 @@ export function MobileCardList({
                 onClick={c.onClick}
                 className={cn(
                   'block min-h-11 w-full text-left hover:bg-surface-2/60',
+                  // Pressed paint on a touch screen, where hover never shows.
+                  '[@media(hover:none)]:active:bg-surface-2',
                   pad,
+                  // Room on the right for the chevron below md; `pr-8` is
+                  // emitted after `p-3`/`px-3`, and `md:pr-3` gives the md card
+                  // back the 12px both of those paint.
+                  'relative pr-8 md:static md:pr-3',
                   rows
                     ? 'bg-transparent'
                     : 'rounded-lg border border-border bg-surface',
                 )}
               >
                 {inner}
+                {/* The cue that the card opens something. Without it a tappable
+                    card and a static one looked identical on a phone, and the
+                    only difference was a hover tint touch never shows — two
+                    screens had started drawing their own chevron or printing
+                    "tap to open". */}
+                <ChevronRight
+                  width={16}
+                  height={16}
+                  strokeWidth={1.75}
+                  aria-hidden
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-subtle md:hidden"
+                />
               </button>
             ) : (
               <div

@@ -37,15 +37,19 @@ export default {
          * dark, so a foreground that DID change would be unreadable in one of the
          * two. That is the trap that ruled out `text-text` here.
          *
-         * `INTENT_CLASSES` is NOT changed. Switching it would restyle every badge
-         * in the portal in one commit; these are used by the documents validity
-         * surfaces only, and the rest of the app can adopt them deliberately.
-         * `neutral` needs no `strong` — #475569 on #e2e8f0 is already 6.15:1.
+         * `INTENT_CLASSES` (and `Callout`) now use them BELOW MD ONLY, with an
+         * `md:` restore of the original shade. The phone is the device read
+         * outdoors, and there the shipped pairing measured 2.9:1 amber, 3.0:1
+         * green, 3.95:1 red and 4.24:1 blue on a 12px label; a desktop badge is
+         * left exactly as it was, and taking the strong shades to desktop too
+         * is a separate decision. `info.strong` (#1e40af, 7.2:1 on #dbeafe) was
+         * added for that change. `neutral` needs no `strong` — #475569 on
+         * #e2e8f0 is already 6.15:1.
          */
         success: { DEFAULT: '#16a34a', soft: '#dcfce7', strong: '#166534' },
         warning: { DEFAULT: '#d97706', soft: '#fef3c7', strong: '#92400e' },
         danger: { DEFAULT: '#dc2626', soft: '#fee2e2', strong: '#991b1b' },
-        info: { DEFAULT: '#2563eb', soft: '#dbeafe' },
+        info: { DEFAULT: '#2563eb', soft: '#dbeafe', strong: '#1e40af' },
         neutral: { DEFAULT: '#475569', soft: '#e2e8f0' },
       },
       borderRadius: { sm: '4px', md: '8px', lg: '12px' },

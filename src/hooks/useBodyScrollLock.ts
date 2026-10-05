@@ -16,9 +16,15 @@ const DEFAULT_SCROLLER = '[data-app-scroller]';
 let lockDepth = 0;
 let releaseAll: Array<() => void> = [];
 
+/** Set on <html> while anything holds the lock, i.e. while an overlay covers
+ *  the page. index.css reads it below md to move toasts to the top of the
+ *  screen, off the sheet's own footer. */
+const OVERLAY_OPEN_ATTR = 'data-overlay-open';
+
 function lock(scrollerSelector: string): void {
   lockDepth += 1;
   if (lockDepth > 1) return;
+  document.documentElement.setAttribute(OVERLAY_OPEN_ATTR, '');
 
   const targets: HTMLElement[] = [];
   const scroller = document.querySelector<HTMLElement>(scrollerSelector);
@@ -48,6 +54,7 @@ function unlock(): void {
   if (lockDepth > 0) return;
   for (const release of releaseAll) release();
   releaseAll = [];
+  document.documentElement.removeAttribute(OVERLAY_OPEN_ATTR);
 }
 
 /**

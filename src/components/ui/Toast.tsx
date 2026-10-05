@@ -92,14 +92,20 @@ function ToastViewport({
   dismiss: (id: string) => void;
 }) {
   return (
-    // Bottom-anchored on a phone, and it has to clear two things nothing else
-    // does: the tab bar (an in-flow element, so `bottom-4` painted straight
-    // over it) and the gesture strip. `inset-x-3` rather than `right-4 w-full`,
-    // because `w-full` on a fixed element resolves to the whole 360px viewport
-    // — `max-w-sm` is 384px and never clamped it, so the card's left edge sat
-    // at −16px and the intent icon was off-screen. Every desktop value is
-    // restored at md.
-    <div className="pointer-events-none fixed inset-x-3 bottom-[calc(var(--tab-bar-h,0px)+max(env(safe-area-inset-bottom),0.5rem)+0.5rem)] z-[var(--z-toast)] flex flex-col gap-2 md:inset-x-auto md:right-4 md:bottom-4 md:w-full md:max-w-sm">
+    // Bottom-anchored on a phone, and it has to clear what nothing else does:
+    // the tab bar (an in-flow element, so `bottom-4` painted straight over it),
+    // the gesture strip, and anything a screen pins to the bottom — the chat
+    // composer, a StickyActionBar — which publishes its height as
+    // `--bottom-bar-h`. Without that a "Copied" landed on Send and a failed
+    // save's error landed on Save, for exactly the seconds the admin needed
+    // it. While an overlay is open the `toast-viewport` rule in index.css moves
+    // it to the top instead.
+    //
+    // `inset-x-3` rather than `right-4 w-full`, because `w-full` on a fixed
+    // element resolves to the whole 360px viewport — `max-w-sm` is 384px and
+    // never clamped it, so the card's left edge sat at −16px and the intent
+    // icon was off-screen. Every desktop value is restored at md.
+    <div className="toast-viewport pointer-events-none fixed inset-x-3 bottom-[calc(var(--tab-bar-h,0px)+var(--bottom-bar-h,0px)+max(env(safe-area-inset-bottom),0.5rem)+0.5rem)] z-[var(--z-toast)] flex flex-col gap-2 md:inset-x-auto md:right-4 md:bottom-4 md:w-full md:max-w-sm">
       {toasts.map((t) => (
         <div
           key={t.id}

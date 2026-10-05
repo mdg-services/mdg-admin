@@ -11,6 +11,29 @@ type Variant = ButtonVariant;
 type Size = ButtonSize;
 
 /**
+ * What a TOUCH screen paints instead of hover: nothing on hover, and the hover
+ * colour while the finger is down.
+ *
+ * Android applies `:hover` to whatever was tapped last and keeps it there, and
+ * the app turns off the tap highlight, so a tap gave no feedback while it
+ * happened and then left the button looking selected — a "Filters" button
+ * still tinted after its sheet closed reads as "filters on". `(hover: none)`
+ * is a phone, and a touch tablet at md; a mouse desktop never matches it.
+ *
+ * The desktop `hover:` classes are kept exactly as they were rather than moved
+ * into a `(hover: hover)` query. A media-wrapped variant is emitted after every
+ * plain one, so it would start beating hover colours a call site passes in —
+ * `rjsfTheme`'s danger remove button among them — and change a desktop. Here
+ * the `(hover: none)` rules are the later ones, and they only exist on touch.
+ */
+const TOUCH = {
+  primary: '[@media(hover:none)]:hover:bg-brand [@media(hover:none)]:active:bg-brand-hover',
+  surface: '[@media(hover:none)]:hover:bg-surface [@media(hover:none)]:active:bg-surface-2',
+  clear: '[@media(hover:none)]:hover:bg-transparent [@media(hover:none)]:active:bg-surface-2',
+  danger: '[@media(hover:none)]:hover:bg-danger [@media(hover:none)]:active:bg-danger/90',
+} as const;
+
+/**
  * The paint for each variant, exported because `IconButton` has to render the
  * identical surface from its own element. It cannot reach it by wrapping a
  * `Button` and passing `className`: `cn` is plain clsx, so `h-11 w-11 p-0`
@@ -19,12 +42,24 @@ type Size = ButtonSize;
  * way the two stay the same colour when one of them is retinted.
  */
 export const BUTTON_VARIANTS: Record<Variant, string> = {
-  primary:
-    'bg-brand text-text-inverse hover:bg-brand-hover disabled:bg-brand/60',
-  secondary:
-    'bg-surface text-text border border-border-strong hover:bg-surface-2',
-  ghost: 'bg-transparent text-text hover:bg-surface-2',
-  danger: 'bg-danger text-white hover:bg-danger/90',
+  primary: `bg-brand text-text-inverse hover:bg-brand-hover disabled:bg-brand/60 ${TOUCH.primary}`,
+  secondary: `bg-surface text-text border border-border-strong hover:bg-surface-2 ${TOUCH.surface}`,
+  ghost: `bg-transparent text-text hover:bg-surface-2 ${TOUCH.clear}`,
+  danger: `bg-danger text-white hover:bg-danger/90 ${TOUCH.danger}`,
+};
+
+/**
+ * The same surfaces with the label in the brand colour, for `tone="brand"`: a
+ * link-like action ("Use the portal's value", "Show every figure") that should
+ * read as tappable rather than as body text. A separate map and not a
+ * `className="text-brand"`, because the variant's own `text-text` is emitted
+ * after `text-brand` and wins — four call sites asked for blue and rendered
+ * black. Only the two quiet variants have a brand tone; a filled button's text
+ * is already the contrast colour of its fill.
+ */
+const BRAND_TONE_VARIANTS: Partial<Record<Variant, string>> = {
+  secondary: `bg-surface text-brand border border-border-strong hover:bg-surface-2 ${TOUCH.surface}`,
+  ghost: `bg-transparent text-brand hover:bg-surface-2 ${TOUCH.clear}`,
 };
 
 // The `min-h-11` floor (44px) only wins below `md`; `md:min-h-8`/`md:min-h-9`
@@ -57,6 +92,9 @@ export interface ButtonProps
    *  win today and a call-site `px-0` happens to lose; neither is a fact a call
    *  site should have to know, so both are props. */
   align?: 'center' | 'start';
+  /** `'brand'` paints the label in the brand colour on `ghost` and
+   *  `secondary`; ignored on the filled variants. `'default'` is unchanged. */
+  tone?: 'default' | 'brand';
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -70,6 +108,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       rightIcon,
       padding = 'default',
       align = 'center',
+      tone = 'default',
       children,
       disabled,
       type = 'button',
@@ -86,7 +125,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           align === 'start' ? 'justify-start text-left' : 'justify-center',
           'transition-colors disabled:cursor-not-allowed disabled:opacity-70',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
-          BUTTON_VARIANTS[variant],
+          (tone === 'brand' ? BRAND_TONE_VARIANTS[variant] : undefined) ??
+            BUTTON_VARIANTS[variant],
           padding === 'none' ? SIZES_NO_PADDING[size] : SIZES[size],
           className,
         )}

@@ -200,10 +200,32 @@ export function videosForSurface(surface: string): GuideVideo[] {
   const exact = BY_SURFACE[surface];
   if (exact?.length) return [...exact, LIBRARY];
 
+  // A topic match is about the SUBJECT, whatever the video was recorded for:
+  // the Credit & DOD walkthrough is a 'screen' video on the Credit & DOD card
+  // and only a subject video on the PAD ledger that matched 'ledger'. The row
+  // caption and the dialog's own sentence both read `fit`, so it is restated.
   const topic = BY_TOPIC.find((r) => surface.includes(r.match));
-  if (topic) return [...topic.videos, LIBRARY];
+  if (topic) {
+    return [...topic.videos.map((v) => ({ ...v, fit: 'subject' as const })), LIBRARY];
+  }
 
   return [LIBRARY];
+}
+
+/**
+ * The sentence under the "guided videos" heading, by the best fit in the list.
+ * The dialog used to promise "showing this exact screen" above a single row
+ * saying no walkthrough of this screen had been recorded — on ~94 of the ~108
+ * screens that carry the button.
+ */
+export function guideDescription(videos: readonly GuideVideo[]): string {
+  if (videos.some((v) => v.fit === 'screen')) {
+    return 'Short walkthroughs for admins, in Hindi, showing this exact screen.';
+  }
+  if (videos.some((v) => v.fit === 'subject')) {
+    return 'Short Hindi walkthroughs on this subject — not of this exact screen.';
+  }
+  return 'No walkthrough for this screen yet. The guide library has the rest.';
 }
 
 /** Whether this surface has a video genuinely about it, rather than a fallback. */

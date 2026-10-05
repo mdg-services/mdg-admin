@@ -1,6 +1,8 @@
 import { Check, Copy } from 'lucide-react';
 import * as React from 'react';
 
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { copyText } from '@/lib/clipboard';
 import { cn } from '@/lib/cn';
 
 import { IconButton } from './IconButton';
@@ -27,6 +29,13 @@ import { useToast } from './Toast';
  * do. `mode="field"` is the answer: a real field, so selection and the paste
  * callout come back, at full width, with the value never truncated.
  *
+ * Below md that field is a read-only TEXTAREA that grows to fit, not a
+ * one-line input. A revealed portal login ID is often a 52-character email and
+ * a generated password 32 characters; in a 232px single-line field the admin
+ * reading one out over the phone saw 22 characters and had to scrub through the
+ * rest. A textarea is on the same selection and long-press allow-lists as an
+ * input, so nothing else changes. At md it is today's `<Input>`.
+ *
  * `mode="inline"` is for a value inside a sentence — a run id, a dealer code —
  * where a field would be absurd. It marks the span `select-text`, which hands
  * the same three CSS properties back to that one span AND is the exact class
@@ -36,10 +45,11 @@ import { useToast } from './Toast';
  * ------------------------------------
  * `navigator.clipboard` is absent outside a secure context and its `writeText`
  * rejects when the WebView has not granted permission — both of which happen
- * here. So there are three rungs: the async Clipboard API, then selecting the
- * text and asking the document to copy it, and finally selecting the text and
- * SAYING SO ("select-and-tell"), which is a worse outcome than a copy but a far
- * better one than a button that appears to do nothing.
+ * here. So there are three rungs: `copyText` (`@/lib/clipboard`) tries the
+ * async Clipboard API and then the document's own copy, and if both refuse,
+ * this selects the value on screen and SAYS SO ("select-and-tell"), which is a
+ * worse outcome than a copy but a far better one than a button that appears to
+ * do nothing.
  */
 export interface CopyableProps {
   /** The exact text placed on the clipboard. */
@@ -68,7 +78,9 @@ export function Copyable({
   className,
 }: CopyableProps) {
   const toast = useToast();
+  const isMd = useMediaQuery('(min-width: 768px)');
   const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const areaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const textRef = React.useRef<HTMLSpanElement | null>(null);
   const [copied, setCopied] = React.useState(false);
   const timerRef = React.useRef<number | null>(null);
@@ -83,7 +95,7 @@ export function Copyable({
   /** Put the value under the user's own selection, so a long-press can finish
    *  the job by hand. Returns false when there was nothing to select. */
   const selectValue = React.useCallback((): boolean => {
-    const field = inputRef.current;
+    const field = inputRef.current ?? areaRef.current;
     if (field) {
       field.focus({ preventScroll: true });
       field.setSelectionRange(0, field.value.length);
@@ -111,30 +123,14 @@ export function Copyable({
       toast.success(toastLabel);
     };
 
-    if (navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(value);
-        markCopied();
-        return;
-      } catch {
-        // Permission refused, or not a secure context. Fall through.
-      }
+    if (await copyText(value)) {
+      markCopied();
+      return;
     }
 
-    // Rung two: the selection-based copy. It needs the text selected first,
-    // which is also exactly what rung three leaves behind on failure.
+    // Rung three: leave the value selected under the admin's own finger, and
+    // say so.
     const selected = selectValue();
-    if (selected) {
-      try {
-        if (document.execCommand('copy')) {
-          markCopied();
-          return;
-        }
-      } catch {
-        // Ignored: the message below is the same either way.
-      }
-    }
-
     toast.info(
       selected
         ? 'This device would not let the app use the clipboard. The value is selected — long-press it and choose Copy.'
@@ -197,24 +193,81 @@ export function Copyable({
       {label != null ? (
         <span className="text-xs font-medium text-text-muted">{label}</span>
       ) : null}
-      <div className="flex items-center gap-1.5">
+      {/* `items-start` below md: the field can be three lines tall there, and
+          the copy button belongs beside its first line, not its middle. */}
+      <div className="flex items-start gap-1.5 md:items-center">
         {/* min-w-0 on the wrapper, not the field: an <input>'s min-content
             width comes from its `size` attribute (20 characters by default), so
             `min-width: auto` on the flex item refused to shrink below ~180px
             and pushed the copy button off a 296px card. */}
         <div className="min-w-0 flex-1">
-          <Input
-            ref={inputRef}
-            readOnly
-            value={value}
-            // Selecting on focus means one tap puts the whole value under the
-            // long-press menu even if the copy button is never touched.
-            onFocus={(e) => e.currentTarget.select()}
-            className={cn(mono && 'font-mono')}
-          />
+          {isMd ? (
+            <Input
+              ref={inputRef}
+              readOnly
+              value={value}
+              // Selecting on focus means one tap puts the whole value under the
+              // long-press menu even if the copy button is never touched.
+              onFocus={(e) => e.currentTarget.select()}
+              className={cn(mono && 'font-mono')}
+            />
+          ) : (
+            <WrappingField ref={areaRef} value={value} mono={mono} />
+          )}
         </div>
         {copyButton('secondary')}
       </div>
     </div>
   );
 }
+
+/**
+ * The below-md shape of `mode="field"`: a read-only textarea one row tall that
+ * grows to show the whole value, wrapping anywhere (`break-all` — this is an
+ * identifier, a password, an email, and none of them has a sensible word
+ * break). Sized to the same 44px box as `Input` for a value that fits one line.
+ * `field-sizing: content` would do the growing in CSS, but not on every WebView
+ * this runs in, so the height is set from `scrollHeight` and re-set when the
+ * width changes (rotation, or the sheet it sits in resizing).
+ */
+const WrappingField = React.forwardRef<
+  HTMLTextAreaElement,
+  { value: string; mono?: boolean }
+>(function WrappingField({ value, mono }, forwardedRef) {
+  const ref = React.useRef<HTMLTextAreaElement | null>(null);
+  React.useImperativeHandle(forwardedRef, () => ref.current as HTMLTextAreaElement);
+
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let width = -1;
+    const fit = () => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      el.style.height = 'auto';
+      // `scrollHeight` leaves the borders out and the box is border-box.
+      el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`;
+    };
+    fit();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      readOnly
+      rows={1}
+      value={value}
+      onFocus={(e) => e.currentTarget.select()}
+      className={cn(
+        'block w-full min-w-0 resize-none overflow-hidden rounded-sm border border-border-strong bg-surface',
+        'px-3 py-[9px] text-base leading-6 text-text break-all',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+        mono && 'font-mono',
+      )}
+    />
+  );
+});

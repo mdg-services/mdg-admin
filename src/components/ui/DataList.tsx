@@ -37,6 +37,20 @@ export interface DataColumn<T> {
   truncate?: boolean;
   thClassName?: string;
   tdClassName?: string;
+  /**
+   * `false` keeps the column out of the md table entirely — header, cells and
+   * skeleton — while the phone card still renders it in its `mobile` slot.
+   * Default `true`.
+   *
+   * For a phone-only rendering of data the table already shows its own way:
+   * Today's board draws five halo'd status badges as table cells at md, and
+   * on a card those five stacked badges overlapped so that tapping the middle
+   * of one opened the NEXT. The card wants one tile grid in their place
+   * (`mobile: 'secondary'`, `desktop: false`) with the five cell columns set to
+   * `mobile: 'hidden'`. The pairing is the point: `'hidden'` drops a column
+   * from the card, this drops one from the table.
+   */
+  desktop?: boolean;
 }
 
 export interface DataListProps<T> {
@@ -224,6 +238,7 @@ function TableShape<T>({
   | 'minWidth'
   | 'className'
 > & { loading: boolean; skeletonRows: number }) {
+  const tableColumns = columns.filter((col) => col.desktop !== false);
   return (
     <Table
       freezeFirstColumn={freezeFirstColumn}
@@ -234,7 +249,7 @@ function TableShape<T>({
     >
       <THead>
         <TRow>
-          {columns.map((col) => (
+          {tableColumns.map((col) => (
             <TH
               key={col.id}
               className={cn(alignClass(col), col.thClassName)}
@@ -254,7 +269,7 @@ function TableShape<T>({
         {loading
           ? Array.from({ length: skeletonRows }, (_, i) => (
               <TRow key={`skeleton-${i}`}>
-                {columns.map((col) => (
+                {tableColumns.map((col) => (
                   <TD key={col.id}>
                     <Skeleton className="h-4 w-full" />
                   </TD>
@@ -273,7 +288,7 @@ function TableShape<T>({
                 className={cn(rowTone?.(row) === 'muted' && 'opacity-60')}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
               >
-                {columns.map((col) => (
+                {tableColumns.map((col) => (
                   <TD
                     key={col.id}
                     className={cn(

@@ -177,6 +177,17 @@
   [data-app-scroller] :where(.grid) > * {
     min-width: 0;
   }
+  /* The same rule for the overlays. Dialog, Drawer and Sheet portal to <body>,
+     outside `main`, so the line above never reached them — and a failed run's
+     300-character error line sized the Run detail body to ~1,500px on a phone,
+     its Download buttons 1,100px off the right edge. Each overlay marks its
+     scrolling body `data-overlay-body`. Below md only: a desktop dialog is
+     wide enough, and is the baseline this programme does not move. */
+  @media (max-width: 767.98px) {
+    [data-overlay-body] :where(.grid) > * {
+      min-width: 0;
+    }
+  }
 
   *:focus-visible {
     outline: 2px solid var(--color-focus-ring);
@@ -311,6 +322,21 @@
       var(--color-border-strong) 0 2px,
       transparent 2px 5px
     );
+  }
+}
+
+/* Where a toast lands on a phone. By default it sits above the tab bar and
+   above whatever else is pinned to the bottom of the screen — the chat
+   composer, a StickyActionBar — which publish their height as
+   `--bottom-bar-h` (`usePublishBottomBar`). While an overlay is open
+   (`useBodyScrollLock` sets `data-overlay-open` on <html>) the bottom belongs
+   to the sheet's own footer, and an error toast sat on its Save button for the
+   eight seconds it was up; so it drops from the top instead. The md position is
+   the viewport's own `md:` classes and is untouched by this. */
+@media (max-width: 767.98px) {
+  html[data-overlay-open] .toast-viewport {
+    top: calc(env(safe-area-inset-top) + 0.5rem);
+    bottom: auto;
   }
 }
 

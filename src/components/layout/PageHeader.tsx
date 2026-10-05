@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { ClampedText } from '@/components/ui';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
 
 import { Breadcrumbs, type Crumb } from './Breadcrumbs';
@@ -10,6 +11,18 @@ export interface PageHeaderProps {
   subtitle?: string;
   breadcrumbs?: Crumb[];
   actions?: React.ReactNode;
+  /**
+   * Icon-only utilities — a Refresh `IconButton`, `<HowThisWorks variant="icon">`.
+   *
+   * Below md they sit on the TITLE's line, at its right edge. As members of
+   * `actions` they wrapped onto a 44px row of their own under everything else:
+   * on the Kavach work queue the title block, a "more" row, the counts row and
+   * then a row holding just Refresh and a play glyph put the first queue row at
+   * 470px of a 676px screen. At md they are appended to the END of the actions
+   * row, so moving a trailing Refresh + help pair out of `actions` and into
+   * `tools` renders exactly what it rendered before.
+   */
+  tools?: React.ReactNode;
   /** Stretch the action buttons across the line they land on, below md. Off by
    *  default: one action does not need to be 328px wide to be tappable. Ask for
    *  it where the actions are the point of the page. */
@@ -47,9 +60,15 @@ export function PageHeader({
   subtitle,
   breadcrumbs,
   actions,
+  tools,
   actionsFill = false,
   dense = false,
 }: PageHeaderProps) {
+  // Decided in JS, like `ClampedText`, so the tools are mounted exactly once —
+  // a CSS branch would put every IconButton in the document twice.
+  const isMd = useMediaQuery('(min-width: 768px)');
+  const hasTools = tools != null && tools !== false;
+
   if (dense) {
     return (
       <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 md:mb-4">
@@ -65,13 +84,25 @@ export function PageHeader({
           {title}
         </h1>
         {subtitle ? (
-          <p className="min-w-0 truncate text-sm text-text-muted">{subtitle}</p>
+          // Two wrapped lines below md, one truncated line at md. On a dealer
+          // the subtitle is the phone AND the outlet's address, and the address
+          // is printed nowhere else on the page: one 336px line of a 949px
+          // string meant it could not be read on a phone at all. The md half is
+          // spelled out property by property — `block`, `nowrap`, `ellipsis`,
+          // the clamp switched off — rather than as `md:truncate` beside
+          // `md:line-clamp-none`, which disagree about `overflow` and would be
+          // settled by stylesheet order.
+          <p className="min-w-0 line-clamp-2 break-words text-sm text-text-muted md:block md:whitespace-nowrap md:text-ellipsis md:[-webkit-line-clamp:none]">
+            {subtitle}
+          </p>
         ) : null}
-        {actions ? (
+        {actions || hasTools ? (
           // `empty:hidden` for the same reason as the block below: an action
-          // that renders nothing must not leave a gap behind.
+          // that renders nothing must not leave a gap behind. The tools need no
+          // place of their own here: this row already is the title's line.
           <div className="ml-auto flex flex-wrap items-center gap-2 empty:hidden">
             {actions}
+            {tools}
           </div>
         ) : null}
       </div>
@@ -92,9 +123,20 @@ export function PageHeader({
             two-word page name onto two lines and, with the subtitle and the
             action under it, spends the first 300px of a 740px viewport before
             the first row of data. 24px is restored from md up. */}
-        <h1 className="break-words text-xl font-semibold text-text md:text-2xl">
-          {title}
-        </h1>
+        {hasTools && !isMd ? (
+          // `-my-2` lets the 44px tools share a 28px title line without making
+          // it taller; a title that wraps keeps them beside its first line.
+          <div className="flex items-start justify-between gap-2">
+            <h1 className="min-w-0 break-words text-xl font-semibold text-text md:text-2xl">
+              {title}
+            </h1>
+            <div className="-my-2 flex shrink-0 items-center gap-1">{tools}</div>
+          </div>
+        ) : (
+          <h1 className="break-words text-xl font-semibold text-text md:text-2xl">
+            {title}
+          </h1>
+        )}
         {subtitle ? (
           // Some subtitles run to 158 characters — five lines, ~100px of a
           // 522px screen, before any data. Two lines below md; unchanged above.
@@ -110,7 +152,7 @@ export function PageHeader({
           </ClampedText>
         ) : null}
       </div>
-      {actions ? (
+      {actions || (hasTools && isMd) ? (
         // `flex-wrap` is what fixed the clipping: a nowrap row of three
         // `whitespace-nowrap` buttons needs ~372px and a 360px screen offers
         // ~296px, so the third one was cut off rather than scrolled off.
@@ -122,13 +164,12 @@ export function PageHeader({
           className={cn(
             'flex flex-wrap items-center gap-2 md:flex-nowrap md:[&>button]:flex-none',
             // `empty:hidden` because an element that renders NOTHING is still a
-            // truthy prop. <HowThisWorks/> returns null on a screen whose video
-            // is not made yet — that is the whole reason its button could be
-            // placed across the portal before the videos existed — but React
-            // cannot tell a parent that in advance, so `actions` is truthy and
-            // this wrapper renders anyway. Empty, it is still a flex child, so
-            // the `gap-2` above puts 8px between the title and nothing at all,
-            // on every such page, below md.
+            // truthy prop. A component can return null — a permission check, a
+            // feature that is switched off, a fragment whose members are all
+            // conditional — and React cannot tell a parent that in advance, so
+            // `actions` is truthy and this wrapper renders anyway. Empty, it is
+            // still a flex child, so the `gap-2` above would put 8px between
+            // the title and nothing at all, below md.
             //
             // `:empty` is the one thing that CAN tell: a component returning
             // null leaves no DOM node behind, so the wrapper genuinely matches
@@ -141,6 +182,7 @@ export function PageHeader({
           )}
         >
           {actions}
+          {isMd ? tools : null}
         </div>
       ) : null}
     </div>

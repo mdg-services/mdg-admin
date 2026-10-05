@@ -47,6 +47,13 @@ export interface TabsProps {
    * screen without scrolling for it, and beside the menu that opened it.
    */
   pinnedActive?: TabItem;
+  /**
+   * Show the `pinnedActive` chip below md only. A desktop strip that already
+   * looks right without it stays byte-identical, and the phone — where the
+   * strip has the least room and the overflow menu holds the most tabs — is
+   * the one that names where you are.
+   */
+  pinnedActiveBelowMd?: boolean;
 }
 
 export function Tabs({
@@ -57,6 +64,7 @@ export function Tabs({
   trailing,
   sticky = false,
   pinnedActive,
+  pinnedActiveBelowMd = false,
 }: TabsProps) {
   const listRef = React.useRef<HTMLDivElement | null>(null);
   const activeRef = React.useRef<HTMLButtonElement | null>(null);
@@ -157,7 +165,10 @@ export function Tabs({
           {pinned ? (
             <span
               aria-current="true"
-              className="mb-0 max-w-[8rem] truncate border-b-2 border-brand px-3 py-3 text-sm font-medium text-text md:-mb-px md:py-2"
+              className={cn(
+                'mb-0 max-w-[10rem] truncate border-b-2 border-brand px-3 py-3 text-sm font-medium text-text md:-mb-px md:py-2',
+                pinnedActiveBelowMd && 'md:hidden',
+              )}
             >
               {pinned.label}
             </span>

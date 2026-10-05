@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { usePublishBottomBar } from '@/hooks/usePublishBottomBar';
 import { useSafeInsets } from '@/hooks/useSafeInsets';
 import { cn } from '@/lib/cn';
 
@@ -128,6 +129,10 @@ export function StickyActionBar({
   className,
 }: StickyActionBarProps) {
   const insets = useSafeInsets();
+  // Below md the toast viewport reads this bar's height and sits above it, so
+  // a failed save's error toast no longer covers the Save that would retry it.
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  usePublishBottomBar(rootRef, !hidden);
   // A `card` that bleeds to the screen edges is no longer a card, and a `fixed`
   // bar already spans the viewport, so the lift only applies to the one shape
   // it was drawn for.
@@ -147,6 +152,7 @@ export function StickyActionBar({
 
   return (
     <div
+      ref={rootRef}
       className={cn(
         // The bleed has to be the gutter token, not a hard-coded `-mx-3`: the
         // two numbers drifting apart is an overhang, and `main` is

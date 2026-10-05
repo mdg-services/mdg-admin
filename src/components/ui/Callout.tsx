@@ -14,13 +14,16 @@ import { cn } from '@/lib/cn';
  * caution reads at the same weight as an old one.
  */
 
+/** The text is the `strong` shade below md — amber on the soft amber is 2.9:1
+ *  and this is a sentence somebody has to read outdoors — and today's shade
+ *  from md up, so a desktop callout is unchanged. See `INTENT_CLASSES`. */
 const INTENTS = {
   warning: {
-    className: 'border-warning bg-warning-soft text-warning',
+    className: 'border-warning bg-warning-soft text-warning-strong md:text-warning',
     Icon: AlertTriangle,
   },
   info: {
-    className: 'border-info bg-info-soft text-info',
+    className: 'border-info bg-info-soft text-info-strong md:text-info',
     Icon: Info,
   },
 } as const;

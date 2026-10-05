@@ -35,6 +35,15 @@ export interface KeyValueListProps {
   /** Show only the `primary` items — or the first N when none are marked —
    *  behind a "Show all N fields" toggle. */
   collapseAfter?: number;
+  /**
+   * Below md, put each short pair on ONE line — label left, value right, a
+   * `numeric` value right-aligned so a column of figures ends on the same
+   * digit. For a list of short labels and short figures (a tank's dip, water
+   * and stock): stacked, each pair cost 48px and a three-figure box 172px, with
+   * the numbers ending wherever they happened to. A `block` item still takes
+   * its own line. From md the list is exactly what `layout` draws without it.
+   */
+  inlineBelowMd?: boolean;
   className?: string;
 }
 
@@ -69,6 +78,7 @@ export function KeyValueList({
   labelWidth = '140px',
   columnsAtMd = 1,
   collapseAfter,
+  inlineBelowMd = false,
   className,
 }: KeyValueListProps) {
   const [expanded, setExpanded] = React.useState(false);
@@ -100,41 +110,56 @@ export function KeyValueList({
         )}
         style={style}
       >
-        {visible.map((item) => (
-          <div
-            key={item.key}
-            className={cn(
-              'min-w-0',
-              layout === 'rows' &&
-                !item.block &&
-                'md:grid md:grid-cols-[var(--kv-label,140px)_minmax(0,1fr)] md:items-baseline md:gap-3',
-            )}
-          >
-            <dt className="text-sm text-text-muted">{item.label}</dt>
-            <dd
+        {visible.map((item) => {
+          const inline = inlineBelowMd && !item.block;
+          return (
+            <div
+              key={item.key}
               className={cn(
-                'min-w-0 break-words text-sm text-text',
-                item.mono && 'break-all font-mono',
-                item.numeric && 'tabular-nums md:text-right',
-                // `select-text` is what the native shell's long-press allow-list
-                // matches on, so a copyable value gets both selection and the
-                // callout without every caller remembering to pass the class
-                // down through `className` (which lands on the whole list).
-                item.copyable && 'select-text',
+                'min-w-0',
+                // The md half resets exactly what this adds: `md:grid` (rows) or
+                // `md:block` (stacked) takes the display back, and
+                // `md:justify-normal` the one property a grid would still read.
+                inline &&
+                  cn(
+                    'flex items-baseline justify-between gap-3',
+                    layout === 'rows' ? 'md:justify-normal' : 'md:block',
+                  ),
+                layout === 'rows' &&
+                  !item.block &&
+                  'md:grid md:grid-cols-[var(--kv-label,140px)_minmax(0,1fr)] md:items-baseline md:gap-3',
               )}
             >
-              {item.copyable && isCopyable(item.value) ? (
-                <Copyable
-                  value={String(item.value)}
-                  mode="inline"
-                  mono={item.mono}
-                />
-              ) : (
-                item.value
-              )}
-            </dd>
-          </div>
-        ))}
+              {/* Inline, a long label wraps and the figure stays whole: the
+                  label is the side that can lose width without losing meaning.
+                  Without this "6,06,12,345 L" broke as "6,06,12,345" over "L". */}
+              <dt className={cn('text-sm text-text-muted', inline && 'min-w-0')}>{item.label}</dt>
+              <dd
+                className={cn(
+                  'min-w-0 break-words text-sm text-text',
+                  item.mono && 'break-all font-mono',
+                  item.numeric && 'tabular-nums md:text-right',
+                  item.numeric && inline && 'shrink-0 whitespace-nowrap text-right md:whitespace-normal',
+                  // `select-text` is what the native shell's long-press allow-list
+                  // matches on, so a copyable value gets both selection and the
+                  // callout without every caller remembering to pass the class
+                  // down through `className` (which lands on the whole list).
+                  item.copyable && 'select-text',
+                )}
+              >
+                {item.copyable && isCopyable(item.value) ? (
+                  <Copyable
+                    value={String(item.value)}
+                    mode="inline"
+                    mono={item.mono}
+                  />
+                ) : (
+                  item.value
+                )}
+              </dd>
+            </div>
+          );
+        })}
       </dl>
       {collapseAfter != null && visible.length < items.length ? (
         <Button

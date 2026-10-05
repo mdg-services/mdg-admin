@@ -2,7 +2,12 @@ import { ExternalLink, PlayCircle } from 'lucide-react';
 import * as React from 'react';
 
 import { cn } from '@/lib/cn';
-import { type GuideVideo, guideUrl, videosForSurface } from '@/lib/guideVideos';
+import {
+  type GuideVideo,
+  guideDescription,
+  guideUrl,
+  videosForSurface,
+} from '@/lib/guideVideos';
 
 import { Button } from './Button';
 import { Dialog } from './Dialog';
@@ -113,7 +118,9 @@ export function HowThisWorks({
     <>
       {variant === 'icon' ? (
         <IconButton
-          aria-label="How this works"
+          // Named after the guide it opens: a screen with two of these side
+          // by side (the Data Vault header) read out "How this works" twice.
+          aria-label={label ? `How this works: ${label}` : 'How this works'}
           title="How this works"
           onClick={() => setOpen(true)}
           className={className}
@@ -136,7 +143,10 @@ export function HowThisWorks({
         open={open}
         onClose={() => setOpen(false)}
         title={label ? `${label} — guided videos` : 'Guided videos'}
-        description="Short walkthroughs for admins, in Hindi, showing this exact screen."
+        // Says which of the three this list is — a video of this screen, one
+        // on the subject, or only the library — instead of promising the
+        // first on every screen.
+        description={guideDescription(videos)}
         size="md"
         footer={
           <Button variant="secondary" onClick={() => setOpen(false)}>

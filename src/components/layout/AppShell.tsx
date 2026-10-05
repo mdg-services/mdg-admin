@@ -16,13 +16,12 @@ import {
 } from 'react-router-dom';
 
 import { Input, Menu, MenuItem } from '@/components/ui';
-import { useAiTurnCountsQuery } from '@/hooks/api/useAiTurns';
-import { useBankHolidayPendingQuery } from '@/hooks/api/useBankHolidays';
-import { useConversations } from '@/hooks/api/useConversations';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useNavBadges } from '@/hooks/useNavBadges';
 import { usePushBridge } from '@/hooks/usePushBridge';
 import { useSafeBack } from '@/hooks/useSafeBack';
+import { useSoftKeyboard } from '@/hooks/useSoftKeyboard';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/store/auth';
 
@@ -96,23 +95,10 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const mineQ = useConversations('mine');
-  const unreadCount = (mineQ.data ?? []).filter((c) => c.unreadByAdmin).length;
   const isSuperAdmin = useIsSuperAdmin();
   const navItems = NAV_ITEMS.filter((item) => !item.superAdminOnly || isSuperAdmin);
-  // Nav count badges keyed by route: unread chats, AI answers nobody has judged
-  // yet, unconfirmed national holidays.
-  const pendingHolidaysQ = useBankHolidayPendingQuery();
-  // The unreviewed figure is the ONLY nudge to open the AI answers page, and the
-  // feature's safety claim is that a person reads what the machine said. It
-  // shares its cache entry with the page, so judging a turn there takes this
-  // number down without a second request.
-  const aiCountsQ = useAiTurnCountsQuery();
-  const navBadges: Record<string, number> = {
-    '/inbox': unreadCount,
-    '/ai-answers': aiCountsQ.data?.unreviewed ?? 0,
-    '/bank-holidays': pendingHolidaysQ.data?.totalCount ?? 0,
-  };
+  // The same counts the phone's tab bar shows — one hook, so they cannot drift.
+  const navBadges = useNavBadges();
 
   // A full-screen drill-in: `/dealers/:id` (guarded against the `/dealers` list).
   const isDealerDetail = !!matchPath('/dealers/:id', location.pathname);
@@ -121,6 +107,11 @@ export function AppShell() {
   // The bottom bar shows on top-level list screens and hides on full-screen
   // drill-ins so chat/detail own the whole viewport (native "push hides tabs").
   const showTabBar = !isDealerDetail && !inThread;
+  // ...and while the on-screen keyboard is up. Navigation cannot be used
+  // mid-entry, and on the shift sheet at 360×420 the bar was 65px of the 226px
+  // left for the form. It comes back when the field loses focus.
+  const keyboardUp = useSoftKeyboard();
+  const tabBarVisible = showTabBar && !keyboardUp;
 
   // Publish the bar's height so anything bottom-anchored can clear it without
   // guessing. It is NOT a constant: 56px on a list screen, zero on a drill-in,
@@ -131,12 +122,12 @@ export function AppShell() {
     const root = document.documentElement;
     root.style.setProperty(
       '--tab-bar-h',
-      showTabBar && !isDesktop ? '3.5rem' : '0px',
+      tabBarVisible && !isDesktop ? '3.5rem' : '0px',
     );
     return () => {
       root.style.removeProperty('--tab-bar-h');
     };
-  }, [showTabBar, isDesktop]);
+  }, [tabBarVisible, isDesktop]);
 
   // Back must not walk out of the app: a push notification can deep-link
   // straight to a dealer, making it the first entry in history.
@@ -169,8 +160,20 @@ export function AppShell() {
         {/* 48px below md, not 56: with the tab bar under it the shell's own
             chrome is 112px of a 740px screen, and on a phone this bar carries
             only the brand mark (or a back chevron) and the account button. Both
-            of those are 44px tall, so 48px still holds them. 56px from md up. */}
-        <header className="sticky top-0 z-10 flex h-12 items-center gap-2 border-b border-border bg-surface px-3 md:h-14 md:gap-3 md:px-4">
+            of those are 44px tall, so 48px still holds them. 56px from md up.
+
+            Not at all in an open thread below md: the thread's own header
+            carries Back and the conversation's actions, and this bar above it
+            was 48px of brand mark — 139px of chrome before the first message,
+            with the name of the person being answered cut to fit. One ternary
+            rather than `flex` plus `hidden`, because `cn` is clsx and two
+            display classes would be settled by stylesheet order. */}
+        <header
+          className={cn(
+            'sticky top-0 z-10 h-12 items-center gap-2 border-b border-border bg-surface px-3 md:h-14 md:gap-3 md:px-4',
+            inThread ? 'hidden md:flex' : 'flex',
+          )}
+        >
           {/* Mobile: a back chevron on a drill-in, otherwise the brand. Both md:hidden. */}
           {isDealerDetail ? (
             <button
@@ -215,11 +218,20 @@ export function AppShell() {
             `body { overflow: hidden }` recipe is a no-op here. On a drill-in
             the tab bar is gone and nothing else carries the bottom safe-area
             inset, so `main` carries it: without this the last row of a dealer
-            page sits under the gesture strip. */}
+            page sits under the gesture strip.
+
+            `relative` makes `main` the containing block for every absolutely
+            positioned thing inside it that has no positioned ancestor of its
+            own — the `sr-only` labels, most of all. Without it they resolved
+            against the initial containing block, escaped `main`'s overflow
+            clip and made the DOCUMENT scrollable: 4,796px on a 740px phone on a
+            Daily Sales Report, so a fling past the end of `main` scrolled the
+            whole shell away and left a blank screen with the tab bar riding
+            up under the header. */}
         <main
           data-app-scroller
           className={cn(
-            'min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-bg p-[var(--app-gutter)]',
+            'relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-bg p-[var(--app-gutter)]',
             !showTabBar &&
               'pb-[calc(var(--app-gutter)+env(safe-area-inset-bottom))]',
           )}
@@ -235,7 +247,7 @@ export function AppShell() {
             <Outlet />
           </ErrorBoundary>
         </main>
-        {showTabBar ? <MobileTabBar className="md:hidden" /> : null}
+        {tabBarVisible ? <MobileTabBar className="md:hidden" /> : null}
       </div>
     </div>
   );

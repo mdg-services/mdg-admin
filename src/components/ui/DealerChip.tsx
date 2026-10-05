@@ -59,9 +59,15 @@ export function DealerChip({
       // Deliberately NOT `.tap-target`: its halo is `inset:-12px` on all four
       // sides, and this chip is routinely a sibling of another control (the run
       // row's own button), where the halo would sit over that neighbour's
-      // padding and swallow taps meant for it. Vertical padding buys the height
-      // instead, without reaching sideways into anything.
-      className={cn(base, 'py-2 hover:bg-surface hover:underline')}
+      // padding and swallow taps meant for it. The chip grows its own box
+      // instead — a 44px square floor below md, so "1E" is not a 28px target
+      // beside a 36px "E02" — without reaching sideways into anything. The
+      // `md:` resets give a desktop row back its 34px chip.
+      className={cn(
+        base,
+        'min-h-11 min-w-11 justify-center py-2 hover:bg-surface hover:underline',
+        'md:min-h-0 md:min-w-0 md:justify-start',
+      )}
       aria-label={`Open outlet ${label}`}
     >
       {label}

@@ -108,7 +108,14 @@ export function FieldCardList({
               card.tone === 'muted' && 'opacity-60',
             )}
           >
-            <div className="flex items-start justify-between gap-2">
+            {/* `items-center` and a `-my-2` action: the action is usually a 44px
+                menu trigger beside a 20px heading, and top-aligned it set a
+                44px row with the heading stuck to its top — about 32px of
+                every card spent above the first field. Centred, with the
+                trigger's own vertical margin pulled in, the row is the
+                heading's height and the 44px hit area is unchanged. The `md:`
+                pair keeps a column-less card stack at md exactly as it was. */}
+            <div className="flex items-center justify-between gap-2 md:items-start">
               <div className="min-w-0 flex-1 break-words text-sm font-semibold text-text">
                 {card.heading}
               </div>
@@ -117,7 +124,9 @@ export function FieldCardList({
                   {card.headingRight}
                 </div>
               ) : null}
-              {card.action != null ? <div className="shrink-0">{card.action}</div> : null}
+              {card.action != null ? (
+                <div className="-my-2 shrink-0 md:my-0">{card.action}</div>
+              ) : null}
             </div>
             <dl className="mt-2 grid gap-2.5">
               {card.fields.map((field) => (
