@@ -1,5 +1,6 @@
 import {
   Activity,
+  Bell,
   Building2,
   CalendarDays,
   Clapperboard,
@@ -46,6 +47,11 @@ export interface NavItem {
  */
 export const NAV_ITEMS: NavItem[] = [
   { to: '/inbox', label: 'Inbox', icon: MessageSquare },
+  // Everything that needs a person, across every outlet — the list behind
+  // every alert pushed to an admin's phone. Second, under Inbox, because the
+  // two together are the whole of "what is waiting on me". On a phone it is
+  // also the bell in the header, since the tab bar is full.
+  { to: '/alerts', label: 'Alerts', icon: Bell },
   // The AI first line's turn log, and the whole safety case for it: every answer
   // the machine has given a dealer, with a verdict button on each. Deliberately
   // NOT `superAdminOnly` — the people who answer the tickets are the people who
@@ -131,3 +137,11 @@ export const NAV_ITEMS: NavItem[] = [
  * in `NAV_ITEMS` falls into the "More" sheet.
  */
 export const BOTTOM_TAB_ROUTES = ['/inbox', '/overview', '/dealers', '/kavach'];
+
+/**
+ * Routes whose count the header already shows on a phone (the Alerts bell).
+ * Left out of the closed More button's total, or the same number would sit on
+ * two buttons at once and the More badge would be lit whenever anything at all
+ * was open — hiding the AI answers and holidays it exists to point at.
+ */
+export const HEADER_BADGE_ROUTES = ['/alerts'];

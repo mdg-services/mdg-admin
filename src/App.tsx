@@ -35,6 +35,11 @@ const ActivityPage = React.lazy(
     import('@/pages/ActivityPage').then((m) => ({ default: m.ActivityPage })),
   ),
 );
+const AlertsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/alerts/AlertsPage').then((m) => ({ default: m.AlertsPage })),
+  ),
+);
 const AiAnswersPage = React.lazy(
   retryImport(() =>
     import('@/pages/aiAnswers/AiAnswersPage').then((m) => ({
@@ -235,6 +240,17 @@ export default function App() {
         >
           <Route index element={<Navigate to="/inbox" replace />} />
           <Route path="inbox" element={<InboxPage />} />
+          {/* Everything that needs a person, and the screen behind every alert
+              pushed to an admin's phone. Every admin, not super-admin: the
+              server already keeps its own health alerts to super-admins. */}
+          <Route
+            path="alerts"
+            element={
+              <LazyPage>
+                <AlertsPage />
+              </LazyPage>
+            }
+          />
           <Route
             path="overview"
             element={

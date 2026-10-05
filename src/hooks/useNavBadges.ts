@@ -1,10 +1,12 @@
+import { useOpenAlertCount } from './api/useAdminAlerts';
 import { useAiTurnCountsQuery } from './api/useAiTurns';
 import { useBankHolidayPendingQuery } from './api/useBankHolidays';
 import { useConversations } from './api/useConversations';
 
 /**
  * The count badge each nav destination carries, keyed by its route: unread
- * chats, AI answers nobody has judged yet, unconfirmed national holidays.
+ * chats, open alerts, AI answers nobody has judged yet, unconfirmed national
+ * holidays.
  *
  * ONE place, because there were two and they had drifted. The desktop sidebar
  * (`AppShell`) and the phone's tab bar (`MobileTabBar`) each computed their
@@ -22,8 +24,10 @@ export function useNavBadges(): Record<string, number> {
   const mineQ = useConversations('mine');
   const aiCountsQ = useAiTurnCountsQuery();
   const pendingHolidaysQ = useBankHolidayPendingQuery();
+  const openAlerts = useOpenAlertCount();
   return {
     '/inbox': (mineQ.data ?? []).filter((c) => c.unreadByAdmin).length,
+    '/alerts': openAlerts,
     '/ai-answers': aiCountsQ.data?.unreviewed ?? 0,
     '/bank-holidays': pendingHolidaysQ.data?.totalCount ?? 0,
   };

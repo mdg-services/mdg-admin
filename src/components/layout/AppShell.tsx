@@ -1,4 +1,5 @@
 import {
+  Bell,
   ChevronDown,
   ChevronLeft,
   LogOut,
@@ -7,6 +8,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import {
+  Link,
   matchPath,
   NavLink,
   Outlet,
@@ -16,6 +18,7 @@ import {
 } from 'react-router-dom';
 
 import { Input, Menu, MenuItem } from '@/components/ui';
+import { useAlertsLive } from '@/hooks/api/useAdminAlerts';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useNavBadges } from '@/hooks/useNavBadges';
@@ -90,6 +93,7 @@ function BrandMark() {
 
 export function AppShell() {
   usePushBridge(); // register push token + handle deep links from native
+  useAlertsLive(); // keep the bell's count current on every screen
   const admin = useAuthStore((s) => s.admin);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
@@ -205,7 +209,8 @@ export function AppShell() {
               disabled
             />
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
+            <AlertsBell count={navBadges['/alerts'] ?? 0} />
             <AdminMenu
               name={admin?.name ?? 'Admin'}
               email={admin?.email ?? ''}
@@ -250,6 +255,36 @@ export function AppShell() {
         {tabBarVisible ? <MobileTabBar className="md:hidden" /> : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * The bell: how many alerts are waiting, on every screen, one tap from the list.
+ *
+ * In the header rather than the tab bar because the bar is full at four, and a
+ * count that lives in the More sheet is a count nobody sees. A link, not a
+ * button — it goes somewhere — and its name carries the number, because the
+ * badge is the whole message and a screen reader would otherwise miss it.
+ */
+function AlertsBell({ count }: { count: number }) {
+  const label = count > 0 ? `Alerts, ${count} waiting` : 'Alerts';
+  return (
+    <Link
+      to="/alerts"
+      aria-label={label}
+      title={label}
+      className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text"
+    >
+      <Bell width={20} height={20} strokeWidth={1.75} />
+      {count > 0 ? (
+        <span
+          aria-hidden
+          className="absolute right-1 top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[11px] font-semibold leading-[18px] text-text-inverse"
+        >
+          {count > 99 ? '99+' : count}
+        </span>
+      ) : null}
+    </Link>
   );
 }
 

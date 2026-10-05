@@ -7,7 +7,7 @@ import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useNavBadges } from '@/hooks/useNavBadges';
 import { cn } from '@/lib/cn';
 
-import { BOTTOM_TAB_ROUTES, NAV_ITEMS } from './navItems';
+import { BOTTOM_TAB_ROUTES, HEADER_BADGE_ROUTES, NAV_ITEMS } from './navItems';
 
 /**
  * The mobile bottom tab bar (below `md`). Four primary destinations plus a
@@ -51,8 +51,11 @@ export function MobileTabBar({ className }: { className?: string }) {
     { title: 'Setup', items: moreItems.filter((i) => i.superAdminOnly) },
   ].filter((section) => section.items.length > 0);
 
-  // What the closed More button has to advertise: everything waiting behind it.
-  const morePending = moreItems.reduce((n, i) => n + (badges[i.to] ?? 0), 0);
+  // What the closed More button has to advertise: everything waiting behind it
+  // that the header's bell is not already showing.
+  const morePending = moreItems
+    .filter((i) => !HEADER_BADGE_ROUTES.includes(i.to))
+    .reduce((n, i) => n + (badges[i.to] ?? 0), 0);
 
   const moreActive = moreItems.some((i) =>
     location.pathname.startsWith(i.to),
