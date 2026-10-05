@@ -45,7 +45,8 @@ export function howItCleared(alert: AdminAlert): string {
     case 'dismissed':
       return alert.dismissedByName ? `Marked as seen by ${alert.dismissedByName}` : 'Marked as seen';
     case 'expired':
-      return 'Closed after a day';
+      // A server alert after its day, or one the system withdrew.
+      return 'Closed automatically';
     default:
       return '';
   }
