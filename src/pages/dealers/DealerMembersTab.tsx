@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Check, Copy, MessageSquare, RefreshCw, UserPlus, Users } from 'lucide-react';
+import { Check, Copy, KeyRound, MessageSquare, RefreshCw, UserPlus, Users } from 'lucide-react';
 import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -33,6 +33,7 @@ import {
   Table,
   useToast,
 } from '@/components/ui';
+import { ResetPasswordDialog } from '@/features/users/ResetPasswordDialog';
 import {
   useCreateDealerUser,
   useDealerUsers,
@@ -93,6 +94,12 @@ export function DealerMembersTab({ dealer }: Props) {
   const isMd = useMediaQuery('(min-width: 768px)');
   const [addOpen, setAddOpen] = React.useState(false);
   const [suspendTarget, setSuspendTarget] = React.useState<User | null>(null);
+  /**
+   * Whose app password is being reset. Any admin can, not only a super-admin:
+   * the person who takes the "I can't sign in" call is the dealer's account
+   * manager, and the API has always allowed an admin to set it.
+   */
+  const [resetTarget, setResetTarget] = React.useState<User | null>(null);
   const hasMembers = !!users && users.length > 0;
 
   async function messageMember(u: User) {
@@ -261,6 +268,14 @@ export function DealerMembersTab({ dealer }: Props) {
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => setResetTarget(u)}
+                            leftIcon={<KeyRound width={14} height={14} strokeWidth={1.75} />}
+                          >
+                            Reset password
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => onStatusPress(u)}
                             loading={
                               (deleteUser.isPending || updateUser.isPending) &&
@@ -350,6 +365,18 @@ export function DealerMembersTab({ dealer }: Props) {
                     <Button
                       variant="secondary"
                       size="sm"
+                      onClick={() => setResetTarget(u)}
+                      leftIcon={<KeyRound width={14} height={14} strokeWidth={1.75} />}
+                    >
+                      Reset password
+                    </Button>
+                    {/* Its own full-width row, under the two everyday actions —
+                        Suspend asks first now, but it is still the one a thumb
+                        should have to reach for. */}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="col-span-2"
                       onClick={() => onStatusPress(u)}
                       loading={
                         (deleteUser.isPending || updateUser.isPending) &&
@@ -376,6 +403,13 @@ export function DealerMembersTab({ dealer }: Props) {
         description="They are signed out and cannot chat until reactivated."
         confirmLabel="Suspend"
         confirmVariant="danger"
+      />
+
+      <ResetPasswordDialog
+        person={resetTarget}
+        onClose={() => setResetTarget(null)}
+        onReset={(id, password) => updateUser.mutateAsync({ id, password })}
+        pending={updateUser.isPending && updateUser.variables?.id === resetTarget?.id}
       />
 
       <AddMemberDialog

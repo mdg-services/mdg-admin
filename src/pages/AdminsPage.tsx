@@ -29,6 +29,7 @@ import {
   useToast,
   type DataColumn,
 } from '@/components/ui';
+import { ResetPasswordDialog } from '@/features/users/ResetPasswordDialog';
 import { useAdmins, useCreateAdmin, useUpdateAdmin } from '@/hooks/api/useAdmins';
 import { ApiError } from '@/lib/api';
 import { copyText } from '@/lib/clipboard';
@@ -266,7 +267,12 @@ export function AdminsPage() {
       </Card>
 
       <AddAdminDialog open={addOpen} onClose={() => setAddOpen(false)} />
-      <ResetPasswordDialog admin={resetFor} onClose={() => setResetFor(null)} />
+      <ResetPasswordDialog
+        person={resetFor}
+        onClose={() => setResetFor(null)}
+        onReset={(id, password) => updateAdmin.mutateAsync({ id, password })}
+        pending={updateAdmin.isPending}
+      />
     </div>
   );
 }
@@ -398,107 +404,6 @@ function AddAdminDialog({ open, onClose }: { open: boolean; onClose: () => void 
           <FieldError message={errors.password?.message} />
         </div>
       </form>
-    </Dialog>
-  );
-}
-
-function ResetPasswordDialog({
-  admin,
-  onClose,
-}: {
-  admin: User | null;
-  onClose: () => void;
-}) {
-  const toast = useToast();
-  const updateAdmin = useUpdateAdmin();
-  const [password, setPassword] = React.useState('');
-  const [copied, setCopied] = React.useState(false);
-
-  // Pre-fill a strong password each time the dialog opens for a new admin.
-  React.useEffect(() => {
-    if (admin) setPassword(generatePassword(14));
-  }, [admin]);
-
-  async function copyPassword() {
-    try {
-      await navigator.clipboard.writeText(password);
-      setCopied(true);
-      toast.success('Password copied');
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toast.error('Could not copy — copy manually.');
-    }
-  }
-
-  async function submit() {
-    if (!admin) return;
-    if (password.length < 8) {
-      toast.error('Password must be at least 8 characters');
-      return;
-    }
-    try {
-      await updateAdmin.mutateAsync({ id: admin.id, password });
-      toast.success(`Password reset for ${admin.name}. Share it securely.`);
-      onClose();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to reset password');
-    }
-  }
-
-  return (
-    <Dialog
-      open={!!admin}
-      onClose={onClose}
-      title="Reset password"
-      description={
-        admin ? `Set a new password for ${admin.name} (${admin.email}).` : undefined
-      }
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={submit} loading={updateAdmin.isPending}>
-            Reset password
-          </Button>
-        </>
-      }
-    >
-      <div>
-        <Label htmlFor="reset-password" required>
-          New password
-        </Label>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            id="reset-password"
-            type="text"
-            autoComplete="new-password"
-            className="font-mono"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => setPassword(generatePassword(14))}
-            leftIcon={<RefreshCw width={14} height={14} />}
-          >
-            Generate
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={copyPassword}
-            leftIcon={
-              copied ? <Check width={14} height={14} /> : <Copy width={14} height={14} />
-            }
-          >
-            {copied ? 'Copied' : 'Copy'}
-          </Button>
-        </div>
-      </div>
     </Dialog>
   );
 }
