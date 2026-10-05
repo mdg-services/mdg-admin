@@ -4,6 +4,7 @@ import {
   Database,
   Droplets,
   FileBarChart2,
+  Fuel,
   Gauge,
   ReceiptText,
   ScanLine,
@@ -16,6 +17,7 @@ import { DealerDsrTab } from '../DealerDsrTab';
 import { DealerLedgerWatchPane } from '../DealerLedgerWatchPane';
 
 import { DealerInspectionPane } from './DealerInspectionPane';
+import { DealerLoadPlannerPane } from './DealerLoadPlannerPane';
 import { DealerPadLedgerPane } from './DealerPadLedgerPane';
 import { DealerRoSupplyStatusPane } from './DealerRoSupplyStatusPane';
 import { DealerTtDensityPane } from './DealerTtDensityPane';
@@ -120,6 +122,15 @@ const REGISTRY = [
     Icon: Droplets,
     requiresService: 'water-ingress-testing',
     Pane: DealerWaterIngressPane,
+  },
+  {
+    id: 'load-planner',
+    label: 'Load Planner',
+    description:
+      'When to order this dealer’s next tanker, which fuel goes in each chamber, and which tank it is unloaded into.',
+    Icon: Fuel,
+    requiresService: 'load-planner',
+    Pane: DealerLoadPlannerPane,
   },
 ] as const satisfies readonly DealerVaultDataset[];
 
