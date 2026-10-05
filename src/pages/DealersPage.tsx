@@ -307,53 +307,75 @@ export function DealersPage() {
                   the screen edge instead of 59px. */}
               <MobileCardList
                 variant="rows"
-                cards={data.items.map((d) => ({
-                  key: d.id,
-                  onClick: () => navigate(`/dealers/${d.id}`),
-                  primary: (
-                    <span
-                      className={cn(
-                        'block break-all font-mono font-medium text-text',
-                        d.archivedAt && 'opacity-60',
-                      )}
-                    >
-                      {dealerCodeLabel(d.code)}
-                    </span>
-                  ),
-                  primaryRight: d.archivedAt ? (
-                    <Badge intent="danger">Deleted</Badge>
-                  ) : null,
-                  // The roster's whole question is "was this done today", and on
-                  // a phone the answer used to exist only in the `title` of a
-                  // span nested inside the card's own <button> — a tooltip no
-                  // touch gesture shows, on an element long-press cannot reach
-                  // either. So `showWhen` is back on and the five services are
-                  // a two-column list instead of a wrapped inline run: label
-                  // left, state and date right, one service per line. It sits
-                  // in `secondary` rather than `meta` because `meta` forces
-                  // `text-xs`, and this is the content of the card.
-                  secondary: (
-                    <span className="grid grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1 md:grid-cols-[64px_minmax(0,1fr)] md:gap-x-3">
-                      {ROSTER_SERVICES.map((spec) => {
-                        const entry = servicesByDealer.get(d.id)?.get(spec.id);
-                        return (
-                          <React.Fragment key={spec.id}>
-                            <span className="text-text-subtle">
-                              {spec.shortLabel}
+                cards={data.items.map((d) => {
+                  const entries = servicesByDealer.get(d.id);
+                  // Why a service FAILED or needs a RESEND. On desktop the
+                  // reason is the cell's tooltip; a tooltip does not exist
+                  // under a finger, so on a phone the card said a bare red
+                  // "Failed" and the admin had to open the dealer and dig
+                  // through runs to learn what.
+                  const notes = ROSTER_SERVICES.flatMap((spec) => {
+                    const note = entries?.get(spec.id)?.note;
+                    return note ? [{ spec, note }] : [];
+                  });
+                  return {
+                    key: d.id,
+                    onClick: () => navigate(`/dealers/${d.id}`),
+                    // Sans and medium, as the Overview's "Today" board draws
+                    // the same code: the two lists answer one question — is
+                    // this outlet done today — and should read as one shape.
+                    primary: (
+                      <span
+                        className={cn(
+                          'block break-all font-medium text-text',
+                          d.archivedAt && 'opacity-60',
+                        )}
+                      >
+                        {dealerCodeLabel(d.code)}
+                      </span>
+                    ),
+                    primaryRight: d.archivedAt ? (
+                      <Badge intent="danger">Deleted</Badge>
+                    ) : null,
+                    // The roster's whole question is "was this done today", and
+                    // on a phone the answer used to exist only in the `title` of
+                    // a span nested inside the card's own <button> — a tooltip
+                    // no touch gesture shows. So the recency stays on, one
+                    // service per row: label left, state and day right on one
+                    // line. As a stacked badge-over-date block per service the
+                    // card was 268px against the board's ~203px for the same
+                    // five answers, and a page of dealers scrolled a third
+                    // longer than it needed to.
+                    kv: ROSTER_SERVICES.map((spec) => ({
+                      label: spec.shortLabel,
+                      value: (
+                        <ServiceStateChip
+                          entry={entries?.get(spec.id)}
+                          spec={spec}
+                          loading={!servicesKnown(d.id)}
+                          layout="inline"
+                        />
+                      ),
+                    })),
+                    // Under the rows rather than under each chip: a reason as
+                    // long as a portal's error message, right-aligned in the
+                    // value column, squeezed the service names to nothing.
+                    // Two lines each; the dealer's page has the rest.
+                    meta:
+                      notes.length > 0 ? (
+                        <span className="grid gap-1">
+                          {notes.map(({ spec, note }) => (
+                            <span key={spec.id} className="line-clamp-2">
+                              <span className="font-medium text-text-muted">
+                                {spec.shortLabel}:
+                              </span>{' '}
+                              {note}
                             </span>
-                            <span className="min-w-0">
-                              <ServiceStateChip
-                                entry={entry}
-                                spec={spec}
-                                loading={!servicesKnown(d.id)}
-                              />
-                            </span>
-                          </React.Fragment>
-                        );
-                      })}
-                    </span>
-                  ),
-                }))}
+                          ))}
+                        </span>
+                      ) : undefined,
+                  };
+                })}
               />
               <Pagination
                 page={data.page}

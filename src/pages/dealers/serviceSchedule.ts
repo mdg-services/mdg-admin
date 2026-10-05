@@ -1,5 +1,20 @@
 import { formatDateTime } from '@/lib/format';
-import type { DealerService } from '@dk/shared';
+import type { Cadence, DealerService } from '@dk/shared';
+
+/**
+ * The words for a cadence, wherever one is shown rather than chosen from.
+ *
+ * Here, beside `describeSchedule`, and not in `ServiceConfigFields`: that module
+ * pulls the whole JSON-schema form stack in, and the Services tab's phone cards
+ * need these words without it (see the note on its lazy dialogs).
+ */
+export const CADENCE_LABELS: Record<Cadence, string> = {
+  DAILY: 'Daily',
+  WEEKLY: 'Weekly',
+  MONTHLY: 'Monthly',
+  YEARLY: 'Yearly',
+  ON_DEMAND: 'On demand',
+};
 
 export interface ScheduleSummary {
   /** `warning` = it will never fire again, and that is not what was asked for. */

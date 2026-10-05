@@ -48,6 +48,7 @@ import {
   CADENCE_BUCKET_LABEL,
   CADENCE_BUCKET_ORDER,
   cadenceBucketFor,
+  cadenceLabel,
   EVIDENCE_LABEL,
   KAVACH_DOMAIN_LABEL,
   KAVACH_DOMAIN_ORDER,
@@ -156,7 +157,7 @@ export function KavachDefaultsPage() {
           `md:` rule: a `<details>` body is hidden by the browser's own
           machinery, which no class can reopen, so a desktop reader would get
           the summary and never the paragraph. */}
-      <details className="mb-4 rounded-md border border-warning bg-warning-soft px-3 text-xs text-warning md:hidden">
+      <details className="mb-4 rounded-md border border-warning bg-warning-soft px-3 text-xs text-warning-strong md:hidden">
         {/* Block, not flex: a flex <summary> loses its native disclosure
             triangle, which is the only cue the line opens at all. */}
         <summary className="min-h-11 cursor-pointer select-none py-3 font-semibold">
@@ -225,7 +226,9 @@ export function KavachDefaultsPage() {
                   <CardTitle className="text-base">
                     {CADENCE_BUCKET_LABEL[g.bucket]}
                   </CardTitle>
-                  <CardSubtitle>{g.items.length} task(s)</CardSubtitle>
+                  <CardSubtitle>
+                    {g.items.length} {g.items.length === 1 ? 'task' : 'tasks'}
+                  </CardSubtitle>
                 </div>
               </CardHeader>
               <CardContent padding="none" className="md:p-4">
@@ -391,9 +394,11 @@ export function KavachDefaultsPage() {
                         {' · '}
                         {KAVACH_DOMAIN_LABEL[it.domain]}
                         {' · '}
+                        {/* The shared wording, which says "every day" where a
+                            hand-rolled template said "every 1 days". */}
                         {it.cadenceDays == null
                           ? 'on event'
-                          : `every ${it.cadenceDays} days`}
+                          : cadenceLabel(it.cadenceDays).toLowerCase()}
                         {it.signalId ? (
                           <>
                             {' · '}

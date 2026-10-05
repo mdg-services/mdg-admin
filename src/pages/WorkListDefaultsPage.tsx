@@ -178,7 +178,9 @@ export function WorkListDefaultsPage() {
               <CardHeader>
                 <div>
                   <CardTitle className="text-base">{domainLabel(g.domain)}</CardTitle>
-                  <CardSubtitle>{g.items.length} work item(s)</CardSubtitle>
+                  <CardSubtitle>
+                    {g.items.length} work {g.items.length === 1 ? 'item' : 'items'}
+                  </CardSubtitle>
                 </div>
               </CardHeader>
               <CardContent padding="none" className="md:p-4">

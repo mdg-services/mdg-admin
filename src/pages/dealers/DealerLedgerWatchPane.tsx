@@ -18,7 +18,6 @@ import {
   CardHeader,
   DateRangeFilter,
   dateRangeForPreset,
-  Dialog,
   DownloadButton,
   EmptyState,
   formatDateRangeLabel,
@@ -27,7 +26,6 @@ import {
   SegmentedControl,
   Select,
   Skeleton,
-  Textarea,
   useToast,
   type DateRangeValue,
 } from '@/components/ui';
@@ -40,10 +38,12 @@ import {
   type LedgerFlagFilters,
   type LedgerWatchCardWindow,
 } from '@/hooks/api/useLedgerWatch';
+import { useBusyIds } from '@/hooks/useBusyIds';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate, formatDateTime, formatDmy, inrFormat, istTodayYmd } from '@/lib/format';
 import { StatTileRow } from '@/pages/dataVault/StatTile';
+import { IgnoreFindingDialog } from '@/pages/ledgerWatch/IgnoreFindingDialog';
 import type { LedgerFlagDto, LedgerFlagStatus } from '@dk/shared';
 
 import {
@@ -143,7 +143,6 @@ export function DealerLedgerWatchPane({ dealer }: DealerVaultPaneProps) {
     Record<string, LedgerFlagStatus>
   >({});
   const [ignoring, setIgnoring] = React.useState<LedgerFlagDto | null>(null);
-  const [ignoreNote, setIgnoreNote] = React.useState('');
 
   const flags = React.useMemo(
     () => sortFlags(flagsQ.data?.pages.flatMap((p) => p.rows) ?? []),
@@ -154,24 +153,29 @@ export function DealerLedgerWatchPane({ dealer }: DealerVaultPaneProps) {
   // sent) silently produced 0 above a screen full of findings.
   const total = flagsQ.data?.pages[0]?.counts.total ?? 0;
 
+  // Per row, as on the estate list: one shared `isPending` greyed out every
+  // finding while one of them saved.
+  const busy = useBusyIds();
+
   function setStatus(flag: LedgerFlagDto, status: LedgerFlagStatus, note?: string) {
-    updateFlag.mutate(
-      { id: flag.id, body: note ? { status, note } : { status } },
-      {
-        onSuccess: () => {
-          setHandled((prev) => ({ ...prev, [flag.id]: status }));
-          toast.success(
-            status === 'IGNORED'
-              ? 'Ignored — detection will not raise it again.'
-              : 'Acknowledged.',
-          );
-        },
-        onError: (err) =>
-          toast.error(
-            err instanceof ApiError ? err.message : 'Could not update the flag',
-          ),
-      },
-    );
+    void busy.run(flag.id, async () => {
+      try {
+        await updateFlag.mutateAsync({
+          id: flag.id,
+          body: note ? { status, note } : { status },
+        });
+        setHandled((prev) => ({ ...prev, [flag.id]: status }));
+        toast.success(
+          status === 'IGNORED'
+            ? 'Ignored — detection will not raise it again.'
+            : 'Acknowledged.',
+        );
+      } catch (err) {
+        toast.error(
+          err instanceof ApiError ? err.message : 'Could not update the flag',
+        );
+      }
+    });
   }
 
   function refresh() {
@@ -311,12 +315,9 @@ export function DealerLedgerWatchPane({ dealer }: DealerVaultPaneProps) {
                     key={flag.id}
                     flag={flag}
                     handledAs={handled[flag.id]}
-                    busy={updateFlag.isPending}
+                    busy={busy.isBusy(flag.id)}
                     onAcknowledge={() => setStatus(flag, 'ACKNOWLEDGED')}
-                    onIgnore={() => {
-                      setIgnoreNote('');
-                      setIgnoring(flag);
-                    }}
+                    onIgnore={() => setIgnoring(flag)}
                   />
                 ))}
               </ul>
@@ -344,47 +345,16 @@ export function DealerLedgerWatchPane({ dealer }: DealerVaultPaneProps) {
 
       {/* Ignoring is terminal — detection refreshes an ignored finding's
           evidence but never drags it back to OPEN — so it asks, and the reason
-          is stored on the flag rather than lost in somebody's memory. */}
-      <Dialog
-        open={ignoring !== null}
-        onClose={() => setIgnoring(null)}
-        title="Ignore this finding?"
-        description={
-          ignoring
-            ? `${ignoring.titleEn} — ${inrFormat(ignoring.amount)} on ${formatDmy(ignoring.date)}. It stays on the ledger; it just stops asking for attention. Detection will not raise it again.`
-            : undefined
-        }
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setIgnoring(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              loading={updateFlag.isPending}
-              onClick={() => {
-                if (!ignoring) return;
-                const flag = ignoring;
-                setIgnoring(null);
-                setStatus(flag, 'IGNORED', ignoreNote.trim() || undefined);
-              }}
-            >
-              Ignore it
-            </Button>
-          </>
-        }
-      >
-        <Label htmlFor="ledger-watch-ignore-note" hint="optional">
-          Why
-        </Label>
-        <Textarea
-          id="ledger-watch-ignore-note"
-          rows={3}
-          value={ignoreNote}
-          onChange={(e) => setIgnoreNote(e.target.value)}
-          placeholder="e.g. confirmed with IOC — annual rental, expected"
-        />
-      </Dialog>
+          is stored on the flag rather than lost in somebody's memory. The same
+          confirm the estate-wide Ledger Watch list uses. */}
+      <IgnoreFindingDialog
+        flag={ignoring}
+        onCancel={() => setIgnoring(null)}
+        onConfirm={(flag, note) => {
+          setIgnoring(null);
+          setStatus(flag, 'IGNORED', note);
+        }}
+      />
     </div>
   );
 }
@@ -480,7 +450,7 @@ function MonthSummary({
               calculation behind it reads differently, and quietly printing the
               served value here would be this feature committing it. */}
           {netAgrees ? null : (
-            <p className="rounded-md border border-warning bg-warning-soft px-3 py-2 text-xs text-warning">
+            <p className="rounded-md border border-warning bg-warning-soft px-3 py-2 text-xs text-warning-strong md:text-warning">
               These figures disagree. Paid to the dealer minus charged to the
               dealer comes to {inrFormat(net)}, and the month was reported as{' '}
               {inrFormat(reportedNet)}. Treat both as unconfirmed until someone
@@ -998,20 +968,31 @@ function DealerCard({ dealerId }: { dealerId: string }) {
         {/* What is ON the card, in words. An admin approving something that goes
             to a dealer should not have to squint at a thumbnail. */}
         {!empty ? (
-          <ul className="grid gap-1.5 rounded-md border border-border bg-surface-subtle p-3">
+          // Below md each entry is two lines, so the entries sit further apart
+          // than the two lines of one entry do — otherwise a title reads as
+          // belonging to the date under it.
+          <ul className="grid gap-3 rounded-md border border-border bg-surface-subtle p-3 md:gap-1.5">
             {card.movements.map((m, i) => (
               <li
                 // The index is in the key because a window card can carry thirty
                 // rows, and two identical fees on one day — the same ₹1,062
                 // charged twice on 12-08 — are a real shape on these ledgers.
                 key={`${m.date}-${m.titleEn}-${m.amount}-${i}`}
-                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-2 text-sm"
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-x-2 gap-y-0.5 text-sm md:gap-2"
               >
                 <span className="tabular-nums text-text-muted">{formatDmy(m.date)}</span>
-                <span className="min-w-0 truncate text-text">{m.titleEn}</span>
+                {/* Below md the title has a line of its own, under the date and
+                    the amount, and wraps there. Squeezed between them it had
+                    ~100px at 360px: "Interest charged…" came out as "Interest
+                    char…", and the admin could not read what was going on the
+                    card before sending it. The `md:` classes put it back in the
+                    middle column on one truncated line. */}
+                <span className="col-span-3 row-start-2 min-w-0 break-words text-text md:col-auto md:row-auto md:truncate">
+                  {m.titleEn}
+                </span>
                 <span
                   className={cn(
-                    'tabular-nums font-medium',
+                    'col-start-3 tabular-nums font-medium md:col-auto',
                     m.direction === 'CHARGED' ? 'text-danger' : 'text-success',
                   )}
                 >

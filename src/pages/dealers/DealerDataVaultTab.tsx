@@ -149,6 +149,7 @@ export function DealerDataVaultTab({ dealer }: Props) {
   const backDate =
     dateValid && collectDate !== '' && collectDate !== today ? collectDate : undefined;
   const openDate = collectDate === '' ? today : collectDate;
+  const latestDate = latestQ.data?.businessDate;
   const collecting = collect.isPending || collectRunId !== null;
 
   // Whether asking the portal is a real option. An outlet with no IRAS account
@@ -234,7 +235,19 @@ export function DealerDataVaultTab({ dealer }: Props) {
             opening a day is a look at figures that arrive on their own; where it
             does not, this is the only route to typing the shift in, and the
             control that says so is worth two clicks a morning. */}
-        {canCollect ? 'Open day' : 'Type the shift'}
+        {!canCollect ? (
+          'Type the shift'
+        ) : openDate === latestDate ? (
+          // Below md the panel's own "Correct this day" is not drawn (see
+          // `correctAction` on SnapshotDetail), so on the day it would have
+          // opened, this button takes its name.
+          <>
+            <span className="md:hidden">Correct this day</span>
+            <span className="hidden md:inline">Open day</span>
+          </>
+        ) : (
+          'Open day'
+        )}
       </Button>
       {canCollect ? (
         <Button
@@ -293,6 +306,7 @@ export function DealerDataVaultTab({ dealer }: Props) {
               snapshot={latestQ.data}
               hideDealerName
               actions={dayActions}
+              correctAction="md-only"
             />
           )}
         </CardContent>
@@ -470,18 +484,39 @@ function HistoryCard({
               </Table>
             </div>
 
-            {/* Mobile card-stack (< md). */}
+            {/* Mobile card-stack (< md).
+
+                The DATE is the tap target, not the card. "Accept" lives on the
+                same card, and inside a card-sized button it was a button in a
+                button — invalid, and on Android the inner one never fires — on
+                the one control that signs for a day's gap. */}
             <MobileCardList
               variant="rows"
               cards={rows.map((r) => ({
                 key: r.businessDate,
-                onClick: r.snapshotId ? () => onOpen(r.snapshotId!) : undefined,
-                primary: (
-                  <span className="block truncate font-medium text-text">
+                primary: r.snapshotId ? (
+                  <button
+                    type="button"
+                    className="flex min-h-11 w-full items-center text-left"
+                    onClick={() => onOpen(r.snapshotId!)}
+                  >
+                    <span className="block break-words font-medium text-text">
+                      {dateLabel(r.businessDate)}
+                    </span>
+                  </button>
+                ) : (
+                  <span className="block break-words font-medium text-text">
                     {dateLabel(r.businessDate)}
                   </span>
                 ),
-                primaryRight: <DayStateChip row={r} />,
+                // The chip alone: the litre gaps are already in `secondary`,
+                // and printed in this rail as well they claimed half the row
+                // and cut the date to "Sun, 04 …".
+                primaryRight: (
+                  <Badge intent={statusIntent('irasDayState', r.state)}>
+                    {IRAS_DAY_STATE_LABEL[r.state]}
+                  </Badge>
+                ),
                 secondary: (
                   <span className="grid min-w-0 gap-1 text-xs">
                     {/* The sentence, not just the chip: "Not closed yet" reads
@@ -494,14 +529,10 @@ function HistoryCard({
                     <DayTags row={r} />
                   </span>
                 ),
-                meta: (
-                  <span className="flex flex-col items-end gap-1">
-                    <span>
-                      {r.capturedAt ? formatDateTime(r.capturedAt) : '—'}
-                    </span>
-                    <VerifyAction row={r} onVerify={setVerifying} />
-                  </span>
-                ),
+                meta: r.capturedAt ? formatDateTime(r.capturedAt) : '—',
+                actions: verifiable(r) ? (
+                  <VerifyAction row={r} onVerify={setVerifying} />
+                ) : undefined,
               }))}
             />
           </>
@@ -583,6 +614,11 @@ function DayTags({ row }: { row: IrasDayStateRow }) {
   );
 }
 
+/** Whether a day has a gap to accept, or an acceptance to show. */
+function verifiable(row: IrasDayStateRow): boolean {
+  return row.state === 'MISMATCH' || row.state === 'MISMATCH_OK';
+}
+
 /** Accept a gap, or show who already did. */
 function VerifyAction({
   row,
@@ -591,7 +627,7 @@ function VerifyAction({
   row: IrasDayStateRow;
   onVerify: (row: IrasDayStateRow) => void;
 }) {
-  if (row.state !== 'MISMATCH' && row.state !== 'MISMATCH_OK') return null;
+  if (!verifiable(row)) return null;
 
   // An accepted day opens the SAME dialog. It is the only place the reason is
   // readable in full and the only way to withdraw the acceptance — leaving it as

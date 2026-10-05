@@ -53,7 +53,7 @@ import type { Dealer, DealerService } from '@dk/shared';
 import type { UpdateDealerServiceInput } from '@dk/shared/schemas';
 
 import { INSPECTION_SERVICE_ID, IRAS_SERVICE_ID } from './schedulePicker';
-import { describeSchedule } from './serviceSchedule';
+import { CADENCE_LABELS, describeSchedule } from './serviceSchedule';
 
 /**
  * Both config dialogs arrive on demand, and only once one is actually opened.
@@ -126,7 +126,14 @@ export function DealerServicesTab({ dealer }: Props) {
   // mount when opened, that fetch would start on the press instead, and land on
   // top of the dialog's own chunk download. Same query key, so this is the one
   // request it always was; it just keeps happening at the moment it used to.
-  useServicesQuery();
+  const catalogQ = useServicesQuery();
+  // The phone card names a service the way the catalog does — "Credit & DOD
+  // monitoring", not `credit-dod-monitoring`. The id stays the fallback for a
+  // plugin the catalog no longer lists, so a card is never left without a title.
+  const serviceName = React.useMemo(() => {
+    const byId = new Map((catalogQ.data ?? []).map((p) => [p.id, p.name]));
+    return (ds: DealerService) => byId.get(ds.serviceId) ?? ds.serviceId;
+  }, [catalogQ.data]);
   const attach = useAttachDealerService(dealer.id);
   const update = useUpdateDealerService(dealer.id);
   const remove = useDeleteDealerService(dealer.id);
@@ -143,8 +150,11 @@ export function DealerServicesTab({ dealer }: Props) {
     (d) => d.serviceId === INSPECTION_SERVICE_ID,
   );
 
+  // DAILY only. An on-demand service runs when somebody presses Run now, so
+  // "it hasn't run today" is its normal state, not a fault — flagging it told
+  // the admin to run a custom request nobody had asked for.
   function isStale(svc: DealerService): boolean {
-    if (svc.cadence !== 'DAILY' && svc.cadence !== 'ON_DEMAND') return false;
+    if (svc.cadence !== 'DAILY') return false;
     if (!svc.lastRunAt) return true;
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -405,7 +415,7 @@ export function DealerServicesTab({ dealer }: Props) {
               key: ds.id,
               primary: (
                 <span className="inline-flex flex-wrap items-center gap-2 font-medium text-text">
-                  {ds.serviceId}
+                  {serviceName(ds)}
                   {isStale(ds) ? (
                     <Badge intent="warning" className="gap-1">
                       <AlertCircle width={12} height={12} strokeWidth={1.75} />
@@ -415,17 +425,26 @@ export function DealerServicesTab({ dealer }: Props) {
                 </span>
               ),
               primaryRight: <StatusChip kind="dealerService" value={ds.status} />,
+              // Two lines rather than one wrapping run: as separate flex items
+              // the run broke after "Last …" and the next line began "· Next",
+              // and an empty date printed as "Last -".
               meta: (
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <Badge intent="neutral">{ds.cadence}</Badge>
-                  <span>Last {formatDateTime(ds.lastRunAt)}</span>
-                  <span>· Next {formatDateTime(ds.nextRunAt)}</span>
+                <span className="grid gap-1">
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <Badge intent="neutral">{CADENCE_LABELS[ds.cadence]}</Badge>
+                    <span>
+                      {ds.lastRunAt
+                        ? `Last run ${formatDateTime(ds.lastRunAt)}`
+                        : 'Never run'}
+                    </span>
+                  </span>
+                  <ScheduleLine ds={ds} />
                   {/* What "stale" means and what to do about it used to live
                       only in the badge's `title`, which no touch gesture shows
                       — so on a phone the word was unexplained. It goes on the
                       card instead. */}
                   {isStale(ds) ? (
-                    <span className="block w-full text-warning">
+                    <span className="text-warning-strong md:text-warning">
                       Hasn&apos;t run today — press Run now to refresh it.
                     </span>
                   ) : null}
@@ -449,8 +468,8 @@ export function DealerServicesTab({ dealer }: Props) {
                     Run now
                   </Button>
                   <Menu
-                    label={`More actions for ${ds.serviceId}`}
-                    title={ds.serviceId}
+                    label={`More actions for ${serviceName(ds)}`}
+                    title={serviceName(ds)}
                   >
                     <MenuItem
                       icon={<Pencil width={15} height={15} strokeWidth={1.75} />}
@@ -636,5 +655,23 @@ function DialogLoading({
         <Spinner size={24} className="text-text-muted" />
       </div>
     </Dialog>
+  );
+}
+
+/**
+ * When a phone card's service will next run, in the same sentence the save toast
+ * uses. "Next …" alone quoted a next run for a PAUSED service that the scheduler
+ * will never claim, and said nothing at all for an on-demand one.
+ */
+function ScheduleLine({ ds }: { ds: DealerService }) {
+  const schedule = describeSchedule(ds);
+  return (
+    <span
+      className={
+        schedule.intent === 'warning' ? 'text-warning-strong md:text-warning' : undefined
+      }
+    >
+      {schedule.text}
+    </span>
   );
 }

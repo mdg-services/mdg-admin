@@ -2,12 +2,12 @@ import { Info, Lightbulb, ServerCrash, ShieldAlert, ShieldCheck } from 'lucide-r
 import * as React from 'react';
 
 import {
-  Badge,
   Button,
   Callout,
   Checkbox,
   Dialog,
   HowThisWorks,
+  InfoBadge,
   KeyValueList,
   Label,
   Skeleton,
@@ -200,9 +200,12 @@ export function AssurancePanel({
             </p>
           ) : null}
           {codes.length > 0 ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            // No wrap: below md the button takes what the help icon leaves.
+            // A `w-full` button pushed the icon onto a 44px line of its own,
+            // orphaned under the one control this panel exists for.
+            <div className="mt-3 flex items-center gap-2">
               <Button
-                className="w-full md:w-auto"
+                className="min-w-0 flex-1 md:w-auto md:flex-none"
                 variant="secondary"
                 size="sm"
                 onClick={openForm}
@@ -772,11 +775,22 @@ export function AssuranceBadge({ report }: { report: DsrReportView }) {
   const { data: verdict } = useAssuranceReport(report.id);
   const badge = assuranceBadge(verdict);
   if (!badge) return null;
+  // `InfoBadge`, because the sentence that says what the badge means lived
+  // only in `title`, and touch never shows a title. At md it is the same
+  // `<Badge title>` as before; below md a tap opens it. Both places this
+  // renders are plain headers, so the button never sits inside a tap target.
   return (
-    <Badge intent={badge.intent} title={badge.detail}>
-      <span className="sr-only">AI verification status: </span>
-      {badge.label}
-    </Badge>
+    <InfoBadge
+      intent={badge.intent}
+      label={
+        <>
+          <span className="sr-only">AI verification status: </span>
+          {badge.label}
+        </>
+      }
+      detail={badge.detail}
+      sheetTitle="Report check"
+    />
   );
 }
 
@@ -792,10 +806,21 @@ export function AiReviewBadge({ report }: { report: DsrReportView }) {
   const { data: verdict } = useAssuranceReport(report.id);
   const badge = aiReviewBadge(verdict);
   if (!badge) return null;
+  // Tappable below md for the same reason as `AssuranceBadge`, and this one
+  // needs it more: a red "AI · not used" beside "Not sent" reads as a second
+  // reason the report is wrong, and the sentence saying it is about the AI,
+  // not the report, was reachable only by hovering.
   return (
-    <Badge intent={badge.intent} title={badge.detail}>
-      <span className="sr-only">AI review: </span>
-      {badge.label}
-    </Badge>
+    <InfoBadge
+      intent={badge.intent}
+      label={
+        <>
+          <span className="sr-only">AI review: </span>
+          {badge.label}
+        </>
+      }
+      detail={badge.detail}
+      sheetTitle="AI review"
+    />
   );
 }

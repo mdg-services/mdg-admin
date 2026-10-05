@@ -26,6 +26,9 @@ export function LoginPage() {
   const toast = useToast();
   const mutation = useLoginMutation();
   const [showPassword, setShowPassword] = React.useState(false);
+  // The server's refusal, held so it can sit under the button on a phone. See
+  // the `role="alert"` line below the form.
+  const [signInError, setSignInError] = React.useState<string | null>(null);
   // The reveal is a phone affordance and is hidden at md. Reading the
   // breakpoint here too means a rotation to landscape (852x393 is already
   // `md`) cannot strand the field in plain text with no control to undo it.
@@ -46,6 +49,7 @@ export function LoginPage() {
   }
 
   const onSubmit = handleSubmit(async (values) => {
+    setSignInError(null);
     try {
       await mutation.mutateAsync(values);
       toast.success('Signed in');
@@ -53,6 +57,7 @@ export function LoginPage() {
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Sign-in failed';
       toast.error(msg);
+      setSignInError(msg);
     }
   });
 
@@ -143,6 +148,16 @@ export function LoginPage() {
           >
             Sign in
           </Button>
+          {/* Below md the refusal also stays on the card, under the button
+              just pressed. On a phone the toast lands below the card, away
+              from the thumb, and fades — and once it had gone a typo in a
+              14-character password looked like nothing had happened at all.
+              Cleared on the next press. */}
+          {signInError ? (
+            <p role="alert" className="mt-3 text-sm text-danger md:hidden">
+              {signInError}
+            </p>
+          ) : null}
         </form>
       </div>
     </div>

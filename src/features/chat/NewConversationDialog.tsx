@@ -82,15 +82,13 @@ export function NewConversationDialog({ open, onClose, onStarted }: Props) {
     <Dialog
       open={open}
       onClose={onClose}
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="min-w-0 break-words">New message</span>
-          <HowThisWorks
-            surface="admin-inbox-new-conversation"
-            label="New message"
-            variant="icon"
-          />
-        </span>
+      title="New message"
+      help={
+        <HowThisWorks
+          surface="admin-inbox-new-conversation"
+          label="New message"
+          variant="icon"
+        />
       }
       description="Start a chat with a dealer member — even if they haven't written in yet."
       footer={

@@ -115,15 +115,13 @@ export function SessionDrawer({ sessionId, onClose }: SessionDrawerProps) {
       width="lg"
       // Beside the title rather than in the footer: the footer is the pinned
       // Save/Close row under the thumb and a help link does not belong in it.
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="min-w-0 break-words">{title}</span>
-          <HowThisWorks
-            surface="admin-assistant-session-drawer"
-            label="Conversation"
-            variant="icon"
-          />
-        </span>
+      title={title}
+      help={
+        <HowThisWorks
+          surface="admin-assistant-session-drawer"
+          label="Conversation"
+          variant="icon"
+        />
       }
       description={description}
       footer={

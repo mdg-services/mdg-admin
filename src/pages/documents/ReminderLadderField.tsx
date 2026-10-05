@@ -148,7 +148,10 @@ export function ReminderLadderField({
             id={id}
             value={value.text}
             disabled={disabled}
-            inputMode="numeric"
+            // `text`, not `numeric`: this is a LIST, and iOS's number pad has
+            // neither the comma nor the space the placeholder separates with
+            // (Android keyboards vary). The box is parsed as typed anyway.
+            inputMode="text"
             placeholder="15, 3, 2, 1"
             aria-describedby={`${id}-help`}
             invalid={Boolean(liveError)}

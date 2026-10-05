@@ -253,18 +253,23 @@ function AuditAccordion({ dealerId }: { dealerId: string }) {
           ) : data && data.items.length > 0 ? (
             <ul className="divide-y divide-border">
               {data.items.map((log) => (
-                // The actor is a raw 24-character ObjectId — hex, so CSS finds
-                // no break opportunity in it at all. Beside a timestamp in a
-                // ~262px row it *is* the row's min-content, and it pushed the
-                // stamp into three lines of two characters. Below md the stamp
-                // takes its own line and the id is allowed to break; at md the
-                // two-column row is exactly what it was.
+                // The actor may be an email or, failing that, a raw 24-character
+                // ObjectId — and CSS finds no break opportunity in either. Beside
+                // a timestamp in a ~262px row it *is* the row's min-content, and
+                // it pushed the stamp into three lines of two characters. Below
+                // md the stamp takes its own line and the actor is allowed to
+                // break; at md the two-column row is exactly what it was.
                 <li key={log.id} className="py-2 text-sm">
                   <div className="flex flex-col gap-0.5 md:flex-row md:items-start md:justify-between md:gap-3">
                     <div className="min-w-0">
                       <p className="font-medium text-text">{log.action}</p>
+                      {/* Who, in words, wherever the row has them: the email is
+                          snapshotted from the token when the change is made over
+                          HTTP. A background job, or a row older than that
+                          snapshot, has neither — and saying "system" for it
+                          would be a guess, so the id is still what is shown. */}
                       <p className="break-all text-xs text-text-muted">
-                        by {log.actorId}
+                        by {log.actorName || log.actorEmail || log.actorId}
                       </p>
                     </div>
                     <span className="shrink-0 whitespace-nowrap text-xs text-text-muted">

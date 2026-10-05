@@ -10,6 +10,7 @@ import {
   Skeleton,
 } from '@/components/ui';
 import { useDsrLatest, useDsrReport, useDsrReports } from '@/hooks/api/useDsr';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import type { Dealer } from '@dk/shared';
 
@@ -37,6 +38,7 @@ function isNotFound(err: unknown): boolean {
  */
 export function DealerDsrTab({ dealer }: Props) {
   const navigate = useNavigate();
+  const isMd = useMediaQuery('(min-width: 768px)');
 
   const reportsQ = useDsrReports(dealer.id);
   const reports = React.useMemo(
@@ -90,11 +92,17 @@ export function DealerDsrTab({ dealer }: Props) {
           `../dsr/DsrToolbar`, which this tab shares with the standalone DSR
           page, so the button sits above it here. `justify-self-start` keeps it
           at its own width, and a null render costs the grid nothing. */}
-      <HowThisWorks
-        surface="admin-dealer-vault-dsr"
-        label="Daily Sales Report"
-        className="justify-self-start"
-      />
+      {/* Desktop only. On a phone the dataset rail directly above already
+          carries a play icon, and the toolbar's "More actions" sheet carries
+          the DSR walkthrough — a third help control, a full row of its own,
+          pushed the toolbar and the report down. */}
+      {isMd ? (
+        <HowThisWorks
+          surface="admin-dealer-vault-dsr"
+          label="Daily Sales Report"
+          className="justify-self-start"
+        />
+      ) : null}
       {/* Business-date selector — the way back through previous days — plus a
           date picker to originate a brand-new back-dated report. */}
       {reports.length > 0 ? (

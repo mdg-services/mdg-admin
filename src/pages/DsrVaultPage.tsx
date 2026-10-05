@@ -230,11 +230,14 @@ function VariationChips({ products }: { products: DsrProductHeadline[] }) {
           title={`${p.productKey}: ${formatLitres(p.variation, {
             sign: true,
           })}${p.withinLimit ? ' (within limit)' : ' (outside limit)'}`}
+          // 12px and the readable `-strong` shades below md: these figures
+          // are what the page is built around, they were the smallest text on
+          // it, and pinch-zoom is off. md keeps today's 11px table chip.
           className={cn(
-            'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] leading-4',
+            'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs leading-4 md:text-[11px]',
             p.withinLimit
-              ? 'bg-success-soft text-success'
-              : 'bg-danger-soft text-danger',
+              ? 'bg-success-soft text-success-strong md:text-success'
+              : 'bg-danger-soft text-danger-strong md:text-danger',
           )}
         >
           {p.withinLimit ? (
@@ -419,10 +422,10 @@ function DealerList({
               <NotGeneratedChip />
             ),
             secondary: (
+              // No second copy of the code: it is the card's title already.
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                <span className="font-mono">{row.dealerCode || '—'}</span>
                 {latest ? (
-                  <span>· Generated {formatDateTime(latest.generatedAt)}</span>
+                  <span>Generated {formatDateTime(latest.generatedAt)}</span>
                 ) : null}
                 {/* The desktop table shows this and the phone card dropped it:
                     a report carrying three data-quality notes looked identical

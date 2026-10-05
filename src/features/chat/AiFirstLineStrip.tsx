@@ -10,7 +10,9 @@ import * as React from 'react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { HowThisWorks } from '@/components/ui/HowThisWorks';
+import { InfoBadge } from '@/components/ui/InfoBadge';
 import { useConversationAiTurnsQuery } from '@/hooks/api/useAiTurns';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import {
   AI_HANDOFF_REASON_LABEL,
   AI_INTENT_LABEL,
@@ -75,15 +77,19 @@ function Fact({
   );
 }
 
-/** How the reply was made, for the collapsed line and the panel both. */
+/**
+ * How the reply was made, inside the panel.
+ *
+ * `InfoBadge`, because what each mark MEANS lives in its hint and a `title`
+ * never fires on touch: below md the badge opens a sheet with the hint, at md it
+ * is today's badge with its tooltip. Only ever rendered in the panel, which is
+ * not itself a button — the collapsed line IS one, so its copy of this mark
+ * stays a plain `Badge` (and is md-only anyway).
+ */
 function ProductionBadge({ turn }: { turn: AiTurn }) {
   const view = aiProduction(turn);
   if (!view) return null;
-  return (
-    <Badge intent={view.tone} title={view.hint}>
-      {view.label}
-    </Badge>
-  );
+  return <InfoBadge intent={view.tone} label={view.label} detail={view.hint} />;
 }
 
 /**
@@ -111,11 +117,17 @@ function RefusedProse({ turn }: { turn: AiTurn }) {
       ) : null}
       <p className="text-xs text-text-muted">{refusal.headline}</p>
       {refusal.rules.length > 0 ? (
-        <div className="flex flex-wrap gap-1">
+        // The rule's long form is the explanation of the refusal, so it is an
+        // `InfoBadge`: tappable below md. The 12px gaps below md keep each
+        // badge's -12px tap halo off its neighbours' painted pills.
+        <div className="flex flex-wrap gap-3 md:gap-1">
           {refusal.rules.map((rule, i) => (
-            <Badge key={`${rule}-${i}`} intent="warning" title={aiRuleHint(rule) ?? rule}>
-              {aiRuleLabel(rule)}
-            </Badge>
+            <InfoBadge
+              key={`${rule}-${i}`}
+              intent="warning"
+              label={aiRuleLabel(rule)}
+              detail={aiRuleHint(rule) ?? rule}
+            />
           ))}
         </div>
       ) : null}
@@ -221,17 +233,23 @@ function TurnDetail({
           )}
         </Fact>
         <Fact label="How it replied">
-          <span className="inline-flex flex-wrap items-center gap-1">
+          {/* Every mark here explains itself only in its hint, so all three
+              are `InfoBadge`s; the gaps widen below md for their tap halos. */}
+          <span className="inline-flex flex-wrap items-center gap-3 md:gap-1">
             <ProductionBadge turn={turn} />
             {turn.partial ? (
-              <Badge intent="warning" title="Part of what they asked was refused or dropped; the reply says so in a hand-written line.">
-                Answered part of it
-              </Badge>
+              <InfoBadge
+                intent="warning"
+                label="Answered part of it"
+                detail="Part of what they asked was refused or dropped; the reply says so in a hand-written line."
+              />
             ) : null}
             {turn.quickFollowUp ? (
-              <Badge intent="neutral" title="The dealer wrote again within minutes. It changes nothing about the machine's behaviour — it is a review signal.">
-                Wrote straight back
-              </Badge>
+              <InfoBadge
+                intent="neutral"
+                label="Wrote straight back"
+                detail="The dealer wrote again within minutes. It changes nothing about the machine's behaviour — it is a review signal."
+              />
             ) : null}
           </span>
         </Fact>
@@ -333,6 +351,22 @@ export function AiFirstLineStrip({
   const [open, setOpen] = React.useState(false);
   const turnsQ = useConversationAiTurnsQuery(conversationId);
   const turns = turnsQ.data?.items ?? [];
+  const isMd = useMediaQuery('(min-width: 768px)');
+
+  /*
+   * Below md, putting the sentence in the box also folds the panel away. The
+   * panel and the composer share one short screen: left open, the panel kept
+   * its height while the box grew to take the paragraph, and Send ended up
+   * under the bottom edge — exactly when the admin's next move is to read the
+   * draft and send it. The panel is one tap from coming back.
+   */
+  const handleUseAnswer = React.useCallback(
+    (text: string) => {
+      onUseAnswer(text);
+      if (!isMd) setOpen(false);
+    },
+    [onUseAnswer, isMd],
+  );
 
   // A thread the machine never looked at gets NO strip at all — not an empty
   // one. Most threads are that, and a permanent "the AI did nothing" row would
@@ -409,16 +443,22 @@ export function AiFirstLineStrip({
         <div
           // Its own scroller, capped. A thread with five turns on it would
           // otherwise push the composer off a 740px phone screen, and the
-          // composer is the thing the admin came here to use.
-          className="max-h-64 overflow-y-auto overscroll-contain md:max-h-80"
+          // composer is the thing the admin came here to use. Below md the cap
+          // is a share of the screen rather than 256px: with the keyboard up a
+          // phone is ~420px tall, and a fixed 256px panel left the message list
+          // a 24px sliver.
+          className="max-h-[30dvh] overflow-y-auto overscroll-contain md:max-h-80"
         >
-          <TurnDetail turn={latest} now={now} onUseAnswer={onUseAnswer} />
+          <TurnDetail turn={latest} now={now} onUseAnswer={handleUseAnswer} />
           {earlier.length > 0 ? (
             <div className="border-t border-border px-3 py-2">
               <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-subtle">
                 Earlier turns on this thread
               </p>
-              <ul className="grid gap-1">
+              {/* `gap-3` below md: each row can carry a tappable production
+                  badge, and at 4px apart one row's tap halo covered the badge
+                  on the row above it. */}
+              <ul className="grid gap-3 md:gap-1">
                 {earlier.map((t) => (
                   <li
                     key={t.id}

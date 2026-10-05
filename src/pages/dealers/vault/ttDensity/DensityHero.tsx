@@ -95,14 +95,26 @@ function DensityTile({ product }: { product: TtLatestDensity }) {
         {heroSpokenLabel(product)}
       </span>
       <CardContent className="md:p-5" aria-hidden>
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-2 md:flex-nowrap">
           {/* `min-w-0` + a two-line clamp: for a provisional product the eyebrow
               is `materialCode · description`, and SAP descriptions are long, so
               with the badge group beside it holding its width the eyebrow got
               ~138px of a 264px card and stacked to four lines of uppercase —
               pushing the figure this tile exists to show off the fold. The full
-              text is still spoken: `heroSpokenLabel` above carries it. */}
-          <span className="line-clamp-2 min-w-0 text-xs font-semibold uppercase tracking-wide text-text-muted">
+              text is still spoken: `heroSpokenLabel` above carries it.
+
+              Below md a provisional product's name takes the whole first line
+              and its badges move under it. Beside "New product", an age badge
+              and the glyph it was left ~97px at 360px, and two clamped lines of
+              that is not enough to hold the only name a product nobody has
+              recognised yet has. A known product's name is short and keeps its
+              row. */}
+          <span
+            className={cn(
+              'line-clamp-2 min-w-0 text-xs font-semibold uppercase tracking-wide text-text-muted',
+              product.provisional && 'basis-full md:basis-auto',
+            )}
+          >
             {heroEyebrow(product)}
           </span>
           <span className="flex shrink-0 items-center gap-2">

@@ -57,13 +57,14 @@ export function ServicesProvidedTab({ dealer }: Props) {
            * inside a ~300px card, so the reader saw two columns at a time and
            * could never line a row up with its heading. `DataList` derives both
            * shapes from one column set — and below md each delivery becomes a
-           * card with the service as its title, the date beside it, the note in
-           * full underneath, and For / Provided by as labelled rows.
+           * card with the service as its title, the note in full underneath,
+           * For / Provided by as labelled rows, and the date as the card's
+           * small last line.
            *
            * The column array stays in the desktop order (Service, Notes, For,
            * Provided by, When) because that is what the <Table> renders; the
-           * `mobile` slot on each column is what moves the date up beside the
-           * title on the card, and it is read independently of the order.
+           * `mobile` slot on each column is what places each one on the card,
+           * and it is read independently of the order.
            *
            * The rows carry no actions, so the card is plain markup rather than
            * a tap target.
@@ -115,7 +116,10 @@ export function ServicesProvidedTab({ dealer }: Props) {
                 id: 'when',
                 header: 'When',
                 cell: (log) => formatDateTime(log.providedAt),
-                mobile: 'primaryRight',
+                // `meta`, not `primaryRight`. The right rail is `shrink-0`, so
+                // "05 Oct 2026, 12:00" took ~150px of a ~300px card and a long
+                // service name wrapped down a 140px column for seven lines.
+                mobile: 'meta',
                 tdClassName: 'whitespace-nowrap text-text-muted',
               },
             ]}

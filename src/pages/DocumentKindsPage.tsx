@@ -21,6 +21,7 @@ import {
   type DataColumn,
 } from '@/components/ui';
 import { useDocumentKindsQuery, useUpdateDocumentKind } from '@/hooks/api/useDocumentKinds';
+import { useRevealOnChange } from '@/hooks/useRevealOnChange';
 import { ApiError } from '@/lib/api';
 import {
   resolveReminderOffsets,
@@ -306,6 +307,9 @@ function EditKindDrawer({
   const [active, setActive] = React.useState(true);
   const [ladder, setLadder] = React.useState<ReminderLadderValue>({ mode: 'remind', text: '' });
   const [error, setError] = React.useState<string | null>(null);
+  /** Moves on every Save, so the same refusal twice still scrolls back to it. */
+  const [attempt, setAttempt] = React.useState(0);
+  const errorRef = useRevealOnChange<HTMLDivElement>(error, attempt);
 
   /** The ladder actually in force for this kind. */
   const effectiveLadder = React.useMemo(() => ladderOf(kind), [kind]);
@@ -341,6 +345,7 @@ function EditKindDrawer({
   async function handleSave(): Promise<void> {
     if (!kind) return;
     setError(null);
+    setAttempt((n) => n + 1);
 
     const words: Array<[string, string, number]> = [
       ['English title', titleEn, 200],
@@ -441,7 +446,14 @@ function EditKindDrawer({
       }
     >
       <div className="space-y-4">
-        {error ? <Callout intent="warning">{error}</Callout> : null}
+        {/* Save is pressed from the footer with this body scrolled anywhere
+            down its ~1,500px on a phone, so the refusal brings itself into
+            view — otherwise the press looks like it did nothing. */}
+        {error ? (
+          <div ref={errorRef} role="alert">
+            <Callout intent="warning">{error}</Callout>
+          </div>
+        ) : null}
 
         <Callout intent="info">
           The code and the period cannot be changed. A code is an ask&rsquo;s only link to what it

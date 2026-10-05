@@ -225,15 +225,9 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
       open={open}
       onClose={onClose}
       size="lg"
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          Award points
-          <HowThisWorks
-            surface="admin-award-points"
-            label="Award points"
-            variant="icon"
-          />
-        </span>
+      title="Award points"
+      help={
+        <HowThisWorks surface="admin-award-points" label="Award points" variant="icon" />
       }
       description="Pick the warriors and the work(s) they did. Points are computed server-side from the dealer's effective work list."
       footer={
@@ -277,22 +271,35 @@ export function AwardPointsDialog({ dealerId, roster, open, onClose }: Props) {
             // which read as the sheet jumping under the finger.
             <div className="grid max-h-[45dvh] grid-cols-1 gap-1 overflow-y-auto overscroll-contain rounded-sm border border-border p-2 md:max-h-40 md:grid-cols-2">
               {activeWorkers.map((w) => (
+                // Below md the name WRAPS and the designation takes a line of
+                // its own. Sharing one truncated line, two warriors called
+                // "Shri Venkateshwara Balasubramanian …" both read "Shri
+                // Venkateshwara Balasubr…", so the part that tells them apart
+                // was the part cut off, and with pinch-zoom disabled nothing
+                // recovers it — points went to whichever one was ticked.
+                //
+                // `md:contents` dissolves the text wrapper at md, so the name
+                // and the designation are the label's own flex items again and
+                // the two-column desktop picker keeps its one truncated line.
                 <label
                   key={w.id}
-                  className="flex min-h-11 items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-surface-2 md:min-h-0"
+                  className="flex min-h-11 items-start gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-surface-2 md:min-h-0 md:items-center"
                 >
                   <input
                     type="checkbox"
-                    className="h-5 w-5 rounded border-border-strong accent-brand md:h-4 md:w-4"
+                    className="h-5 w-5 shrink-0 rounded border-border-strong accent-brand md:h-4 md:w-4"
                     checked={selected.has(w.id)}
                     onChange={() => toggleWorker(w.id)}
                   />
-                  <span className="truncate">{w.name}</span>
-                  {w.designation ? (
-                    <span className="truncate text-xs text-text-subtle">
-                      · {w.designation}
-                    </span>
-                  ) : null}
+                  <span className="min-w-0 flex-1 md:contents">
+                    <span className="block break-words md:truncate">{w.name}</span>
+                    {w.designation ? (
+                      <span className="block break-words text-xs text-text-subtle md:truncate">
+                        <span className="hidden md:inline">· </span>
+                        {w.designation}
+                      </span>
+                    ) : null}
+                  </span>
                 </label>
               ))}
             </div>

@@ -286,15 +286,13 @@ export function CreditDodReportCard({
       <Dialog
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        title={
-          <span className="flex flex-wrap items-center gap-2">
-            Share with dealer
-            <HowThisWorks
-              surface="admin-credit-dod-report-card"
-              label="The Credit & DOD card"
-              variant="icon"
-            />
-          </span>
+        title="Share with dealer"
+        help={
+          <HowThisWorks
+            surface="admin-credit-dod-report-card"
+            label="The Credit & DOD card"
+            variant="icon"
+          />
         }
         description="Share this Credit & DOD card with the dealer's chat? This will message the dealer."
         size="sm"
@@ -741,9 +739,9 @@ function Notice({
 }) {
   const cls =
     tone === 'danger'
-      ? 'border-danger bg-danger-soft text-danger'
+      ? 'border-danger bg-danger-soft text-danger-strong md:text-danger'
       : tone === 'warning'
-        ? 'border-warning bg-warning-soft text-warning'
+        ? 'border-warning bg-warning-soft text-warning-strong md:text-warning'
         : 'border-info bg-info-soft text-info';
   return (
     <div

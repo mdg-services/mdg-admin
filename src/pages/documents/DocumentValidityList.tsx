@@ -128,7 +128,11 @@ export function DocumentValidityList({
       id: 'renewal',
       header: 'Renewal',
       width: '8rem',
-      mobile: 'meta',
+      // Labelled on the phone card. The `meta` slot prints no label, so the
+      // "—" for "no renewal open" stood alone at the foot of every card and
+      // read as missing data.
+      mobile: 'kv',
+      mobileLabel: 'Renewal',
       cell: (row) =>
         row.renewalOpen ? (
           <Badge intent="info">

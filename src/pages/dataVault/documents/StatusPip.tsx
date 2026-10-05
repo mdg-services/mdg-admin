@@ -144,7 +144,7 @@ export function StatusPip({
       {late ? (
         // Only ever on a row that is the dealer's turn — the backend's `isLate`
         // requires it — so this is never MDG's own lateness dressed up as theirs.
-        <span className="shrink-0 rounded-full bg-danger-soft px-1.5 text-[11px] font-semibold text-danger">
+        <span className="shrink-0 rounded-full bg-danger-soft px-1.5 text-[11px] font-semibold text-danger-strong md:text-danger">
           Overdue
         </span>
       ) : null}

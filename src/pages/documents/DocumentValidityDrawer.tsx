@@ -1,4 +1,4 @@
-import { AlertCircle, BellRing, ExternalLink, FileText, Save } from 'lucide-react';
+import { BellRing, ExternalLink, FileText, Save } from 'lucide-react';
 import * as React from 'react';
 
 import {
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui';
 import { useDocumentAskFileUrl, useSetDocumentValidity } from '@/hooks/api/useDocumentAsks';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useRevealOnChange } from '@/hooks/useRevealOnChange';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, istTodayYmd } from '@/lib/format';
 import { isNativeShell, requestNativeDownload } from '@/lib/nativeBridge';
@@ -80,6 +81,9 @@ export function DocumentValidityDrawer({ open, row, onClose }: DocumentValidityD
   const [validUntil, setValidUntil] = React.useState('');
   const [ladder, setLadder] = React.useState<ReminderLadderValue>({ mode: 'remind', text: '' });
   const [error, setError] = React.useState<string | null>(null);
+  /** Moves on every Save, so the same refusal twice still scrolls back to it. */
+  const [attempt, setAttempt] = React.useState(0);
+  const errorRef = useRevealOnChange<HTMLDivElement>(error, attempt);
 
   /**
    * The row's stored ladder as a VALUE rather than a reference.
@@ -142,6 +146,7 @@ export function DocumentValidityDrawer({ open, row, onClose }: DocumentValidityD
   async function handleSave(): Promise<void> {
     if (!row) return;
     setError(null);
+    setAttempt((n) => n + 1);
 
     if (validUntil !== '' && !isIsoDay(validUntil)) {
       setError('That is not a real date. Use the date printed on the paper.');
@@ -190,15 +195,13 @@ export function DocumentValidityDrawer({ open, row, onClose }: DocumentValidityD
       open={open}
       onClose={onClose}
       width="md"
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="min-w-0 break-words">{row.title}</span>
-          <HowThisWorks
-            surface="admin-document-validity"
-            label="When a paper runs out"
-            variant="icon"
-          />
-        </span>
+      title={row.title}
+      help={
+        <HowThisWorks
+          surface="admin-document-validity"
+          label="When a paper runs out"
+          variant="icon"
+        />
       }
       description={`${dealerCodeLabel(row.dealerCode)} · on file${
         row.filedAt ? ` since ${formatDateTime(row.filedAt)}` : ''
@@ -227,7 +230,13 @@ export function DocumentValidityDrawer({ open, row, onClose }: DocumentValidityD
           {row.filedByMdg ? <Badge intent="neutral">Filed by MDG</Badge> : null}
         </div>
 
-        {error ? <Callout intent="warning">{error}</Callout> : null}
+        {/* Above the date and the ladder that Save is pressed from, so the
+            refusal brings itself into view rather than landing off screen. */}
+        {error ? (
+          <div ref={errorRef} role="alert">
+            <Callout intent="warning">{error}</Callout>
+          </div>
+        ) : null}
 
         {/* ── The paper itself ── */}
         {row.hasFile ? (
@@ -358,12 +367,10 @@ export function DocumentValidityDrawer({ open, row, onClose }: DocumentValidityD
           ) : null}
         </div>
 
+        {/* No icon of its own: `Callout` already draws one. */}
         <Callout intent="info">
-          <span className="flex items-start gap-1.5">
-            <AlertCircle width={13} height={13} strokeWidth={1.75} className="mt-px shrink-0" />
-            Correcting the date does not re-send anything. Steps already sent stay sent, so
-            pushing a date further out will not repeat a warning the dealer has already had.
-          </span>
+          Correcting the date does not re-send anything. Steps already sent stay sent, so
+          pushing a date further out will not repeat a warning the dealer has already had.
         </Callout>
       </div>
     </Drawer>

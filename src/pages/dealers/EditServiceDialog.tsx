@@ -162,15 +162,13 @@ export function EditServiceDialog({
       open={open}
       onClose={onClose}
       animateIn={animateIn}
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          Edit service
-          <HowThisWorks
-            surface="admin-dealer-service-edit"
-            label="Edit service"
-            variant="icon"
-          />
-        </span>
+      title="Edit service"
+      help={
+        <HowThisWorks
+          surface="admin-dealer-service-edit"
+          label="Edit service"
+          variant="icon"
+        />
       }
       // The rule this states is worth stating, but `Dialog`'s `description`
       // sits in the sticky header and never scrolls, so it costs ~60px of a
@@ -215,7 +213,7 @@ export function EditServiceDialog({
           </p>
 
           {isError ? (
-            <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning">
+            <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning-strong md:text-warning">
               <AlertTriangle
                 width={16}
                 height={16}

@@ -214,9 +214,9 @@ export function BankHolidaysPage() {
             bank holiday from a phone. */}
         <CardHeader
           action={
-            // Below md the same action is the `+` at the end of the month row,
-            // where it costs nothing; as a header `action` it would still buy a
-            // whole 52px line of its own for one small button.
+            // Below md the same action is a labelled button under the month
+            // row; as a header `action` it would sit beside the month nav and
+            // squeeze it.
             <Button
               className="hidden md:inline-flex"
               variant="secondary"
@@ -251,15 +251,20 @@ export function BankHolidaysPage() {
             >
               <ChevronRight width={16} height={16} strokeWidth={1.75} />
             </IconButton>
-            <IconButton
-              className="md:hidden"
+          </div>
+          {/* Its own row, with its words. As a bare `+` it was the same 44px
+              bordered square as the arrows, 8px from "Next month" — and the
+              only way to add a holiday on a phone — so Add and Next looked
+              alike side by side. */}
+          <div className="mt-2 md:hidden">
+            <Button
+              className="w-full"
               variant="secondary"
-              size="sm"
               onClick={() => setAddOpen(true)}
-              aria-label="Add holiday"
+              leftIcon={<Plus width={16} height={16} strokeWidth={1.75} />}
             >
-              <Plus width={16} height={16} strokeWidth={1.75} />
-            </IconButton>
+              Add holiday
+            </Button>
           </div>
         </CardHeader>
 

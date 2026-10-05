@@ -192,7 +192,12 @@ export function AttachmentPreview({ attachment }: { attachment: Attachment }) {
       ) : (
         <Paperclip width={14} height={14} strokeWidth={1.75} />
       )}
-      <span className="truncate">{attachment.filename}</span>
+      {/* Two lines below md, so the end of the name — usually the part that
+          tells one statement from the next — survives. The chip is min-h-11
+          and grows with it. */}
+      <span className="line-clamp-2 min-w-0 break-all text-left md:line-clamp-none md:truncate">
+        {attachment.filename}
+      </span>
       <span className="shrink-0 text-text-subtle">
         {formatBytes(attachment.size)}
       </span>

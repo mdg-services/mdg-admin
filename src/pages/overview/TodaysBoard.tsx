@@ -47,6 +47,49 @@ function Cell({ state, label }: { state: CellState; label: string }) {
   );
 }
 
+/**
+ * The same five states as a phone card's tile grid — the `md` table never sees
+ * this (its column is `desktop: false`).
+ *
+ * On the card the five used to be stacked `Cell`s, 26px apart with a 12px tap
+ * halo each, so the halo of every badge covered most of the badge above it:
+ * tapping the middle of "Collection failed" opened the Report page. A tile is
+ * the link itself, 44px tall and 8px from its neighbours, so there is no halo to
+ * overlap and every tile's centre is its own.
+ *
+ * The tile also has room for the state's hint, which on the table lives only in
+ * `title` — a hover a phone never fires. For a failed collection that hint IS
+ * the reason ("SDMS login rejected: password mismatch"), and a wrong password
+ * and a portal outage ask for different things of the admin.
+ */
+function BoardTiles({ cells }: { cells: { label: string; state: CellState }[] }) {
+  return (
+    // `w-screen max-w-full`: the card slot sizes its cells to their content, so
+    // a row of short labels would leave the grid half the card wide. Asking
+    // for the viewport and capping at the slot makes every card's grid the
+    // card's full width.
+    <span className="mt-1 grid w-screen max-w-full grid-cols-2 gap-2">
+      {cells.map(({ label, state }) => (
+        <Link
+          key={label}
+          to={state.href}
+          // `relative` so the tile paints above the dealer link's tap halo,
+          // which reaches 12px down from the card's title.
+          className="relative flex min-h-11 min-w-0 flex-col items-start justify-center gap-0.5 rounded-md border border-border px-2 py-1 text-left"
+        >
+          <span className="text-xs text-text-muted">{label}</span>
+          <Badge intent={state.intent}>{state.label}</Badge>
+          {state.hint ? (
+            <span className="line-clamp-2 break-words text-xs text-text-muted">
+              {state.hint}
+            </span>
+          ) : null}
+        </Link>
+      ))}
+    </span>
+  );
+}
+
 export function TodaysBoard({
   rows,
   reportingDate,
@@ -138,39 +181,54 @@ export function TodaysBoard({
               </Link>
             ),
           },
+          // The phone card's tiles. Paired with `mobile: 'hidden'` on the five
+          // columns below: this one is kept out of the md table, those are kept
+          // off the card.
+          {
+            id: 'cells',
+            header: '',
+            desktop: false,
+            mobile: 'secondary',
+            cell: (r) => (
+              <BoardTiles
+                cells={[
+                  { label: 'Shift', state: shiftCell(r, reportingDate) },
+                  { label: 'Report', state: dsrCell(r) },
+                  { label: 'Sent', state: sentCell(r) },
+                  { label: 'Kavach', state: kavachCell(r) },
+                  { label: 'Chat', state: chatCell(r, now) },
+                ]}
+              />
+            ),
+          },
           {
             id: 'shift',
             header: 'Shift',
-            mobile: 'kv',
-            mobileLabel: 'Shift',
+            mobile: 'hidden',
             cell: (r) => <Cell state={shiftCell(r, reportingDate)} label="Shift" />,
           },
           {
             id: 'dsr',
             header: 'Report',
-            mobile: 'kv',
-            mobileLabel: 'Report',
+            mobile: 'hidden',
             cell: (r) => <Cell state={dsrCell(r)} label="Report" />,
           },
           {
             id: 'sent',
             header: 'Sent',
-            mobile: 'kv',
-            mobileLabel: 'Sent',
+            mobile: 'hidden',
             cell: (r) => <Cell state={sentCell(r)} label="Sent" />,
           },
           {
             id: 'kavach',
             header: 'Kavach',
-            mobile: 'kv',
-            mobileLabel: 'Kavach',
+            mobile: 'hidden',
             cell: (r) => <Cell state={kavachCell(r)} label="Kavach" />,
           },
           {
             id: 'chat',
             header: 'Chat',
-            mobile: 'kv',
-            mobileLabel: 'Chat',
+            mobile: 'hidden',
             cell: (r) => <Cell state={chatCell(r, now)} label="Chat" />,
           },
         ]}

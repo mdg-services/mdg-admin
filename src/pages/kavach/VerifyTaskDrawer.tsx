@@ -38,6 +38,7 @@ import {
   useRejectKavachEvidence,
   useVerifyKavachItem,
 } from '@/hooks/api/useKavachQueue';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { compressImage } from '@/lib/compressImage';
@@ -94,6 +95,16 @@ export const VERIFICATION_ICON: Record<KavachVerificationMode, typeof Camera> = 
 
 /** The written reason the server demands before it will close without evidence. */
 const MIN_REASON_CHARS = 4;
+/**
+ * The too-short-reason complaint. Below md it is said again UNDER THE REASON
+ * BOX, not only at the foot of the drawer: on a phone the reason box is near
+ * the top and the keyboard is up while it has focus, so pressing Send back with
+ * "old" in it did nothing anyone could see — and the next thing pressed was
+ * Save, verifying the task they meant to reject. At md the foot stays the one
+ * place it appears. It is read off `error` rather than kept as a second piece
+ * of state, so it cannot outlive the error it repeats.
+ */
+const SEND_BACK_TOO_SHORT = `Write what was missing — at least ${MIN_REASON_CHARS} characters. The dealer reads it as written.`;
 
 /**
  * A viewable URL for a stored image.
@@ -218,6 +229,7 @@ export function VerifyTaskDrawer({
 }: VerifyTaskDrawerProps) {
   const toast = useToast();
   const today = istTodayYmd();
+  const isMd = useMediaQuery('(min-width: 768px)');
 
   const [doneOn, setDoneOn] = React.useState(today);
   const [note, setNote] = React.useState('');
@@ -344,9 +356,7 @@ export function VerifyTaskDrawer({
   async function handleSendBack() {
     if (!row || submitting) return;
     if (sendBackReason.trim().length < MIN_REASON_CHARS) {
-      setError(
-        `Write what was missing — at least ${MIN_REASON_CHARS} characters. The dealer reads it as written.`,
-      );
+      setError(SEND_BACK_TOO_SHORT);
       return;
     }
     setSubmitting(true);
@@ -411,32 +421,39 @@ export function VerifyTaskDrawer({
         open={open}
         onClose={onClose}
         width="lg"
-        title={
-          <span className="inline-flex flex-wrap items-center gap-2">
-            {row.labelEn}
-            <HowThisWorks
-              surface="admin-kavach-verify-task"
-              label="Verifying a task"
-              variant="icon"
-            />
-          </span>
+        title={row.labelEn}
+        help={
+          <HowThisWorks
+            surface="admin-kavach-verify-task"
+            label="Verifying a task"
+            variant="icon"
+          />
         }
         description={
           position
             ? `${dealerCodeLabel(row.dealerCode)} · ${position.index} of ${position.total} in view`
             : dealerCodeLabel(row.dealerCode)
         }
+        // One row of two below md, not three stacked buttons. Stacked, the
+        // footer was 173px of a 420px sheet with the keyboard up, which left
+        // the send-back reason box 124px of body to be typed into. Close goes
+        // below md — the header's X is the same action, one thumb-reach up —
+        // and stays at md, where the footer row has always carried it.
+        footerBelow="row"
         footer={
           <>
-            <Button
-              variant="secondary"
-              onClick={onClose}
-              disabled={submitting}
-            >
-              Close
-            </Button>
+            {isMd ? (
+              <Button
+                variant="secondary"
+                onClick={onClose}
+                disabled={submitting}
+              >
+                Close
+              </Button>
+            ) : null}
             <Button
               variant={hasNext ? 'secondary' : 'primary'}
+              className="flex-1 md:flex-initial"
               onClick={() => void handleSave(false)}
               disabled={submitting}
               loading={submitting && !hasNext}
@@ -446,6 +463,7 @@ export function VerifyTaskDrawer({
             </Button>
             {hasNext ? (
               <Button
+                className="flex-1 md:flex-initial"
                 onClick={() => void handleSave(true)}
                 loading={submitting}
                 rightIcon={
@@ -597,11 +615,28 @@ export function VerifyTaskDrawer({
                   <Textarea
                     id="kavach-send-back"
                     value={sendBackReason}
-                    onChange={(e) => setSendBackReason(e.target.value)}
+                    onChange={(e) => {
+                      setSendBackReason(e.target.value);
+                      if (error === SEND_BACK_TOO_SHORT) setError(null);
+                    }}
                     placeholder="e.g. The board in the photo is last week's — please send today's."
                     rows={2}
                     maxLength={500}
                   />
+                  {error === SEND_BACK_TOO_SHORT ? (
+                    <p
+                      className="mt-1 flex items-start gap-1.5 text-xs text-danger md:hidden"
+                      role="alert"
+                    >
+                      <AlertCircle
+                        width={14}
+                        height={14}
+                        strokeWidth={1.75}
+                        className="mt-0.5 shrink-0"
+                      />
+                      <span>{SEND_BACK_TOO_SHORT}</span>
+                    </p>
+                  ) : null}
                   <p className="mt-1 text-xs text-text-muted">
                     The dealer sees this sentence word for word.
                   </p>
@@ -621,7 +656,10 @@ export function VerifyTaskDrawer({
                       size="sm"
                       variant="ghost"
                       disabled={submitting}
-                      onClick={() => setSendBackOpen(false)}
+                      onClick={() => {
+                        setSendBackOpen(false);
+                        if (error === SEND_BACK_TOO_SHORT) setError(null);
+                      }}
                     >
                       Cancel
                     </Button>
@@ -821,7 +859,12 @@ export function VerifyTaskDrawer({
 
           {error ? (
             <p
-              className="flex items-start gap-1.5 text-xs text-danger"
+              className={cn(
+                'items-start gap-1.5 text-xs text-danger',
+                // Below md the send-back complaint is already under the reason
+                // box; printing it here too would be the same sentence twice.
+                error === SEND_BACK_TOO_SHORT ? 'hidden md:flex' : 'flex',
+              )}
               role="alert"
             >
               <AlertCircle

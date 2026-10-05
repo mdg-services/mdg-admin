@@ -186,7 +186,10 @@ export function NeedsAPerson({
                   'text-sm text-text-muted transition-colors hover:bg-surface-2 md:px-0',
                 )}
               >
-                <span className="min-w-0 truncate">{i.title}</span>
+                {/* Wraps below md: the end of the line ("standing backlog,
+                    not this morning's work") is the qualifier that says this
+                    row can wait, and it was the part being cut. */}
+                <span className="min-w-0 break-words md:truncate">{i.title}</span>
                 <span className="shrink-0 text-xs text-text-subtle">{i.count ?? ''}</span>
               </button>
             </li>

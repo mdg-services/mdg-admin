@@ -100,7 +100,11 @@ export function DatasetRail({
         far end of the pills rather than at the visible edge. `md:hidden`
         because a mouse has a scrollbar and a trackpad; this cue is for a finger.
       */}
-      <div className={horizontal ? 'relative' : undefined}>
+      {/* The vertical rail is a horizontal strip below `lg` too, and on a phone
+          it overflows just the same — the third dataset sat 66px past the edge
+          with nothing to say it was there. So it gets the fade as well, and is
+          `relative` only while the fade is drawn. */}
+      <div className={horizontal ? 'relative' : 'relative md:static'}>
         <ul
           ref={listRef}
           className={cn(
@@ -149,12 +153,10 @@ export function DatasetRail({
             );
           })}
         </ul>
-        {horizontal ? (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-bg to-transparent md:hidden"
-          />
-        ) : null}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-bg to-transparent md:hidden"
+        />
       </div>
     </nav>
   );

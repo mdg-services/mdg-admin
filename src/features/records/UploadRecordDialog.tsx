@@ -14,7 +14,10 @@ import { useToast } from '@/components/ui/Toast';
 import { useCreateRecord } from '@/hooks/api/useCreateRecord';
 import { cn } from '@/lib/cn';
 import {
+  isSendable,
   MAX_ATTACHMENT_BYTES,
+  notSendableMessage,
+  UPLOAD_ACCEPT,
   uploadAttachment,
 } from '@/lib/uploadAttachment';
 import { RECORD_TYPES, RECORD_TYPE_LABELS } from '@dk/shared';
@@ -28,9 +31,6 @@ interface UploadRecordDialogProps {
   /** Conversation used for the upload presign scope, if available. */
   conversationId?: string;
 }
-
-const ACCEPT =
-  'image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain';
 
 export function UploadRecordDialog({
   open,
@@ -86,6 +86,12 @@ export function UploadRecordDialog({
       setError(`${f.name} exceeds 25 MB limit`);
       return;
     }
+    if (!isSendable(f)) {
+      setError(
+        notSendableMessage(f.name),
+      );
+      return;
+    }
     setFile(f);
   }
 
@@ -131,15 +137,13 @@ export function UploadRecordDialog({
     <Dialog
       open={open}
       onClose={handleClose}
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="min-w-0 break-words">Upload report</span>
-          <HowThisWorks
-            surface="admin-inbox-upload-report"
-            label="Upload report"
-            variant="icon"
-          />
-        </span>
+      title="Upload report"
+      help={
+        <HowThisWorks
+          surface="admin-inbox-upload-report"
+          label="Upload report"
+          variant="icon"
+        />
       }
       description={dealerCode ? `Deliver a record to ${dealerCode}` : undefined}
       footer={
@@ -172,7 +176,7 @@ export function UploadRecordDialog({
           <input
             ref={fileInputRef}
             type="file"
-            accept={ACCEPT}
+            accept={UPLOAD_ACCEPT}
             hidden
             onChange={(e) => pickFile(e.target.files)}
           />

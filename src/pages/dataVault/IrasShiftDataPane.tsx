@@ -341,27 +341,36 @@ function BusinessDateControl({
       >
         <ChevronLeft width={16} height={16} strokeWidth={1.75} />
       </IconButton>
-      <Input
-        type="date"
-        value={value}
-        min={MIN_SELECTABLE_YMD}
-        max={max}
-        aria-label="Business date"
-        onChange={(e) => {
-          // The floor is load-bearing, not decoration. Per the browser behaviour
-          // DateRangeFilter documents, a year typed digit-by-digit emits four
-          // COMPLETE dates on the way to one real one (0002-…, 0020-…, 0202-…,
-          // 2026-…), and each one that gets through re-scopes the pane and costs
-          // another `/iras-data/vault` round-trip — not free on 2G. Committing
-          // only days this product could hold leaves exactly one.
-          const next = e.target.value;
-          if (isYmd(next) && next >= MIN_SELECTABLE_YMD && next <= max) onChange(next);
-        }}
-        // A hard 150px is 14px of slack once the two arrows and "Today" are
-        // beside it at 360px, and an Android WebView draws `dd-mm-yyyy` plus a
-        // calendar glyph, which can exceed it and truncate the visible date.
-        className="w-full max-w-[170px] md:w-[150px]"
-      />
+      {/* A definite 170px box below md, the field filling it. The field's own
+          `w-full` is a percentage of a row that is itself sizing to its
+          content, and that circle let "Next day" wrap onto a line of its own at
+          every phone width. At md the box steps aside (`contents`) and the
+          field is the 150px it always was. A wrapper rather than a width on the
+          field: `cn` is clsx, and an arbitrary width there would land beside
+          `Input`'s own `w-full` and lose on stylesheet order. */}
+      <span className="w-[170px] md:contents">
+        <Input
+          type="date"
+          value={value}
+          min={MIN_SELECTABLE_YMD}
+          max={max}
+          aria-label="Business date"
+          onChange={(e) => {
+            // The floor is load-bearing, not decoration. Per the browser behaviour
+            // DateRangeFilter documents, a year typed digit-by-digit emits four
+            // COMPLETE dates on the way to one real one (0002-…, 0020-…, 0202-…,
+            // 2026-…), and each one that gets through re-scopes the pane and costs
+            // another `/iras-data/vault` round-trip — not free on 2G. Committing
+            // only days this product could hold leaves exactly one.
+            const next = e.target.value;
+            if (isYmd(next) && next >= MIN_SELECTABLE_YMD && next <= max) onChange(next);
+          }}
+          // A hard 150px is 14px of slack once the two arrows and "Today" are
+          // beside it at 360px, and an Android WebView draws `dd-mm-yyyy` plus a
+          // calendar glyph, which can exceed it and truncate the visible date.
+          className="w-full max-w-[170px] md:w-[150px]"
+        />
+      </span>
       <IconButton
         variant="secondary"
         size="sm"

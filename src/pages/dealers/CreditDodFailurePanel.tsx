@@ -59,7 +59,7 @@ export function CreditDodFailurePanel({
           aria-hidden
         />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-danger">{copy.title}</p>
+          <p className="text-sm font-semibold text-danger-strong md:text-danger">{copy.title}</p>
           <p className="mt-1 text-sm text-text">{hint}</p>
 
           {isSuperAdmin && phase ? (

@@ -6,11 +6,16 @@ import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Textarea } from '@/components/ui/Textarea';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { usePublishBottomBar } from '@/hooks/usePublishBottomBar';
 import { cn } from '@/lib/cn';
 import { isNativeShell, requestNativeMicPermission } from '@/lib/nativeBridge';
 import {
-  MAX_ATTACHMENT_BYTES,
   formatDuration,
+  isSendable,
+  MAX_ATTACHMENT_BYTES,
+  notSendableMessage,
+  resolveFileType,
+  UPLOAD_ACCEPT,
   uploadAttachment,
 } from '@/lib/uploadAttachment';
 import { useVoiceRecorder } from '@/lib/useVoiceRecorder';
@@ -65,11 +70,15 @@ interface ComposerProps {
   insert?: ComposerInsert | null;
 }
 
-const ACCEPT =
-  'image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain';
-
 const LINE_HEIGHT = 20;
-const MAX_ROWS = 6;
+/*
+ * How far the box grows before it scrolls inside itself. Four rows below md,
+ * not six: a thread on a 740px phone already spends its header, the AI strip
+ * and this row on chrome, and a "Put in composer" paragraph grown to six rows
+ * pushed Send under the bottom edge. Desktop keeps its six.
+ */
+const MAX_ROWS_MD = 6;
+const MAX_ROWS_PHONE = 4;
 
 export function Composer({
   conversationId,
@@ -85,16 +94,24 @@ export function Composer({
   const [error, setError] = React.useState<string | null>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  // Below md this row is the bottom of the screen in a thread, so it publishes
+  // its height and a toast ("Copied", a failed send) sits above it instead of
+  // on top of Send. It grows with the draft, staged files and the reply quote,
+  // and the hook re-measures as it does.
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  usePublishBottomBar(rootRef);
   const recorder = useVoiceRecorder();
   const isRecording = recorder.status === 'recording';
+  const isMd = useMediaQuery('(min-width: 768px)');
 
   React.useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
     ta.style.height = 'auto';
-    const next = Math.min(ta.scrollHeight, LINE_HEIGHT * MAX_ROWS + 16);
+    const maxRows = isMd ? MAX_ROWS_MD : MAX_ROWS_PHONE;
+    const next = Math.min(ta.scrollHeight, LINE_HEIGHT * maxRows + 16);
     ta.style.height = `${next}px`;
-  }, [body]);
+  }, [body, isMd]);
 
   // Starting a reply drops focus straight into the input.
   React.useEffect(() => {
@@ -132,7 +149,6 @@ export function Composer({
 
   const hasContent = body.trim().length > 0 || files.length > 0;
   const busy = sending || disabled;
-  const isMd = useMediaQuery('(min-width: 768px)');
   // A resolved chat disables the composer; say why. On phones drop the desktop
   // keyboard hint (no Cmd/Ctrl; it just truncates in a narrow field).
   const placeholder = disabled
@@ -152,10 +168,17 @@ export function Composer({
         setError(`${f.name} exceeds 25 MB limit`);
         continue;
       }
+      if (!isSendable(f)) {
+        setError(notSendableMessage(f.name));
+        continue;
+      }
       next.push({
         id: `${Date.now()}-${i}-${f.name}`,
         file: f,
-        previewUrl: f.type.startsWith('image/') ? URL.createObjectURL(f) : undefined,
+        // The same resolver the upload uses, so a camera photo whose picker
+        // reported no type still gets its thumbnail rather than a file chip.
+        previewUrl:
+          resolveFileType(f).kind === 'image' ? URL.createObjectURL(f) : undefined,
       });
     }
     if (next.length > 0) {
@@ -273,7 +296,10 @@ export function Composer({
      * rendering 32px shorter than the space it occupies (InboxPage's `h-full`
      * against `main`'s content box), an accident the height fix removes.
      */
-    <div className="border-t border-border bg-surface px-3 py-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] md:pb-2">
+    <div
+      ref={rootRef}
+      className="border-t border-border bg-surface px-3 py-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] md:pb-2"
+    >
       {replyingTo ? (
         <div className="mb-2 flex items-center gap-2 rounded-md border-l-[3px] border-brand bg-surface-2 px-2.5 py-1.5">
           <div className="min-w-0 flex-1">
@@ -408,7 +434,7 @@ export function Composer({
           <input
             ref={fileInputRef}
             type="file"
-            accept={ACCEPT}
+            accept={UPLOAD_ACCEPT}
             multiple
             hidden
             onChange={(e) => pickFiles(e.target.files)}

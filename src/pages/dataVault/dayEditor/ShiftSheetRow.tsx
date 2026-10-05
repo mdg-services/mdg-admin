@@ -59,7 +59,26 @@ const FIELD_BASE =
   'w-full min-w-0 rounded-sm border px-3 h-11 md:h-9 outline-none ' +
   // 16px below md: a 14px field is under iOS's focus-zoom floor, and pinch-zoom
   // is disabled app-wide, so there is no way back out of the zoom it triggers.
-  'text-base md:text-sm focus-visible:ring-2 focus-visible:ring-focus-ring';
+  'text-base md:text-sm focus-visible:ring-2 focus-visible:ring-focus-ring ' +
+  // Below md, any scroll the browser makes to bring a focused box into view
+  // leaves 112px under it, so the sticky bar's 81px accessory row cannot land
+  // on top of the box being typed in.
+  'scroll-mb-28 md:scroll-mb-0';
+
+/**
+ * The sheet's small print: 11px at md, as it always was, and larger below it.
+ *
+ * Below md this is the screen typed on a forecourt phone with pinch-zoom off,
+ * and the sentence saying why a figure is refused was the smallest text on it.
+ * `PROBLEM_TEXT` is for what is WRONG — a field's problem, a row's finding — and
+ * `NOTE_TEXT` for everything that only explains.
+ *
+ * `md:leading-[inherit]` because `text-xs` and `text-sm` set a line height and
+ * an arbitrary `md:text-[11px]` does not: without it the desktop line would keep
+ * the phone's, where the bare `text-[11px]` used to take its parent's.
+ */
+export const NOTE_TEXT = 'text-xs md:text-[11px] md:leading-[inherit]';
+export const PROBLEM_TEXT = 'text-sm md:text-[11px] md:leading-[inherit]';
 
 const FIELD_STATE: Record<ShiftFieldState, string> = {
   ASKED: 'border-border-strong bg-surface text-text',
@@ -347,16 +366,20 @@ function ShiftFieldNote({ field }: { field: ShiftSheetField }) {
       {field.problem ? (
         <p
           role={field.problem.severity === 'BLOCK' ? 'alert' : undefined}
+          // The warning in its readable shade below md: amber on white is
+          // 3.2:1, and this is the sentence saying why the day will not save.
           className={cn(
-            'text-[11px]',
-            field.problem.severity === 'BLOCK' ? 'text-danger' : 'text-warning',
+            PROBLEM_TEXT,
+            field.problem.severity === 'BLOCK'
+              ? 'text-danger'
+              : 'text-warning-strong md:text-warning',
           )}
         >
           {field.problem.message}
         </p>
       ) : null}
       {field.caption == null ? null : (
-        <p className="text-[11px] text-text-subtle">{field.caption}</p>
+        <p className={cn(NOTE_TEXT, 'text-text-subtle')}>{field.caption}</p>
       )}
     </div>
   );
@@ -391,7 +414,7 @@ function ShiftDisclosure({
   return (
     <div className="grid min-w-0 gap-1.5">
       {disclosure.note != null ? (
-        <p className="text-[11px] text-text-muted">{disclosure.note}</p>
+        <p className={cn(NOTE_TEXT, 'text-text-muted')}>{disclosure.note}</p>
       ) : null}
       <div>
         <button

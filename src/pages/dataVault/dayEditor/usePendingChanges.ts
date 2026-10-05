@@ -209,10 +209,19 @@ export interface PendingApi {
    * Cmd+Z would take away one nozzle of six and leave a day that cannot be
    * saved; `replace` is what lets "Discard all" put the day back to the shape it
    * opened in rather than emptying the screen with no way back.
+   *
+   * `baseline` is for that opening layout and nothing else: the rows are the
+   * day's starting point, not something the operator did, so while there is
+   * nothing underneath them to undo to they add no undo step. Recorded as one,
+   * they had "Undo" on screen before a single figure was typed, and one tap on
+   * it emptied the whole laid-out morning into a wall of missing-row errors.
+   * When there IS history underneath — work done on the Full grid before the
+   * sheet first opened — they are an ordinary step, exactly as before, so an
+   * Undo there still walks back through that work in order.
    */
   addRows: (
     rows: ReadonlyArray<{ code: IrasReportCode; row: IrasRow }>,
-    options?: { meta?: Record<string, unknown>; replace?: boolean },
+    options?: { meta?: Record<string, unknown>; replace?: boolean; baseline?: boolean },
   ) => void;
   editAddedRow: (
     localId: string,
@@ -311,13 +320,19 @@ export function usePendingChanges(resetKey: string): PendingApi {
   }
 
   const commit = React.useCallback(
-    (next: (prev: PendingState) => PendingState, foldKey?: string) => {
+    (next: (prev: PendingState) => PendingState, foldKey?: string, baseline = false) => {
       // Decided out here rather than inside the updater: the updater has to stay
       // a pure function of `prev`, and React runs it twice in development.
       const folding = foldKey !== undefined && foldKey === foldingInto.current;
       foldingInto.current = foldKey;
       setState((prev) => {
-        if (!folding) setHistory((h) => [...h.slice(-(UNDO_DEPTH - 1)), prev]);
+        if (!folding) {
+          // A baseline on an empty history is where the day starts, not a step
+          // back to take. See `addRows`.
+          setHistory((h) =>
+            baseline && h.length === 0 ? h : [...h.slice(-(UNDO_DEPTH - 1)), prev],
+          );
+        }
         return next(prev);
       });
     },
@@ -363,24 +378,28 @@ export function usePendingChanges(resetKey: string): PendingApi {
         })),
 
       addRows: (rows, options) =>
-        commit((prev) => {
-          const base = options?.replace ? EMPTY_PENDING : prev;
-          return {
-            ...base,
-            addedRows: [
-              ...base.addedRows,
-              ...rows.map((r) => ({
-                localId: `local-${nextLocalId.current++}`,
-                code: r.code,
-                row: r.row,
-              })),
-            ],
-            // Off `base`, not `prev`: `replace` means "put the day back to how it
-            // opened", and the notes about a change set that no longer exists
-            // would otherwise outlive it.
-            meta: options?.meta ? { ...base.meta, ...options.meta } : base.meta,
-          };
-        }),
+        commit(
+          (prev) => {
+            const base = options?.replace ? EMPTY_PENDING : prev;
+            return {
+              ...base,
+              addedRows: [
+                ...base.addedRows,
+                ...rows.map((r) => ({
+                  localId: `local-${nextLocalId.current++}`,
+                  code: r.code,
+                  row: r.row,
+                })),
+              ],
+              // Off `base`, not `prev`: `replace` means "put the day back to how it
+              // opened", and the notes about a change set that no longer exists
+              // would otherwise outlive it.
+              meta: options?.meta ? { ...base.meta, ...options.meta } : base.meta,
+            };
+          },
+          undefined,
+          options?.baseline === true,
+        ),
 
       editAddedRow: (localId, field, value, options) =>
         commit(

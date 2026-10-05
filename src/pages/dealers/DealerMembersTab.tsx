@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardSubtitle,
   CardTitle,
+  ConfirmDialog,
   Copyable,
   Dialog,
   EmptyState,
@@ -41,6 +42,7 @@ import {
 import { useStartConversation } from '@/hooks/api/useStartConversation';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
+import { copyText } from '@/lib/clipboard';
 import { generatePassword } from '@/lib/password';
 import type { Dealer, User } from '@dk/shared';
 
@@ -90,6 +92,7 @@ export function DealerMembersTab({ dealer }: Props) {
   const toast = useToast();
   const isMd = useMediaQuery('(min-width: 768px)');
   const [addOpen, setAddOpen] = React.useState(false);
+  const [suspendTarget, setSuspendTarget] = React.useState<User | null>(null);
   const hasMembers = !!users && users.length > 0;
 
   async function messageMember(u: User) {
@@ -101,7 +104,8 @@ export function DealerMembersTab({ dealer }: Props) {
     }
   }
 
-  async function toggleStatus(u: User) {
+  /** Resolves true once the change has landed; a failure is toasted here. */
+  async function toggleStatus(u: User): Promise<boolean> {
     try {
       if (u.status === 'ACTIVE') {
         await deleteUser.mutateAsync(u.id);
@@ -110,8 +114,31 @@ export function DealerMembersTab({ dealer }: Props) {
         await updateUser.mutateAsync({ id: u.id, status: 'ACTIVE' });
         toast.success(`${u.name} reactivated`);
       }
+      return true;
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Action failed');
+      return false;
+    }
+  }
+
+  /**
+   * Suspend asks first; Reactivate does not.
+   *
+   * Suspending signs the member out of the app and their chat at once, and on a
+   * phone the button sat 8px from Message — one thumb slip locked a dealer's
+   * owner out until somebody noticed. Reactivating undoes nothing anyone would
+   * regret, so it stays one tap.
+   */
+  function onStatusPress(u: User) {
+    if (u.status === 'ACTIVE') setSuspendTarget(u);
+    else void toggleStatus(u);
+  }
+
+  // The confirm stays open on a failure, so a retry is one more tap rather than
+  // finding the member again.
+  async function confirmSuspend() {
+    if (suspendTarget && (await toggleStatus(suspendTarget))) {
+      setSuspendTarget(null);
     }
   }
 
@@ -234,7 +261,7 @@ export function DealerMembersTab({ dealer }: Props) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => toggleStatus(u)}
+                            onClick={() => onStatusPress(u)}
                             loading={
                               (deleteUser.isPending || updateUser.isPending) &&
                               (deleteUser.variables === u.id ||
@@ -259,10 +286,16 @@ export function DealerMembersTab({ dealer }: Props) {
               variant="rows"
               cards={users.map((u) => ({
                 key: u.id,
+                // The name wraps and the role gets a line of its own. As one
+                // truncated span the role sat AFTER the name, so on a phone
+                // any name longer than ~25 characters cut it off entirely —
+                // "Shri Venkateshwara Balasubramanian Ramakrishnan Owner"
+                // never got as far as "Owner". The list is hidden at md anyway;
+                // the `md:` classes only restore the one-line row it was.
                 primary: (
-                  <span className="block truncate font-medium text-text">
+                  <span className="block break-words font-medium text-text md:truncate">
                     {u.name}
-                    <span className="ml-2 text-xs font-normal text-text-subtle">
+                    <span className="block text-xs font-normal text-text-subtle md:ml-2 md:inline">
                       {memberRoleLabel(u)}
                     </span>
                   </span>
@@ -317,7 +350,7 @@ export function DealerMembersTab({ dealer }: Props) {
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => toggleStatus(u)}
+                      onClick={() => onStatusPress(u)}
                       loading={
                         (deleteUser.isPending || updateUser.isPending) &&
                         (deleteUser.variables === u.id ||
@@ -333,6 +366,17 @@ export function DealerMembersTab({ dealer }: Props) {
           </>
         )}
       </CardContent>
+
+      <ConfirmDialog
+        open={suspendTarget !== null}
+        onCancel={() => setSuspendTarget(null)}
+        onConfirm={() => void confirmSuspend()}
+        loading={deleteUser.isPending}
+        title={`Suspend ${suspendTarget?.name ?? 'this member'}?`}
+        description="They are signed out and cannot chat until reactivated."
+        confirmLabel="Suspend"
+        confirmVariant="danger"
+      />
 
       <AddMemberDialog
         dealerId={dealer.id}
@@ -410,28 +454,19 @@ function AddMemberDialog({
   }
 
   /**
-   * Three rungs, because `navigator.clipboard` is absent outside a secure
-   * context and rejects in some WebViews. The last one is why this is not a
-   * one-liner: `#root` sets `user-select: none`, so "copy it manually" is only
-   * honest advice when the value is inside an `<input>` — which this one is, so
-   * the field is selected and the admin is told so rather than being sent after
-   * text they cannot highlight.
+   * `copyText` tries the Clipboard API, then a selection copy. When both refuse
+   * there is still a third rung, and it is why this is not a one-liner: `#root`
+   * sets `user-select: none`, so "copy it manually" is only honest advice when
+   * the value is inside an `<input>` — which this one is, so the field is
+   * selected and the admin is told so rather than being sent after text they
+   * cannot highlight.
    */
   async function copyPassword() {
-    const markCopied = () => {
+    if (await copyText(getValues('password'))) {
       setCopiedPw(true);
       toast.success('Password copied');
       window.setTimeout(() => setCopiedPw(false), 1500);
-    };
-
-    if (navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(getValues('password'));
-        markCopied();
-        return;
-      } catch {
-        // Permission refused, or not a secure context. Fall through.
-      }
+      return;
     }
 
     const field = document.getElementById(
@@ -440,14 +475,6 @@ function AddMemberDialog({
     if (field) {
       field.focus({ preventScroll: true });
       field.setSelectionRange(0, field.value.length);
-      try {
-        if (document.execCommand('copy')) {
-          markCopied();
-          return;
-        }
-      } catch {
-        // Ignored: the message below is the same either way.
-      }
     }
 
     toast.info(
@@ -587,7 +614,17 @@ function AddMemberDialog({
         </div>
         <div>
           <Label htmlFor="member-phone">Phone (optional)</Label>
-          <Input id="member-phone" placeholder="+91…" {...register('phone')} />
+          {/* `tel` for the number pad, and autofill OFF: the browser's own
+              suggestion for a phone box is the ADMIN's number, and this one
+              belongs to a dealer's member. */}
+          <Input
+            id="member-phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="off"
+            placeholder="+91…"
+            {...register('phone')}
+          />
         </div>
       </form>
     </Dialog>

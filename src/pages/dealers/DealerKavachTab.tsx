@@ -18,6 +18,7 @@ import {
   Card,
   CardContent,
   ClampedText,
+  ConfirmDialog,
   Dialog,
   EmptyState,
   HowThisWorks,
@@ -95,6 +96,7 @@ export function DealerKavachTab({ dealer }: Props) {
   const toast = useToast();
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [enableDealerFacingOpen, setEnableDealerFacingOpen] = React.useState(false);
+  const [pauseConfirmOpen, setPauseConfirmOpen] = React.useState(false);
   const [verifying, setVerifying] = React.useState<KavachItem | null>(null);
 
   const programmeQ = useKavachProgrammeQuery(dealer.id);
@@ -105,13 +107,20 @@ export function DealerKavachTab({ dealer }: Props) {
   const setPaused = useSetKavachItemPaused(dealer.id);
   const setSos = useSetKavachSosCompliance(dealer.id);
 
-  async function withBusy(id: string, fn: () => Promise<unknown>, successMsg: string) {
+  /** Runs `fn` with the row busy and toasts the outcome; resolves to whether it worked. */
+  async function withBusy(
+    id: string,
+    fn: () => Promise<unknown>,
+    successMsg: string,
+  ): Promise<boolean> {
     setBusyId(id);
     try {
       await fn();
       toast.success(successMsg);
+      return true;
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Action failed');
+      return false;
     } finally {
       setBusyId(null);
     }
@@ -195,6 +204,20 @@ export function DealerKavachTab({ dealer }: Props) {
     notYetVerifiedCount: score.notYetVerifiedCount,
     heldCount: score.heldCount,
   });
+
+  function setProgrammeStatus(status: 'ACTIVE' | 'PAUSED') {
+    return withBusy(
+      'programme',
+      () => updateProgramme.mutateAsync({ status }),
+      status === 'PAUSED' ? 'Programme paused' : 'Programme resumed',
+    );
+  }
+
+  // The confirm stays up when the pause fails, as Suspend's does on the Team
+  // tab: closing it would read as "paused" over an error toast.
+  async function confirmPause() {
+    if (await setProgrammeStatus('PAUSED')) setPauseConfirmOpen(false);
+  }
 
   async function setDealerFacing(enabled: boolean) {
     await withBusy(
@@ -319,10 +342,20 @@ export function DealerKavachTab({ dealer }: Props) {
                   ))}
                 </Select>
               </div>
+              {/* Pause asks first, at every width; Resume does not. Pausing
+                  stops this dealer's digests and reminders, and on a phone the
+                  button sat 9px above "Open work queue" — the screen's main
+                  action — and paused on one tap, with nothing left on the card
+                  once the toast faded.
+
+                  `order-last` below md for the same reason: the row reads
+                  Digest time, Open work queue, help, and only then Pause, so
+                  the thumb reaching for the queue does not land on it first.
+                  `md:order-none` puts the desktop row back as it was. */}
               <Button
                 variant="secondary"
                 size="sm"
-                className="w-full md:w-auto"
+                className="order-last w-full md:order-none md:w-auto"
                 disabled={busyId === 'programme'}
                 leftIcon={
                   isPaused ? (
@@ -332,14 +365,9 @@ export function DealerKavachTab({ dealer }: Props) {
                   )
                 }
                 onClick={() =>
-                  withBusy(
-                    'programme',
-                    () =>
-                      updateProgramme.mutateAsync({
-                        status: isPaused ? 'ACTIVE' : 'PAUSED',
-                      }),
-                    isPaused ? 'Programme resumed' : 'Programme paused',
-                  )
+                  isPaused
+                    ? void setProgrammeStatus('ACTIVE')
+                    : setPauseConfirmOpen(true)
                 }
               >
                 {isPaused ? 'Resume' : 'Pause programme'}
@@ -396,7 +424,7 @@ export function DealerKavachTab({ dealer }: Props) {
               <span
                 className={
                   dealerFacing
-                    ? 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-success-soft text-success'
+                    ? 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-success-soft text-success-strong md:text-success'
                     : 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-surface-2 text-text-muted'
                 }
               >
@@ -471,7 +499,7 @@ export function DealerKavachTab({ dealer }: Props) {
           content-visibility, which no `md:` class can reopen, so a desktop
           reader would get a collapsed summary instead of the paragraph. The
           copy lives in `TASKS_TAB_NOTE` so the two cannot drift. */}
-      <details className="rounded-md border border-info bg-info-soft px-3 text-xs text-info md:hidden">
+      <details className="rounded-md border border-info bg-info-soft px-3 text-xs text-info-strong md:hidden">
         {/* Block, not flex: a flex <summary> loses its native disclosure
             triangle, and that triangle is the only cue the line opens. */}
         <summary className="min-h-11 cursor-pointer select-none py-3 font-medium">
@@ -618,6 +646,16 @@ export function DealerKavachTab({ dealer }: Props) {
           <p>You can switch it off again at any time.</p>
         </div>
       </Dialog>
+
+      <ConfirmDialog
+        open={pauseConfirmOpen}
+        onCancel={() => setPauseConfirmOpen(false)}
+        onConfirm={() => void confirmPause()}
+        loading={busyId === 'programme'}
+        title={`Pause Kavach for ${dealerCodeLabel(dealer.code)}?`}
+        description="No digest or reminder goes out until you resume."
+        confirmLabel="Pause programme"
+      />
 
       {/*
         The same drawer the cross-dealer queue opens, adapted from the item in

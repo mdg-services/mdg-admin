@@ -45,9 +45,23 @@ export function DsrStaleNotice({ report }: { report: DsrReportView }) {
     (r) => r.businessDate !== report.businessDate,
   );
   const busy = regenerate.isPending || run.busy;
+  // Counted, because the card header carries a "Regenerate" of its own that
+  // redoes ONE day, while this rebuilds every flagged report from the earliest
+  // forward — a week of reports, and possibly portal collections. The same
+  // word on both said nothing about the difference. This report is stale (or
+  // nothing would render), so it is the one added to the others.
+  const staleCount = staleQ.data ? others.length + 1 : null;
+  const label =
+    staleCount === null
+      ? 'Rebuild out-of-date reports'
+      : staleCount === 1
+        ? 'Rebuild this report'
+        : `Rebuild ${staleCount} out-of-date reports`;
 
   return (
-    <div className="flex flex-wrap items-start gap-3 rounded-md border border-warning bg-warning-soft px-3 py-2.5 text-sm text-warning">
+    // `text-warning-strong` below md: #d97706 on the soft amber is 3.14:1,
+    // and this is read on a forecourt in daylight. md keeps today's shade.
+    <div className="flex flex-wrap items-start gap-3 rounded-md border border-warning bg-warning-soft px-3 py-2.5 text-sm text-warning-strong md:text-warning">
       <History width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2">
@@ -100,7 +114,7 @@ export function DsrStaleNotice({ report }: { report: DsrReportView }) {
           })
         }
       >
-        {busy ? 'Rebuilding…' : 'Regenerate'}
+        {busy ? 'Rebuilding…' : label}
       </Button>
     </div>
   );

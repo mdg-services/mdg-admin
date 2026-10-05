@@ -274,7 +274,7 @@ export function ReviewApplyDialog({
               <span className="font-semibold text-text">{c.to}</span>
             </div>
             {c.identityWarning ? (
-              <p className="mt-1 text-[12px] text-danger">{c.identityWarning}</p>
+              <p className="mt-1 text-[12px] text-danger-strong md:text-danger">{c.identityWarning}</p>
             ) : null}
           </li>
         ))}
@@ -300,10 +300,15 @@ export function ReviewApplyDialog({
         align="start"
         labelClassName="rounded-md border border-danger bg-danger-soft px-3 py-2.5 text-danger"
         label={
-          <>
+          // The readable red below md, on the label's own words. The
+          // `text-danger` in `labelClassName` never applied — Checkbox's base
+          // `text-text` is emitted after it and wins — so the sentence has
+          // always rendered in the body colour; `md:text-inherit` keeps that
+          // at md exactly as it is.
+          <span className="text-danger-strong md:text-inherit">
             I meant to move {identityChanges.length === 1 ? 'this row' : 'these rows'} to a
             different tank, nozzle or product.
-          </>
+          </span>
         }
       />
     ) : null;
@@ -368,7 +373,7 @@ export function ReviewApplyDialog({
 
   const sharedWarning =
     affected.sharedDates.length > 0 ? (
-      <div className="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2.5 text-sm text-danger">
+      <div className="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2.5 text-sm text-danger-strong md:text-danger">
         <AlertTriangle width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
         <div>
           <p className="font-medium">
@@ -459,17 +464,13 @@ export function ReviewApplyDialog({
       open={open}
       onClose={onClose}
       size="lg"
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="min-w-0 break-words">
-            {manual ? manual.title : `Apply ${pending.count} change${pending.count === 1 ? '' : 's'}`}
-          </span>
-          <HowThisWorks
-            surface="admin-review-apply-corrections"
-            label="Applying corrections"
-            variant="icon"
-          />
-        </span>
+      title={manual ? manual.title : `Apply ${pending.count} change${pending.count === 1 ? '' : 's'}`}
+      help={
+        <HowThisWorks
+          surface="admin-review-apply-corrections"
+          label="Applying corrections"
+          variant="icon"
+        />
       }
       description={`${dealerCodeLabel(day.dealer.code)} · ${formatYmd(day.businessDate)}`}
       footer={
@@ -538,7 +539,8 @@ export function ReviewApplyDialog({
                 size="sm"
                 padding="none"
                 align="start"
-                className="mt-1 text-brand"
+                tone="brand"
+                className="mt-1"
                 onClick={() => setShowEveryFigure((v) => !v)}
               >
                 {showEveryFigure ? 'Hide every figure' : 'Show every figure'}

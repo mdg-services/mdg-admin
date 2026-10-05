@@ -23,6 +23,7 @@ import {
   HowThisWorks,
   Label,
   MobileCardList,
+  RefreshTool,
   Select,
   Skeleton,
   Table,
@@ -188,12 +189,21 @@ function groupRows(rows: KavachWorkQueueRow[], by: GroupBy): QueueGroup[] {
     );
     const first = sorted[0];
     if (!first) continue;
+    // Points are per dealer — an override can make one outlet's copy of a task
+    // worth 75 where the catalog says 5 — so "N pts each" is only true when
+    // every row agrees. Otherwise the heading gives the range rather than
+    // quoting the first row's figure for all of them.
+    const points = sorted.map((r) => r.points);
+    const minPts = Math.min(...points);
+    const maxPts = Math.max(...points);
     groups.push({
       key,
       title: by === 'task' ? first.labelEn : dealerCodeLabel(first.dealerCode),
       subtitle:
         by === 'task'
-          ? `${sorted.length} ${sorted.length === 1 ? 'dealer' : 'dealers'} · ${first.points} pts each`
+          ? `${sorted.length} ${sorted.length === 1 ? 'dealer' : 'dealers'} · ${
+              minPts === maxPts ? `${minPts} pts each` : `${minPts}–${maxPts} pts`
+            }`
           : `${sorted.length} ${sorted.length === 1 ? 'task' : 'tasks'} outstanding`,
       rows: sorted,
     });
@@ -395,7 +405,7 @@ export function KavachWorkQueuePage() {
           <>
             <Badge
               intent={total > 0 ? 'warning' : 'success'}
-              className="h-7 px-3"
+              className="px-3"
             >
               {total} outstanding
             </Badge>
@@ -411,17 +421,19 @@ export function KavachWorkQueuePage() {
             >
               {needsReview === null ? 'Needs review' : `${needsReview} need review`}
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={refresh}
+          </>
+        }
+        // `tools`, not `actions`: below md these sit on the title's line instead
+        // of a 44px row of their own under the counts. At md they are appended
+        // to the end of the actions row, exactly where they always were.
+        tools={
+          <>
+            <RefreshTool
+              label="Refresh the queue"
               loading={queueQ.isRefetching}
-              aria-label="Refresh the queue"
-              leftIcon={<RotateCw width={14} height={14} strokeWidth={1.75} />}
-            >
-              Refresh
-            </Button>
-            {/* Icon: the badge and two buttons already fill this row. */}
+              onRefresh={refresh}
+            />
+            {/* Icon: the badge and two buttons already fill the actions row. */}
             <HowThisWorks surface="admin-kavach-work-queue" label="Work queue" variant="icon" />
           </>
         }
@@ -537,9 +549,13 @@ export function KavachWorkQueuePage() {
         <div>
           <Label>Group by</Label>
           <div className="flex gap-1">
+            {/* `aria-pressed`, because the selection was colour alone: a
+                screen reader announced two plain buttons and never which
+                grouping was on. */}
             <Button
               size="sm"
               className="flex-1"
+              aria-pressed={groupBy === 'task'}
               variant={groupBy === 'task' ? 'primary' : 'secondary'}
               onClick={() => {
                 setActiveIndex(null);
@@ -554,6 +570,7 @@ export function KavachWorkQueuePage() {
             <Button
               size="sm"
               className="flex-1"
+              aria-pressed={groupBy === 'dealer'}
               variant={groupBy === 'dealer' ? 'primary' : 'secondary'}
               onClick={() => {
                 setActiveIndex(null);
@@ -675,22 +692,28 @@ export function KavachWorkQueuePage() {
                       heading one gutter down and let rows scroll through the
                       band above it.
 
-                      ONE HEIGHT, ALWAYS TWO LINES, below md. The heading is a
-                      wrapping row, so "Stock board / 8 dealers · 30 pts each"
-                      is 52px and "Held / 1 dealer · 30 pts each" is 36px — and
-                      the sticky one is pushed out by the next group's, which
-                      means the two bands meet mid-scroll at two different
-                      heights and the join reads as a drawing error rather than
-                      as one heading replacing another. One fixed shape plus a
-                      rule along its bottom edge makes the handover legible:
-                      same height, same line, one leaving as the other arrives.
-                      Both lines truncate, which is what fixes the height
-                      without a hard-coded one — a longer task name can no longer add a
-                      third line — and the rows underneath carry the detail.
+                      ONE SHAPE below md. The heading is a wrapping row, so
+                      "Stock board / 8 dealers · 30 pts each" is 52px and "Held /
+                      1 dealer · 30 pts each" is 36px — and the sticky one is
+                      pushed out by the next group's, which means the two bands
+                      meet mid-scroll at two different heights and the join
+                      reads as a drawing error rather than as one heading
+                      replacing another. A fixed shape plus a rule along its
+                      bottom edge makes the handover legible: one leaving as the
+                      other arrives. The subtitle truncates to its one line.
+
+                      The title is clamped at TWO lines rather than truncated at
+                      one. Grouped by task it is the only place the task is
+                      named — the cards under it say only the dealer — and a
+                      dealer-only custom task has no length cap, so one line cut
+                      "Declare in SDMS that proper hygiene is mai…" mid-sentence
+                      over rows an admin was certifying. Two lines hold about 90
+                      characters at 360px; every catalog label still fits in one,
+                      so only a long custom name makes its band a line taller.
                       From md up the heading is static and is exactly the
                       wrapping row it always was. */}
                   <div className="sticky stick-top z-[var(--z-sticky)] border-b border-border bg-surface-2 px-3 py-2 md:static md:z-auto md:flex md:flex-wrap md:items-baseline md:justify-between md:gap-2 md:border-b-0 md:px-4">
-                    <h2 className="truncate text-sm font-semibold text-text md:overflow-visible md:whitespace-normal">
+                    <h2 className="line-clamp-2 text-sm font-semibold text-text md:line-clamp-none">
                       {group.title}
                     </h2>
                     <span className="block truncate text-xs text-text-muted md:overflow-visible md:whitespace-normal">
@@ -826,6 +849,13 @@ export function KavachWorkQueuePage() {
                       // so on the rows that can be chased the title becomes the
                       // tap target and the ask sits in the card's footer — the
                       // shape `DataList` uses for exactly this collision.
+                      //
+                      // The title alone was not enough of a target: the badges
+                      // and lines under it went dead while the cards around
+                      // them opened on any tap, and nothing said the title was
+                      // the way in. So the footer names both ways out, side by
+                      // side — opening the task is what an admin who saw the
+                      // sheet in person is after.
                       const canAsk = !mark && askable(row);
                       const open = () =>
                         setActiveIndex(rowIndexOf(row.itemId));
@@ -875,17 +905,32 @@ export function KavachWorkQueuePage() {
                           </span>
                         ),
                         actions: canAsk ? (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="w-full"
-                            onClick={() => setAskRow(row)}
-                            leftIcon={
-                              <Send width={14} height={14} strokeWidth={1.75} />
-                            }
-                          >
-                            Ask the dealer
-                          </Button>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={open}
+                              leftIcon={
+                                <ShieldCheck
+                                  width={14}
+                                  height={14}
+                                  strokeWidth={1.75}
+                                />
+                              }
+                            >
+                              Open task
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setAskRow(row)}
+                              leftIcon={
+                                <Send width={14} height={14} strokeWidth={1.75} />
+                              }
+                            >
+                              Ask the dealer
+                            </Button>
+                          </div>
                         ) : undefined,
                         primaryRight: mark ? (
                           <Badge intent="success">{HANDLED_LABEL[mark]}</Badge>

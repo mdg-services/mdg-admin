@@ -56,15 +56,9 @@ export function DealerCreateDrawer({ open, onClose, loading, onSubmit }: Props) 
         onClose();
         reset();
       }}
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          Add dealer
-          <HowThisWorks
-            surface="admin-dealer-create"
-            label="Add dealer"
-            variant="icon"
-          />
-        </span>
+      title="Add dealer"
+      help={
+        <HowThisWorks surface="admin-dealer-create" label="Add dealer" variant="icon" />
       }
       // One short sentence only. `Drawer` renders `description` in the panel's
       // NON-scrolling header, above the `flex-1 overflow-y-auto` body: the
@@ -118,8 +112,14 @@ export function DealerCreateDrawer({ open, onClose, loading, onSubmit }: Props) 
         </div>
         <div>
           <Label htmlFor="phone">Phone number (optional)</Label>
+          {/* `tel` for the number pad; autofill OFF because the browser's
+              suggestion for a phone box is the ADMIN's own number, and this
+              one is the dealer's. */}
           <Input
             id="phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="off"
             placeholder="+91 90000 00000"
             invalid={!!errors.phone}
             // An untouched input posts ''. The shared schema already coerces a

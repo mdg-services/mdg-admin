@@ -66,14 +66,12 @@ export function DataVaultPage() {
       <PageHeader
         title="Data Vault"
         subtitle={dataset.description}
-        actions={
-          <>
-            {Actions ? <Actions params={search} patchParams={patchParams} /> : null}
-            {/* Icon, not words: the Documents dataset already hangs three
-                controls and a button off this same slot. */}
-            <HowThisWorks surface="admin-data-vault" label="Data Vault" variant="icon" />
-          </>
-        }
+        actions={Actions ? <Actions params={search} patchParams={patchParams} /> : undefined}
+        // An icon, not words: the Documents dataset already hangs three
+        // controls and a button off `actions`. As a tool it sits beside the
+        // title below md, and at md it is appended after the dataset's own
+        // actions, exactly where it always was.
+        tools={<HowThisWorks surface="admin-data-vault" label="Data Vault" variant="icon" />}
       />
 
       {/* Two panes from `lg`: a fixed-width rail and a track that is allowed to

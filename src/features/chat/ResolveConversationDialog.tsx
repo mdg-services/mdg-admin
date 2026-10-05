@@ -24,6 +24,35 @@ export interface ResolveValues {
   notes: string;
 }
 
+/*
+ * Sentences for the three fields, in place of the schema's own messages.
+ *
+ * The schema lives in the shared package (vendored four times), and its
+ * defaults are zod's — "String must contain at least 1 character(s)" under
+ * both boxes, which reads as a developer error rather than an instruction. The
+ * error's `type` is zod's issue code, so a too-long entry still gets the
+ * sentence that is actually true of it.
+ */
+type FieldIssue = { type?: unknown } | undefined;
+
+function serviceIdMessage(e: FieldIssue): string | undefined {
+  return e ? 'Pick the service you provided.' : undefined;
+}
+
+function serviceNameMessage(e: FieldIssue): string | undefined {
+  if (!e) return undefined;
+  return e.type === 'too_big'
+    ? 'Keep the service name under 160 characters.'
+    : 'Name the service you provided.';
+}
+
+function notesMessage(e: FieldIssue): string | undefined {
+  if (!e) return undefined;
+  return e.type === 'too_big'
+    ? 'Keep the notes under 2,000 characters.'
+    : 'Say in a line what was done for the dealer.';
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -50,11 +79,17 @@ export function ResolveConversationDialog({
     formState: { errors },
   } = useForm<ResolveValues>({
     resolver: zodResolver(resolveConversationSchema),
-    defaultValues: { serviceId: '', serviceName: '', notes: '' },
+    // NO `serviceName: ''`. The schema's `serviceName` is optional but, when
+    // present, at least one character — and an empty default is present. The
+    // box is only on screen for "Other", so picking a catalog service and
+    // pressing Resolve failed validation on a field nobody could see: no
+    // request, no message, nothing. Left undefined, and unregistered when the
+    // box goes away (see `register` below), it is only checked when it is shown.
+    defaultValues: { serviceId: '', notes: '' },
   });
 
   React.useEffect(() => {
-    if (open) reset({ serviceId: '', serviceName: '', notes: '' });
+    if (open) reset({ serviceId: '', notes: '' });
   }, [open, reset]);
 
   const serviceId = watch('serviceId');
@@ -79,15 +114,13 @@ export function ResolveConversationDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="min-w-0 break-words">Resolve request</span>
-          <HowThisWorks
-            surface="admin-inbox-resolve"
-            label="Resolve request"
-            variant="icon"
-          />
-        </span>
+      title="Resolve request"
+      help={
+        <HowThisWorks
+          surface="admin-inbox-resolve"
+          label="Resolve request"
+          variant="icon"
+        />
       }
       description="Log the service you provided. This is recorded against the dealer's history."
       footer={
@@ -125,7 +158,7 @@ export function ResolveConversationDialog({
               <option value="other">Other (specify)</option>
             </Select>
           )}
-          <FieldError message={errors.serviceId?.message} />
+          <FieldError message={serviceIdMessage(errors.serviceId)} />
         </div>
 
         {isOther ? (
@@ -137,9 +170,11 @@ export function ResolveConversationDialog({
               id="resolve-service-name"
               placeholder="Describe the service"
               invalid={!!errors.serviceName}
-              {...register('serviceName')}
+              // Dropped from the values when "Other" is unpicked, so an empty
+              // box left behind cannot block a catalog service's Resolve.
+              {...register('serviceName', { shouldUnregister: true })}
             />
-            <FieldError message={errors.serviceName?.message} />
+            <FieldError message={serviceNameMessage(errors.serviceName)} />
           </div>
         ) : null}
 
@@ -154,7 +189,7 @@ export function ResolveConversationDialog({
             invalid={!!errors.notes}
             {...register('notes')}
           />
-          <FieldError message={errors.notes?.message} />
+          <FieldError message={notesMessage(errors.notes)} />
         </div>
       </form>
     </Dialog>

@@ -184,7 +184,14 @@ function MediaGalleryDrawer({
                   className="shrink-0 text-text-muted"
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-text">
+                  {/* Two lines, broken anywhere, below md: ten statements
+                      named alike read identically when cut at the tail, and
+                      the tail is the part that differs. No `block` here:
+                      `line-clamp-2` is already a block box (`-webkit-box`),
+                      and Tailwind emits `block` after it, so the clamp would
+                      be switched off. `md:line-clamp-none` gives `block` back
+                      at md, where this is the one-line row it always was. */}
+                  <span className="line-clamp-2 break-all text-sm text-text md:line-clamp-none md:truncate">
                     {attachment.filename}
                   </span>
                   <span className="block text-xs text-text-subtle">
@@ -234,15 +241,13 @@ function MediaGalleryDrawer({
     <Drawer
       open={open}
       onClose={onClose}
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="min-w-0 break-words">Media, links, docs</span>
-          <HowThisWorks
-            surface="admin-inbox-media-gallery"
-            label="Media, links, docs"
-            variant="icon"
-          />
-        </span>
+      title="Media, links, docs"
+      help={
+        <HowThisWorks
+          surface="admin-inbox-media-gallery"
+          label="Media, links, docs"
+          variant="icon"
+        />
       }
       width="md"
     >
@@ -318,11 +323,10 @@ export function MediaGalleryCard({ conversationId }: { conversationId: string })
       <MediaGalleryDrawer
         conversationId={conversationId}
         open={drawerOpen}
-        // While the image preview is stacked on top, Escape should close only
-        // the preview (its own Dialog handles that) — not the drawer beneath.
-        onClose={() => {
-          if (!preview) setDrawerOpen(false);
-        }}
+        // No guard for the preview stacked on top: the shared overlay stack
+        // sends Escape and Back to the top overlay only, so the preview closes
+        // and this drawer stays.
+        onClose={() => setDrawerOpen(false)}
         onPreview={setPreview}
       />
       <ImagePreviewDialog attachment={preview} onClose={() => setPreview(null)} />

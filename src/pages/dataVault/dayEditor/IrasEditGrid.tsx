@@ -373,30 +373,38 @@ export function IrasEditGrid({
           fields stacked under it. See the note on this component for why a
           table has no working size here. */}
       {isMd ? null : (
-        <ul className="grid gap-3 md:hidden">
-          {rowModels.map((r) => (
-            <li
-              key={r.key}
-              className={cn(
-                'rounded-md border border-border bg-surface p-2.5 md:p-3',
-                r.toneClassName,
-              )}
-            >
-              {r.gutter('card')}
-              <dl className="mt-3 grid gap-3">
-                {columns.map((col) => (
-                  <div key={col.field} className="min-w-0">
-                    <dt className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium uppercase tracking-wide text-text-muted">
-                      <span className="break-all">{col.headerName}</span>
-                      <FieldPolicyMark code={code} field={col.field} shape="card" />
-                    </dt>
-                    <dd className={cn('min-w-0', r.valueClassName)}>{r.cell(col, 'card')}</dd>
-                  </div>
-                ))}
-              </dl>
-            </li>
-          ))}
-        </ul>
+        <>
+          {/* The rule the field marks are exceptions to, said once. */}
+          {columns.some((col) => irasFieldPolicy(code, col.field).usedByReport) ? (
+            <p className="text-xs text-text-subtle">
+              Every field is used by the report unless it says otherwise.
+            </p>
+          ) : null}
+          <ul className="grid gap-3 md:hidden">
+            {rowModels.map((r) => (
+              <li
+                key={r.key}
+                className={cn(
+                  'rounded-md border border-border bg-surface p-2.5 md:p-3',
+                  r.toneClassName,
+                )}
+              >
+                {r.gutter('card')}
+                <dl className="mt-3 grid gap-3">
+                  {columns.map((col) => (
+                    <div key={col.field} className="min-w-0">
+                      <dt className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium uppercase tracking-wide text-text-muted">
+                        <span className="break-all">{col.headerName}</span>
+                        <FieldPolicyMark code={code} field={col.field} shape="card" />
+                      </dt>
+                      <dd className={cn('min-w-0', r.valueClassName)}>{r.cell(col, 'card')}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       {/* Desktop (≥ md): the spreadsheet, unchanged. It scrolls inside its own
@@ -485,16 +493,13 @@ function FieldPolicyMark({
   const policy = irasFieldPolicy(code, field);
 
   if (shape === 'card') {
-    if (policy.usedByReport) {
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-brand">
-          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-brand" />
-          Used by the report
-        </span>
-      );
-    }
+    // Only the exceptions are marked. Nearly every field is used by the report,
+    // so a "Used by the report" pill on each of them said nothing and hid the
+    // rare one that is NOT used among six identical pills a card. The card list
+    // says the rule once, above the cards.
+    if (policy.usedByReport) return null;
     return (
-      <span className="inline-flex items-center rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-text-subtle">
+      <span className="inline-flex items-center rounded-full bg-surface-2 px-1.5 py-0.5 text-xs font-medium normal-case tracking-normal text-text-subtle">
         {policy.affectsReportNotes ? 'Report notes only' : 'Not used by the report'}
       </span>
     );
@@ -530,6 +535,10 @@ function FieldPolicyMark({
 }
 
 /* ──────────────────────────────── one cell ──────────────────────────────── */
+
+/** Why a locked field cannot be typed into, and the way round it. */
+const LOCKED_FIELD_SENTENCE =
+  'This cannot be changed. The report adds a product’s tanks together, so moving a stock row onto a tank that already has one would count that tank’s fuel twice. To correct it, exclude this row and add the right one.';
 
 function Cell({
   code,
@@ -682,7 +691,7 @@ function Cell({
                 portalMoved ? ' (it changed after this was corrected)' : ''
               }`
             : policy.locked
-              ? 'This cannot be changed. The report adds a product’s tanks together, so moving a stock row onto a tank that already has one would count that tank’s fuel twice. To correct it, exclude this row and add the right one.'
+              ? LOCKED_FIELD_SENTENCE
               : policy.usedByReport
                 ? 'Used by the report.'
                 : policy.affectsReportNotes
@@ -707,7 +716,9 @@ function Cell({
         )}
       >
         <span className="flex items-center gap-1">
-          {shown}
+          {/* Breakable in the card: a 28-character transaction id or invoice
+              number otherwise ran straight through the box's right border. */}
+          {card ? <span className="min-w-0 break-all">{shown}</span> : shown}
           {isCorrected ? (
             <span
               aria-hidden
@@ -724,6 +735,13 @@ function Cell({
           </span>
         ) : null}
       </button>
+      {/* Said under the box in the card. In the grid it is the tooltip above,
+          but a disabled button takes no tap and touch never shows a `title`, so
+          on a phone the tank number did nothing and said nothing — and the way
+          to fix a wrong tank was invisible. */}
+      {card && policy.locked ? (
+        <p className="mt-1 text-xs text-text-subtle">{LOCKED_FIELD_SENTENCE}</p>
+      ) : null}
       {/*
         Two rungs back out of a correction. In the grid they stay the hover-
         revealed links they have always been. In the card they are real buttons,
@@ -742,7 +760,7 @@ function Cell({
             <Button
               variant="ghost"
               size="sm"
-              className="text-brand"
+              tone="brand"
               onClick={() => pending.setCell(code, rowKey, field, null)}
             >
               Use the portal’s value
@@ -764,7 +782,7 @@ function Cell({
             <Button
               variant="ghost"
               size="sm"
-              className="text-brand"
+              tone="brand"
               onClick={() => pending.clearCell(code, rowKey, field)}
             >
               Undo this edit
@@ -1055,7 +1073,7 @@ function HandRowGutter({
       {badge}
       <ProductTag product={product} />
       {readOnly ? null : shape === 'card' ? (
-        <Button variant="ghost" size="sm" className="text-brand" onClick={onAction}>
+        <Button variant="ghost" size="sm" tone="brand" onClick={onAction}>
           {actionLabel}
         </Button>
       ) : (

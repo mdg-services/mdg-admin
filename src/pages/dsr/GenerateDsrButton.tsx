@@ -15,7 +15,7 @@ import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { istTodayYmd, isYmd } from '@/lib/format';
 
-import { useDsrRunWatcher } from './useDsrRunWatcher';
+import { useDsrRunWatcher, type DsrRunWatcher } from './useDsrRunWatcher';
 
 interface Props {
   dealerId: string;
@@ -31,6 +31,13 @@ interface Props {
   className?: string;
   /** Block the button (e.g. no valid date chosen yet). */
   disabled?: boolean;
+  /**
+   * A run watcher owned by a parent that outlives this button. Without one the
+   * button watches its own run, which is right wherever it stays mounted; pass
+   * one when the button sits somewhere that unmounts the moment it is pressed
+   * — see `DsrDateToolbar`'s sheet.
+   */
+  watcher?: DsrRunWatcher;
 }
 
 /**
@@ -53,10 +60,14 @@ export function GenerateDsrButton({
   onQueued,
   className,
   disabled,
+  watcher,
 }: Props) {
   const toast = useToast();
   const generate = useGenerateDsr();
-  const run = useDsrRunWatcher(dealerId, 'Report ready — it is showing below.');
+  // Always called — hooks cannot be conditional — and simply idle when a
+  // parent's watcher is doing the job.
+  const own = useDsrRunWatcher(dealerId, 'Report ready — it is showing below.');
+  const run = watcher ?? own;
 
   const busy = generate.isPending || run.busy;
 
@@ -114,6 +125,7 @@ export function GenerateDsrForDate({
   dealerId,
   onGenerated,
   className,
+  watcher,
 }: {
   dealerId: string;
   /**
@@ -123,6 +135,8 @@ export function GenerateDsrForDate({
    */
   onGenerated?: (businessDate: string) => void;
   className?: string;
+  /** Passed through to `GenerateDsrButton` — see its prop of the same name. */
+  watcher?: DsrRunWatcher;
 }) {
   // Recomputed each render (not memoised) so `max` and the validity check advance
   // past IST midnight on a long-open session. IST (matching the backend guard), so
@@ -169,6 +183,7 @@ export function GenerateDsrForDate({
           label="Generate"
           className="w-full md:w-auto"
           icon={<CalendarPlus width={14} height={14} strokeWidth={1.75} />}
+          watcher={watcher}
           onQueued={() => {
             if (valid) onGenerated?.(date);
           }}

@@ -171,15 +171,13 @@ export function UploadDayPhotoDialog({
       open={open}
       onClose={handleClose}
       size="sm"
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          {`${replacing ? 'Replace' : 'Upload'} register photo — ${dayLabel}`}
-          <HowThisWorks
-            surface="admin-tt-density-upload-day-photo"
-            label="Filing a register photo"
-            variant="icon"
-          />
-        </span>
+      title={`${replacing ? 'Replace' : 'Upload'} register photo — ${dayLabel}`}
+      help={
+        <HowThisWorks
+          surface="admin-tt-density-upload-day-photo"
+          label="Filing a register photo"
+          variant="icon"
+        />
       }
       footer={
         <>

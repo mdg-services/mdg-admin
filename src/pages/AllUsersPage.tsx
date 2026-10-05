@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
+  AlertCircle,
   AlertTriangle,
   Archive,
   Building2,
@@ -46,6 +47,7 @@ import {
   useUpdateUser,
 } from '@/hooks/api/useAllUsers';
 import { ApiError } from '@/lib/api';
+import { copyText } from '@/lib/clipboard';
 import { cn } from '@/lib/cn';
 import { generatePassword } from '@/lib/password';
 import { selectUser, useAuthStore } from '@/store/auth';
@@ -65,7 +67,7 @@ function DealerStatusBadge({ status }: { status: string }) {
 }
 
 export function AllUsersPage() {
-  const { data: groups, isLoading } = useAllUsers();
+  const { data: groups, isLoading, isError, error, refetch } = useAllUsers();
   const currentUserId = useAuthStore(selectUser)?.id ?? null;
   const [query, setQuery] = React.useState('');
   const [showArchived, setShowArchived] = React.useState(false);
@@ -121,7 +123,9 @@ export function AllUsersPage() {
       <PageHeader
         title="All Users"
         subtitle={
-          isLoading
+          // A failed load has no counts to state — "0 users across 0 dealers"
+          // above the error would be the same false empty in a second place.
+          isLoading || isError
             ? 'Every user across all dealers, grouped dealer-wise.'
             : `${liveUsers} users across ${dealerCount} dealers. Full control: email, password, access, role, and archive.`
         }
@@ -167,6 +171,23 @@ export function AllUsersPage() {
             <Skeleton key={i} className="h-40" />
           ))}
         </div>
+      ) : isError ? (
+        // Before the empty branch: a failed request leaves `groups` undefined,
+        // and on a dropped connection this read "No users yet".
+        <Card>
+          <CardContent padding="none" className="md:p-4 md:pt-6">
+            <EmptyState
+              icon={<AlertCircle width={28} height={28} strokeWidth={1.75} />}
+              title="Could not load the users"
+              description={error instanceof ApiError ? error.message : 'Please try again.'}
+              cta={
+                <Button variant="secondary" size="sm" onClick={() => void refetch()}>
+                  Retry
+                </Button>
+              }
+            />
+          </CardContent>
+        </Card>
       ) : filtered.length === 0 ? (
         <Card>
           {/* `EmptyState` carries its own `py-8 md:py-12`; below md this card's
@@ -496,13 +517,14 @@ function ManageUserDialog({
     }
   }
 
+  // `copyText`, not `navigator.clipboard` alone: the Clipboard API is
+  // missing or refused in some WebViews, and there the copy failed outright.
   async function copyPassword() {
-    try {
-      await navigator.clipboard.writeText(getValues('password'));
+    if (await copyText(getValues('password'))) {
       setCopied(true);
       toast.success('Password copied');
       window.setTimeout(() => setCopied(false), 1500);
-    } catch {
+    } else {
       toast.error('Could not copy — copy manually.');
     }
   }

@@ -572,10 +572,10 @@ export function DealerDetailPage() {
           <div className="flex items-center gap-2">
             {dealer.archivedAt ? <Badge intent="danger">Deleted</Badge> : null}
             <StatusChip kind="dealer" value={dealer.status} />
-            {/* Icon: `dense` keeps the title, subtitle and actions on one row. */}
-            <HowThisWorks surface="admin-dealer-detail" label="Dealer" variant="icon" />
           </div>
         }
+        // Icon: `dense` keeps the title, subtitle, actions and tools on one row.
+        tools={<HowThisWorks surface="admin-dealer-detail" label="Dealer" variant="icon" />}
       />
       {isArchived ? (
         <Card className="mb-4 border-danger/40 bg-danger-soft/40">
@@ -615,6 +615,14 @@ export function DealerDetailPage() {
         items={stripTabs.map((t) => ({ id: t.id, label: t.label }))}
         value={activeTab}
         onChange={selectTab}
+        // A tab opened from the ⋮ menu is named in the strip on a phone. The
+        // tinted trigger alone said "you are somewhere in here" — not where —
+        // and a phone keeps the most tabs in that menu. Phone-only, so the
+        // desktop strip is the one it has always been.
+        pinnedActive={
+          activeInMenu ? { id: activeDef.id, label: activeDef.label } : undefined
+        }
+        pinnedActiveBelowMd
         trailing={
           <>
             {/* The fade hints that the strip scrolls to more tabs. `right-full`

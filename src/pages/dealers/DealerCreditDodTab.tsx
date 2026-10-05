@@ -635,19 +635,19 @@ function CreditLockBadge({
 function ReconcileChip({ snapshot }: { snapshot: CreditDodSnapshotRecord }) {
   if (!snapshot.reconcileChecked) {
     return (
-      <span className="inline-flex h-[22px] shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-warning-soft px-2 text-xs font-medium text-warning">
+      <span className="inline-flex h-[22px] shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-warning-soft px-2 text-xs font-medium text-warning-strong md:text-warning">
         <HelpCircle width={12} height={12} strokeWidth={2} aria-hidden />
         Unchecked
       </span>
     );
   }
   return snapshot.reconciles ? (
-    <span className="inline-flex h-[22px] shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-success-soft px-2 text-xs font-medium text-success">
+    <span className="inline-flex h-[22px] shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-success-soft px-2 text-xs font-medium text-success-strong md:text-success">
       <CheckCircle2 width={12} height={12} strokeWidth={2} aria-hidden />
       Reconciles
     </span>
   ) : (
-    <span className="inline-flex h-[22px] shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-danger-soft px-2 text-xs font-medium text-danger">
+    <span className="inline-flex h-[22px] shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-danger-soft px-2 text-xs font-medium text-danger-strong md:text-danger">
       <XCircle width={12} height={12} strokeWidth={2} aria-hidden />
       Mismatch
     </span>

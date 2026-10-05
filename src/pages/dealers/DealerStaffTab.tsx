@@ -266,8 +266,11 @@ export function DealerStaffTab({ dealer }: Props) {
     () =>
       (isMd ? [] : awards).map((a) => ({
         key: a.id,
+        // Wrapped, not truncated: two warriors who share a long first part of
+        // a name were the same cut-off string on a phone, and the cut-off part
+        // was the one telling them apart. These cards only exist below md.
         primary: (
-          <span className="block truncate font-medium text-text">
+          <span className="block break-words font-medium text-text md:truncate">
             {nameById.get(a.employeeId) ?? 'Unknown worker'}
           </span>
         ),
@@ -561,7 +564,9 @@ export function DealerStaffTab({ dealer }: Props) {
                       meta: (
                         <span className="flex flex-wrap items-center gap-1.5">
                           <EmployeeStatusChip status={row.status} />
-                          <span>· {row.awardCount} awards</span>
+                          <span>
+                            · {row.awardCount} {row.awardCount === 1 ? 'award' : 'awards'}
+                          </span>
                           {rowTarget !== undefined ? (
                             <span className={hitTarget ? 'text-success' : undefined}>
                               · {fmtPoints(rowTarget)} target
@@ -916,8 +921,10 @@ export function DealerStaffTab({ dealer }: Props) {
                   variant="rows"
                   cards={draft.lineItems.map((li, i) => ({
                     key: `${li.employeeId}-${li.workItemCode}-${i}`,
+                    // Wrapped for the same reason as the history cards: a
+                    // truncated name is the one string that cannot be cut.
                     primary: (
-                      <span className="block truncate font-medium text-text">
+                      <span className="block break-words font-medium text-text md:truncate">
                         {li.employeeName}
                       </span>
                     ),
@@ -1190,16 +1197,10 @@ export function DealerStaffTab({ dealer }: Props) {
         roster={roster}
         summary={summary}
         range={range}
-        onClose={() => {
-          // Both `Drawer` and `Dialog` bind their own Escape handler to
-          // `document`, so one keypress reaches both and the undo confirmation
-          // would take the panel underneath it down as well — dropping the
-          // admin back on the tab, having to re-open the warrior and re-find
-          // their place in a 136-row ledger, and only when they backed out with
-          // Esc rather than with Cancel. The confirmation is stacked ON this
-          // panel, so while it is up, Escape is its key, not ours.
-          if (!undoTarget) setDetailId(null);
-        }}
+        // No guard for the undo confirmation stacked on top of this panel:
+        // Escape goes to the top overlay only (the shared overlay stack), so it
+        // closes the confirmation and leaves the warrior open.
+        onClose={() => setDetailId(null)}
         onUndoAward={setUndoTarget}
       />
 
@@ -1220,16 +1221,8 @@ export function DealerStaffTab({ dealer }: Props) {
       <Dialog
         open={!!undoTarget}
         onClose={() => setUndoTarget(null)}
-        title={
-          <span className="flex flex-wrap items-center gap-2">
-            Undo award
-            <HowThisWorks
-              surface="admin-undo-award"
-              label="Undo award"
-              variant="icon"
-            />
-          </span>
-        }
+        title="Undo award"
+        help={<HowThisWorks surface="admin-undo-award" label="Undo award" variant="icon" />}
         description={
           undoTarget
             ? `Reverse ${fmtPoints(undoTarget.points)} pts for “${undoTarget.workLabelEn}”?`

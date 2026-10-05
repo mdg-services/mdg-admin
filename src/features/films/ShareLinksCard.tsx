@@ -26,6 +26,7 @@ import {
 } from '@/hooks/api/useFilms';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
+import { copyText } from '@/lib/clipboard';
 import {
   PHONE_LIST_LIMIT,
   cappedRows,
@@ -378,9 +379,10 @@ function WhatsAppLink({ text, compact = false }: { text: string; compact?: boole
 /**
  * Copy one link from the list. The list shows the short code, not the whole
  * URL (a 37-character URL in a table cell wraps into four lines), so the copy
- * has to work without anything on screen to select: the clipboard API, then a
- * hidden field and the document's own copy, and if the device refuses both, the
- * link is put in a message to copy by hand rather than the button doing nothing.
+ * has to work without anything on screen to select: `copyText` tries the
+ * clipboard API and then the document's own copy, and if the device refuses
+ * both, the link is put in a message to copy by hand rather than the button
+ * doing nothing.
  */
 function CopyLinkButton({ url }: { url: string }) {
   const toast = useToast();
@@ -392,30 +394,7 @@ function CopyLinkButton({ url }: { url: string }) {
   }, [copied]);
 
   const copy = async () => {
-    let ok = false;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
-        ok = true;
-      }
-    } catch {
-      ok = false;
-    }
-    if (!ok) {
-      const field = document.createElement('textarea');
-      field.value = url;
-      field.setAttribute('readonly', '');
-      field.style.position = 'fixed';
-      field.style.opacity = '0';
-      document.body.appendChild(field);
-      field.select();
-      try {
-        ok = document.execCommand('copy');
-      } catch {
-        ok = false;
-      }
-      field.remove();
-    }
+    const ok = await copyText(url);
     if (ok) {
       setCopied(true);
       toast.success('Link copied');

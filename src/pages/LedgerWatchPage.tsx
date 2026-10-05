@@ -1,6 +1,7 @@
 import {
   AlertCircle,
   Check,
+  ExternalLink,
   EyeOff,
   RotateCw,
   ScanLine,
@@ -8,7 +9,7 @@ import {
   X,
 } from 'lucide-react';
 import * as React from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -41,6 +42,7 @@ import {
   useUpdateLedgerMovementRule,
   type LedgerFlagFilters,
 } from '@/hooks/api/useLedgerWatch';
+import { useBusyIds } from '@/hooks/useBusyIds';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDmy, inrFormat } from '@/lib/format';
@@ -65,6 +67,7 @@ import {
   rollupByDealer,
   sortFlags,
 } from './dealers/ledgerWatchFormat';
+import { IgnoreFindingDialog } from './ledgerWatch/IgnoreFindingDialog';
 
 /**
  * Ledger watch, across every dealer: the findings inbox.
@@ -129,8 +132,14 @@ function paramsFromFilters(filters: LedgerFlagFilters): URLSearchParams {
   return params;
 }
 
+/** Where "open that outlet's ledger" goes — the answer to almost every finding. */
+function outletLedgerHref(flag: LedgerFlagDto): string {
+  return `/dealers/${flag.dealerId}?tab=data-vault&vault=ledger-watch`;
+}
+
 export function LedgerWatchPage() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   // Seeded once from the URL; after that the URL follows the controls and not
   // the other way round, so a re-render can never fight a half-made choice.
@@ -142,6 +151,11 @@ export function LedgerWatchPage() {
     return fromUrl.status || fromUrl.kind ? fromUrl : { status: 'OPEN' };
   });
   const [handled, setHandled] = React.useState<Record<string, FlagAction>>({});
+  /** The findings with a write in flight — per row (see `useBusyIds`), so a
+   *  45-row list on a 2G phone is not frozen for the length of each request. */
+  const busy = useBusyIds();
+  /** The finding whose "Ignore this finding?" confirm is open. */
+  const [ignoring, setIgnoring] = React.useState<LedgerFlagDto | null>(null);
 
   const inboxQ = useLedgerFlagInbox(filters);
   const updateFlag = useUpdateLedgerFlag();
@@ -217,19 +231,26 @@ export function LedgerWatchPage() {
     );
   }
 
-  function act(flag: LedgerFlagDto, status: FlagAction) {
-    updateFlag.mutate(
-      { id: flag.id, body: { status } },
-      {
-        onSuccess: () => {
-          setHandled((prev) => ({ ...prev, [flag.id]: status }));
-        },
-        onError: (err) =>
-          toast.error(
-            err instanceof ApiError ? err.message : 'Could not update the flag',
-          ),
-      },
-    );
+  /**
+   * `mutateAsync`, not `mutate` with callbacks: the callbacks passed to
+   * `mutate` fire only for the latest call, and rows are now free to be acted
+   * on while another is still saving. Each call's own promise settles for that
+   * call alone.
+   */
+  async function act(flag: LedgerFlagDto, status: FlagAction, note?: string) {
+    await busy.run(flag.id, async () => {
+      try {
+        await updateFlag.mutateAsync({
+          id: flag.id,
+          body: note ? { status, note } : { status },
+        });
+        setHandled((prev) => ({ ...prev, [flag.id]: status }));
+      } catch (err) {
+        toast.error(
+          err instanceof ApiError ? err.message : 'Could not update the flag',
+        );
+      }
+    });
   }
 
   const activeChips: { key: string; label: string; onRemove: () => void }[] = [];
@@ -267,7 +288,7 @@ export function LedgerWatchPage() {
               intent={
                 alertCount > 0 ? 'danger' : total > 0 ? 'warning' : 'success'
               }
-              className="h-7 px-3"
+              className="px-3"
             >
               {alertCount > 0
                 ? `${alertCount} ${alertCount === 1 ? 'alert' : 'alerts'}`
@@ -462,7 +483,7 @@ export function LedgerWatchPage() {
                                 is "open that outlet's ledger". */}
                             <Link
                               className="hover:underline"
-                              to={`/dealers/${flag.dealerId}?tab=data-vault&vault=ledger-watch`}
+                              to={outletLedgerHref(flag)}
                             >
                               {dealerCodeLabel(flag.dealerCode)}
                             </Link>
@@ -509,8 +530,8 @@ export function LedgerWatchPage() {
                                 <Button
                                   size="sm"
                                   variant="secondary"
-                                  disabled={updateFlag.isPending}
-                                  onClick={() => act(flag, 'ACKNOWLEDGED')}
+                                  disabled={busy.isBusy(flag.id)}
+                                  onClick={() => void act(flag, 'ACKNOWLEDGED')}
                                   aria-label="Acknowledge this finding"
                                   title="Acknowledge"
                                 >
@@ -523,8 +544,8 @@ export function LedgerWatchPage() {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  disabled={updateFlag.isPending}
-                                  onClick={() => act(flag, 'IGNORED')}
+                                  disabled={busy.isBusy(flag.id)}
+                                  onClick={() => setIgnoring(flag)}
                                   aria-label="Ignore this finding"
                                   title="Ignore"
                                 >
@@ -545,9 +566,12 @@ export function LedgerWatchPage() {
               </div>
 
               {/* Mobile card-stack (< md). The outlet code and the severity lead
-                  the card, the sentence is the body, and the two actions sit in
-                  the footer — a card cannot be one big tap target AND hold
-                  buttons of its own. */}
+                  the card, the sentence is the body, and the actions sit in the
+                  footer — a card cannot be one big tap target AND hold buttons
+                  of its own. Opening the outlet's ledger is one of those
+                  actions rather than a link on the code: inline in the title it
+                  was a 29×18 target, for the step that follows almost every
+                  finding. */}
               <MobileCardList
                 variant="rows"
                 cards={flags.map((flag) => {
@@ -559,12 +583,9 @@ export function LedgerWatchPage() {
                     tone: mark ? ('muted' as const) : ('default' as const),
                     primary: (
                       <span className="block break-words font-medium text-text">
-                        <Link
-                          className="font-mono"
-                          to={`/dealers/${flag.dealerId}?tab=data-vault&vault=ledger-watch`}
-                        >
+                        <span className="font-mono">
                           {dealerCodeLabel(flag.dealerCode)}
-                        </Link>{' '}
+                        </span>{' '}
                         · {flag.titleEn}
                       </span>
                     ),
@@ -593,32 +614,46 @@ export function LedgerWatchPage() {
                       </span>
                     ),
                     actionsLayout: 'wrap' as const,
-                    actions: actionable ? (
+                    actions: (
                       <>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={updateFlag.isPending}
-                          onClick={() => act(flag, 'ACKNOWLEDGED')}
-                          leftIcon={
-                            <Check width={14} height={14} strokeWidth={1.75} />
-                          }
-                        >
-                          Acknowledge
-                        </Button>
+                        {actionable ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={busy.isBusy(flag.id)}
+                              onClick={() => void act(flag, 'ACKNOWLEDGED')}
+                              leftIcon={
+                                <Check width={14} height={14} strokeWidth={1.75} />
+                              }
+                            >
+                              Acknowledge
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={busy.isBusy(flag.id)}
+                              onClick={() => setIgnoring(flag)}
+                              leftIcon={
+                                <EyeOff width={14} height={14} strokeWidth={1.75} />
+                              }
+                            >
+                              Ignore
+                            </Button>
+                          </>
+                        ) : null}
                         <Button
                           size="sm"
                           variant="ghost"
-                          disabled={updateFlag.isPending}
-                          onClick={() => act(flag, 'IGNORED')}
+                          onClick={() => navigate(outletLedgerHref(flag))}
                           leftIcon={
-                            <EyeOff width={14} height={14} strokeWidth={1.75} />
+                            <ExternalLink width={14} height={14} strokeWidth={1.75} />
                           }
                         >
-                          Ignore
+                          Open {dealerCodeLabel(flag.dealerCode)} ledger
                         </Button>
                       </>
-                    ) : undefined,
+                    ),
                   };
                 })}
               />
@@ -640,6 +675,18 @@ export function LedgerWatchPage() {
       </Card>
 
       <PendingRules />
+
+      {/* At every width, the desktop table's icon button included: Ignore
+          silences a money finding for good, and this screen offers no way to
+          bring one back. */}
+      <IgnoreFindingDialog
+        flag={ignoring}
+        onCancel={() => setIgnoring(null)}
+        onConfirm={(flag, note) => {
+          setIgnoring(null);
+          void act(flag, 'IGNORED', note);
+        }}
+      />
     </div>
   );
 }
@@ -709,6 +756,10 @@ function PendingRules() {
   const toast = useToast();
   const rulesQ = useLedgerMovementRules();
   const updateRule = useUpdateLedgerMovementRule();
+  // Per rule, the same way the findings list tracks its rows: one shared
+  // `isPending` spun every "Confirm this name" at once, as if all of them were
+  // being confirmed.
+  const busy = useBusyIds();
 
   if (rulesQ.isLoading || rulesQ.isError || !rulesQ.data) return null;
 
@@ -728,20 +779,17 @@ function PendingRules() {
     );
   }
 
-  function confirmRule(rule: LedgerMovementRuleDto) {
-    updateRule.mutate(
-      { id: rule.id, body: { active: true } },
-      {
-        onSuccess: () =>
-          toast.success(
-            `"${rule.titleEn}" now classifies every row that matches it.`,
-          ),
-        onError: (err) =>
-          toast.error(
-            err instanceof ApiError ? err.message : 'Could not confirm the rule',
-          ),
-      },
-    );
+  async function confirmRule(rule: LedgerMovementRuleDto) {
+    await busy.run(rule.id, async () => {
+      try {
+        await updateRule.mutateAsync({ id: rule.id, body: { active: true } });
+        toast.success(`"${rule.titleEn}" now classifies every row that matches it.`);
+      } catch (err) {
+        toast.error(
+          err instanceof ApiError ? err.message : 'Could not confirm the rule',
+        );
+      }
+    });
   }
 
   return (
@@ -793,8 +841,8 @@ function PendingRules() {
                 <Button
                   size="sm"
                   variant="secondary"
-                  loading={updateRule.isPending}
-                  onClick={() => confirmRule(rule)}
+                  loading={busy.isBusy(rule.id)}
+                  onClick={() => void confirmRule(rule)}
                   leftIcon={<Check width={14} height={14} strokeWidth={1.75} />}
                 >
                   Confirm this name

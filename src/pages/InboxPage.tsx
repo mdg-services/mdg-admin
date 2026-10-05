@@ -4,6 +4,7 @@ import {
   Check,
   CheckCircle2,
   ChevronLeft,
+  ChevronRight,
   CornerUpRight,
   FileText,
   FileUp,
@@ -14,14 +15,16 @@ import {
   MoreVertical,
   PanelRightClose,
   PanelRightOpen,
+  Phone,
   Plus,
   RotateCcw,
   ShieldAlert,
+  Store,
   UserPlus,
   type LucideIcon,
 } from 'lucide-react';
 import * as React from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { ActionRow } from '@/components/ui/ActionRow';
 import { Badge } from '@/components/ui/Badge';
@@ -73,8 +76,9 @@ import { useServicesQuery } from '@/hooks/api/useServices';
 import { useUpdateTicket } from '@/hooks/api/useUpdateTicket';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { usePublishBottomBar } from '@/hooks/usePublishBottomBar';
 import { useSafeBack } from '@/hooks/useSafeBack';
-import { api } from '@/lib/api';
+import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { Intent } from '@/lib/statusIntent';
 import { useAuthStore } from '@/store/auth';
@@ -249,6 +253,8 @@ function AiGuardBanner({
   // The SAME query key the strip below uses, so react-query serves both from one
   // cache entry and one request.
   const turnsQ = useConversationAiTurnsQuery(conversationId);
+  const [explainOpen, setExplainOpen] = React.useState(false);
+  const explainId = React.useId();
   const guard = aiThreadGuard(turnsQ.data?.items);
   if (!guard) return null;
   return (
@@ -270,17 +276,49 @@ function AiGuardBanner({
             <span className="text-xs text-text-subtle">
               {aiTurnAge(guard.at, now)}
             </span>
+            {/* Below md the explanation is folded behind this, on the badge's
+                own row. `-my-2.5` keeps the row its 24px while the button
+                keeps a 44px target: a disclosure on a line of its own cost
+                44px of a screen this banner is already short of. */}
+            <button
+              type="button"
+              aria-expanded={explainOpen}
+              aria-controls={explainId}
+              onClick={() => setExplainOpen((v) => !v)}
+              className="-my-2.5 ml-1 flex min-h-11 items-center gap-1 text-xs font-medium text-text-muted md:hidden"
+            >
+              <ChevronRight
+                width={14}
+                height={14}
+                strokeWidth={1.75}
+                aria-hidden
+                className={cn(
+                  'shrink-0 transition-transform',
+                  explainOpen && 'rotate-90',
+                )}
+              />
+              What this means
+            </button>
           </div>
           {guard.labels.length > 0 ? (
-            <p className="min-w-0 break-words text-sm text-text">
+            <p className="line-clamp-2 min-w-0 break-words text-sm text-text md:line-clamp-none">
               {guard.labels.join(', ')}
             </p>
           ) : null}
-          <p className="text-xs text-text-muted">{guard.hint}</p>
-          <p className="text-xs text-text-muted">
-            The dealer was told nothing different — they got the same warm line as
-            a busy day.
-          </p>
+          {/* Always shown at md; one tap away below it. The mark is never
+              cleared by replying, so on a phone this banner sat at ~187px over
+              the composer for the whole life of the thread and left the
+              messages a sliver. */}
+          <div
+            id={explainId}
+            className={cn(explainOpen ? 'grid' : 'hidden', 'gap-1 md:grid')}
+          >
+            <p className="text-xs text-text-muted">{guard.hint}</p>
+            <p className="text-xs text-text-muted">
+              The dealer was told nothing different — they got the same warm line as
+              a busy day.
+            </p>
+          </div>
         </div>
         {isSuperAdmin ? (
           <Button
@@ -411,6 +449,60 @@ function TicketFlagBadge({
   );
 }
 
+/**
+ * The Details drawer's dealer card on a phone: the code opens the dealer, the
+ * number rings it, and the dealer's Daily Sales Report is one tap away.
+ *
+ * Most of what a dealer asks in chat is about their own records ("22 tarikh ka
+ * DSR bhejo"), and from a thread there was no way to them: Code and Phone were
+ * dead text, the number could not even be long-pressed (`#root` is
+ * `user-select: none`), and sending a report meant backing out, finding the
+ * outlet under More, and finding the thread again — about eight taps. Below lg
+ * the thread lives in the URL (`?c=<id>`), so Back from any of these returns to
+ * it. Phone-only: the md+ card keeps its plain text.
+ */
+function DealerQuickLinks({ dealer }: { dealer: Dealer }) {
+  const linkClass =
+    'flex min-h-11 items-center gap-2 text-brand underline underline-offset-2';
+  return (
+    <>
+      <div>
+        <p className="text-xs text-text-subtle">Code</p>
+        <Link to={`/dealers/${dealer.id}`} className={linkClass}>
+          <Store width={15} height={15} strokeWidth={1.75} aria-hidden />
+          <span className="min-w-0 break-words">
+            {dealer.code ?? '-'} · Open the dealer
+          </span>
+        </Link>
+      </div>
+      <div>
+        <p className="text-xs text-text-subtle">Phone</p>
+        {dealer.phone ? (
+          // `select-text` as well as the link: the shell allows long-press Copy
+          // only on that class, and a number is as often copied as rung.
+          <a
+            href={`tel:${dealer.phone.replace(/[^\d+]/g, '')}`}
+            className={cn(linkClass, 'select-text tabular-nums')}
+          >
+            <Phone width={15} height={15} strokeWidth={1.75} aria-hidden />
+            {dealer.phone}
+          </a>
+        ) : (
+          <p className="text-text">-</p>
+        )}
+      </div>
+      <div>
+        <p className="text-xs text-text-subtle">Status</p>
+        <p className="text-text">{dealer.status}</p>
+      </div>
+      <Link to={`/dsr/dealers/${dealer.id}`} className={linkClass}>
+        <FileText width={15} height={15} strokeWidth={1.75} aria-hidden />
+        Daily Sales Report
+      </Link>
+    </>
+  );
+}
+
 export function InboxPage() {
   useInboxSocket();
 
@@ -440,6 +532,8 @@ export function InboxPage() {
   // instead of an inline column, so it stays reachable on phones/tablets.
   const [mobileContextOpen, setMobileContextOpen] = React.useState(false);
   const isLg = useMediaQuery('(min-width: 1024px)');
+  const isMd = useMediaQuery('(min-width: 768px)');
+  const toast = useToast();
 
   // Ticks once a minute so the reply-SLA flag colours advance on their own,
   // without waiting for new data to arrive.
@@ -526,6 +620,12 @@ export function InboxPage() {
 
   const selectedQ = useConversation(selectedId);
   const conversation = selectedQ.data ?? null;
+
+  // The AI chrome and the composer, published together as the thread's bottom
+  // bar below md — see where it is attached. Only while a thread is drawn: the
+  // element exists exactly then.
+  const threadBottomRef = React.useRef<HTMLDivElement>(null);
+  usePublishBottomBar(threadBottomRef, !!conversation);
 
   const messagesQ = useMessages(selectedId);
   const { markRead } = useConversationSocket(selectedId);
@@ -831,10 +931,24 @@ export function InboxPage() {
                 value={conversation.priority ?? 'normal'}
                 disabled={updateTicket.isPending}
                 onChange={(e) =>
-                  updateTicket.mutate({
-                    conversationId: conversation.id,
-                    priority: e.target.value as TicketPriority,
-                  })
+                  updateTicket.mutate(
+                    {
+                      conversationId: conversation.id,
+                      priority: e.target.value as TicketPriority,
+                    },
+                    // The hook applies the change at once and quietly puts the
+                    // old value back if the save fails, so without a word here
+                    // a ticket marked Urgent on a weak link went back to
+                    // Normal behind the admin's back.
+                    {
+                      onError: (err) =>
+                        toast.error(
+                          err instanceof ApiError
+                            ? err.message
+                            : 'Could not save the priority',
+                        ),
+                    },
+                  )
                 }
               >
                 {TICKET_PRIORITIES.map((p) => (
@@ -851,10 +965,20 @@ export function InboxPage() {
                 value={conversation.category ?? 'general'}
                 disabled={updateTicket.isPending}
                 onChange={(e) =>
-                  updateTicket.mutate({
-                    conversationId: conversation.id,
-                    category: e.target.value as TicketCategory,
-                  })
+                  updateTicket.mutate(
+                    {
+                      conversationId: conversation.id,
+                      category: e.target.value as TicketCategory,
+                    },
+                    {
+                      onError: (err) =>
+                        toast.error(
+                          err instanceof ApiError
+                            ? err.message
+                            : 'Could not save the category',
+                        ),
+                    },
+                  )
                 }
               >
                 {TICKET_CATEGORIES.map((c) => (
@@ -880,7 +1004,7 @@ export function InboxPage() {
             <p className="text-xs text-text-muted">
               Dealer details unavailable.
             </p>
-          ) : (
+          ) : isMd ? (
             <>
               <div>
                 <p className="text-xs text-text-subtle">Code</p>
@@ -897,6 +1021,8 @@ export function InboxPage() {
                 <p className="text-text">{dealerQ.data.status}</p>
               </div>
             </>
+          ) : (
+            <DealerQuickLinks dealer={dealerQ.data} />
           )}
         </CardContent>
       </Card>
@@ -943,7 +1069,9 @@ export function InboxPage() {
                     className="mt-0.5 shrink-0 text-text-muted"
                   />
                   <div className="min-w-0">
-                    <p className="truncate text-text">
+                    {/* Wraps below md: the tail is what tells a revised copy
+                        from the original, and there is no pinch-zoom. */}
+                    <p className="break-words text-text md:truncate">
                       {r.title}
                     </p>
                     {r.periodLabel ? (
@@ -988,8 +1116,17 @@ export function InboxPage() {
           : 'h-[calc(100%+2*var(--app-gutter))]',
       )}
     >
-      {/* Left rail */}
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface md:flex">
+      {/* Left rail.
+
+          The three panes appear at lg (1024px), not md — the same line the
+          JavaScript has always drawn (`isLg` decides URL-driven selection and
+          the details Drawer). With the panes at md, everything from 768 to
+          1023px — a phone held sideways in a browser, a portrait tablet — got
+          the app sidebar, this rail and the list side by side and left the
+          open thread 48-100px wide, with a 26px composer. That band is now one
+          pane at a time, as on a phone. At lg and up every `lg:` class here
+          is the `md:` class it replaced, so a desktop is unchanged. */}
+      <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface lg:flex">
         <div className="flex items-center justify-between gap-2 px-4 py-3">
           <h2 className="text-sm font-semibold text-text">Inbox</h2>
           <HowThisWorks surface="admin-inbox" label="Inbox" variant="icon" />
@@ -1035,10 +1172,10 @@ export function InboxPage() {
         </nav>
       </aside>
 
-      {/* Conversation list — full-width on mobile, hidden once a chat is open */}
+      {/* Conversation list — full-width below lg, hidden once a chat is open */}
       <section
         className={cn(
-          'w-full shrink-0 flex-col border-r border-border bg-surface md:flex md:w-80',
+          'w-full shrink-0 flex-col border-r border-border bg-surface lg:flex lg:w-80',
           selectedId ? 'hidden' : 'flex',
         )}
       >
@@ -1048,6 +1185,12 @@ export function InboxPage() {
           </h3>
           <div className="flex items-center gap-2">
             {conversationsQ.isFetching ? <Spinner size={14} /> : null}
+            {/* The rail carries this at lg; below it the rail is hidden, and
+                without a copy here the Inbox — the most-used screen — was the
+                one place a phone could not reach its guided video. */}
+            <span className="contents lg:hidden">
+              <HowThisWorks surface="admin-inbox" label="Inbox" variant="icon" />
+            </span>
             <Button
               size="sm"
               variant="secondary"
@@ -1058,8 +1201,8 @@ export function InboxPage() {
             </Button>
           </div>
         </div>
-        {/* Mobile filter chips (the desktop filter rail is hidden < md) */}
-        <div className="flex gap-1.5 overflow-x-auto border-b border-border px-3 py-2 md:hidden">
+        {/* Filter chips (the filter rail is hidden < lg) */}
+        <div className="flex gap-1.5 overflow-x-auto border-b border-border px-3 py-2 lg:hidden">
           {FILTERS.map((f) => {
             const active = filter === f.key;
             const count = countMap[f.key];
@@ -1071,8 +1214,10 @@ export function InboxPage() {
                   setFilter(f.key);
                   setSelectedId(null);
                 }}
+                // 44px at every width they appear: below lg is a phone, a
+                // phone held sideways or a tablet, and all three are touch.
                 className={cn(
-                  'flex min-h-11 shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium md:min-h-0',
+                  'flex min-h-11 shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium',
                   active
                     ? 'bg-brand text-text-inverse'
                     : 'bg-surface-2 text-text-muted',
@@ -1134,12 +1279,20 @@ export function InboxPage() {
                               shrink (it clips its own label instead), so the
                               pressure has to go somewhere. Wrapping puts the
                               preview on its own line rather than cutting the
-                              chip that says the machine got this one wrong. */}
+                              chip that says the machine got this one wrong.
+
+                              That only happens if the preview has a BASIS to
+                              wrap on. `flex-1` is a 0px basis, which always
+                              "fits", so the preview was squeezed to 10-80px
+                              ("…") beside three badges instead of wrapping.
+                              Below md it asks for 10rem and drops to its own
+                              line when less is left; the 320px desktop list
+                              keeps `flex-1`. */}
                           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                             {priorityPill(c.priority)}
                             <TicketFlagBadge conversation={c} now={now} />
                             <AiRowChip conversation={c} />
-                            <p className="min-w-0 flex-1 truncate text-sm text-text-muted">
+                            <p className="min-w-0 flex-[1_1_10rem] truncate text-sm text-text-muted md:flex-1">
                               {c.lastMessagePreview ?? 'No messages yet'}
                             </p>
                           </div>
@@ -1160,10 +1313,10 @@ export function InboxPage() {
         </ul>
       </section>
 
-      {/* Active chat — full-screen on mobile once a conversation is selected */}
+      {/* Active chat — the whole width below lg once a conversation is selected */}
       <section
         className={cn(
-          'min-w-0 flex-1 flex-col bg-bg md:flex',
+          'min-w-0 flex-1 flex-col bg-bg lg:flex',
           selectedId ? 'flex' : 'hidden',
         )}
       >
@@ -1187,7 +1340,7 @@ export function InboxPage() {
                     closeConversation();
                   }}
                   aria-label="Back to conversations"
-                  className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 md:hidden"
+                  className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 lg:hidden"
                 >
                   <ChevronLeft width={20} height={20} strokeWidth={1.75} />
                 </button>
@@ -1207,7 +1360,7 @@ export function InboxPage() {
                     <ActionRow className="mt-4">
                       <Button
                         variant="secondary"
-                        className="md:hidden"
+                        className="lg:hidden"
                         onClick={() => {
                           setMobileContextOpen(false);
                           closeConversation();
@@ -1252,13 +1405,17 @@ export function InboxPage() {
                     closeConversation();
                   }}
                   aria-label="Back to conversations"
-                  className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 md:hidden"
+                  className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 lg:hidden"
                 >
                   <ChevronLeft width={20} height={20} strokeWidth={1.75} />
                 </button>
                 <div className="min-w-0">
+                {/* Wraps below md rather than truncating. The cut-off half
+                    was always the role ("· Owner") and the assignee — the two
+                    things that change what the admin writes back — and a
+                    phone has height to spare where it has no width. */}
                 <div className="flex min-w-0 items-center gap-2">
-                  <h2 className="truncate text-base font-semibold text-text">
+                  <h2 className="min-w-0 break-words text-base font-semibold text-text md:truncate">
                     {memberLabel(conversation)}
                   </h2>
                   {/* At 360px the right-hand cluster (a status button plus two
@@ -1272,7 +1429,7 @@ export function InboxPage() {
                     <TicketFlagBadge conversation={conversation} now={now} />
                   </span>
                 </div>
-                <p className="truncate text-xs text-text-muted">
+                <p className="break-words text-xs text-text-muted md:truncate">
                   {dealerCodeLabel(conversation.dealerCode)}
                   {conversation.assignedAdminName
                     ? ` · Assigned to ${conversation.assignedAdminName}`
@@ -1451,13 +1608,31 @@ export function InboxPage() {
                     the threads they have nothing to say about, which is most of
                     them; the guard banner sits ABOVE the strip because it is
                     the one an admin must not be able to miss while the strip is
-                    collapsed. */}
-                <AiGuardBanner conversationId={conversation.id} now={now} />
-                <AiFirstLineStrip
-                  conversationId={conversation.id}
-                  onUseAnswer={handleUseAiAnswer}
-                  now={now}
-                />
+                    collapsed.
+
+                    Below md the two share ONE capped region that scrolls inside
+                    itself. On a 740px phone the banner and an open strip took
+                    ~450px between them and left the messages 52px; with the
+                    keyboard up the composer itself went under the bottom edge.
+                    Capped at 40% of the screen, the messages and the box being
+                    typed in always keep the rest. Both children are blocks with
+                    their own top border, so at md this wrapper is inert.
+
+                    The outer block is published as the bottom bar below md, so
+                    a toast clears the guard banner and the strip as well as the
+                    composer. The composer publishes its own height too, but the
+                    tallest bar wins, and a toast that cleared only the composer
+                    landed on the banner's Clear — the button whose failure it was
+                    reporting. A plain block at md. */}
+                <div ref={threadBottomRef}>
+                <div className="max-h-[40dvh] shrink-0 overflow-y-auto overscroll-contain md:max-h-none md:overflow-visible">
+                  <AiGuardBanner conversationId={conversation.id} now={now} />
+                  <AiFirstLineStrip
+                    conversationId={conversation.id}
+                    onUseAnswer={handleUseAiAnswer}
+                    now={now}
+                  />
+                </div>
                 <Composer
                   /*
                    * KEYED ON THE THREAD, so the draft box empties when the
@@ -1484,6 +1659,7 @@ export function InboxPage() {
                       : null
                   }
                 />
+                </div>
               </div>
 
               {isLg ? (
@@ -1547,7 +1723,19 @@ export function InboxPage() {
             <Sheet
               open={threadMenuOpen}
               onClose={() => setThreadMenuOpen(false)}
+              // The thread's guided video rides on the sheet's title row. At
+              // md it is in the header's action row; below md the header has
+              // room for only two glyphs beside the name, and a third would
+              // cost the name another line. `HowThisWorks` cannot yet be
+              // opened from a `SheetItem` (it owns its own open state).
               title="Actions"
+              help={
+                <HowThisWorks
+                  surface="admin-inbox-thread"
+                  label="Conversation"
+                  variant="icon"
+                />
+              }
             >
               {/* First, because it is the same control as the glyph in the
                   header — this row is where that glyph's word went. */}

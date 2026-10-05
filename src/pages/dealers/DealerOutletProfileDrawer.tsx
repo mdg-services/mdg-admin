@@ -1,6 +1,11 @@
 import { Plus, Trash2 } from 'lucide-react';
 import * as React from 'react';
-import { useFieldArray, useForm, type UseFormSetError } from 'react-hook-form';
+import {
+  useFieldArray,
+  useForm,
+  type FieldPath,
+  type UseFormSetError,
+} from 'react-hook-form';
 
 import {
   Button,
@@ -94,6 +99,7 @@ export function DealerOutletProfileDrawer({ open, onClose, dealer }: Props) {
     control,
     reset,
     setError,
+    setFocus,
     clearErrors,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: emptyValues() });
@@ -150,12 +156,19 @@ export function DealerOutletProfileDrawer({ open, onClose, dealer }: Props) {
     const body = { ...patch, customFields };
     const parsed = dealerUpdateSchema.safeParse(body);
     if (!parsed.success) {
-      applyIssues(
+      const marked = applyIssues(
         parsed.error.issues,
         patch.outletProfile,
         custom.map((row) => row.formIndex),
         setError,
       );
+      // Take the admin TO the first red box. The panel is ~25 fields long and
+      // Save sits in its footer, so a toast alone left them hunting up and down
+      // a phone-length sheet for a border they could not see. Focusing scrolls
+      // the box into the panel's own scroller; "first" is the order the panel
+      // draws them, not the order the schema happened to complain in.
+      const first = firstInPanelOrder(marked, values.custom.length);
+      if (first) setFocus(first);
       toast.error('Some details need fixing before this can be saved');
       return;
     }
@@ -175,15 +188,13 @@ export function DealerOutletProfileDrawer({ open, onClose, dealer }: Props) {
     <Drawer
       open={open}
       onClose={onClose}
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          Outlet details
-          <HowThisWorks
-            surface="admin-dealer-outlet-profile"
-            label="Outlet details"
-            variant="icon"
-          />
-        </span>
+      title="Outlet details"
+      help={
+        <HowThisWorks
+          surface="admin-dealer-outlet-profile"
+          label="Outlet details"
+          variant="icon"
+        />
       }
       description="The pump's registration file."
       width="lg"
@@ -461,27 +472,55 @@ function applyIssues(
   sent: readonly { key: string }[],
   customRowOf: readonly number[],
   setError: UseFormSetError<FormValues>,
-): void {
+): Set<FieldPath<FormValues>> {
+  const marked = new Set<FieldPath<FormValues>>();
+  const mark = (name: FieldPath<FormValues>, message: string) => {
+    setError(name, { message });
+    marked.add(name);
+  };
   for (const issue of issues) {
     const [root, index, leaf] = issue.path;
     if (root === 'outletProfile' && typeof index === 'number') {
       const key = sent[index]?.key;
       if (!key) continue;
       const which = leaf === 'expiresOn' ? 'expiresOn' : 'value';
-      setError(`fields.${key}.${which}` as const, { message: issue.message });
+      mark(`fields.${key}.${which}`, issue.message);
       continue;
     }
     if (root === 'customFields' && typeof index === 'number') {
       const row = customRowOf[index];
       if (row === undefined) continue;
       const which = leaf === 'value' || leaf === 'expiresOn' ? leaf : 'label';
-      setError(`custom.${row}.${which}` as const, { message: issue.message });
+      mark(`custom.${row}.${which}`, issue.message);
       continue;
     }
     // GST and PAN keep their own catalog boxes even though they are sent as
     // their own PATCH keys, so an issue on either lands where it was typed.
     if (root === 'gst' || root === 'pan') {
-      setError(`fields.${root}.value` as const, { message: issue.message });
+      mark(`fields.${root}.value`, issue.message);
     }
   }
+  return marked;
+}
+
+/**
+ * The marked box that sits highest in the panel: catalog groups in the order
+ * they are drawn, each field's value before its expiry, then the custom pairs
+ * row by row.
+ */
+function firstInPanelOrder(
+  marked: ReadonlySet<FieldPath<FormValues>>,
+  customRows: number,
+): FieldPath<FormValues> | undefined {
+  const order: FieldPath<FormValues>[] = [];
+  for (const group of DEALER_PROFILE_GROUPS) {
+    for (const def of DEALER_PROFILE_FIELDS) {
+      if (def.group !== group) continue;
+      order.push(`fields.${def.key}.value`, `fields.${def.key}.expiresOn`);
+    }
+  }
+  for (let row = 0; row < customRows; row++) {
+    order.push(`custom.${row}.label`, `custom.${row}.value`, `custom.${row}.expiresOn`);
+  }
+  return order.find((name) => marked.has(name));
 }

@@ -107,6 +107,29 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
   const [error, setError] = React.useState<string | null>(null);
   const [advice, setAdvice] = React.useState<string | null>(null);
 
+  /*
+   * Keep the send-back reason on screen once the keyboard is up.
+   *
+   * The tap that focuses the box happens at full height; the keyboard then
+   * shrinks the page from below (`interactive-widget=resizes-content`) and the
+   * box the browser had just scrolled to ends up underneath it — the reviewer
+   * typing a sentence the dealer reads word for word into a box they cannot
+   * see. So while it has focus below md, every viewport resize centres the box
+   * again together with the "Send back" button under it — the two fit the
+   * sheet a 360px phone has left with the keyboard up.
+   * At md there is no on-screen keyboard to make room for.
+   */
+  const sendBackRef = React.useRef<HTMLDivElement>(null);
+  const [reasonFocused, setReasonFocused] = React.useState(false);
+  React.useEffect(() => {
+    if (!reasonFocused || wideEnoughToEmbed) return undefined;
+    const viewport = window.visualViewport;
+    if (!viewport) return undefined;
+    const recentre = () => sendBackRef.current?.scrollIntoView({ block: 'center' });
+    viewport.addEventListener('resize', recentre);
+    return () => viewport.removeEventListener('resize', recentre);
+  }, [reasonFocused, wideEnoughToEmbed]);
+
   // Every field is per-row. Carrying a half-typed rejection from one dealer's
   // paper onto the next is the one mistake this screen could make that nobody
   // would notice until a dealer read somebody else's sentence.
@@ -305,19 +328,23 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
         onClose={onClose}
         width="lg"
         title={
-          // `min-w-0` on the name: a flex item cannot shrink below its
-          // content, so a long document name has to be allowed to break rather
-          // than push the help button out of the header.
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="min-w-0 break-words">{row.document}</span>
-            <HowThisWorks
-              surface="admin-review-document-ask"
-              label="Review a document"
-              variant="icon"
-            />
-          </span>
+          // Two lines at most below md, where a four-line name took a quarter
+          // of the sheet before any of the paper; the whole name opens the body
+          // instead.
+          <span className="line-clamp-2 md:line-clamp-none">{row.document}</span>
+        }
+        help={
+          <HowThisWorks
+            surface="admin-review-document-ask"
+            label="Review a document"
+            variant="icon"
+          />
         }
         description={`${dealerCodeLabel(row.dealerCode)} · ${row.periodLabel || 'No period'}`}
+        // A row of short labels below md rather than a stack. Stacked, Close /
+        // Withdraw / Accept took 165px, and with the keyboard up for the
+        // send-back reason that left the box 32px of sheet to be typed into.
+        footerBelow="wrap"
         footer={
           <>
             <Button variant="ghost" onClick={onClose} disabled={busy}>
@@ -365,6 +392,13 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
       >
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
+            {/* The document's whole name, below md only — the title above is
+                clamped to two lines there. Inside this row rather than a
+                sibling of it: `space-y` counts a `display: none` sibling, so a
+                hidden line before the row would push the row down at md. */}
+            <p className="basis-full break-words text-sm font-medium text-text md:hidden">
+              {row.document}
+            </p>
             <StatusPip status={row.status} late={row.late} />
             {row.askedCount > 0 ? (
               <Badge intent={row.askedCount >= 3 ? 'warning' : 'neutral'}>
@@ -594,37 +628,43 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
                     <Label htmlFor="ask-send-back" required>
                       Why this is going back
                     </Label>
-                    <Textarea
-                      id="ask-send-back"
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                      placeholder="The dealer reads this word for word — e.g. The date on the page is 1 September, not 2 September. Please send yesterday’s page."
-                      rows={3}
-                      maxLength={500}
-                    />
-                    <p className="mt-1 text-xs text-text-muted">
-                      Shown to the dealer exactly as written, and it is the only thing telling
-                      them what to do next. At least {MIN_REJECT_REASON} characters.
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        loading={reject.isPending}
-                        disabled={busy}
-                        onClick={() => void handleReject()}
-                        leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
-                      >
-                        Send back
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() => setSendBackOpen(false)}
-                      >
-                        Cancel
-                      </Button>
+                    {/* What the keyboard recentre keeps in view: the box, its note and
+                        the buttons — the label above can scroll off a 360px sheet. */}
+                    <div ref={sendBackRef}>
+                      <Textarea
+                        id="ask-send-back"
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        onFocus={() => setReasonFocused(true)}
+                        onBlur={() => setReasonFocused(false)}
+                        placeholder="The dealer reads this word for word — e.g. The date on the page is 1 September, not 2 September. Please send yesterday’s page."
+                        rows={3}
+                        maxLength={500}
+                      />
+                      <p className="mt-1 text-xs text-text-muted">
+                        Shown to the dealer exactly as written, and it is the only thing telling
+                        them what to do next. At least {MIN_REJECT_REASON} characters.
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          loading={reject.isPending}
+                          disabled={busy}
+                          onClick={() => void handleReject()}
+                          leftIcon={<Undo2 width={14} height={14} strokeWidth={1.75} />}
+                        >
+                          Send back
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => setSendBackOpen(false)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ) : (

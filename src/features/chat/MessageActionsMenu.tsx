@@ -1,9 +1,12 @@
 import { Copy, Download, Info, Reply } from 'lucide-react';
 import * as React from 'react';
 
+import { Portal } from '@/components/ui/Portal';
 import { Sheet } from '@/components/ui/Sheet';
 import { useToast } from '@/components/ui/Toast';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useOverlayEntry } from '@/hooks/useOverlayStack';
+import { copyText } from '@/lib/clipboard';
 import { cn } from '@/lib/cn';
 import { downloadAttachment } from '@/lib/downloadAttachment';
 import type { Attachment, Message } from '@dk/shared';
@@ -92,27 +95,28 @@ export function MessageActionsMenu({
     });
   }, [anchor.x, anchor.y, message.id, isMd]);
 
+  // The desktop popover is an entry on the shared overlay stack, as `Menu`'s
+  // is: Escape reaches it only while it is the top overlay, and any history
+  // navigation closes it (`dismissOnPop`), since it is anchored to a view that
+  // has gone. Below md the `Sheet` registers itself instead.
+  useOverlayEntry(isMd, onClose, { dismissOnPop: true });
+
   // Desktop only. Below md the shared `Sheet` owns dismissal — backdrop
-  // pointerdown and Escape — and a document-level pointerdown handler keyed on
-  // `cardRef` (which the sheet branch no longer sets) would close the sheet on
-  // the first tap *inside* it.
+  // pointerdown, Escape and Back — and a document-level pointerdown handler
+  // keyed on `cardRef` (which the sheet branch no longer sets) would close the
+  // sheet on the first tap *inside* it. Escape is the stack's, above.
   React.useEffect(() => {
     if (!isMd) return;
     const onPointerDown = (e: PointerEvent) => {
       if (!cardRef.current?.contains(e.target as Node)) onClose();
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
     document.addEventListener('pointerdown', onPointerDown, true);
-    document.addEventListener('keydown', onKeyDown);
     // The popover follows the anchor, so a scroll/resize invalidates it.
     const onScroll = () => onClose();
     window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', onClose);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown, true);
-      document.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onClose);
     };
@@ -124,14 +128,13 @@ export function MessageActionsMenu({
     (r) => r.userId === currentUserId,
   )?.emoji;
 
+  // `copyText` and not the clipboard API alone: in the WebView the API is
+  // often missing or refused, and its second rung (the document's own copy)
+  // works exactly there.
   async function handleCopy() {
     onClose();
-    try {
-      await navigator.clipboard.writeText(message.body ?? '');
-      toast.success('Copied');
-    } catch {
-      toast.error('Could not copy');
-    }
+    if (await copyText(message.body ?? '')) toast.success('Copied');
+    else toast.error('Could not copy');
   }
 
   async function handleDownload(attachment: Attachment) {
@@ -222,21 +225,27 @@ export function MessageActionsMenu({
     );
   }
 
-  // Desktop: anchored popover.
+  // Desktop: anchored popover. Portalled and on the shared overlay token like
+  // every other overlay, rather than a `fixed` box with a literal `z-50` inside
+  // the message list: a `position: fixed` element resolves against the nearest
+  // transformed ancestor, and this one was the only overlay outside the ladder.
+  // The position is viewport coordinates either way, so nothing moves.
   return (
-    <div
-      ref={cardRef}
-      role="menu"
-      aria-label="Message actions"
-      style={{
-        position: 'fixed',
-        left: pos?.left ?? anchor.x,
-        top: pos?.top ?? anchor.y,
-        visibility: pos ? 'visible' : 'hidden',
-      }}
-      className="z-50 w-60 rounded-md border border-border bg-surface py-1 shadow-md"
-    >
-      {content}
-    </div>
+    <Portal>
+      <div
+        ref={cardRef}
+        role="menu"
+        aria-label="Message actions"
+        style={{
+          position: 'fixed',
+          left: pos?.left ?? anchor.x,
+          top: pos?.top ?? anchor.y,
+          visibility: pos ? 'visible' : 'hidden',
+        }}
+        className="z-[var(--z-overlay)] w-60 rounded-md border border-border bg-surface py-1 shadow-md"
+      >
+        {content}
+      </div>
+    </Portal>
   );
 }

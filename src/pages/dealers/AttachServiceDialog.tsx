@@ -99,15 +99,13 @@ export function AttachServiceDialog({
       open={open}
       onClose={onClose}
       animateIn={animateIn}
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          Attach service
-          <HowThisWorks
-            surface="admin-dealer-service-attach"
-            label="Attach service"
-            variant="icon"
-          />
-        </span>
+      title="Attach service"
+      help={
+        <HowThisWorks
+          surface="admin-dealer-service-attach"
+          label="Attach service"
+          variant="icon"
+        />
       }
       // Kept to one line: `Dialog` puts `description` in the sticky,
       // non-scrolling header, so every extra sentence is permanent height in a

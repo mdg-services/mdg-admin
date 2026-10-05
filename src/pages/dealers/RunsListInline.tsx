@@ -168,15 +168,9 @@ export function RunsListInline({ dealerId, serviceId }: Props) {
       <Dialog
         open={!!openRunId}
         onClose={() => setOpenRunId(null)}
-        title={
-          <span className="flex flex-wrap items-center gap-2">
-            {openRun ? `Run ${openRun.id.slice(-8)}` : ''}
-            <HowThisWorks
-              surface="admin-dealer-runs"
-              label="Run history"
-              variant="icon"
-            />
-          </span>
+        title={openRun ? `Run ${openRun.id.slice(-8)}` : ''}
+        help={
+          <HowThisWorks surface="admin-dealer-runs" label="Run history" variant="icon" />
         }
         size="lg"
         footer={
@@ -584,7 +578,7 @@ function RunStatusNotice({
         <p
           className={cn(
             'text-sm font-semibold',
-            tone === 'danger' ? 'text-danger' : 'text-text',
+            tone === 'danger' ? 'text-danger-strong md:text-danger' : 'text-text',
           )}
         >
           {title}

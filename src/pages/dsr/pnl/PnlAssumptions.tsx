@@ -82,6 +82,11 @@ function RateField({
   );
 }
 
+/** A rupee figure rounded to the paisa, so float noise never reaches a box. */
+function toPaise(rupees: number): number {
+  return Math.round(rupees * 100) / 100;
+}
+
 /** One read-only constant the engine itself ran with. */
 function EngineConstant({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -143,9 +148,13 @@ export function PnlAssumptions({ data, settings, onChange }: PnlAssumptionsProps
         <div className="space-y-4">
           {data.products.map((p) => {
             const r = settings.rates[p.productKey] ?? { buyPerLitre: null, sellPerLitre: null };
+            // Rounded to the paisa, both ways. A plain subtraction of two
+            // decimal prices carries binary noise — 99.34 − 97.76 is
+            // 1.5799999999999983 — and that was printed as-is in the one box a
+            // dealer checks from memory ("I get ₹1.58 on diesel").
             const margin =
               r.buyPerLitre !== null && r.sellPerLitre !== null
-                ? r.sellPerLitre - r.buyPerLitre
+                ? toPaise(r.sellPerLitre - r.buyPerLitre)
                 : null;
             return (
               <div
@@ -200,7 +209,7 @@ export function PnlAssumptions({ data, settings, onChange }: PnlAssumptionsProps
                       setRate(
                         p.productKey,
                         'sellPerLitre',
-                        v === null || r.buyPerLitre === null ? null : r.buyPerLitre + v,
+                        v === null || r.buyPerLitre === null ? null : toPaise(r.buyPerLitre + v),
                       )
                     }
                   />

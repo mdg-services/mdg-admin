@@ -40,6 +40,16 @@ function staleLabel(days: number | null): string {
 }
 
 /**
+ * The same fact as a sentence, for the phone card. The table's badge leans on
+ * its column header ("Last verified by us"), and a card has no header — so a
+ * bare red "never" read as an unexplained alarm rather than as "nobody at MDG
+ * has checked this outlet yet".
+ */
+function staleCardLabel(days: number | null): string {
+  return days === null ? 'Never verified by us' : `Verified ${staleLabel(days)}`;
+}
+
+/**
  * One row per dealer: where each outlet stands, and — the question this page
  * exists to answer since ADR 0011 — how long since anybody at MDG looked at it.
  *
@@ -87,13 +97,18 @@ export function KavachDashboardPage() {
                 </Badge>
               </div>
             ) : null}
-            {/* Icon: two full sentences of badge already occupy this row. */}
-            <HowThisWorks
-              surface="admin-kavach-standing"
-              label="Kavach standing"
-              variant="icon"
-            />
           </>
+        }
+        // Below md the help glyph sits on the title's line rather than on a row
+        // of its own under the two badges; at md it ends the actions row as it
+        // always did.
+        tools={
+          // Icon: two full sentences of badge already occupy the actions row.
+          <HowThisWorks
+            surface="admin-kavach-standing"
+            label="Kavach standing"
+            variant="icon"
+          />
         }
       />
 
@@ -267,7 +282,7 @@ export function KavachDashboardPage() {
                   secondary: (
                     <span className="flex flex-wrap items-center gap-1.5">
                       <Badge intent={stalenessIntent(r.daysSinceLastVerified, STALE_DAYS)}>
-                        {staleLabel(r.daysSinceLastVerified)}
+                        {staleCardLabel(r.daysSinceLastVerified)}
                       </Badge>
                       {r.dealerFacingEnabled ? null : (
                         <span className="text-text-subtle">Messages off</span>

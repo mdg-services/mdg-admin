@@ -30,9 +30,10 @@ import { validityKey, VALIDITY_CLASSES, VALIDITY_TEXT_CLASSES, VALIDITY_WORD } f
  *
  * NO WHITE TEXT ON A TINT, ANYWHERE, AND NO 3:1 EITHER. The pill takes its
  * colours from `VALIDITY_CLASSES`, which pairs each soft background with the
- * matching `strong` shade: 6.37:1 for amber, 6.80:1 for red, 6.49:1 for green.
- * The portal's shared `INTENT_CLASSES` pairing measures 3.14:1 and 3.00:1 on the
- * first two, and the person reading this is 55, outdoors, under a canopy, on a
+ * matching `strong` shade: 6.37:1 for amber, 6.80:1 for red, 6.49:1 for green,
+ * at every width. The portal's shared `INTENT_CLASSES` now uses the same shades
+ * below md only, and its desktop pairing still measures 3.14:1 and 3.00:1 on
+ * the first two; the person reading this is 55, outdoors, under a canopy, on a
  * cheap screen. White on `warning.DEFAULT` would be 2.15:1 and appears nowhere.
  */
 
@@ -117,6 +118,10 @@ export function ValidityPill({
 }) {
   const key = validityKey(state);
   const days = showDays && daysToExpiry !== null ? documentValidityLabel(daysToExpiry, 'en') : '';
+  // A lapsed count already opens with the word — "Expired 365 days ago" — so
+  // it stands alone. Prefixed, the pill read "Expired · Expired 365 days ago"
+  // and spent a third of a narrow cell saying the verdict twice.
+  const countIsVerdict = key === 'expired' && days !== '' && daysToExpiry !== null && daysToExpiry < 0;
   return (
     <span
       className={cn(
@@ -130,8 +135,14 @@ export function ValidityPill({
     >
       <ValidityGlyph state={state} />
       <span className="min-w-0 break-words">
-        {VALIDITY_WORD[key]}
-        {days ? <span className="font-normal"> · {days}</span> : null}
+        {countIsVerdict ? (
+          days
+        ) : (
+          <>
+            {VALIDITY_WORD[key]}
+            {days ? <span className="font-normal"> · {days}</span> : null}
+          </>
+        )}
       </span>
     </span>
   );

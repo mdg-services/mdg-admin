@@ -41,6 +41,13 @@ export interface SnapshotDetailProps {
    * it is what makes the panel readable on its own.
    */
   hideDealerName?: boolean;
+  /**
+   * Where "Correct this day" is offered. `'md-only'` is for a parent whose own
+   * `actions` already open any day in the editor — the per-dealer tab's date
+   * row. Below md the two buttons were a whole extra row of chrome above the
+   * figures, doing the same thing under two different names.
+   */
+  correctAction?: 'always' | 'md-only';
   className?: string;
 }
 
@@ -72,9 +79,23 @@ export function SnapshotDetail({
   snapshot,
   actions,
   hideDealerName = false,
+  correctAction = 'always',
   className,
 }: SnapshotDetailProps) {
   const navigate = useNavigate();
+  const correctButton = (
+    <Button
+      variant="secondary"
+      size="sm"
+      leftIcon={<PencilRuler width={14} height={14} strokeWidth={1.75} />}
+      onClick={(e) => {
+        e.stopPropagation();
+        navigate(`/data-vault/dealers/${snapshot.dealerId}/days/${snapshot.businessDate}`);
+      }}
+    >
+      Correct this day
+    </Button>
+  );
   const filePrefix = `${snapshot.dealerCode || snapshot.dealerId.slice(-6)}_${snapshot.businessDate}`;
 
   return (
@@ -114,26 +135,21 @@ export function SnapshotDetail({
         <div className="flex w-full min-w-0 flex-wrap items-center gap-2 md:w-auto md:shrink-0">
           {/* The way into the editor from every Vault surface — the cross-dealer
               drawer, the per-dealer tab and a historic capture all render this
-              panel, so one button here covers all three. */}
-          <Button
-            variant="secondary"
-            size="sm"
-            leftIcon={<PencilRuler width={14} height={14} strokeWidth={1.75} />}
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(
-                `/data-vault/dealers/${snapshot.dealerId}/days/${snapshot.businessDate}`,
-              );
-            }}
-          >
-            Correct this day
-          </Button>
+              panel, so one button here covers all three. `md:contents` puts it
+              back in this row at md exactly as it was; a `hidden` on the Button
+              itself would win over its own `inline-flex` only by stylesheet
+              order. */}
+          {correctAction === 'md-only' ? (
+            <span className="hidden md:contents">{correctButton}</span>
+          ) : (
+            correctButton
+          )}
           {actions}
         </div>
       </div>
 
       {snapshot.failureReason ? (
-        <div className="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2.5 text-sm text-danger">
+        <div className="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2.5 text-sm text-danger-strong md:text-danger">
           <AlertTriangle
             width={16}
             height={16}
@@ -153,7 +169,7 @@ export function SnapshotDetail({
         // The day HAS its data; only a later re-collection attempt failed. That
         // is a warning, not a failure — showing it in danger red would suggest
         // the figures below are untrustworthy when they are perfectly good.
-        <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning">
+        <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning-strong md:text-warning">
           <AlertTriangle
             width={16}
             height={16}

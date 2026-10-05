@@ -117,7 +117,11 @@ function CardMessage({ message }: { message: Message }) {
           className="mt-0.5 shrink-0 text-text-muted"
         />
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-text">{card.title}</p>
+          {/* Wraps below md: "Daily Sales Report — E02 — Sa…" hid the date and
+              the "(revised copy)" that tell two cards apart. */}
+          <p className="break-words text-sm font-medium text-text md:truncate">
+            {card.title}
+          </p>
           <p className="truncate text-xs text-text-subtle">
             {card.periodLabel ? `${card.periodLabel} · ` : ''}
             {card.recordType.toUpperCase()}
@@ -316,7 +320,11 @@ export const MessageBubble = React.memo(function MessageBubble({
       {reactions.length > 0 ? (
         <div
           className={cn(
-            'relative z-[1] -mt-2 flex flex-wrap gap-1',
+            // Tucked 8px into the bubble's edge at md. Below md it sits just
+            // under the bubble instead: each chip's -12px tap halo reached up
+            // over the bottom of a photo attachment, so a tap on the lower edge
+            // of the picture opened Reactions rather than the photo.
+            'relative z-[1] flex flex-wrap gap-1 md:-mt-2',
             adminSide ? 'justify-end pr-2' : 'pl-2',
           )}
         >

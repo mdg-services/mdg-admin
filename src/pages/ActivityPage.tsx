@@ -367,15 +367,23 @@ export function ActivityPage() {
                   // fire on Android — which is where this admin is used. The
                   // card opens the detail dialog, and the dialog carries the
                   // link. Same destination, one tap further, and it works.
+                  //
+                  // The outlet code LEADS and the line wraps to two. Appended
+                  // after a long target and truncated, the code was the part
+                  // that never showed — "…certificate for t…" — so which
+                  // outlet an action was about meant opening every entry.
                   meta: (
-                    <span className="block truncate">
+                    // No `block` beside the clamp: `.block` is emitted after
+                    // `.line-clamp-2` and would replace its `-webkit-box`,
+                    // which is what makes the clamp work at all.
+                    <span className="line-clamp-2 break-words">
+                      {row.entityDealerCode ? `${row.entityDealerCode} · ` : ''}
                       {describeAuditTarget({
                         entity: row.entity,
                         entityId: row.entityId,
                         name: row.entityName,
                         dealerId: row.entityDealerId,
                       }).text}
-                      {row.entityDealerCode ? ` · ${row.entityDealerCode}` : ''}
                     </span>
                   ),
                 }))}

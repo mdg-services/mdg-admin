@@ -1,4 +1,7 @@
-import { Badge, DataList, type DataColumn } from '@/components/ui';
+import * as React from 'react';
+
+import { Badge, Button, DataList, type DataColumn } from '@/components/ui';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { formatInrWhole, formatLitres, formatYmd } from '@/lib/format';
 import type { PnlLoad, PnlProduct } from '@/lib/fuelPnl';
 
@@ -119,7 +122,25 @@ const COLUMNS: DataColumn<PnlLoad>[] = [
   },
 ];
 
+/**
+ * How many deliveries a phone shows before "Show all".
+ *
+ * Every delivery is a full card on a phone, ~218px each. A month with 24 + 21 +
+ * 3 loads made the page 16,271px long at 360px, and the second grade's summary
+ * — the answer the page is for — sat two dozen cards below the first. The
+ * loads arrive oldest first, so the cap keeps the newest.
+ */
+const PHONE_LOADS = 5;
+
 export function PnlLoadsTable({ product }: { product: PnlProduct }) {
+  // In JS, not CSS: a `md:hidden` cap would still mount every card. Desktop
+  // takes every row exactly as before.
+  const isMd = useMediaQuery('(min-width: 768px)');
+  const [showAll, setShowAll] = React.useState(false);
+  const total = product.loads.length;
+  const capped = !isMd && !showAll && total > PHONE_LOADS;
+  const rows = capped ? product.loads.slice(-PHONE_LOADS) : product.loads;
+
   return (
     <div className="space-y-2">
       <p className="text-sm text-text-muted">
@@ -128,7 +149,7 @@ export function PnlLoadsTable({ product }: { product: PnlProduct }) {
         every row, <span className="text-text">Revenue &minus; Cost = Profit</span>.
       </p>
       <DataList
-        rows={product.loads}
+        rows={rows}
         rowKey={(l) => `${l.businessDate}-${l.litres}`}
         columns={COLUMNS}
         minWidth="58rem"
@@ -141,6 +162,16 @@ export function PnlLoadsTable({ product }: { product: PnlProduct }) {
           </p>
         }
       />
+      {capped ? (
+        <div className="grid gap-2">
+          <p className="text-xs text-text-subtle">
+            The {PHONE_LOADS} most recent of {total} deliveries.
+          </p>
+          <Button variant="secondary" onClick={() => setShowAll(true)}>
+            Show all {total} deliveries
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

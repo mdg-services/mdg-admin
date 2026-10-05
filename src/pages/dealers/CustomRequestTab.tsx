@@ -169,11 +169,17 @@ export function CustomRequestTab({ dealer }: Props) {
       </Card>
 
       <Card>
+        {/* Wrapped, not two loose children: with no `action` the header is a
+            `justify-between` row, and an unwrapped title and subtitle flew to
+            opposite ends of it — "Recent / runs" squeezed into a left column
+            with the sentence in a right one. */}
         <CardHeader padding="comfortable">
-          <CardTitle>Recent runs</CardTitle>
-          <CardSubtitle>
-            Runs from the custom-request plugin for this dealer.
-          </CardSubtitle>
+          <div>
+            <CardTitle>Recent runs</CardTitle>
+            <CardSubtitle>
+              Runs from the custom-request plugin for this dealer.
+            </CardSubtitle>
+          </div>
         </CardHeader>
         {/* The run list brings its own padding, so the card body runs to the
             card's edges. `padding="none"`, never `className="p-0"` — `cn` is
@@ -192,12 +198,12 @@ export function CustomRequestTab({ dealer }: Props) {
           the page scroller instead — and carries its own bottom inset, which
           matters here because this tab only renders inside `/dealers/:id`,
           where the tab bar is hidden and nothing else is holding the safe
-          area off the gesture strip. */}
-      <StickyActionBar
-        className="md:hidden"
-        summary="The payload is merged on top of the stored config."
-        summaryOnMobile
-      >
+          area off the gesture strip.
+
+          No summary: it repeated, word for word, the sentence directly under
+          the card's heading, and on a phone that was ~50px of a sticky bar
+          spent saying it twice. */}
+      <StickyActionBar visibility="below-md">
         <Button
           leftIcon={<Send width={16} height={16} strokeWidth={1.75} />}
           loading={runNow.isPending}

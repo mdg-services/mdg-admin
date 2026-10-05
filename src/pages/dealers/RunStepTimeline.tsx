@@ -115,8 +115,11 @@ export function RunStepTimeline({ steps, runStatus }: Props) {
               </p>
             ) : null}
 
+            {/* `break-words`: a step message often carries a selector or a
+                path with no break opportunity in it, and at 360px one of those
+                pushed the run dialog 12px past the screen edge. */}
             {step.message ? (
-              <p className="mt-0.5 text-xs text-text-muted">{step.message}</p>
+              <p className="mt-0.5 break-words text-xs text-text-muted">{step.message}</p>
             ) : null}
 
             {step.status === 'error' && step.error ? (

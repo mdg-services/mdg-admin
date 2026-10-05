@@ -148,14 +148,20 @@ export function WarriorDetailDrawer({
           >
             {initials(name)}
           </span>
-          <span className="min-w-0 truncate">{name}</span>
-          <HowThisWorks
-            surface="admin-warrior-detail"
-            label="Warrior detail"
-            variant="icon"
-            className="shrink-0"
-          />
+          {/* Wraps below md: at 360px the title had ~176px and cut a
+              47-character name to "Shri Venkateshwar…" with no way to read the
+              rest. The desktop panel keeps its one line. */}
+          <span className="min-w-0 break-words md:truncate">{name}</span>
         </span>
+      }
+      // On `help`, not inside `title`: the drawer is named by its title, and
+      // the icon's own label would otherwise be read out as part of the name.
+      help={
+        <HowThisWorks
+          surface="admin-warrior-detail"
+          label="Warrior detail"
+          variant="icon"
+        />
       }
       description={
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">

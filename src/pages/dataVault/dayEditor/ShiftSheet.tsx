@@ -52,7 +52,13 @@ import type {
 
 import { reportsAffected } from './describePending';
 import { decantSeedFields } from './IrasEditGrid';
-import { HEADING_RIGHT_COLUMN, shiftFieldShape, shiftSheetRowCard } from './ShiftSheetRow';
+import {
+  HEADING_RIGHT_COLUMN,
+  NOTE_TEXT,
+  PROBLEM_TEXT,
+  shiftFieldShape,
+  shiftSheetRowCard,
+} from './ShiftSheetRow';
 import type { ShiftSheetField, ShiftSheetRowHandlers, ShiftSheetRowModel } from './ShiftSheetRow';
 import { SlipPanel, type SlipDateAnswer, type SlipFill } from './SlipPanel';
 import {
@@ -1030,7 +1036,7 @@ export function useShiftSheetModel({
   };
 
   const scaffold = React.useCallback(
-    (options?: { replace?: boolean; restoring?: readonly SavedRow[] }) => {
+    (options?: { replace?: boolean; restoring?: readonly SavedRow[]; baseline?: boolean }) => {
       const current = latest.current;
       if (!current.day) return;
       const replace = options?.replace === true;
@@ -1083,6 +1089,7 @@ export function useShiftSheetModel({
         {
           meta: { [SHIFT_CARRIED_META]: carriedSeed, [SHIFT_READ_META]: readSeed },
           replace,
+          baseline: options?.baseline === true,
         },
       );
     },
@@ -1112,7 +1119,10 @@ export function useShiftSheetModel({
     if (!active || !available || !shellReady || readOnly || !dayKey) return;
     if (seeded.current === dayKey) return;
     seeded.current = dayKey;
-    scaffold();
+    // The layout the day OPENS in, so it is not an undo step: an "Undo" offered
+    // before anything was typed wiped every row on one tap. "Discard all" and
+    // "Put the missing rows back" lay rows down too, and stay undoable.
+    scaffold({ baseline: true });
   }, [active, available, shellReady, readOnly, dayKey, scaffold]);
 
   /**
@@ -1888,6 +1898,26 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
   const walk = React.useRef<WalkStop[]>([]);
   walk.current = [];
 
+  /*
+   * Centre the focused box again once the keyboard has finished opening.
+   *
+   * The centring in `onFocusField` runs on the tap, while the screen is still
+   * full height. The app sets `interactive-widget=resizes-content`, so the
+   * keyboard then shrinks the page from below, and the box centred a moment ago
+   * ends up under the sticky bar's accessory row — the first reading of the
+   * morning typed into a box nobody can see. Fields reached with Enter were
+   * fine only because the keyboard was already up when they were centred.
+   * Phones only: at md there is no on-screen keyboard and no accessory row.
+   */
+  React.useEffect(() => {
+    if (isMd || focusedId === null) return undefined;
+    const viewport = window.visualViewport;
+    if (!viewport) return undefined;
+    const recentre = () => document.getElementById(focusedId)?.scrollIntoView({ block: 'center' });
+    viewport.addEventListener('resize', recentre);
+    return () => viewport.removeEventListener('resize', recentre);
+  }, [focusedId, isMd]);
+
   const handlers = React.useMemo<ShiftSheetRowHandlers>(
     () => ({
       onFocusField: (id) => {
@@ -1920,7 +1950,12 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
             if (owed) focusField(owed.id);
             else {
               input.blur();
-              document.getElementById(SAVE_BUTTON_ID)?.focus();
+              // On the next task, not now. Below md, while a box has focus the
+              // bar shows its accessory row and the save button is not in the
+              // document at all; the blur's state update is what brings it back,
+              // and that lands at the end of this keydown. Focused here, the
+              // call found nothing and the operator was left with no focus.
+              window.setTimeout(() => document.getElementById(SAVE_BUTTON_ID)?.focus(), 0);
             }
             return;
           }
@@ -2388,7 +2423,10 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
     return (
       <p
         role={finding.severity === 'BLOCK' ? 'alert' : undefined}
-        className={cn('text-[11px]', finding.severity === 'BLOCK' ? 'text-danger' : 'text-warning')}
+        className={cn(
+          PROBLEM_TEXT,
+          finding.severity === 'BLOCK' ? 'text-danger' : 'text-warning-strong md:text-warning',
+        )}
       >
         {finding.message}
       </p>
@@ -2823,9 +2861,13 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
           : [],
       },
       footer: (
-        <div className="grid gap-1 text-[11px] text-text-muted">
+        <div className={cn('grid gap-1 text-text-muted', NOTE_TEXT)}>
           {rowFooter(row)}
-          {tankerNotes}
+          {/* Per row at md only. Below md the same three sentences are said
+              once, above the cards — repeated on every card they made each
+              tanker 740px tall, and the second tanker's boxes started a whole
+              screen of identical prose below the first's. */}
+          <div className="hidden gap-1 md:grid">{tankerNotes}</div>
         </div>
       ),
       onRemove: remove?.run,
@@ -3088,6 +3130,7 @@ export function ShiftSheet({ day, model, pending, readOnly, onSave }: ShiftSheet
             </div>
           ) : (
             <div className="grid gap-2">
+              <div className="grid gap-1 text-xs text-text-subtle md:hidden">{tankerNotes}</div>
               <FieldCardList
                 aria-label="Tankers"
                 cards={byIdentity.rec.map((row) => shiftSheetRowCard(deliveryRow(row), handlers))}
@@ -3224,18 +3267,18 @@ function MissingRowsPanel({
   return (
     <div className="grid gap-2 rounded-md border border-danger bg-danger-soft px-3 py-2.5">
       {missing.findings.map((f) => (
-        <p key={`${f.code}:${f.identity}`} className="text-sm text-danger">
+        <p key={`${f.code}:${f.identity}`} className="text-sm text-danger-strong md:text-danger">
           {f.message}
         </p>
       ))}
       {restored.length > 0 ? (
-        <p className="text-xs text-danger">
+        <p className="text-xs text-danger-strong md:text-danger">
           {sentenceCase(joinList(restored))} {restored.length === 1 ? 'comes' : 'come'} back with the
           figures already saved on {restored.length === 1 ? 'it' : 'them'}.
         </p>
       ) : null}
       {rebuilt.length > 0 ? (
-        <p className="text-xs text-danger">
+        <p className="text-xs text-danger-strong md:text-danger">
           {sentenceCase(joinList(rebuilt))} {rebuilt.length === 1 ? 'comes' : 'come'} back holding{' '}
           {carriedFrom}’s figures again, for you to type this morning’s over. Anything typed into{' '}
           {rebuilt.length === 1 ? 'it' : 'them'} before{' '}
@@ -3584,7 +3627,13 @@ function ReconcileLine({
   const gap = Math.abs(variation.unexplainedLitres);
   const loud = gap > reconcileThreshold(variation);
   return (
-    <p className={cn('mt-1.5 text-[11px]', loud ? 'text-warning' : 'text-text-subtle')}>
+    <p
+      className={cn(
+        'mt-1.5',
+        NOTE_TEXT,
+        loud ? 'text-warning-strong md:text-warning' : 'text-text-subtle',
+      )}
+    >
       {label}: the book says {formatLitres(variation.bookStock)}, you have typed{' '}
       {formatLitres(variation.openingStock)} — {formatLitres(gap)} difference.
     </p>
@@ -3787,7 +3836,11 @@ function SaveBar({
             nothing here can squeeze a sibling that refuses to shrink.
           */}
           {model.canSave || !model.blockReason ? null : (
-            <span className="mt-0.5 block text-warning">{model.blockReason}</span>
+            // The readable amber below md: plain amber on the white bar is
+            // about 3.1:1, on the one sentence saying why the day will not save.
+            <span className="mt-0.5 block text-warning-strong md:text-warning">
+              {model.blockReason}
+            </span>
           )}
           <span className="mt-0.5 block">
             {/* What is on the SERVER, which is not what is on the screen. This
@@ -3795,36 +3848,45 @@ function SaveBar({
                 whose ten figures were saved an hour earlier — so the operator
                 had no way to tell a day they had already done from one they had
                 not. */}
-            {savedSentence(model.savedProgress)}{' '}
-            {/* The one document this save builds, named here and named the same
-                way in the tanker notes a panel above — `the 31 Aug 2026 report`,
-                the day being typed. The line that said this was taken out in an
-                earlier pass, and what was left was a save bar counting reports
-                from 31 Aug beside a tanker note calling 30 Aug "the report": one
-                delivery, two dates, and nothing on screen tying them together.
-                A dealer with no Daily Sales Report attached builds nothing, so
-                this says nothing. */}
-            {buildsReport ? `Saving builds ${buildsReport}. ` : ''}
-            {/* And then what has to be REBUILT — a LIST of this dealer's OTHER
-                existing reports, never a name for the one being built. The day
-                being typed is filtered out of it: once a report exists for that
-                day (this save chains a build, so from the second visit onward it
-                does), `reportsAffected` includes it, and the bar read "Saving
-                builds the 31 Aug 2026 report. 1 report will need rebuilding,
-                from 31 Aug 2026." — one document named twice, once as the thing
-                being built and once as extra work. */}
-            {rebuildDates.length === 0
-              ? buildsReport
-                ? 'Nothing else of this dealer’s needs rebuilding.'
-                : 'No report of this dealer’s needs rebuilding yet.'
-              : `${rebuildDates.length} report${
-                  rebuildDates.length === 1 ? '' : 's'
-                } will need rebuilding, from ${formatYmd(rebuildDates[0]!)}.`}
-            {rebuildShared.length > 0
-              ? ` ${rebuildShared.length} of them ${
-                  rebuildShared.length === 1 ? 'has' : 'have'
-                } already been shared with the dealer.`
-              : ''}
+            {savedSentence(model.savedProgress)}
+            {/* The report sentences are desktop only. On a 360px phone they were
+                three more lines of a bar that already covered over half the
+                screen, so the operator typing twenty figures saw one nozzle card
+                at a time. Nothing is lost by leaving them out there: the review
+                dialog the save button opens names every report that will need
+                rebuilding, under its own heading, before anything is written. */}
+            <span className="hidden md:inline">
+              {' '}
+              {/* The one document this save builds, named here and named the same
+                  way in the tanker notes a panel above — `the 31 Aug 2026 report`,
+                  the day being typed. The line that said this was taken out in an
+                  earlier pass, and what was left was a save bar counting reports
+                  from 31 Aug beside a tanker note calling 30 Aug "the report": one
+                  delivery, two dates, and nothing on screen tying them together.
+                  A dealer with no Daily Sales Report attached builds nothing, so
+                  this says nothing. */}
+              {buildsReport ? `Saving builds ${buildsReport}. ` : ''}
+              {/* And then what has to be REBUILT — a LIST of this dealer's OTHER
+                  existing reports, never a name for the one being built. The day
+                  being typed is filtered out of it: once a report exists for that
+                  day (this save chains a build, so from the second visit onward it
+                  does), `reportsAffected` includes it, and the bar read "Saving
+                  builds the 31 Aug 2026 report. 1 report will need rebuilding,
+                  from 31 Aug 2026." — one document named twice, once as the thing
+                  being built and once as extra work. */}
+              {rebuildDates.length === 0
+                ? buildsReport
+                  ? 'Nothing else of this dealer’s needs rebuilding.'
+                  : 'No report of this dealer’s needs rebuilding yet.'
+                : `${rebuildDates.length} report${
+                    rebuildDates.length === 1 ? '' : 's'
+                  } will need rebuilding, from ${formatYmd(rebuildDates[0]!)}.`}
+              {rebuildShared.length > 0
+                ? ` ${rebuildShared.length} of them ${
+                    rebuildShared.length === 1 ? 'has' : 'have'
+                  } already been shared with the dealer.`
+                : ''}
+            </span>
           </span>
         </>
       }
@@ -3838,7 +3900,10 @@ function SaveBar({
         Discard all
       </Button>
       <Button id={SAVE_BUTTON_ID} size="sm" disabled={!model.canSave} onClick={onSave}>
-        Check and save the day
+        {/* Shorter below md so "Discard all" and this share one row at 360px
+            instead of the button wrapping onto a second 44px row of its own. */}
+        <span className="md:hidden">Save the day</span>
+        <span className="hidden md:inline">Check and save the day</span>
       </Button>
     </StickyActionBar>
   );

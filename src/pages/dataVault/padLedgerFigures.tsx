@@ -1,4 +1,8 @@
-import { inrFormat } from '@/lib/format';
+import type * as React from 'react';
+
+import type { MobileCard } from '@/components/ui';
+import { formatDmy, inrFormat } from '@/lib/format';
+import type { CreditDodLedgerRow } from '@/types/creditDod';
 
 /**
  * The two money cells the PAD ledger draws, in one place.
@@ -41,4 +45,52 @@ export function Balance({ value }: { value: number }) {
 export function Amount({ value }: { value: number }) {
   if (!value) return <span className="text-text-subtle">—</span>;
   return <>{inrFormat(value)}</>;
+}
+
+/**
+ * One ledger line as a phone card — the same card on both panes.
+ *
+ * The date is the title and the entry's own description sits under it, whole.
+ * The description used to share the title row with the date while the balance
+ * — `₹-18,50,60,635.69 Cr`, some 190px — held the right of it, so at 360px
+ * "PRODUCT SUPPLY INVOICE - SALES…" came out as "PRO…": the one field that says
+ * whether a line is a fuel invoice, a K1 fee, interest or an EMI recovery was
+ * the one cut, on a screen with no zoom to get it back.
+ *
+ * `metaLead` is whatever leads the meta line — the per-dealer pane's Ledger
+ * Watch chip, which the cross-dealer pane does not draw.
+ */
+export function padLedgerRowCard(
+  r: CreditDodLedgerRow,
+  options?: { metaLead?: React.ReactNode },
+): MobileCard {
+  return {
+    key: String(r.seq),
+    primary: (
+      <span className="whitespace-nowrap text-sm font-medium text-text">{formatDmy(r.date)}</span>
+    ),
+    primaryRight: (
+      <span className="whitespace-nowrap text-sm font-medium tabular-nums">
+        <Balance value={r.balance} />
+      </span>
+    ),
+    secondary: (
+      <>
+        <span className="block break-words text-xs text-text-muted">{r.doc || '—'}</span>
+        <span className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs tabular-nums">
+          {r.debit ? <span>Debit {inrFormat(r.debit)}</span> : null}
+          {r.credit ? <span className="text-success">Credit {inrFormat(r.credit)}</span> : null}
+          {!r.debit && !r.credit ? <span>No amount</span> : null}
+        </span>
+      </>
+    ),
+    meta: (
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {options?.metaLead}
+        <span>{r.txnType || '—'}</span>
+        {r.terminal ? <span>· {r.terminal}</span> : null}
+        {r.product ? <span>· {r.product}</span> : null}
+      </span>
+    ),
+  };
 }

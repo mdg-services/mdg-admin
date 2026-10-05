@@ -22,6 +22,7 @@ import {
   useFileDocumentForDealer,
 } from '@/hooks/api/useDocumentAsks';
 import { useDocumentKindCatalog } from '@/hooks/api/useDocumentKinds';
+import { useRevealOnChange } from '@/hooks/useRevealOnChange';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { compressImage } from '@/lib/compressImage';
@@ -96,22 +97,10 @@ export interface FileForDealerDialogProps {
   initialKindCode?: string;
 }
 
-/** The one MIME the shared resolver does not cover, because it only ever met images. */
+/** A file's kind and a concrete type, even when Android's picker names none. */
 function contentTypeOf(file: File): { kind: 'image' | 'file'; contentType: string } {
   const resolved = resolveFileType(file, { assumeImage: false });
-  if (resolved.kind === 'image') return { kind: 'image', contentType: resolved.contentType };
-  // An Android System WebView picker hands back a `File` whose `.type` is the
-  // empty string, and `resolveFileType`'s extension table is deliberately
-  // narrowed to the image cases the admin picks. A documents upload is the first
-  // caller that also takes a scan, so the one missing extension is filled in
-  // here rather than by widening a helper four other screens depend on.
-  if (
-    resolved.contentType === 'application/octet-stream' &&
-    file.name.toLowerCase().endsWith('.pdf')
-  ) {
-    return { kind: 'file', contentType: 'application/pdf' };
-  }
-  return { kind: 'file', contentType: resolved.contentType };
+  return { kind: resolved.kind === 'image' ? 'image' : 'file', contentType: resolved.contentType };
 }
 
 export function FileForDealerDialog({
@@ -136,6 +125,9 @@ export function FileForDealerDialog({
   const [validUntil, setValidUntil] = React.useState('');
   const [confirmedDate, setConfirmedDate] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  /** Moves on every press, so the same refusal twice still scrolls back to it. */
+  const [attempt, setAttempt] = React.useState(0);
+  const errorRef = useRevealOnChange<HTMLDivElement>(error, attempt);
   const [submitting, setSubmitting] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   /** The ask created by THIS attempt, so a retry does not open a second one. */
@@ -234,6 +226,7 @@ export function FileForDealerDialog({
 
   function pickFile(list: FileList | null): void {
     setError(null);
+    setAttempt((n) => n + 1);
     const f = list?.item(0) ?? null;
     // Cleared straight away, always: choosing the SAME file twice fires no
     // change event otherwise, which is exactly what somebody does after a
@@ -282,6 +275,7 @@ export function FileForDealerDialog({
   async function handleSubmit(): Promise<void> {
     if (submitting) return;
     setError(null);
+    setAttempt((n) => n + 1);
 
     if (!kind) {
       setError('Pick which paper this is.');
@@ -397,15 +391,13 @@ export function FileForDealerDialog({
       open={open}
       onClose={submitting ? () => {} : onClose}
       size="md"
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          {`File a paper for ${dealerCodeLabel(dealerCode)}`}
-          <HowThisWorks
-            surface="admin-file-document-for-dealer"
-            label="Filing a paper for a dealer"
-            variant="icon"
-          />
-        </span>
+      title={`File a paper for ${dealerCodeLabel(dealerCode)}`}
+      help={
+        <HowThisWorks
+          surface="admin-file-document-for-dealer"
+          label="Filing a paper for a dealer"
+          variant="icon"
+        />
       }
       description="For a paper MDG already holds — one the dealer handed over, or one MDG filed on their behalf."
       footer={
@@ -425,7 +417,14 @@ export function FileForDealerDialog({
       }
     >
       <div className="space-y-4">
-        {error ? <Callout intent="warning">{error}</Callout> : null}
+        {/* The refusal lands at the TOP of a sheet the admin has usually
+            scrolled to the end of to reach "File it", so it brings itself into
+            view — otherwise the press looks like it did nothing. */}
+        {error ? (
+          <div ref={errorRef} role="alert">
+            <Callout intent="warning">{error}</Callout>
+          </div>
+        ) : null}
         {isFallback && !kindsLoading ? (
           <Callout intent="info">
             The live catalog could not be read, so this is the shipped list. A paper an admin

@@ -208,7 +208,7 @@ export function RemarksPanel({
                 {/* min-w-0 on each cell: a grid track is sized by its item's
                     min-content, and a `type="number"` field's intrinsic width
                     plus its spinner overflows a 328px drawer without it. */}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div className="min-w-0">
                     <Label htmlFor="remark-product" className="text-xs">
                       Product
@@ -256,7 +256,7 @@ export function RemarksPanel({
 
               <div>
                 <Label>How long it runs</Label>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div className="min-w-0">
                     <Label htmlFor="remark-from" className="text-xs" required>
                       From
@@ -573,23 +573,44 @@ function CheckPicker({
         ))}
       </div>
 
-      <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-text-muted">
-        Cannot be suppressed
-      </p>
-      <p className="mb-2 text-xs text-text-subtle">
-        These say the report states something a forecourt forbids. No remark, at
-        any scope, written by anyone, releases one — a note typed in a hurry must
-        never be able to send a report claiming an outlet sold more fuel than has
-        ever been in its tanks.
-      </p>
-      <div className="grid gap-2">
-        {forbidden.map((meta) => (
-          <CheckOption key={meta.code} meta={meta} checked={false} disabled />
-        ))}
+      {/* Written twice rather than as one node inside a `<details>` carrying
+          an `md:` rule: a `<details>` body is hidden by the browser's own
+          machinery, which no class can reopen, so a desktop reader would get
+          the summary and never the list. Same shape as the document catalog's
+          warning. Below md the group is closed because none of it can be
+          ticked: at 360px these seven full cards were ~1,350px of a form whose
+          "Record remark" sat 5,234px down the drawer. */}
+      <details className="mt-4 md:hidden">
+        <summary className="min-h-11 cursor-pointer select-none py-3 text-xs font-semibold text-text-muted">
+          {forbidden.length} checks can never be suppressed — why
+        </summary>
+        <p className="mb-2 text-xs text-text-subtle">{FORBIDDEN_NOTE}</p>
+        <div className="grid gap-2">
+          {forbidden.map((meta) => (
+            <CheckOption key={meta.code} meta={meta} checked={false} disabled />
+          ))}
+        </div>
+      </details>
+      <div className="hidden md:block">
+        <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-text-muted">
+          Cannot be suppressed
+        </p>
+        <p className="mb-2 text-xs text-text-subtle">{FORBIDDEN_NOTE}</p>
+        <div className="grid gap-2">
+          {forbidden.map((meta) => (
+            <CheckOption key={meta.code} meta={meta} checked={false} disabled />
+          ))}
+        </div>
       </div>
     </div>
   );
 }
+
+const FORBIDDEN_NOTE =
+  'These say the report states something a forecourt forbids. No remark, at ' +
+  'any scope, written by anyone, releases one — a note typed in a hurry must ' +
+  'never be able to send a report claiming an outlet sold more fuel than has ' +
+  'ever been in its tanks.';
 
 function CheckOption({
   meta,

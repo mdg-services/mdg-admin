@@ -26,6 +26,7 @@ import {
   EmptyState,
   FilterBar,
   HowThisWorks,
+  InfoBadge,
   Label,
   Pagination,
   Select,
@@ -231,13 +232,21 @@ function ProductionMark({ turn }: { turn: AiTurn }) {
   const view = aiProduction(turn);
   if (!view) return null;
   const Icon = PRODUCTION_ICON[view.kind];
+  // `InfoBadge`, like every mark on this strip: what the mark MEANS is in its
+  // hint, and a `title` never fires on touch. Below md it opens a sheet; at md
+  // it is today's badge and tooltip.
   return (
-    <Badge intent={view.tone} title={view.hint}>
-      <span className="inline-flex items-center gap-1">
-        <Icon width={11} height={11} strokeWidth={2} />
-        {view.label}
-      </span>
-    </Badge>
+    <InfoBadge
+      intent={view.tone}
+      sheetTitle={view.label}
+      detail={view.hint}
+      label={
+        <span className="inline-flex items-center gap-1">
+          <Icon width={11} height={11} strokeWidth={2} />
+          {view.label}
+        </span>
+      }
+    />
   );
 }
 
@@ -293,42 +302,47 @@ function TurnMarks({ turn }: { turn: AiTurn }) {
   return (
     <>
       {guard ? (
-        <Badge
+        <InfoBadge
           // Advisory guard hits are recorded and the turn carries on; only a
           // blocking one is an event. Amber for both rather than red, because a
           // guard firing is the guard WORKING — red here would teach the team to
           // read the screen's worst colour as normal.
           intent={guard.action === 'advisory' ? 'neutral' : 'warning'}
-          title={`${guard.rules.map((r) => aiRuleLabel(r)).join(', ')} — ${
+          sheetTitle="AI guard"
+          // The rule names live only here, so below md this has to be a tap
+          // and not a hover.
+          detail={`${guard.rules.map((r) => aiRuleLabel(r)).join(', ')} — ${
             guard.stage === 'input'
               ? 'caught in the dealer’s message, before the model saw it'
               : 'caught in what the writer produced'
           }.`}
-        >
-          <span className="inline-flex items-center gap-1">
-            <ShieldAlert width={11} height={11} strokeWidth={2} />
-            {guard.stage === 'input' ? 'Guard — message' : 'Guard — reply'}
-          </span>
-        </Badge>
+          label={
+            <span className="inline-flex items-center gap-1">
+              <ShieldAlert width={11} height={11} strokeWidth={2} />
+              {guard.stage === 'input' ? 'Guard — message' : 'Guard — reply'}
+            </span>
+          }
+        />
       ) : null}
       {turn.partial ? (
-        <Badge
+        <InfoBadge
           intent="warning"
-          title="One of the things they asked about was refused or dropped. The reply carries a hand-written line saying the rest went to the team."
-        >
-          Answered part of it
-        </Badge>
+          label="Answered part of it"
+          detail="One of the things they asked about was refused or dropped. The reply carries a hand-written line saying the rest went to the team."
+        />
       ) : null}
       {turn.quickFollowUp ? (
-        <Badge
+        <InfoBadge
           intent="neutral"
-          title="The dealer wrote again within minutes of this answer. It changes nothing about the machine's behaviour — it is the cheapest quality signal there is, and under v1 it was unmeasurable."
-        >
-          <span className="inline-flex items-center gap-1">
-            <Undo2 width={11} height={11} strokeWidth={2} />
-            Wrote straight back
-          </span>
-        </Badge>
+          sheetTitle="Wrote straight back"
+          detail="The dealer wrote again within minutes of this answer. It changes nothing about the machine's behaviour — it is the cheapest quality signal there is, and under v1 it was unmeasurable."
+          label={
+            <span className="inline-flex items-center gap-1">
+              <Undo2 width={11} height={11} strokeWidth={2} />
+              Wrote straight back
+            </span>
+          }
+        />
       ) : null}
     </>
   );
@@ -366,11 +380,17 @@ function RefusedProse({ turn }: { turn: AiTurn }) {
       ) : null}
       <p className="text-xs text-text-muted">{refusal.headline}</p>
       {refusal.rules.length > 0 ? (
-        <div className="flex flex-wrap gap-1">
+        // Each rule's long form is the tuning instruction, so it has to be
+        // reachable by touch: `InfoBadge`. The gaps widen to 12px below md so
+        // one badge's -12px tap halo stays off its neighbours' pills.
+        <div className="flex flex-wrap gap-3 md:gap-1">
           {refusal.rules.map((rule, i) => (
-            <Badge key={`${rule}-${i}`} intent="warning" title={aiRuleHint(rule) ?? rule}>
-              {aiRuleLabel(rule)}
-            </Badge>
+            <InfoBadge
+              key={`${rule}-${i}`}
+              intent="warning"
+              label={aiRuleLabel(rule)}
+              detail={aiRuleHint(rule) ?? rule}
+            />
           ))}
         </div>
       ) : null}
@@ -528,10 +548,15 @@ function TurnCard({
        * was made, how it ended, what it cost — so it is one wrapping row above
        * the reading, rather than four columns beside it.
        */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+      {/* 12px gaps below md: the dealer link and up to four marks here are
+          tap targets with a -12px halo, and at 6-8px apart one halo covered
+          the edge of the next pill, so a tap there opened its neighbour. */}
+      <div className="flex flex-wrap items-center gap-3 md:gap-x-2 md:gap-y-1.5">
+        {/* `tap-target`: this 17-25px code is the only route from a judged
+            answer to its thread, and nothing beside it is interactive. */}
         <Link
           to={`/inbox?c=${turn.conversationId}`}
-          className="font-mono text-sm font-medium text-brand hover:underline"
+          className="tap-target font-mono text-sm font-medium text-brand hover:underline"
         >
           {dealerCodeLabel(turn.dealerCode)}
         </Link>
@@ -680,10 +705,12 @@ function DayBand({
              * inbox and not a list on this page, because acting on a guard hit
              * means opening the thread and talking to the dealer — and the row
              * has to keep its place in every other tab while that happens.
+             *
+             * `min-h-11` below md: on one line it was a 20px-tall target.
              */}
             <Link
               to="/inbox?lens=ai-guard"
-              className="inline-flex items-center gap-1 font-medium text-brand hover:underline"
+              className="inline-flex min-h-11 items-center gap-1 font-medium text-brand hover:underline md:min-h-0"
             >
               <ShieldAlert width={14} height={14} strokeWidth={1.75} />
               {guardThreads === 1

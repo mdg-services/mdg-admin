@@ -516,7 +516,7 @@ export function ShiftDataEditorPage() {
       ) : day.snapshot.status === 'FAILED' ? (
         <Card className="mt-3 md:mt-4">
           <CardContent>
-            <div className="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2.5 text-sm text-danger">
+            <div className="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2.5 text-sm text-danger-strong md:text-danger">
               <AlertTriangle
                 width={16}
                 height={16}
@@ -822,7 +822,9 @@ function Header({
       <div className="min-w-0">
         <Link
           to={`/dealers/${day.dealer.id}?tab=data-vault`}
-          className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text"
+          // 44px tall below md: this route keeps the tab bar, so there is no
+          // back chevron in the top bar and this line is the only way back.
+          className="inline-flex min-h-11 items-center gap-1 text-sm text-text-muted hover:text-text md:min-h-0"
         >
           <ArrowLeft width={14} height={14} strokeWidth={1.75} />
           Back to the dealer’s Data Vault
@@ -909,7 +911,7 @@ function Banners({ day, pending }: { day: IrasDayEditorView; pending: number }) 
   return (
     <div className="mt-3 grid gap-2">
       {day.duplicateRisk.length > 0 ? (
-        <div className="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2.5 text-sm text-danger">
+        <div className="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2.5 text-sm text-danger-strong md:text-danger">
           <AlertTriangle width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           <div>
             <p className="font-medium">
@@ -930,7 +932,7 @@ function Banners({ day, pending }: { day: IrasDayEditorView; pending: number }) 
       ) : null}
 
       {day.orphaned.length > 0 ? (
-        <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning">
+        <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning-strong md:text-warning">
           <AlertTriangle width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           <div>
             <p className="font-medium">
@@ -1243,9 +1245,9 @@ function AppliedNotice({
       className={cn(
         'mt-3 flex flex-wrap items-start gap-3 rounded-md px-3 py-2.5 text-sm',
         tone === 'success'
-          ? 'bg-success-soft text-success'
+          ? 'bg-success-soft text-success-strong md:text-success'
           : tone === 'warning'
-            ? 'bg-warning-soft text-warning'
+            ? 'bg-warning-soft text-warning-strong md:text-warning'
             : 'bg-info-soft text-info',
       )}
     >
@@ -1334,6 +1336,14 @@ function PendingBar({
           <span className="block font-medium text-text">
             {count} change{count === 1 ? '' : 's'} pending · nothing has been saved
           </span>
+          {/* Below md the reason the button is dead goes HERE, in the column
+              built to hold a sentence, exactly as the shift sheet's save bar
+              does it. Beside the buttons it held only because it was `w-full`;
+              the next label change would have squeezed the summary to zero and
+              broken its text one letter per line. */}
+          {blocked && blockReason ? (
+            <span className="mt-0.5 block text-warning-strong md:hidden">{blockReason}</span>
+          ) : null}
           <span className="mt-0.5 block">
             {affected.dates.length === 0
               ? 'No generated report is affected yet.'
@@ -1349,12 +1359,13 @@ function PendingBar({
         </>
       }
     >
-      {/* The reason the button is dead, as visible text beside it — the same
-          sentence, in the same place, as the shift sheet's own save bar. Never a
-          `title`: it does not fire on touch, so on a phone a disabled primary
-          would be silent and the operator would be left tapping it. */}
+      {/* The reason the button is dead, as visible text beside it at md — the
+          same sentence as the shift sheet's own save bar; below md it is in the
+          summary above. Never a `title`: it does not fire on touch, so on a
+          phone a disabled primary would be silent and the operator would be
+          left tapping it. */}
       {blocked && blockReason ? (
-        <p className="w-full text-sm text-text-muted md:w-auto">{blockReason}</p>
+        <p className="hidden text-sm text-text-muted md:block md:w-auto">{blockReason}</p>
       ) : null}
       {canUndo ? (
         <Button

@@ -1,5 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Check, Copy, KeyRound, RefreshCw, ShieldPlus, UserCog } from 'lucide-react';
+import {
+  AlertCircle,
+  Check,
+  Copy,
+  KeyRound,
+  RefreshCw,
+  ShieldPlus,
+  UserCog,
+} from 'lucide-react';
 import * as React from 'react';
 import { useForm } from 'react-hook-form';
 
@@ -23,6 +31,7 @@ import {
 } from '@/components/ui';
 import { useAdmins, useCreateAdmin, useUpdateAdmin } from '@/hooks/api/useAdmins';
 import { ApiError } from '@/lib/api';
+import { copyText } from '@/lib/clipboard';
 import { formatDateTime } from '@/lib/format';
 import { generatePassword } from '@/lib/password';
 import { useAuthStore } from '@/store/auth';
@@ -35,7 +44,7 @@ import { createAdminSchema, type CreateAdminInput } from '@dk/shared/schemas';
 const SELF_ROW_NOTE = "You can't suspend your own account";
 
 export function AdminsPage() {
-  const { data: admins, isLoading } = useAdmins();
+  const { data: admins, isLoading, isError, error, refetch } = useAdmins();
   const updateAdmin = useUpdateAdmin();
   const toast = useToast();
   const currentId = useAuthStore((s) => s.admin?.id ?? s.user?.id ?? '');
@@ -175,6 +184,21 @@ export function AdminsPage() {
                 <Skeleton key={i} className="h-10" />
               ))}
             </div>
+          ) : isError ? (
+            // Before the empty branch, never folded into it: a failed request
+            // leaves `admins` undefined, and on a dropped connection this
+            // screen told a super-admin the team was empty and offered to
+            // start adding it again.
+            <EmptyState
+              icon={<AlertCircle width={28} height={28} strokeWidth={1.75} />}
+              title="Could not load the team"
+              description={error instanceof ApiError ? error.message : 'Please try again.'}
+              cta={
+                <Button variant="secondary" size="sm" onClick={() => void refetch()}>
+                  Retry
+                </Button>
+              }
+            />
           ) : !admins || admins.length === 0 ? (
             <EmptyState
               icon={<UserCog width={28} height={28} strokeWidth={1.5} />}
@@ -275,13 +299,14 @@ function AddAdminDialog({ open, onClose }: { open: boolean; onClose: () => void 
     });
   }
 
+  // `copyText`, not `navigator.clipboard` alone: the Clipboard API is
+  // missing or refused in some WebViews, and there the copy failed outright.
   async function copyPassword() {
-    try {
-      await navigator.clipboard.writeText(getValues('password'));
+    if (await copyText(getValues('password'))) {
       setCopiedPw(true);
       toast.success('Password copied');
       window.setTimeout(() => setCopiedPw(false), 1500);
-    } catch {
+    } else {
       toast.error('Could not copy — copy manually.');
     }
   }

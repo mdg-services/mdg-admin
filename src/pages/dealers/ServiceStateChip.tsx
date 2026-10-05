@@ -84,10 +84,19 @@ export function ServiceStateChip({
   spec,
   loading,
   showWhen = true,
+  layout = 'stacked',
 }: {
   entry: DealerServiceSummaryEntry | undefined;
   spec: RosterServiceSpec;
   loading?: boolean;
+  /**
+   * `'stacked'` (default) puts the recency line under the badge, which is what
+   * a table cell wants. `'inline'` keeps them on one line, right-aligned and
+   * wrapping only if it must — for the dealer list's phone card, where each
+   * service is a label-left / state-right row in the same shape as the
+   * Overview's "Today" board, rather than a two-line block per service.
+   */
+  layout?: 'stacked' | 'inline';
   /**
    * The recency line under the badge — "today", "yesterday", "23 Aug", and the
    * window a service marked.
@@ -117,10 +126,18 @@ export function ServiceStateChip({
       : entry.covers
     : when;
   return (
-    <span className="inline-flex flex-col items-start gap-0.5">
+    <span
+      className={
+        layout === 'inline'
+          ? 'inline-flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5'
+          : 'inline-flex flex-col items-start gap-0.5'
+      }
+    >
       <Badge intent={intent}>{label}</Badge>
       {showWhen && second ? (
-        <span className="whitespace-nowrap text-xs text-text-subtle">
+        // `font-normal`: inline, this sits in a card's value cell, which is
+        // `font-medium`, and the date is the quiet half of the pair.
+        <span className="whitespace-nowrap text-xs font-normal text-text-subtle">
           {second}
         </span>
       ) : null}

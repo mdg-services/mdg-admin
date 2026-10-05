@@ -415,7 +415,7 @@ function KnowledgeBaseCard() {
               // unbreakable token wider than a 296px card, and `main` clips
               // rather than scrolls. It is also the one line on the screen that
               // says why the assistant is not answering.
-              <p className="break-words rounded-md border border-danger bg-danger-soft px-3 py-2 text-xs text-danger">
+              <p className="break-words rounded-md border border-danger bg-danger-soft px-3 py-2 text-xs text-danger-strong md:text-danger">
                 {kb.error}
               </p>
             ) : null}

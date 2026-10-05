@@ -19,6 +19,7 @@ import {
   type DataColumn,
 } from '@/components/ui';
 import { useWaterIngressCard, useWaterIngressDays } from '@/hooks/api/useWaterIngress';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, formatYmd, istTodayYmd } from '@/lib/format';
 import { shareActionLabel, shareSavedImage } from '@/lib/shareCard';
@@ -115,6 +116,26 @@ export function DealerWaterIngressPane({ dealer }: DealerVaultPaneProps) {
   const [date, setDate] = React.useState<string | null>(null);
   const day = days.find((d) => d.businessDate === date) ?? days[0] ?? null;
 
+  /*
+   * A day picked from the History list, brought into view.
+   *
+   * On a phone the list starts some 2,600px below the day it changes: the tap
+   * swapped the figures and windows at the top of the pane and, near the
+   * finger, only a small "Showing" badge moved — so the tap read as doing
+   * nothing. At md the two sit close enough to see both, and the page stays
+   * where it is. A counter rather than the date, so tapping the day already
+   * showing still brings it back.
+   */
+  const isMd = useMediaQuery('(min-width: 768px)');
+  const dayCard = React.useRef<HTMLDivElement>(null);
+  const [revealDay, setRevealDay] = React.useState(0);
+  React.useEffect(() => {
+    if (revealDay === 0 || isMd) return;
+    dayCard.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    // `isMd` is read, not watched: rotating the phone is not a request to scroll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealDay]);
+
   /**
    * The picture comes from the SERVER, not from this page.
    *
@@ -145,6 +166,25 @@ export function DealerWaterIngressPane({ dealer }: DealerVaultPaneProps) {
       }
     },
     [card, toast],
+  );
+
+  const shareButton = React.useCallback(
+    (d: WaterIngressDayLog) => (
+      <Button
+        variant="ghost"
+        size="sm"
+        leftIcon={<Share2 width={15} height={15} strokeWidth={1.75} />}
+        loading={pending === d.businessDate}
+        // The row itself selects the day; this must not do both.
+        onClick={(e) => {
+          e.stopPropagation();
+          void onShare(d.businessDate);
+        }}
+      >
+        {shareActionLabel()}
+      </Button>
+    ),
+    [onShare, pending],
   );
 
   const historyColumns: DataColumn<WaterIngressDayLog>[] = React.useMemo(
@@ -189,24 +229,15 @@ export function DealerWaterIngressPane({ dealer }: DealerVaultPaneProps) {
       {
         id: 'get',
         header: '',
-        cell: (d) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            leftIcon={<Share2 width={15} height={15} strokeWidth={1.75} />}
-            loading={pending === d.businessDate}
-            // The row itself selects the day; this must not do both.
-            onClick={(e) => {
-              e.stopPropagation();
-              void onShare(d.businessDate);
-            }}
-          >
-            {shareActionLabel()}
-          </Button>
-        ),
+        // Not on the card: there it would be a button inside the card-sized
+        // button `onRowClick` makes. Below md it is passed as `rowActions`
+        // instead, which makes the card's title the tap target and puts this
+        // beside it.
+        mobile: 'hidden',
+        cell: shareButton,
       },
     ],
-    [date, onShare, pending],
+    [date, shareButton],
   );
 
   if (q.isLoading) {
@@ -250,85 +281,89 @@ export function DealerWaterIngressPane({ dealer }: DealerVaultPaneProps) {
 
   return (
     <div className="space-y-3 md:space-y-4">
-      <Card>
-        <CardHeader
-          action={
-            <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                leftIcon={<Share2 width={16} height={16} strokeWidth={1.75} />}
-                onClick={() => void onShare(day.businessDate)}
-                loading={pending === day.businessDate}
+      {/* A plain wrapper only because `Card` takes no ref; it is the block the
+          History list scrolls back to. */}
+      <div ref={dayCard}>
+        <Card>
+          <CardHeader
+            action={
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  leftIcon={<Share2 width={16} height={16} strokeWidth={1.75} />}
+                  onClick={() => void onShare(day.businessDate)}
+                  loading={pending === day.businessDate}
+                >
+                  {shareActionLabel()}
+                </Button>
+                <HowThisWorks
+                  surface="admin-dealer-vault-water-ingress"
+                  label="Water ingress"
+                  variant="icon"
+                />
+              </div>
+            }
+          >
+            <CardTitle>{dealerCodeLabel(q.data?.outletCode)} · water ingress</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="max-w-xs">
+              <Label htmlFor="wi-date">Day</Label>
+              <Select
+                id="wi-date"
+                value={day.businessDate}
+                onChange={(e) => setDate(e.target.value)}
               >
-                {shareActionLabel()}
-              </Button>
-              <HowThisWorks
-                surface="admin-dealer-vault-water-ingress"
-                label="Water ingress"
-                variant="icon"
-              />
+                {days.map((d) => (
+                  <option key={d.businessDate} value={d.businessDate}>
+                    {formatYmd(d.businessDate, { weekday: true })} — {d.recordedSlots}/{d.totalSlots}
+                  </option>
+                ))}
+              </Select>
             </div>
-          }
-        >
-          <CardTitle>{dealerCodeLabel(q.data?.outletCode)} · water ingress</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="max-w-xs">
-            <Label htmlFor="wi-date">Day</Label>
-            <Select
-              id="wi-date"
-              value={day.businessDate}
-              onChange={(e) => setDate(e.target.value)}
-            >
-              {days.map((d) => (
-                <option key={d.businessDate} value={d.businessDate}>
-                  {formatYmd(d.businessDate, { weekday: true })} — {d.recordedSlots}/{d.totalSlots}
-                </option>
-              ))}
-            </Select>
-          </div>
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 md:gap-5 lg:grid-cols-4">
-            <Stat label="Windows recorded" value={`${day.recordedSlots} of ${day.totalSlots}`} />
-            {/* Neutral while windows are still open: a 24-hour outlet that has
-                missed nothing reads 17% at breakfast, and red would say the
-                opposite of the "0 missed" tile beside it. */}
-            <Stat
-              label="Compliance"
-              value={`${day.compliancePercent}%`}
-              tone={open > 0 ? undefined : day.compliancePercent === 100 ? 'good' : 'bad'}
-            />
-            <Stat
-              label="Missed"
-              value={String(missed.length)}
-              tone={missed.length > 0 ? 'bad' : 'good'}
-            />
-            <Stat label="Last checked" value={formatDateTime(day.lastRunAt)} />
-          </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 md:gap-5 lg:grid-cols-4">
+              <Stat label="Windows recorded" value={`${day.recordedSlots} of ${day.totalSlots}`} />
+              {/* Neutral while windows are still open: a 24-hour outlet that has
+                  missed nothing reads 17% at breakfast, and red would say the
+                  opposite of the "0 missed" tile beside it. */}
+              <Stat
+                label="Compliance"
+                value={`${day.compliancePercent}%`}
+                tone={open > 0 ? undefined : day.compliancePercent === 100 ? 'good' : 'bad'}
+              />
+              <Stat
+                label="Missed"
+                value={String(missed.length)}
+                tone={missed.length > 0 ? 'bad' : 'good'}
+              />
+              <Stat label="Last checked" value={formatDateTime(day.lastRunAt)} />
+            </div>
 
-          {missed.length > 0 ? (
-            <Callout intent="warning">
-              {missed.length === 1 ? 'One window' : `${missed.length} windows`} closed without being
-              recorded: {missed.map((s) => s.label).join(', ')}. A window can only be filled in
-              while the clock is inside it, so these cannot be recovered.
-            </Callout>
-          ) : null}
+            {missed.length > 0 ? (
+              <Callout intent="warning">
+                {missed.length === 1 ? 'One window' : `${missed.length} windows`} closed without being
+                recorded: {missed.map((s) => s.label).join(', ')}. A window can only be filled in
+                while the clock is inside it, so these cannot be recovered.
+              </Callout>
+            ) : null}
 
-          {isToday && open > 0 ? (
-            <Callout intent="info">
-              This day is still running — {open === 1 ? 'one window has' : `${open} windows have`}{' '}
-              yet to close, so the compliance figure is not final.
-            </Callout>
-          ) : null}
+            {isToday && open > 0 ? (
+              <Callout intent="info">
+                This day is still running — {open === 1 ? 'one window has' : `${open} windows have`}{' '}
+                yet to close, so the compliance figure is not final.
+              </Callout>
+            ) : null}
 
-          {day.lastOutcome === 'FAILED' && day.lastFailure ? (
-            <Callout intent="warning">
-              The last attempt did not complete ({day.lastFailure.reason}), so the grid below is as
-              of the last successful read rather than right now.
-            </Callout>
-          ) : null}
-        </CardContent>
-      </Card>
+            {day.lastOutcome === 'FAILED' && day.lastFailure ? (
+              <Callout intent="warning">
+                The last attempt did not complete ({day.lastFailure.reason}), so the grid below is as
+                of the last successful read rather than right now.
+              </Callout>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
 
       <DataList
         rows={rows}
@@ -358,7 +393,11 @@ export function DealerWaterIngressPane({ dealer }: DealerVaultPaneProps) {
             rows={days}
             rowKey={(d) => d.businessDate}
             columns={historyColumns}
-            onRowClick={(d) => setDate(d.businessDate)}
+            onRowClick={(d) => {
+              setDate(d.businessDate);
+              setRevealDay((n) => n + 1);
+            }}
+            rowActions={isMd ? undefined : shareButton}
             minWidth="42rem"
             freezeFirstColumn
             empty={

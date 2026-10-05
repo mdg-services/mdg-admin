@@ -49,6 +49,7 @@ import {
   CADENCE_BUCKET_LABEL,
   CADENCE_BUCKET_ORDER,
   cadenceBucketFor,
+  cadenceLabel,
   EVIDENCE_LABEL,
   KAVACH_DOMAIN_LABEL,
   makeLocalId,
@@ -862,7 +863,7 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                             ? 'on event'
                             : cadence == null
                               ? 'no cadence'
-                              : `every ${cadence} days`}
+                              : cadenceLabel(cadence).toLowerCase()}
                         </summary>
                         <div className="grid gap-2 pb-1">
                         <div className="grid grid-cols-2 gap-2">
@@ -1118,7 +1119,7 @@ export function DealerKavachWorkListTab({ dealer }: Props) {
                       {KAVACH_DOMAIN_LABEL[c.domain ?? 'daily-ops']} ·{' '}
                       {c.trigger === 'SOS'
                         ? 'On event'
-                        : `Every ${c.cadenceDays ?? '—'} days`}{' '}
+                        : cadenceLabel(c.cadenceDays)}{' '}
                       · {VERIFICATION_LABEL[c.verification ?? 'ADMIN']}
                     </span>
                   ),

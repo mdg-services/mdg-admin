@@ -329,8 +329,8 @@ export function dayCellClasses(state: DayCellState, selected: boolean): string {
   const base =
     'relative flex aspect-square w-full items-center justify-center rounded-md text-sm font-medium tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring';
   const byState: Record<DayCellState, string> = {
-    dealer: 'border border-success/30 bg-success-soft text-success',
-    admin: 'bg-success-soft text-success ring-2 ring-inset ring-brand',
+    dealer: 'border border-success/30 bg-success-soft text-success-strong md:text-success',
+    admin: 'bg-success-soft text-success-strong md:text-success ring-2 ring-inset ring-brand',
     today: 'border border-border-strong bg-surface font-semibold text-text',
     missing: 'border border-dashed border-border text-text-subtle',
     closed: 'border border-dashed border-border text-text-subtle/60',

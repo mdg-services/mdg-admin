@@ -90,3 +90,6 @@ export function useDsrRunWatcher(dealerId: string, successMessage: string) {
     busy: runId !== null,
   };
 }
+
+/** What `useDsrRunWatcher` hands back — a prop type for a watcher passed down. */
+export type DsrRunWatcher = ReturnType<typeof useDsrRunWatcher>;

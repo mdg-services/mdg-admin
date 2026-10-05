@@ -83,16 +83,8 @@ export function WorkerFormDialog({ dealerId, open, onClose, employee }: Props) {
     <Dialog
       open={open}
       onClose={onClose}
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          {isEdit ? 'Edit warrior' : 'Add warrior'}
-          <HowThisWorks
-            surface="admin-worker-form"
-            label="Warriors"
-            variant="icon"
-          />
-        </span>
-      }
+      title={isEdit ? 'Edit warrior' : 'Add warrior'}
+      help={<HowThisWorks surface="admin-worker-form" label="Warriors" variant="icon" />}
       description={
         isEdit
           ? 'Update this warrior’s details.'

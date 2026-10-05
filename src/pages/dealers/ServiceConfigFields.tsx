@@ -21,6 +21,7 @@ import {
   WEEKDAYS,
   type ScheduleParts,
 } from './schedulePicker';
+import { CADENCE_LABELS } from './serviceSchedule';
 
 /**
  * `''` means "send no cadence at all". Only the attach POST can express that —
@@ -33,14 +34,6 @@ export interface CadenceOption {
   value: CadenceChoice;
   label: string;
 }
-
-const CADENCE_LABELS: Record<Cadence, string> = {
-  DAILY: 'Daily',
-  WEEKLY: 'Weekly',
-  MONTHLY: 'Monthly',
-  YEARLY: 'Yearly',
-  ON_DEMAND: 'On demand',
-};
 
 /** Attach: "Plugin default" omits `cadence` from the body. */
 export const ATTACH_CADENCE_OPTIONS: CadenceOption[] = [
@@ -376,7 +369,7 @@ function ScheduleFields({
       {scheduleWarning ? (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-md border border-warning bg-warning-soft px-3 py-2 text-xs font-medium text-warning"
+          className="flex items-start gap-2 rounded-md border border-warning bg-warning-soft px-3 py-2 text-xs font-medium text-warning-strong md:text-warning"
         >
           <AlertTriangle
             width={14}

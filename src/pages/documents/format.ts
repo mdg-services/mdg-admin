@@ -366,17 +366,18 @@ export const VALIDITY_WORD: Record<ExpiryState | 'undated', string> = {
 /**
  * The colours each verdict is drawn in.
  *
- * NOT `INTENT_CLASSES`, and this is the one place in the app that departs from
- * it. The shipped pairing is `bg-*-soft` + `text-*`, which measures 3.14:1 for
- * amber and 3.00:1 for green — well under the 4.5:1 an ordinary reader needs,
- * and this list is read by a 55-year-old outdoors under a forecourt canopy on a
- * cheap screen. The `strong` shades added to `tailwind.config.ts` measure
- * 6.37:1, 6.80:1 and 6.49:1 against the same backgrounds.
+ * NOT `INTENT_CLASSES`. The shipped pairing is `bg-*-soft` + `text-*`, which
+ * measures 3.14:1 for amber and 3.00:1 for green — well under the 4.5:1 an
+ * ordinary reader needs, and this list is read by a 55-year-old outdoors under
+ * a forecourt canopy on a cheap screen. The `strong` shades added to
+ * `tailwind.config.ts` measure 6.37:1, 6.80:1 and 6.49:1 against the same
+ * backgrounds.
  *
- * `INTENT_CLASSES` itself is deliberately left alone: changing it would restyle
- * every badge in the portal in one commit, and one accessible surface now beats
- * a whole-portal restyle nobody asked for. Neutral keeps the shared pairing
- * because it already measures 6.15:1.
+ * `INTENT_CLASSES` has since adopted those shades too, but BELOW MD ONLY, with
+ * an `md:` restore of the original colour (see the comment in
+ * `tailwind.config.ts`). This pill keeps them at EVERY width: it was the first
+ * surface to take them, and a validity verdict reads the same on a desktop.
+ * Neutral keeps the shared pairing because it already measures 6.15:1.
  *
  * AND COLOUR IS NEVER THE ONLY CARRIER. `ValidityPill` gives each verdict its own
  * SHAPE as well, for the reasons `StatusPip`'s header sets out at length —

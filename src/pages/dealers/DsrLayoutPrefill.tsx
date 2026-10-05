@@ -316,16 +316,20 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
         </div>
         {/* The button and its help travel together in one shrink-0 column, so
             the row above stays a two-item `justify-between` and the paragraph
-            keeps the width it has today. */}
-        <div className="flex shrink-0 items-center gap-2">
+            keeps the width it has today. Below md the BUTTON takes what the
+            help icon leaves: a full-width button pushed the icon past the
+            sheet's edge and the whole form scrolled sideways under the thumb.
+            The icon goes through `leftIcon` — as a child it sat inside the
+            label's span and, being a block svg, stacked above the words. */}
+        <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
           <Button
             variant="secondary"
             size="sm"
             onClick={handleRead}
             loading={draft.isFetching}
-            className="w-full shrink-0 md:w-auto"
+            leftIcon={<Download width={14} height={14} strokeWidth={1.75} />}
+            className="min-w-0 flex-1 md:w-auto md:flex-none"
           >
-            <Download className="mr-1.5 h-3.5 w-3.5" />
             Read layout
           </Button>
           <HowThisWorks

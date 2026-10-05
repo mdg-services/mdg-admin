@@ -182,7 +182,7 @@ export function DsrReportPanel({
                   </span>
                   <span className="mt-0.5 block text-xs text-text-subtle">
                     The sheet exactly as the dealer receives it. Every figure on
-                    it is also listed below.
+                    it is also listed on this page.
                   </span>
                 </span>
               }
@@ -285,7 +285,8 @@ function DsrWarningsBanner({ warnings }: { warnings: string[] }) {
   const rest = warnings.length - 1;
 
   return (
-    <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning">
+    // `-strong` below md: the default amber on its own soft ground is 3.14:1.
+    <div className="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-sm text-warning-strong md:text-warning">
       <AlertTriangle
         width={16}
         height={16}
@@ -542,17 +543,24 @@ function ProductFigures({
           },
         ]
       : []),
+    // `block`: these two labels carry a whole date, and on one line beside
+    // an eight-figure total at 360px the FIGURE was the part that broke —
+    // "6,06,12,345" on one line and its "L" on the next. Stacked, the label
+    // takes its own line and the figure stays whole. (The list renders below
+    // md only, so this shapes nothing on a desktop.)
     {
       key: 'receipts-since',
       label: `Receipts since ${dsrDateLabel(v.sinceDate)}`,
       value: formatLitres(v.totalReceiptSinceInspection),
       numeric: true,
+      block: true,
     },
     {
       key: 'testing-since',
       label: `Testing since ${dsrDateLabel(v.sinceDate)}`,
       value: formatLitres(v.totalTestSinceInspection),
       numeric: true,
+      block: true,
     },
   ];
 
@@ -586,7 +594,11 @@ function ProductFigures({
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
                       Tank {t.tankNo}
                     </p>
+                    {/* One line a pair, label left and figure right: three
+                        short figures stacked two lines each made every tank
+                        box ~180px of a 640px screen. */}
                     <KeyValueList
+                      inlineBelowMd
                       items={[
                         {
                           key: 'dip',
@@ -610,7 +622,7 @@ function ProductFigures({
                     />
                   </div>
                 ))}
-            <KeyValueList items={dayItems} />
+            <KeyValueList items={dayItems} inlineBelowMd />
           </>
         ) : (
           <p className="text-sm text-text-muted">
@@ -627,19 +639,21 @@ function ProductFigures({
               {ADVISORY_LABEL[v.advisory.kind]}
             </Badge>
           </div>
-          <KeyValueList items={variationItems} />
+          <KeyValueList items={variationItems} inlineBelowMd />
           <p className="mt-2 text-xs text-text-subtle">{bandNote(v)}</p>
           {/* The one sentence that says what to DO about the figures above.
               It used to live only on `VariationCard`, which is now desktop
               only, so it moves here rather than disappearing off the phone. */}
           <div
+            // The `-strong` shades: on its own soft ground the default
+            // colour is ~3:1, and this is the sentence the admin acts on.
             className={cn(
               'mt-3 rounded-md px-3 py-2 text-sm',
               ADVISORY_INTENT[v.advisory.kind] === 'success'
-                ? 'bg-success-soft text-success'
+                ? 'bg-success-soft text-success-strong md:text-success'
                 : ADVISORY_INTENT[v.advisory.kind] === 'danger'
-                  ? 'bg-danger-soft text-danger'
-                  : 'bg-warning-soft text-warning',
+                  ? 'bg-danger-soft text-danger-strong md:text-danger'
+                  : 'bg-warning-soft text-warning-strong md:text-warning',
             )}
           >
             <p className="font-medium">{v.advisory.messageHi}</p>
@@ -716,7 +730,10 @@ function DsrShareSection({
       url: report.salesCardUrl,
       label: 'Daily sales',
       alt: 'DSR daily-sales card',
-      tapLabel: 'Open the day book',
+      // Not "the day book": the report card on this screen already opens
+      // "the day book full screen", and this is a different artefact — the
+      // image the dealer is sent.
+      tapLabel: 'Open the daily-sales card',
       tapNote: 'The eight-column daily-sales card, with real zoom.',
     },
   ];
@@ -853,7 +870,10 @@ function DsrShareSection({
                 <div
                   className={cn(
                     'flex items-start gap-2 rounded-md px-3 py-2.5 text-sm',
-                    urgent ? 'bg-danger-soft text-danger' : 'bg-warning-soft text-warning',
+                    // `-strong` below md, readable on the soft ground; md as today.
+                    urgent
+                      ? 'bg-danger-soft text-danger-strong md:text-danger'
+                      : 'bg-warning-soft text-warning-strong md:text-warning',
                   )}
                 >
                   <History width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
@@ -1070,13 +1090,16 @@ function VariationCard({ variation }: { variation: DsrVariationSummary }) {
         </dl>
 
         <div
+          // The same readable pairs as the phone's figure list. This card only
+          // renders from md, where the `md:` shade is what paints — so this is
+          // today's colour there, and the right one if the card ever comes down.
           className={cn(
             'mt-auto rounded-md px-3 py-2 text-sm',
             intent === 'success'
-              ? 'bg-success-soft text-success'
+              ? 'bg-success-soft text-success-strong md:text-success'
               : intent === 'danger'
-                ? 'bg-danger-soft text-danger'
-                : 'bg-warning-soft text-warning',
+                ? 'bg-danger-soft text-danger-strong md:text-danger'
+                : 'bg-warning-soft text-warning-strong md:text-warning',
           )}
         >
           <p className="font-medium">{variation.advisory.messageHi}</p>

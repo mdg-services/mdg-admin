@@ -32,14 +32,14 @@ import {
 import { useCreditDodLedger, useCreditDodVault } from '@/hooks/api/useCreditDod';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
-import { formatDateTime, formatDmy, inrFormat } from '@/lib/format';
+import { formatDateTime, formatDmy } from '@/lib/format';
 import type {
   CreditDodVaultDealerRow,
   CreditDodVaultOverview,
 } from '@/types/creditDod';
 import { compareDealerCodes, dealerCodeLabel } from '@dk/shared';
 
-import { Amount, Balance } from './padLedgerFigures';
+import { Amount, Balance, padLedgerRowCard } from './padLedgerFigures';
 import { StatTile, StatTileRow, StatTileSkeletons } from './StatTile';
 import type { VaultDatasetProps } from './types';
 
@@ -739,49 +739,12 @@ function DealerLedger({
                 </div>
               ) : null}
 
-              {/* Mobile card-stack (< md). Debit and credit are the numbers an
-                  admin scans for, so they lead; the descriptive columns follow. */}
+              {/* Mobile card-stack (< md) — the same card the per-dealer pane
+                  draws; see `padLedgerRowCard`. */}
               {isMd ? null : (
                 <MobileCardList
                   variant="rows"
-                  cards={rows.map((r) => ({
-                    key: String(r.seq),
-                    primary: (
-                      <span className="flex min-w-0 items-baseline gap-2">
-                        <span className="whitespace-nowrap text-sm font-medium text-text">
-                          {formatDmy(r.date)}
-                        </span>
-                        <span className="truncate text-xs text-text-muted">
-                          {r.doc || '—'}
-                        </span>
-                      </span>
-                    ),
-                    primaryRight: (
-                      <span className="whitespace-nowrap text-sm font-medium tabular-nums">
-                        <Balance value={r.balance} />
-                      </span>
-                    ),
-                    secondary: (
-                      <span className="flex flex-wrap items-center gap-x-3 text-xs tabular-nums">
-                        {r.debit ? (
-                          <span>Debit {inrFormat(r.debit)}</span>
-                        ) : null}
-                        {r.credit ? (
-                          <span className="text-success">
-                            Credit {inrFormat(r.credit)}
-                          </span>
-                        ) : null}
-                        {!r.debit && !r.credit ? <span>No amount</span> : null}
-                      </span>
-                    ),
-                    meta: (
-                      <span className="flex flex-wrap items-center gap-x-2">
-                        <span>{r.txnType || '—'}</span>
-                        {r.terminal ? <span>· {r.terminal}</span> : null}
-                        {r.product ? <span>· {r.product}</span> : null}
-                      </span>
-                    ),
-                  }))}
+                  cards={rows.map((r) => padLedgerRowCard(r))}
                 />
               )}
 

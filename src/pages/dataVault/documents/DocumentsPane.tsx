@@ -291,23 +291,27 @@ function PeriodControl({
   if (kind.periodKind === 'MONTH' || kind.periodKind === 'YEAR') {
     const isMonth = kind.periodKind === 'MONTH';
     return (
-      <Input
-        type={isMonth ? 'month' : 'number'}
-        value={isMonth ? date.slice(0, 7) : date.slice(0, 4)}
-        min={isMonth ? MIN_SELECTABLE_YMD.slice(0, 7) : MIN_SELECTABLE_YMD.slice(0, 4)}
-        max={isMonth ? today.slice(0, 7) : today.slice(0, 4)}
-        aria-label={isMonth ? 'Which month' : 'Which year'}
-        className="w-full max-w-[170px] md:w-[150px]"
-        onChange={(e) => {
-          const next = e.target.value;
-          // Stored as a full day whatever the shape, so there is exactly one
-          // `?date=` and `periodKeyFor` slices it down to the kind's period.
-          const asDay = isMonth ? `${next}-01` : `${next}-01-01`;
-          if (isYmd(asDay) && asDay >= MIN_SELECTABLE_YMD && asDay <= today) {
-            patchParams({ date: asDay, open: null });
-          }
-        }}
-      />
+      // The same definite box below md as the day field, and for the same
+      // reason — see `BusinessDateControl` in the IRAS pane.
+      <span className="w-[170px] md:contents">
+        <Input
+          type={isMonth ? 'month' : 'number'}
+          value={isMonth ? date.slice(0, 7) : date.slice(0, 4)}
+          min={isMonth ? MIN_SELECTABLE_YMD.slice(0, 7) : MIN_SELECTABLE_YMD.slice(0, 4)}
+          max={isMonth ? today.slice(0, 7) : today.slice(0, 4)}
+          aria-label={isMonth ? 'Which month' : 'Which year'}
+          className="w-full max-w-[170px] md:w-[150px]"
+          onChange={(e) => {
+            const next = e.target.value;
+            // Stored as a full day whatever the shape, so there is exactly one
+            // `?date=` and `periodKeyFor` slices it down to the kind's period.
+            const asDay = isMonth ? `${next}-01` : `${next}-01-01`;
+            if (isYmd(asDay) && asDay >= MIN_SELECTABLE_YMD && asDay <= today) {
+              patchParams({ date: asDay, open: null });
+            }
+          }}
+        />
+      </span>
     );
   }
   return (
@@ -325,20 +329,23 @@ function PeriodControl({
       >
         <ChevronLeft width={16} height={16} strokeWidth={1.75} />
       </IconButton>
-      <Input
-        type="date"
-        value={date}
-        min={MIN_SELECTABLE_YMD}
-        max={today}
-        aria-label="Which day"
-        className="w-full max-w-[170px] md:w-[150px]"
-        onChange={(e) => {
-          const next = e.target.value;
-          if (isYmd(next) && next >= MIN_SELECTABLE_YMD && next <= today) {
-            patchParams({ date: next, open: null });
-          }
-        }}
-      />
+      {/* A definite box below md — see `BusinessDateControl` in the IRAS pane. */}
+      <span className="w-[170px] md:contents">
+        <Input
+          type="date"
+          value={date}
+          min={MIN_SELECTABLE_YMD}
+          max={today}
+          aria-label="Which day"
+          className="w-full max-w-[170px] md:w-[150px]"
+          onChange={(e) => {
+            const next = e.target.value;
+            if (isYmd(next) && next >= MIN_SELECTABLE_YMD && next <= today) {
+              patchParams({ date: next, open: null });
+            }
+          }}
+        />
+      </span>
       <IconButton
         variant="secondary"
         size="sm"

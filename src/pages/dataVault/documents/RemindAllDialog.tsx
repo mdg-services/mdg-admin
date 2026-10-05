@@ -130,15 +130,13 @@ export function RemindAllDialog({ open, onClose, rows }: RemindAllDialogProps) {
     <Dialog
       open={open}
       onClose={onClose}
-      title={
-        <span className="inline-flex flex-wrap items-center gap-2">
-          Remind everyone who has not sent it
-          <HowThisWorks
-            surface="admin-remind-all-documents"
-            label="Remind everyone who has not sent it"
-            variant="icon"
-          />
-        </span>
+      title="Remind everyone who has not sent it"
+      help={
+        <HowThisWorks
+          surface="admin-remind-all-documents"
+          label="Remind everyone who has not sent it"
+          variant="icon"
+        />
       }
       size="md"
       footer={

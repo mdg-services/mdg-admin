@@ -21,8 +21,8 @@ import {
 } from '@/components/ui';
 import { useCreditDodLedger, useCreditDodVault } from '@/hooks/api/useCreditDod';
 import { ApiError } from '@/lib/api';
-import { formatDateTime, formatDmy, inrFormat } from '@/lib/format';
-import { Amount, Balance } from '@/pages/dataVault/padLedgerFigures';
+import { formatDateTime, formatDmy } from '@/lib/format';
+import { Amount, Balance, padLedgerRowCard } from '@/pages/dataVault/padLedgerFigures';
 import {
   asMovementClass,
   classifiedRowCount,
@@ -238,45 +238,15 @@ export function DealerPadLedgerPane({ dealer }: DealerVaultPaneProps) {
                 </Table>
               </div>
 
-              {/* Mobile card-stack (< md). Debit/credit lead — the numbers an
-                  admin scans for — with the descriptive columns as meta. */}
+              {/* Mobile card-stack (< md) — the same card the cross-dealer pane
+                  draws; see `padLedgerRowCard`. */}
               <MobileCardList
                 className="p-3"
-                cards={visibleRows.map((r) => ({
-                  key: String(r.seq),
-                  primary: (
-                    <span className="flex min-w-0 items-baseline gap-2">
-                      <span className="whitespace-nowrap text-sm font-medium text-text">
-                        {formatDmy(r.date)}
-                      </span>
-                      <span className="truncate text-xs text-text-muted">
-                        {r.doc || '—'}
-                      </span>
-                    </span>
-                  ),
-                  primaryRight: (
-                    <span className="whitespace-nowrap text-sm font-medium tabular-nums">
-                      <Balance value={r.balance} />
-                    </span>
-                  ),
-                  secondary: (
-                    <span className="flex flex-wrap items-center gap-x-3 text-xs tabular-nums">
-                      {r.debit ? <span>Debit {inrFormat(r.debit)}</span> : null}
-                      {r.credit ? (
-                        <span className="text-success">Credit {inrFormat(r.credit)}</span>
-                      ) : null}
-                      {!r.debit && !r.credit ? <span>No amount</span> : null}
-                    </span>
-                  ),
-                  meta: (
-                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <MovementChip movementClass={r.movementClass} />
-                      <span>{r.txnType || '—'}</span>
-                      {r.terminal ? <span>· {r.terminal}</span> : null}
-                      {r.product ? <span>· {r.product}</span> : null}
-                    </span>
-                  ),
-                }))}
+                cards={visibleRows.map((r) =>
+                  padLedgerRowCard(r, {
+                    metaLead: <MovementChip movementClass={r.movementClass} />,
+                  }),
+                )}
               />
 
               {/* Every loaded row was part of the pair. Said out loud, because

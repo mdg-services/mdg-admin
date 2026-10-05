@@ -20,11 +20,18 @@ import {
   Skeleton,
   StatusChip,
 } from '@/components/ui';
+import { useDealersQuery } from '@/hooks/api/useDealers';
 import { useRunQuery, useRunsQuery } from '@/hooks/api/useRuns';
+import { useServicesQuery } from '@/hooks/api/useServices';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
-import { formatDateTime, formatDuration, groupByDay } from '@/lib/format';
+import { formatDateTime, formatDuration, formatTime, groupByDay } from '@/lib/format';
 import { serviceLabel } from '@/lib/serviceLabel';
-import type { ServiceRun, ServiceRunStatus } from '@dk/shared';
+import {
+  compareDealerCodes,
+  dealerCodeLabel,
+  type ServiceRun,
+  type ServiceRunStatus,
+} from '@dk/shared';
 
 const STATUSES: Array<{ value: '' | ServiceRunStatus; label: string }> = [
   { value: '', label: 'All statuses' },
@@ -89,6 +96,38 @@ export function RunHistoryPage() {
     setSearch(next, { replace: true });
   }
 
+  // The two pickers. A dealer IS its code everywhere else in this admin, and
+  // these were free-text boxes asking for a 24-character ObjectId and a plugin
+  // slug — neither of which an admin has any way to look up — so in practice
+  // nobody could filter by either. Same dealer query, and so the same cache
+  // entry, as the Documents filter.
+  const dealersQ = useDealersQuery({ pageSize: 200 });
+  const servicesQ = useServicesQuery();
+  const dealers = React.useMemo(
+    () =>
+      (dealersQ.data?.items ?? [])
+        .slice()
+        .sort((a, b) => compareDealerCodes(a.code, b.code)),
+    [dealersQ.data],
+  );
+  const services = React.useMemo(
+    () =>
+      (servicesQ.data ?? [])
+        .slice()
+        .sort((a, b) => serviceLabel(a.id).localeCompare(serviceLabel(b.id))),
+    [servicesQ.data],
+  );
+  // A filter the list cannot name — an older link to an archived dealer, a
+  // retired plugin — still gets an option of its own. Without one the select
+  // shows "Every dealer" while the runs below are quietly narrowed to one.
+  const dealerUnlisted =
+    dealerId !== undefined && !dealers.some((d) => d.id === dealerId);
+  const unlistedDealerCode = dealerUnlisted
+    ? data?.items.find((r) => r.dealerId === dealerId)?.dealerCode
+    : undefined;
+  const serviceUnlisted =
+    serviceId !== undefined && !services.some((s) => s.id === serviceId);
+
   const grouped = data ? groupByDay(data.items) : [];
   const activeFilters = [dealerId, serviceId, status, from, to].filter(
     Boolean,
@@ -120,20 +159,44 @@ export function RunHistoryPage() {
         activeCount={activeFilters}
         onClear={clearFilters}
       >
-        <TextFilter
-          id="dealerId"
-          label="Dealer ID"
-          placeholder="24-char hex"
-          value={dealerId ?? ''}
-          onCommit={(v) => update('dealerId', v)}
-        />
-        <TextFilter
-          id="serviceId"
-          label="Service ID"
-          placeholder="plugin slug"
-          value={serviceId ?? ''}
-          onCommit={(v) => update('serviceId', v)}
-        />
+        <div>
+          <Label htmlFor="dealerId">Dealer</Label>
+          <Select
+            id="dealerId"
+            value={dealerId ?? ''}
+            onChange={(e) => update('dealerId', e.target.value || undefined)}
+          >
+            <option value="">Every dealer</option>
+            {dealerUnlisted ? (
+              <option value={dealerId}>
+                {unlistedDealerCode ? dealerCodeLabel(unlistedDealerCode) : dealerId}
+              </option>
+            ) : null}
+            {dealers.map((d) => (
+              <option key={d.id} value={d.id}>
+                {dealerCodeLabel(d.code)}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="serviceId">Service</Label>
+          <Select
+            id="serviceId"
+            value={serviceId ?? ''}
+            onChange={(e) => update('serviceId', e.target.value || undefined)}
+          >
+            <option value="">Every service</option>
+            {serviceUnlisted ? (
+              <option value={serviceId}>{serviceLabel(serviceId)}</option>
+            ) : null}
+            {services.map((svc) => (
+              <option key={svc.id} value={svc.id}>
+                {serviceLabel(svc.id)}
+              </option>
+            ))}
+          </Select>
+        </div>
         <div>
           <Label htmlFor="status">Status</Label>
           <Select
@@ -275,8 +338,12 @@ export function RunHistoryPage() {
                                   {serviceLabel(r.serviceId)}
                                 </span>
                               </div>
+                              {/* The time only: the card's heading already names
+                                  the day every run in it started on, and the
+                                  full date repeated on each row was the widest
+                                  thing on it. */}
                               <div className="flex items-center gap-1.5 text-xs text-text-muted">
-                                <span>{formatDateTime(r.startedAt)}</span>
+                                <span>{formatTime(r.startedAt)}</span>
                                 <span className="text-text-subtle">·</span>
                                 <span className="text-text-subtle">
                                   {formatDuration(r.durationMs)}
@@ -328,115 +395,6 @@ export function RunHistoryPage() {
       </Dialog>
     </div>
   );
-}
-
-/**
- * One free-text filter, held in a local draft and pushed to the URL on blur, on
- * Enter, and on the way out.
- *
- * The flush on the way out is the whole reason this is a component rather than
- * an `<Input defaultValue>`. Below md these fields live inside `FilterBar`'s
- * sheet, and `Sheet` returns null when it closes, so tapping the dimmed
- * backdrop — or pressing Escape — tears the focused input out of the DOM. A
- * removed node fires no blur: the WebView never sends one and React's listener
- * has already gone with it. The dealer id an admin had just typed was therefore
- * dropped on the floor — the list stayed unfiltered, the trigger still read
- * "Filters" (its count comes from the URL), and reopening the sheet showed an
- * empty box. "Show results" only ever worked by luck, because a `<button>`
- * takes focus on pointer-down and blurs the field on its way in. This is the
- * exact trap `FilterBar`'s own docstring names; `SearchBox` in the assist
- * filters guards it the same way.
- *
- * The ref remembers the last value we pushed ourselves, so a value arriving on
- * the props is adopted only when it came from somewhere else — the back button,
- * "Clear all", a pasted link — and never as the echo of what is already in the
- * box.
- *
- * At md the fields never unmount between edits, so none of this is reachable
- * there and desktop behaviour is unchanged.
- */
-function TextFilter({
-  id,
-  label,
-  placeholder,
-  value,
-  onCommit,
-}: {
-  id: string;
-  label: string;
-  placeholder: string;
-  value: string;
-  onCommit: (value: string | undefined) => void;
-}) {
-  const [draft, setDraft] = React.useState(value);
-  const emittedRef = React.useRef(value);
-
-  React.useEffect(() => {
-    if (value === emittedRef.current) return;
-    emittedRef.current = value;
-    setDraft(value);
-  }, [value]);
-
-  // Reading the pending value and the callback off a ref is what keeps the
-  // flush effect's dependency list empty, so its cleanup runs on unmount and
-  // not on every keystroke.
-  const latestRef = React.useRef({ draft, onCommit });
-  latestRef.current = { draft, onCommit };
-
-  const commit = React.useCallback(() => {
-    const { draft: pending, onCommit: send } = latestRef.current;
-    if (pending === emittedRef.current) return;
-    emittedRef.current = pending;
-    send(pending || undefined);
-  }, []);
-
-  // Only flush while the browser is still on this page. Unmount also happens
-  // when the operator leaves — the Android back button out of an open sheet is
-  // the live case — and committing then would push the run-history URL back
-  // over the page they just moved to. React Router has already updated
-  // `window.location` by the time a cleanup runs, so this comparison sees it.
-  const ownPathRef = React.useRef(window.location.pathname);
-  React.useEffect(
-    () => () => {
-      if (window.location.pathname !== ownPathRef.current) return;
-      commit();
-    },
-    [commit],
-  );
-
-  return (
-    <div>
-      <Label htmlFor={id}>{label}</Label>
-      <Input
-        id={id}
-        placeholder={placeholder}
-        inputMode="text"
-        autoCapitalize="none"
-        autoCorrect="off"
-        spellCheck={false}
-        enterKeyHint="search"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={commitOnEnter}
-        onBlur={commit}
-      />
-    </div>
-  );
-}
-
-/**
- * A text filter that commits on blur alone never commits on Android: the
- * on-screen keyboard's Done key does not reliably blur a WebView input, and the
- * next control is a native `<select>` that opens its own overlay. So an admin
- * typed a dealer id and the list simply never filtered. Enter now blurs (which
- * commits through the existing handler), and `enterKeyHint` makes the key say
- * what it does.
- */
-function commitOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    e.currentTarget.blur();
-  }
 }
 
 /**

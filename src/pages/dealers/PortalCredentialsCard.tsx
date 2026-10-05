@@ -202,9 +202,15 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
               <Label htmlFor={`${idPrefix}-username`} required>
                 Username
               </Label>
+              {/* An identifier, not a word: a phone keyboard that
+                  capitalises "abc123" to "Abc123" saves a login the portal
+                  refuses, and every run after it fails as a wrong password. */}
               <Input
                 id={`${idPrefix}-username`}
                 autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 invalid={!!errors.username}
                 {...form.register(usernameField)}
               />

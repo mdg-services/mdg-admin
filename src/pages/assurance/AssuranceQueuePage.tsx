@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  FileText,
   NotebookPen,
   RotateCw,
   ShieldCheck,
@@ -19,6 +20,7 @@ import {
   HowThisWorks,
   Label,
   MobileCardList,
+  RefreshTool,
   Select,
   Skeleton,
   Table,
@@ -109,7 +111,7 @@ export function AssuranceQueuePage() {
           <>
             <Badge
               intent={queue.length > 0 ? 'warning' : 'success'}
-              className="h-7 px-3"
+              className="px-3"
             >
               {queue.length} withheld
             </Badge>
@@ -125,15 +127,20 @@ export function AssuranceQueuePage() {
             >
               Standing remarks
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => void holdsQ.refetch()}
+          </>
+        }
+        // On the title's line below md, instead of a 44px row of their own
+        // under the badge and the remarks button. At md `tools` is appended to
+        // the end of the actions row, so the desktop row is what it was —
+        // which is also why Refresh keeps its words there and is a glyph only
+        // where it has to share a line with the title.
+        tools={
+          <>
+            <RefreshTool
+              label="Refresh the withheld reports"
               loading={holdsQ.isRefetching}
-              leftIcon={<RotateCw width={14} height={14} strokeWidth={1.75} />}
-            >
-              Refresh
-            </Button>
+              onRefresh={() => void holdsQ.refetch()}
+            />
             <HowThisWorks
               surface="admin-assurance-queue"
               label="Withheld reports"
@@ -268,15 +275,13 @@ function RemarksDrawer({
       open
       onClose={onClose}
       width="lg"
-      title={
-        <span className="inline-flex flex-wrap items-center gap-2">
-          Standing remarks
-          <HowThisWorks
-            surface="admin-standing-remarks"
-            label="Standing remarks"
-            variant="icon"
-          />
-        </span>
+      title="Standing remarks"
+      help={
+        <HowThisWorks
+          surface="admin-standing-remarks"
+          label="Standing remarks"
+          variant="icon"
+        />
       }
       description="A fault that is real, physical and ongoing — a dead dip gauge, a nozzle out of service — written down once instead of explained on every report."
     >
@@ -438,13 +443,17 @@ function HoldSection({
             </Table>
           </div>
 
-          {/* Mobile card-stack (< md) */}
+          {/* Mobile card-stack (< md). Two buttons rather than a tappable
+              card: the desktop row's Remarks button had no phone counterpart,
+              so the only way to an outlet's remarks was the header's, which
+              opens on whichever outlet heads the queue. A card cannot be one
+              tap target and hold buttons too (`MobileCardList` drops one), so
+              opening the report becomes a button of its own. */}
           <MobileCardList
             variant="rows"
             cards={rows.map((row) => ({
               key: row.reportId,
               tone: tone === 'history' ? ('muted' as const) : ('default' as const),
-              onClick: () => navigate(reportHref(row)),
               primary: (
                 <span className="block break-words font-mono font-medium text-text">
                   {dealerCodeLabel(row.outletCode)}
@@ -461,8 +470,37 @@ function HoldSection({
                   ) : null}
                 </>
               ),
-              secondary: <Reasons row={row} />,
-              meta: `${formatYmd(row.businessDate)} · tap to open the report`,
+              // One finding per card. Every one is printed in full on the
+              // report itself, and printing up to six long sentences here made
+              // the median card 297px — 38 held reports were sixteen screens
+              // of scrolling to see the whole queue.
+              secondary: <Reasons row={row} max={1} />,
+              meta: formatYmd(row.businessDate),
+              actionsLayout: 'wrap' as const,
+              actions: (
+                <>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => navigate(reportHref(row))}
+                    leftIcon={
+                      <FileText width={14} height={14} strokeWidth={1.75} />
+                    }
+                  >
+                    Open report
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onRemarks(row.dealerId)}
+                    leftIcon={
+                      <NotebookPen width={14} height={14} strokeWidth={1.75} />
+                    }
+                  >
+                    Remarks
+                  </Button>
+                </>
+              ),
             }))}
           />
         </CardContent>
@@ -479,7 +517,20 @@ function HoldSection({
  * outlet has held since the 2026-09-03 inspection (19,741 L)" — and a refusal an
  * admin cannot act on is just a broken button.
  */
-function Reasons({ row }: { row: AssuranceHoldRow }) {
+function Reasons({
+  row,
+  max,
+}: {
+  row: AssuranceHoldRow;
+  /** Print only the first `max` reasons and say how many more the report has. */
+  max?: number;
+}) {
+  const findings = max === undefined ? row.findings : row.findings.slice(0, max);
+  const reasons = max === undefined ? row.reasons : row.reasons.slice(0, max);
+  const hidden =
+    row.findings.length > 0
+      ? row.findings.length - findings.length
+      : row.reasons.length - reasons.length;
   return (
     <span className="block min-w-0">
       {row.neverChecked ? (
@@ -504,14 +555,14 @@ function Reasons({ row }: { row: AssuranceHoldRow }) {
             {DECISION_NOTE[row.decision] ?? 'No reason was recorded.'}
           </span>
         ) : (
-          row.reasons.map((reason, i) => (
+          reasons.map((reason, i) => (
             <span key={i} className="mt-0.5 block break-words text-sm text-text-muted">
               {reason}
             </span>
           ))
         )
       ) : (
-        row.findings.map((f, i) => (
+        findings.map((f, i) => (
           <span key={i} className="mt-0.5 block break-words text-sm text-text-muted">
             {f.source === 'MODEL' ? (
               <span className="mr-1 whitespace-nowrap text-xs text-text-subtle">
@@ -522,6 +573,11 @@ function Reasons({ row }: { row: AssuranceHoldRow }) {
           </span>
         ))
       )}
+      {hidden > 0 ? (
+        <span className="mt-0.5 block text-xs text-text-subtle">
+          +{hidden} more on the report
+        </span>
+      ) : null}
     </span>
   );
 }

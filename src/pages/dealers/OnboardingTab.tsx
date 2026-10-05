@@ -34,6 +34,7 @@ import {
   useStepReopenMutation,
 } from '@/hooks/api/useDealerOnboarding';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { copyText } from '@/lib/clipboard';
 import { formatDateTime } from '@/lib/format';
 import { generatePassword } from '@/lib/password';
 import { ONBOARDING_STEPS, stepById } from '@dk/shared';
@@ -90,7 +91,7 @@ export function OnboardingTab({ dealer }: Props) {
         <Card>
           <CardContent>
             <div className="flex items-center gap-3">
-              <div className="rounded-full bg-success-soft p-2 text-success">
+              <div className="rounded-full bg-success-soft p-2 text-success-strong md:text-success">
                 <Check width={18} height={18} />
               </div>
               <div>
@@ -408,12 +409,11 @@ function ComposeMessageBlock({
   const [copied, setCopied] = useState(false);
 
   async function copy() {
-    try {
-      await navigator.clipboard.writeText(message);
+    if (await copyText(message)) {
       setCopied(true);
       toast.success('Message copied');
       window.setTimeout(() => setCopied(false), 1500);
-    } catch {
+    } else {
       toast.error('Could not copy — copy manually from the field.');
     }
   }
@@ -632,8 +632,13 @@ function CollectPhoneForm({
         <Label htmlFor="collect-phone" required>
           Phone number
         </Label>
+        {/* `tel` for the number pad; autofill OFF because the browser would
+            offer the ADMIN's own number into the dealer's record. */}
         <Input
           id="collect-phone"
+          type="tel"
+          inputMode="tel"
+          autoComplete="off"
           placeholder="+91 90000 00000"
           invalid={!!errors.phone}
           {...register('phone')}
@@ -730,12 +735,11 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   const toast = useToast();
   const [copied, setCopied] = useState(false);
   async function copy() {
-    try {
-      await navigator.clipboard.writeText(value);
+    if (await copyText(value)) {
       setCopied(true);
       toast.success(`${label} copied`);
       window.setTimeout(() => setCopied(false), 1500);
-    } catch {
+    } else {
       toast.error(
         'Could not copy. Both values are in the fields below — tap one and long-press to copy it.',
       );
@@ -898,15 +902,28 @@ function IssueAppLoginForm({
     setValue('password', pw, { shouldValidate: true, shouldDirty: true });
   }
 
+  // When both of `copyText`'s rungs refuse, the password is in an `<input>`,
+  // the one kind of element `#root`'s `user-select: none` leaves selectable — so
+  // it is selected for the admin and the toast says so, instead of "copy it
+  // manually" pointing at nothing they can highlight.
   async function copyPassword() {
-    try {
-      await navigator.clipboard.writeText(getValues('password'));
+    if (await copyText(getValues('password'))) {
       setCopiedPw(true);
       toast.success('Password copied');
       window.setTimeout(() => setCopiedPw(false), 1500);
-    } catch {
-      toast.error('Could not copy — copy manually.');
+      return;
     }
+    const field = document.getElementById('app-password') as HTMLInputElement | null;
+    if (field) {
+      field.focus({ preventScroll: true });
+      field.setSelectionRange(0, field.value.length);
+    }
+    toast.info(
+      field
+        ? 'This device would not let the app use the clipboard. The password is selected — long-press it and choose Copy.'
+        : 'This device would not let the app use the clipboard.',
+      { duration: 8000 },
+    );
   }
 
   const submit = handleSubmit(async (values) => {
@@ -997,6 +1014,9 @@ function IssueAppLoginForm({
         <Label htmlFor="app-phone">Phone (optional)</Label>
         <Input
           id="app-phone"
+          type="tel"
+          inputMode="tel"
+          autoComplete="off"
           placeholder="+91…"
           invalid={!!errors.phone}
           {...register('phone')}

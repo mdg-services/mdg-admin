@@ -20,6 +20,7 @@ import { formatDateTime } from '@/lib/format';
 import { dsrArtifactName, dsrDateLabel } from './DsrReportPanel';
 import { EditShiftDataButton } from './EditShiftDataButton';
 import { GenerateDsrButton, GenerateDsrForDate } from './GenerateDsrButton';
+import { useDsrRunWatcher } from './useDsrRunWatcher';
 
 /**
  * The two DSR toolbars, in one place.
@@ -39,10 +40,11 @@ import { GenerateDsrButton, GenerateDsrForDate } from './GenerateDsrButton';
  * The consequence to know: a landscape phone is already ≥ md (852×393), so
  * ROTATING THE DEVICE crosses the branch and remounts whatever it swaps. The
  * only state worth protecting from that is `GenerateDsrButton`'s in-flight run
- * watcher, and `DsrReportActions` below keeps that element in the same child
- * slot in both shapes for exactly this reason. The date typed into "Generate
- * for a date" is not protected and does not need to be — it is re-picked in one
- * tap, and the queued run is already server-side.
+ * watcher. `DsrReportActions` below keeps that element in the same child slot
+ * in both shapes for exactly this reason; `DsrDateToolbar` holds its watcher
+ * itself, above both branches. The date typed into "Generate for a date" is not
+ * protected and does not need to be — it is re-picked in one tap, and the
+ * queued run is already server-side.
  */
 
 export interface DsrDateToolbarProps {
@@ -96,6 +98,13 @@ export function DsrDateToolbar({
   const isMd = useMediaQuery('(min-width: 768px)');
   const [open, setOpen] = React.useState(false);
   const selectId = React.useId();
+  // The back-dated run is watched HERE, not inside the button. Below md the
+  // button lives in a `Sheet`, the sheet closes once the run is queued, and a
+  // closed `Sheet` renders nothing — so a watcher inside it was unmounted
+  // before its first poll, and the admin was told the report "updates when it
+  // lands" by a screen that never updated. The toolbar stays mounted, and
+  // across a rotation too, since both shapes below are this one component.
+  const run = useDsrRunWatcher(dealerId, 'Report ready — it is showing below.');
 
   const dateField = (
     <>
@@ -139,7 +148,11 @@ export function DsrDateToolbar({
                 </p>
               ) : null}
             </div>
-            <GenerateDsrForDate dealerId={dealerId} onGenerated={onGenerated} />
+            <GenerateDsrForDate
+              dealerId={dealerId}
+              onGenerated={onGenerated}
+              watcher={run}
+            />
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <EditShiftDataButton
@@ -195,6 +208,7 @@ export function DsrDateToolbar({
           <div className="grid gap-3 px-4 py-2">
             <GenerateDsrForDate
               dealerId={dealerId}
+              watcher={run}
               onGenerated={(d) => {
                 setOpen(false);
                 onGenerated(d);
