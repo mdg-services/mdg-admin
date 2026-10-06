@@ -202,7 +202,7 @@ export function fuelRow(pool: LoadPlanPool): FuelRow {
     spare: formatLitres(pool.spare, { sign: true }),
     spareNegative: pool.spare < 0,
     sellsPerDay: sellsPerDayLabel(pool.ratePerDay, pool.busyPerDay),
-    daysLeft: pool.daysLeft == null ? NO_VALUE : `${pool.daysLeft.toFixed(1)} days`,
+    daysLeft: pool.daysLeft == null ? NO_VALUE : `${Math.max(0, pool.daysLeft).toFixed(1)} days`,
     runsOut: pool.runOutOn ? formatYmd(pool.runOutOn) : NO_VALUE,
     onTheWay: pool.onTheWay > 0 ? formatLitres(pool.onTheWay) : NO_VALUE,
     atLine: pool.atLine,
