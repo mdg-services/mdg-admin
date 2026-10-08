@@ -130,8 +130,26 @@ function labelFor(key: string | null, map: Record<string, string>, fallback = 'E
 
 /* ───────────────────────────── section 3 — the truck ─────────────────────── */
 
-export function truckDatesLine(truck: Pick<LoadPlanTruck, 'orderOn' | 'arriveOn'>): string {
-  return `Order on ${formatYmd(truck.orderOn)} · unload on ${formatYmd(truck.arriveOn)}`;
+/** `16:00` → `4:00 PM`; `null` for anything that will not parse. */
+export function clock12(hhmm: string | null | undefined): string | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm ?? '');
+  if (!m) return null;
+  const h = Number(m[1]);
+  return `${h % 12 === 0 ? 12 : h % 12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+/** `Order on 7 Oct · loaded at the depot 8 Oct · unloaded about 4:00 PM, 8 Oct`. Older plans
+ *  carry no loading day or time and read as before. */
+export function truckDatesLine(
+  truck: Pick<LoadPlanTruck, 'orderOn' | 'arriveOn' | 'loadOn' | 'arriveTime' | 'arriveDate'>,
+): string {
+  const parts = [`Order on ${formatYmd(truck.orderOn)}`];
+  if (truck.loadOn) parts.push(`loaded at the depot ${formatYmd(truck.loadOn)}`);
+  const at = clock12(truck.arriveTime);
+  parts.push(
+    at ? `unloaded about ${at}, ${formatYmd(truck.arriveDate ?? truck.arriveOn)}` : `unload on ${formatYmd(truck.arriveOn)}`,
+  );
+  return parts.join(' · ');
 }
 
 export interface ChamberTile {
@@ -163,7 +181,8 @@ export function nextTruckLine(truck: LoadPlanTruck, poolLabelByKey: Record<strin
   const fuels = filled
     .map((c) => `${labelFor(c.poolKey, poolLabelByKey)} ${formatLitres(c.litres)}`)
     .join(' · ');
-  return `${formatYmd(truck.orderOn)} → unload ${formatYmd(truck.arriveOn)}: ${fuels || 'nothing yet decided'}`;
+  const load = truck.loadOn ? ` → loads ${formatYmd(truck.loadOn)}` : '';
+  return `${formatYmd(truck.orderOn)}${load} → unload ${formatYmd(truck.arriveOn)}: ${fuels || 'nothing yet decided'}`;
 }
 
 export function estimatedCostLine(cost: number | null): string {
@@ -264,7 +283,7 @@ export function tankRow(tank: LoadPlanTank): TankRow {
     key: tank.tankNo,
     label: `Tank ${tank.tankNo}`,
     stock: tank.stock == null ? 'No reading this morning' : formatLitres(tank.stock),
-    fillUpTo: formatLitres(tank.capacityLitres),
+    fillUpTo: `${formatLitres(tank.capacityLitres)}${tank.estimated ? ' (estimate)' : ''}`,
     room: tank.room == null ? NO_VALUE : formatLitres(tank.room),
     noReading: tank.stock == null,
   };
@@ -320,7 +339,48 @@ export function measuredLeadTimeLine(leadTime: LoadPlanLeadTime): string {
 }
 
 export function leadTimeSettingLine(days: number): string {
-  return `Setting: ${days} day${days === 1 ? '' : 's'} from order to unloading`;
+  return `Orders are loaded ${days} day${days === 1 ? '' : 's'} later, on the next day the depot is open`;
+}
+
+/**
+ * The tanker timing the plan used, one plain line each: where it loads, when the
+ * depot invoices, how long until it is unloaded, and whether each figure was
+ * measured from this outlet's own trucks or is the setting standing in for it.
+ * Plans made before timing was stored carry none of it and get the old two lines.
+ */
+export function tankerTimingLines(
+  plan: Pick<LoadPlan, 'leadTime' | 'settings'>,
+): string[] {
+  const lines: string[] = [];
+  const { depotName, distanceKm, leadTimeDays } = plan.settings;
+  if (depotName) lines.push(`Loads at ${depotName}${distanceKm ? ` · ${distanceKm} km away` : ''}`);
+  const lt = plan.leadTime;
+  if (lt.loadTime) {
+    const at = clock12(lt.loadTime) ?? lt.loadTime;
+    lines.push(
+      lt.loadTimeFrom === 'MEASURED'
+        ? `The depot usually invoices around ${at} (from this outlet's own invoices)`
+        : `The depot is taken to invoice around ${at} (setting — not enough invoices yet)`,
+    );
+  }
+  if (lt.usedHours != null) {
+    const h = Math.round(lt.usedHours * 10) / 10;
+    lines.push(
+      lt.usedFrom === 'MEASURED'
+        ? `Unloaded about ${h} h after the invoice — measured over ${lt.samples} truck${lt.samples === 1 ? '' : 's'}`
+        : `Unloaded about ${h} h after the invoice — setting, until 5 trucks are measured (${lt.samples} so far)`,
+    );
+  } else {
+    lines.push(`Invoice to unloading: ${measuredLeadTimeLine(lt)}`);
+  }
+  lines.push(leadTimeSettingLine(leadTimeDays));
+  return lines;
+}
+
+/** `Sun 11 Oct, Sun 18 Oct`, or a plain sentence when the depot is open all week but Sunday. */
+export function depotClosedLine(days: readonly string[] | undefined): string {
+  if (!days || days.length === 0) return 'Open every day this week';
+  return days.map((d) => formatYmd(d, { weekday: true })).join(', ');
 }
 
 /* ───────────────────────── section 8 — card + actions ─────────────────────── */

@@ -81,6 +81,13 @@ const DataVaultPage = React.lazy(
     import('@/pages/DataVaultPage').then((m) => ({ default: m.DataVaultPage })),
   ),
 );
+const DepotHolidaysPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/DepotHolidaysPage').then((m) => ({
+      default: m.DepotHolidaysPage,
+    })),
+  ),
+);
 const DealerDetailPage = React.lazy(
   retryImport(() =>
     import('@/pages/DealerDetailPage').then((m) => ({
@@ -520,6 +527,20 @@ export default function App() {
               <RequireSuperAdmin>
                 <LazyPage>
                   <BankHolidaysPage />
+                </LazyPage>
+              </RequireSuperAdmin>
+            }
+          />
+          {/* The depot (Barauni Terminal) closure calendar the Load Planner
+              reads. Same blast radius as bank holidays — it moves what every
+              dealer is told about ordering ahead of a closure — so it gets
+              the same super-admin gate. */}
+          <Route
+            path="depot-holidays"
+            element={
+              <RequireSuperAdmin>
+                <LazyPage>
+                  <DepotHolidaysPage />
                 </LazyPage>
               </RequireSuperAdmin>
             }

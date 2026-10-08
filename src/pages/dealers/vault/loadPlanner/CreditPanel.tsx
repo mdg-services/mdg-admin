@@ -3,7 +3,7 @@ import { Truck } from 'lucide-react';
 import { Card, CardContent, CardHeader, EmptyState, KeyValueList } from '@/components/ui';
 import type { LoadPlan } from '@dk/shared';
 
-import { creditBoxLines, inTransitLine, leadTimeSettingLine, measuredLeadTimeLine, poolLabelMap } from './format';
+import { creditBoxLines, depotClosedLine, inTransitLine, poolLabelMap, tankerTimingLines } from './format';
 
 /** What is already on the road, whether credit covers the next truck, and how
  *  long a truck actually takes to unload once ordered — three facts an admin
@@ -54,10 +54,17 @@ export function CreditPanel({ plan }: { plan: LoadPlan }) {
             ]}
           />
           <div className="border-t border-border pt-3">
-            <p className="text-sm text-text">
-              Invoice to unloading: <span className="font-medium">{measuredLeadTimeLine(plan.leadTime)}</span>
+            <p className="text-sm font-medium text-text">Tanker timing</p>
+            <ul className="mt-1 grid gap-0.5 text-sm text-text-muted">
+              {tankerTimingLines(plan).map((line) => (
+                <li key={line} className="min-w-0 break-words">
+                  {line}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-sm text-text">
+              Depot closed: <span className="font-medium">{depotClosedLine(plan.depotClosed)}</span>
             </p>
-            <p className="mt-0.5 text-sm text-text-muted">{leadTimeSettingLine(plan.settings.leadTimeDays)}</p>
           </div>
         </CardContent>
       </Card>

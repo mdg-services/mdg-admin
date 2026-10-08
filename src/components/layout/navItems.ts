@@ -22,6 +22,7 @@ import {
   ShieldPlus,
   UserCog,
   Users,
+  Warehouse,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
@@ -127,6 +128,10 @@ export const NAV_ITEMS: NavItem[] = [
   // wrapped in `RequireSuperAdmin` to match.
   { to: '/document-kinds', label: 'Document catalog', icon: FileCog, superAdminOnly: true },
   { to: '/bank-holidays', label: 'Bank holidays', icon: CalendarDays, superAdminOnly: true },
+  // The depot (Barauni Terminal) closure calendar the Load Planner reads to
+  // tell a dealer to order earlier before a closure. Same blast radius as
+  // bank holidays, so it sits right beside it with the same gate.
+  { to: '/depot-holidays', label: 'Depot holidays', icon: Warehouse, superAdminOnly: true },
   { to: '/festival', label: 'Festival greeting', icon: PartyPopper, superAdminOnly: true },
   { to: '/activity', label: 'Activity', icon: ScrollText, superAdminOnly: true },
   { to: '/settings/team', label: 'Team', icon: UserCog, superAdminOnly: true },

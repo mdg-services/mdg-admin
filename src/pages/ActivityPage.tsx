@@ -70,7 +70,9 @@ function actionIntent(action: string): Intent {
     action === 'CONVERSATION_STARTED' ||
     action === 'CONVERSATION_RESOLVED' ||
     action === 'CREDIT_DOD_SHARE' ||
-    action === 'BANK_HOLIDAY_CONFIRM'
+    action === 'BANK_HOLIDAY_CONFIRM' ||
+    action === 'DEPOT_HOLIDAY_CONFIRM' ||
+    action === 'LOAD_PLAN_APPROVE_AND_SHARE'
   ) {
     return 'success';
   }
