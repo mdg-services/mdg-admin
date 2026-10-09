@@ -10,6 +10,7 @@ import {
   type LoadPlanLeadTime,
   type LoadPlanOutcome,
   type LoadPlanPool,
+  type LoadPlanProjectionDay,
   type LoadPlanScorecard,
   type LoadPlanStatus,
   type LoadPlanSummary,
@@ -187,6 +188,55 @@ export function nextTruckLine(truck: LoadPlanTruck, poolLabelByKey: Record<strin
 
 export function estimatedCostLine(cost: number | null): string {
   return cost == null ? 'Cost not known — a fuel price is missing' : formatInrWhole(cost);
+}
+
+/* ───────────────────── section 2b — the four-day projection ─────────────────── */
+
+/**
+ * How many days ahead the plan looked: the length of its projection (four —
+ * IndianOil takes projections that far and no further), or seven for a plan
+ * made before projections existed, which sketched a week.
+ */
+export function planWindowDays(plan: Pick<LoadPlan, 'projection'>): number {
+  return plan.projection && plan.projection.length > 0 ? plan.projection.length : 7;
+}
+
+/** The fuels in the words the dealer's card uses, listed diesel first. */
+const FUEL_WORD: Record<string, string> = { HSD: 'Diesel', MS: 'Petrol', XP: 'XP95', XG: 'XtraGreen' };
+const FUEL_ORDER = ['HSD', 'MS', 'XP', 'XG'];
+
+/** `1 tanker: Diesel 8,000 L · Petrol 4,000 L`, or `No order` — the same words as the dealer's card. */
+export function projectionOrderLine(day: Pick<LoadPlanProjectionDay, 'tankers' | 'litres'>): string {
+  if (day.tankers === 0) return 'No order';
+  const fuels = Object.keys(day.litres).sort(
+    (a, b) => (FUEL_ORDER.indexOf(a) + 1 || 99) - (FUEL_ORDER.indexOf(b) + 1 || 99),
+  );
+  const what = fuels.map((f) => `${FUEL_WORD[f] ?? f} ${formatLitres(day.litres[f])}`).join(' · ');
+  return `${day.tankers} tanker${day.tankers === 1 ? '' : 's'}: ${what}`;
+}
+
+export interface ProjectionRow {
+  key: string;
+  /** `Fri 9 Oct`. */
+  dayLabel: string;
+  depotClosed: boolean;
+  ordering: boolean;
+  orderLine: string;
+  /** Days of spare that morning per pool key — `2.3 days`, or `—` with no daily sale. */
+  daysLeft: Record<string, string>;
+}
+
+export function projectionRows(days: readonly LoadPlanProjectionDay[]): ProjectionRow[] {
+  return days.map((d) => ({
+    key: d.date,
+    dayLabel: formatYmd(d.date, { weekday: true }),
+    depotClosed: d.depotClosed,
+    ordering: d.tankers > 0,
+    orderLine: projectionOrderLine(d),
+    daysLeft: Object.fromEntries(
+      d.pools.map((p) => [p.key, p.daysLeft == null ? NO_VALUE : `${Math.max(0, p.daysLeft).toFixed(1)} days`]),
+    ),
+  }));
 }
 
 /* ───────────────────────────── section 4 — fuel table ────────────────────── */
@@ -378,8 +428,8 @@ export function tankerTimingLines(
 }
 
 /** `Sun 11 Oct, Sun 18 Oct`, or a plain sentence when the depot is open all week but Sunday. */
-export function depotClosedLine(days: readonly string[] | undefined): string {
-  if (!days || days.length === 0) return 'Open every day this week';
+export function depotClosedLine(days: readonly string[] | undefined, windowDays: number): string {
+  if (!days || days.length === 0) return `Open on each of the next ${windowDays} days`;
   return days.map((d) => formatYmd(d, { weekday: true })).join(', ');
 }
 

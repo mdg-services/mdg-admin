@@ -3,7 +3,14 @@ import { Truck } from 'lucide-react';
 import { Card, CardContent, CardHeader, EmptyState, KeyValueList } from '@/components/ui';
 import type { LoadPlan } from '@dk/shared';
 
-import { creditBoxLines, depotClosedLine, inTransitLine, poolLabelMap, tankerTimingLines } from './format';
+import {
+  creditBoxLines,
+  depotClosedLine,
+  inTransitLine,
+  planWindowDays,
+  poolLabelMap,
+  tankerTimingLines,
+} from './format';
 
 /** What is already on the road, whether credit covers the next truck, and how
  *  long a truck actually takes to unload once ordered — three facts an admin
@@ -63,7 +70,7 @@ export function CreditPanel({ plan }: { plan: LoadPlan }) {
               ))}
             </ul>
             <p className="mt-2 text-sm text-text">
-              Depot closed: <span className="font-medium">{depotClosedLine(plan.depotClosed)}</span>
+              Depot closed: <span className="font-medium">{depotClosedLine(plan.depotClosed, planWindowDays(plan))}</span>
             </p>
           </div>
         </CardContent>

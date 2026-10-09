@@ -13,6 +13,7 @@ import { poolLabelMap } from './loadPlanner/format';
 import { FuelTable } from './loadPlanner/FuelTable';
 import { HeadlineBanner } from './loadPlanner/HeadlineBanner';
 import { HistoryTable } from './loadPlanner/HistoryTable';
+import { ProjectionTable } from './loadPlanner/ProjectionTable';
 import { Scorecard } from './loadPlanner/Scorecard';
 import { TanksTable } from './loadPlanner/TanksTable';
 import { TruckPlan } from './loadPlanner/TruckPlan';
@@ -124,6 +125,7 @@ export function DealerLoadPlannerPane({ dealer }: DealerVaultPaneProps) {
     <div className="grid gap-4">
       <HeadlineBanner plan={plan} todayYmd={istTodayYmd()} />
       <TruckPlan plan={plan} />
+      <ProjectionTable plan={plan} />
       <FuelTable pools={plan.pools} />
       <TanksTable tanks={plan.pools.flatMap((p) => p.tanks)} />
       <CreditPanel plan={plan} />

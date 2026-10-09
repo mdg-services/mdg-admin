@@ -3,7 +3,7 @@ import { Truck } from 'lucide-react';
 import { Card, CardContent, CardHeader, EmptyState } from '@/components/ui';
 import type { LoadPlan, LoadPlanTruck } from '@dk/shared';
 
-import { chamberTiles, estimatedCostLine, nextTruckLine, poolLabelMap, truckDatesLine } from './format';
+import { chamberTiles, estimatedCostLine, nextTruckLine, planWindowDays, poolLabelMap, truckDatesLine } from './format';
 
 /**
  * The recommended truck — the reason this plan exists — and a plain sketch of
@@ -18,6 +18,7 @@ import { chamberTiles, estimatedCostLine, nextTruckLine, poolLabelMap, truckDate
  */
 export function TruckPlan({ plan }: { plan: LoadPlan }) {
   const labels = poolLabelMap(plan.pools);
+  const windowDays = planWindowDays(plan);
 
   return (
     <div className="grid gap-3">
@@ -27,7 +28,7 @@ export function TruckPlan({ plan }: { plan: LoadPlan }) {
           {plan.truck ? (
             <p className="text-sm text-text-muted">{truckDatesLine(plan.truck)}</p>
           ) : (
-            <p className="text-sm text-text-muted">Nothing recommended in the next 7 days.</p>
+            <p className="text-sm text-text-muted">Nothing recommended in the next {windowDays} days.</p>
           )}
         </CardHeader>
         <CardContent>
@@ -62,8 +63,8 @@ export function TruckPlan({ plan }: { plan: LoadPlan }) {
           ) : (
             <EmptyState
               icon={<Truck width={24} height={24} strokeWidth={1.75} />}
-              title="No order needed this week"
-              description="Every fuel has enough spare to last the next 7 days at the normal rate."
+              title={`No order needed in the next ${windowDays} days`}
+              description={`Every fuel has enough spare to last the next ${windowDays} days at the normal rate.`}
             />
           )}
         </CardContent>
@@ -73,7 +74,7 @@ export function TruckPlan({ plan }: { plan: LoadPlan }) {
         <Card>
           <CardHeader>
             <p className="text-base font-semibold text-text">Then</p>
-            <p className="text-sm text-text-muted">The trucks after this one, over the next 7 days.</p>
+            <p className="text-sm text-text-muted">The trucks after this one, over the next {windowDays} days.</p>
           </CardHeader>
           <CardContent>
             <ul className="grid gap-1.5 text-sm text-text">
