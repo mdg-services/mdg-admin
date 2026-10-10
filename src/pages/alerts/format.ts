@@ -17,9 +17,33 @@ export function isEventAlert(alert: AdminAlert): boolean {
   return EVENT_KINDS.has(alert.kind);
 }
 
+/**
+ * A WhatsApp reply is never hidden either. Its alert is about a person, and a
+ * hidden one would go on swallowing everything that person wrote afterwards —
+ * so the server marks the messages as read and closes the alert, and their
+ * next message raises a new one.
+ */
+export function isReplyAlert(alert: AdminAlert): boolean {
+  return alert.kind === 'whatsapp_reply';
+}
+
+/** Whether the row's button closes the alert for good rather than hiding it. */
+export function closesWhenPressed(alert: AdminAlert): boolean {
+  return isEventAlert(alert) || isReplyAlert(alert);
+}
+
 /** The label on the row's button for an open alert. */
 export function hideLabel(alert: AdminAlert): string {
+  if (isReplyAlert(alert)) return 'Mark as read';
   return isEventAlert(alert) ? 'Mark as seen' : 'Hide';
+}
+
+/** What the toast says once that button has worked. */
+export function hiddenToast(alert: AdminAlert): string {
+  if (isReplyAlert(alert)) return 'Marked as read. Their next message will alert you again.';
+  return isEventAlert(alert)
+    ? 'Marked as seen.'
+    : 'Hidden. It moves to Cleared on its own once it is fixed.';
 }
 
 /**

@@ -21,7 +21,7 @@ import {
 import { useBusyIds } from '@/hooks/useBusyIds';
 import { ADMIN_ALERT_KIND_INFO, type AdminAlert } from '@dk/shared';
 
-import { alertAge, hiddenBy, hideLabel, howItCleared, isEventAlert, opensSomewhere } from './format';
+import { alertAge, hiddenBy, hiddenToast, hideLabel, howItCleared, opensSomewhere } from './format';
 
 const VIEWS: readonly AlertView[] = ['open', 'dismissed', 'cleared'];
 
@@ -93,9 +93,7 @@ export function AlertsPage() {
     void busy.run(alert.id, async () => {
       try {
         await dismiss.mutateAsync(alert.id);
-        toast.success(
-          isEventAlert(alert) ? 'Marked as seen.' : 'Hidden. It moves to Cleared on its own once it is fixed.',
-        );
+        toast.success(hiddenToast(alert));
       } catch (e) {
         toast.error((e as Error).message || 'That did not go through.');
       }

@@ -12,6 +12,7 @@ import {
   Headset,
   LayoutDashboard,
   ListChecks,
+  MessageCircle,
   MessageSquare,
   PartyPopper,
   Plug,
@@ -114,6 +115,11 @@ export const NAV_ITEMS: NavItem[] = [
   // The two Dealer Kavach films on mdgservices.in: views, how far people get,
   // where they stop, and the share links that send people there (ADR 0015).
   { to: '/films', label: 'Films', icon: Clapperboard, superAdminOnly: true },
+  // What people have written back to the WhatsApp number our promotions go
+  // out from. There is no handset behind that number, so this is the only
+  // place a reply is read. Super-admin for the reason the two above are: they
+  // are members of the public, with their numbers and their words.
+  { to: '/whatsapp', label: 'WhatsApp replies', icon: MessageCircle, superAdminOnly: true },
   { to: '/services', label: 'Service Catalog', icon: Plug, superAdminOnly: true },
   { to: '/runs', label: 'Run History', icon: Activity, superAdminOnly: true },
   { to: '/users', label: 'All Users', icon: Users, superAdminOnly: true },

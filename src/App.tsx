@@ -131,6 +131,13 @@ const DsrVaultPage = React.lazy(
     import('@/pages/DsrVaultPage').then((m) => ({ default: m.DsrVaultPage })),
   ),
 );
+const WhatsAppRepliesPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/whatsapp/WhatsAppRepliesPage').then((m) => ({
+      default: m.WhatsAppRepliesPage,
+    })),
+  ),
+);
 const FilmsPage = React.lazy(
   retryImport(() =>
     import('@/pages/FilmsPage').then((m) => ({ default: m.FilmsPage })),
@@ -448,6 +455,19 @@ export default function App() {
               <RequireSuperAdmin>
                 <LazyPage>
                   <FilmsPage />
+                </LazyPage>
+              </RequireSuperAdmin>
+            }
+          />
+          {/* Replies to our WhatsApp number, behind the `whatsapp_reply` alert.
+              Super-admin, as the API is (`requireSuperAdmin`). Keep in step
+              with `superAdminOnly` in navItems.ts. */}
+          <Route
+            path="whatsapp"
+            element={
+              <RequireSuperAdmin>
+                <LazyPage>
+                  <WhatsAppRepliesPage />
                 </LazyPage>
               </RequireSuperAdmin>
             }
