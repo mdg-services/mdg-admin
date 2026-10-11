@@ -47,6 +47,13 @@ export const CODE_COPY: Record<string, CreditDodFailureCopy> = {
       "dealer now stop, so the dealer's account is not locked by repeated wrong attempts. Get the current password " +
       'from the dealer and save it in the SDMS section; checks restart by themselves within 15 minutes.',
   },
+  SDMS_PASSWORD_REFUSED: {
+    title: 'Not run: SDMS already refused this outlet\'s saved password.',
+    hint:
+      "IndianOil refused the saved ID and password on an earlier run, so this outlet is on hold and nothing " +
+      "was sent this time — each wrong attempt walks the dealer's own login toward a lockout. Get the current " +
+      'password from the dealer and save it in the SDMS section (saving the same one again also lifts the hold), then run again.',
+  },
   LOGIN_NO_RESPONSE: {
     title: 'SDMS took our sign-in but never answered.',
     hint:
