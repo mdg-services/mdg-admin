@@ -2,10 +2,10 @@ import { RefreshCw } from 'lucide-react';
 import * as React from 'react';
 
 import {
-  ShareAudiencePicker,
+  ShareAudienceNote,
+  ShareMenu,
   shareResultMessage,
-  useShareAudience,
-} from '@/components/share/ShareAudiencePicker';
+} from '@/components/share/ShareMenu';
 import {
   ActionRow,
   Button,
@@ -30,7 +30,7 @@ import {
   useLoadPlanCard,
 } from '@/hooks/api/useLoadPlanner';
 import { ApiError } from '@/lib/api';
-import { dealerCodeLabel, type Dealer, type LoadPlan } from '@dk/shared';
+import { dealerCodeLabel, type Dealer, type LoadPlan, type ShareAudience } from '@dk/shared';
 
 import { approveConfirmDescription, canActOnPlan, cannotActReason, dismissReasonProblem } from './format';
 import { useLoadPlannerRunWatcher } from './useLoadPlannerRunWatcher';
@@ -61,7 +61,7 @@ export function CardActions({
   const runWatch = useLoadPlannerRunWatcher(dealer.id);
 
   const [approveOpen, setApproveOpen] = React.useState(false);
-  const [audience, setAudience] = useShareAudience('load-plan');
+  const [audience, setAudience] = React.useState<ShareAudience>('owners');
   const [dismissOpen, setDismissOpen] = React.useState(false);
   const [reason, setReason] = React.useState('');
   const [reasonTouched, setReasonTouched] = React.useState(false);
@@ -177,9 +177,15 @@ export function CardActions({
           <Button variant="ghost" disabled={!canAct} onClick={() => setDismissOpen(true)}>
             Dismiss
           </Button>
-          <Button disabled={!canAct || !cardQ.data} onClick={() => setApproveOpen(true)}>
-            Approve and send to {label}
-          </Button>
+          <ShareMenu
+            label={`Approve and send to ${label}`}
+            align="end"
+            disabled={!canAct || !cardQ.data}
+            onPick={(a) => {
+              setAudience(a);
+              setApproveOpen(true);
+            }}
+          />
         </ActionRow>
         {disabledReason ? (
           <p className="text-xs text-text-subtle">{disabledReason}</p>
@@ -196,7 +202,7 @@ export function CardActions({
         description={
           <>
             <p className="mb-3">{approveConfirmDescription(label)}</p>
-            <ShareAudiencePicker value={audience} onChange={setAudience} />
+            <ShareAudienceNote audience={audience} />
           </>
         }
         confirmLabel="Send"

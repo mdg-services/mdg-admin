@@ -6,6 +6,12 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { focusQuietly, useOverlayEntry } from '@/hooks/useOverlayStack';
 import { cn } from '@/lib/cn';
 
+import {
+  BUTTON_SIZES,
+  BUTTON_VARIANTS,
+  type ButtonSize,
+  type ButtonVariant,
+} from './Button';
 import { Portal } from './Portal';
 
 /** Gap kept between the popover and the edge of the viewport. */
@@ -35,6 +41,18 @@ export interface MenuProps {
    *  through `triggerClassName` would not replace the square one; this is the
    *  supported way to ask for the other shape. */
   triggerShape?: 'icon' | 'auto';
+  /**
+   * Paint the trigger as a `Button` of this variant, sized like
+   * `Button size={triggerSize}`, instead of the quiet overflow look — for a
+   * menu whose trigger IS the screen's main action, such as "Send to dealer ▾".
+   * Replaces `triggerShape`. A variant cannot be reached through
+   * `triggerClassName`: `cn` is plain clsx, so `bg-brand` would land beside the
+   * quiet look's `text-text-muted` and stylesheet order would pick the winner.
+   */
+  triggerVariant?: ButtonVariant;
+  triggerSize?: ButtonSize;
+  /** A dead trigger: the action behind the menu is not available yet. */
+  triggerDisabled?: boolean;
   children: React.ReactNode;
 }
 
@@ -67,6 +85,9 @@ export function Menu({
   align = 'end',
   triggerClassName,
   triggerShape = 'icon',
+  triggerVariant,
+  triggerSize = 'md',
+  triggerDisabled = false,
   children,
 }: MenuProps) {
   const isMd = useMediaQuery('(min-width: 768px)');
@@ -86,6 +107,13 @@ export function Menu({
   // Escape when focus has wandered out of the panel, and Back. The panel's own
   // key handler takes Escape first while focus is inside it.
   useOverlayEntry(open, close, { dismissOnPop: true });
+
+  // A trigger that goes dead while its list is open — a report held by its
+  // check, a send already in flight — takes the list with it, so nothing can
+  // be picked from a menu whose button says it is not available.
+  React.useEffect(() => {
+    if (open && triggerDisabled) close(false);
+  }, [open, triggerDisabled, close]);
 
   const ctx = React.useMemo<MenuContextValue>(() => ({ close }), [close]);
 
@@ -259,6 +287,7 @@ export function Menu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={label}
+        disabled={triggerDisabled}
         onClick={() => (open ? close(false) : setOpen(true))}
         onKeyDown={(e) => {
           // Enter/Space already fire a click on a <button>; arrows are the extra
@@ -269,10 +298,16 @@ export function Menu({
           }
         }}
         className={cn(
-          'inline-flex shrink-0 items-center justify-center rounded-md',
-          'text-text-muted transition-colors hover:bg-surface-2 hover:text-text',
+          'inline-flex shrink-0 items-center justify-center rounded-md transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
-          TRIGGER_SHAPES[triggerShape],
+          triggerVariant
+            ? cn(
+                'whitespace-nowrap font-semibold',
+                'disabled:cursor-not-allowed disabled:opacity-70',
+                BUTTON_VARIANTS[triggerVariant],
+                BUTTON_SIZES[triggerSize],
+              )
+            : cn('text-text-muted hover:bg-surface-2 hover:text-text', TRIGGER_SHAPES[triggerShape]),
           triggerClassName,
         )}
       >

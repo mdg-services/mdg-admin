@@ -12,10 +12,10 @@ import {
 import * as React from 'react';
 
 import {
-  ShareAudiencePicker,
+  ShareAudienceNote,
+  ShareMenu,
   shareResultMessage,
-  useShareAudience,
-} from '@/components/share/ShareAudiencePicker';
+} from '@/components/share/ShareMenu';
 import {
   Button,
   Dialog,
@@ -31,6 +31,7 @@ import { ApiError } from '@/lib/api';
 import { formatDateTime, formatDmy, inrFormat } from '@/lib/format';
 import type { CreditDodSnapshotRecord } from '@/types/creditDod';
 import type { CreditDodRunOutput } from '@/types/serviceRun';
+import type { ShareAudience } from '@dk/shared';
 
 interface Props {
   /** The stored snapshot — the single source of truth for the whole report. */
@@ -75,7 +76,7 @@ export function CreditDodReportCard({
   });
 
   const [confirmOpen, setConfirmOpen] = React.useState(false);
-  const [audience, setAudience] = useShareAudience('credit-dod');
+  const [audience, setAudience] = React.useState<ShareAudience>('owners');
   const [cardOpen, setCardOpen] = React.useState(false);
   const alreadyShared = !!snapshot.shared;
   const imageUrl = cardImageUrl ?? snapshot.artifacts.cardUrl;
@@ -276,12 +277,14 @@ export function CreditDodReportCard({
             </span>
           </>
         ) : (
-          <Button
-            onClick={() => setConfirmOpen(true)}
-            leftIcon={<Share2 width={14} height={14} strokeWidth={1.75} />}
-          >
-            Share with dealer
-          </Button>
+          <ShareMenu
+            label="Share with dealer"
+            icon={<Share2 width={14} height={14} strokeWidth={1.75} aria-hidden />}
+            onPick={(a) => {
+              setAudience(a);
+              setConfirmOpen(true);
+            }}
+          />
         )}
       </div>
 
@@ -336,7 +339,7 @@ export function CreditDodReportCard({
             </Notice>
           </div>
         ) : null}
-        <ShareAudiencePicker value={audience} onChange={setAudience} />
+        <ShareAudienceNote audience={audience} />
       </Dialog>
 
       <ImageLightbox

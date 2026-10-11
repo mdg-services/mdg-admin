@@ -10,11 +10,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
-import {
-  ShareAudiencePicker,
-  shareResultMessage,
-  useShareAudience,
-} from '@/components/share/ShareAudiencePicker';
+import { ShareMenu, shareResultMessage } from '@/components/share/ShareMenu';
 import {
   Badge,
   Button,
@@ -49,7 +45,7 @@ import { cn } from '@/lib/cn';
 import { formatDate, formatDateTime, formatDmy, inrFormat, istTodayYmd } from '@/lib/format';
 import { StatTileRow } from '@/pages/dataVault/StatTile';
 import { IgnoreFindingDialog } from '@/pages/ledgerWatch/IgnoreFindingDialog';
-import type { LedgerFlagDto, LedgerFlagStatus } from '@dk/shared';
+import type { LedgerFlagDto, LedgerFlagStatus, ShareAudience } from '@dk/shared';
 
 import {
   FLAG_KIND_LABEL,
@@ -730,7 +726,6 @@ function DealerCard({ dealerId }: { dealerId: string }) {
     activeWindow,
   );
   const share = useShareLedgerWatchCard();
-  const [audience, setAudience] = useShareAudience('ledger-watch');
 
   function chooseMode(next: CardMode) {
     setMode(next);
@@ -897,7 +892,8 @@ function DealerCard({ dealerId }: { dealerId: string }) {
   const drawnWindow = card.window;
   const truncated = card.movements.length < card.totalMovements;
 
-  function sendIt() {
+  // No confirm step on this card: picking who it goes to IS the send.
+  function sendIt(audience: ShareAudience) {
     share.mutate(
       { dealerId, window: drawnWindow, audience },
       {
@@ -959,21 +955,17 @@ function DealerCard({ dealerId }: { dealerId: string }) {
               variant="secondary"
               size="sm"
             />
-            <Button
+            <ShareMenu
+              label="Send to dealer"
               size="sm"
-              onClick={sendIt}
+              align="end"
               disabled={empty}
               loading={share.isPending}
-              leftIcon={<Send width={14} height={14} strokeWidth={1.75} aria-hidden />}
-            >
-              Send to dealer
-            </Button>
+              icon={<Send width={14} height={14} strokeWidth={1.75} aria-hidden />}
+              onPick={sendIt}
+            />
           </div>
         </div>
-
-        {/* Who "Send to dealer" reaches. There is no confirm step on this card,
-            so the choice sits beside the button rather than in a dialog. */}
-        {!empty ? <ShareAudiencePicker value={audience} onChange={setAudience} /> : null}
 
         {/* What is ON the card, in words. An admin approving something that goes
             to a dealer should not have to squint at a thumbnail. */}

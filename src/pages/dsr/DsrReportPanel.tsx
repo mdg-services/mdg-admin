@@ -20,10 +20,10 @@ import {
   AssuranceSummaryStrip,
 } from '@/components/dsr/AssurancePanel';
 import {
-  ShareAudiencePicker,
+  ShareAudienceNote,
+  ShareMenu,
   shareResultMessage,
-  useShareAudience,
-} from '@/components/share/ShareAudiencePicker';
+} from '@/components/share/ShareMenu';
 import {
   Badge,
   Button,
@@ -53,6 +53,7 @@ import {
   type DsrProductReport,
   type DsrTankReading,
   type DsrVariationSummary,
+  type ShareAudience,
 } from '@dk/shared';
 
 import { DsrStaleNotice } from './DsrStaleNotice';
@@ -694,7 +695,7 @@ function DsrShareSection({
   const toast = useToast();
   const share = useShareDsr(report.id);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
-  const [audience, setAudience] = useShareAudience('dsr');
+  const [audience, setAudience] = React.useState<ShareAudience>('owners');
 
   const alreadyShared = !!report.shared;
   // Evaluated live rather than read off `report.assurance`: a re-baseline marks
@@ -926,13 +927,15 @@ function DsrShareSection({
                 </>
               ) : (
                 <>
-                  <Button
-                    onClick={() => setConfirmOpen(true)}
+                  <ShareMenu
+                    label="Share with dealer"
                     disabled={shareBlocked}
-                    leftIcon={<Share2 width={14} height={14} strokeWidth={1.75} />}
-                  >
-                    Share with dealer
-                  </Button>
+                    icon={<Share2 width={14} height={14} strokeWidth={1.75} aria-hidden />}
+                    onPick={(a) => {
+                      setAudience(a);
+                      setConfirmOpen(true);
+                    }}
+                  />
                   {!haveImages && !shareBlocked ? (
                     <span className="text-xs text-text-subtle">
                       The cards render when you share.
@@ -973,7 +976,7 @@ function DsrShareSection({
           </>
         }
       >
-        <ShareAudiencePicker value={audience} onChange={setAudience} />
+        <ShareAudienceNote audience={audience} />
       </Dialog>
 
       <ImageLightbox

@@ -64,7 +64,9 @@ const BRAND_TONE_VARIANTS: Partial<Record<Variant, string>> = {
 
 // The `min-h-11` floor (44px) only wins below `md`; `md:min-h-8`/`md:min-h-9`
 // restores the original desktop density so ≥ md looks identical to before.
-const SIZES: Record<Size, string> = {
+// Exported for the same reason as `BUTTON_VARIANTS`: a `Menu` whose trigger is
+// a screen's main action has to be the same size as the buttons beside it.
+export const BUTTON_SIZES: Record<Size, string> = {
   sm: 'h-8 min-h-11 md:min-h-0 px-3 text-sm gap-1.5',
   md: 'h-9 min-h-11 md:min-h-0 px-4 text-sm gap-2',
 };
@@ -127,7 +129,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
           (tone === 'brand' ? BRAND_TONE_VARIANTS[variant] : undefined) ??
             BUTTON_VARIANTS[variant],
-          padding === 'none' ? SIZES_NO_PADDING[size] : SIZES[size],
+          padding === 'none' ? SIZES_NO_PADDING[size] : BUTTON_SIZES[size],
           className,
         )}
         disabled={disabled || loading}

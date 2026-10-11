@@ -3,10 +3,10 @@ import * as React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import {
-  ShareAudiencePicker,
+  ShareAudienceNote,
+  ShareMenu,
   shareResultMessage,
-  useShareAudience,
-} from '@/components/share/ShareAudiencePicker';
+} from '@/components/share/ShareMenu';
 import {
   Badge,
   Button,
@@ -17,7 +17,7 @@ import {
 } from '@/components/ui';
 import { useOverviewActionMutation } from '@/hooks/api/useOverview';
 import { dealerCodeLabel } from '@dk/shared';
-import type { DealerDayRow, ShareOutcome } from '@dk/shared';
+import type { DealerDayRow, ShareAudience, ShareOutcome } from '@dk/shared';
 
 import {
   boardAction,
@@ -119,8 +119,7 @@ export function TodaysBoard({
     null,
   );
   const [busyId, setBusyId] = React.useState<string | null>(null);
-  // The same remembered choice as the Share button on the report itself.
-  const [audience, setAudience] = useShareAudience('dsr');
+  const [audience, setAudience] = React.useState<ShareAudience>('owners');
 
   const perform = React.useCallback(
     (row: DealerDayRow, action: BoardAction) => {
@@ -246,15 +245,27 @@ export function TodaysBoard({
         rowActions={(r) => {
           const action = boardAction(r, reportingDate);
           if (!action) return null;
+          if (action.kind === 'share') {
+            return (
+              <ShareMenu
+                label={action.label}
+                size="sm"
+                variant="secondary"
+                align="end"
+                loading={busyId === r.dealerId}
+                onPick={(a) => {
+                  setAudience(a);
+                  setPending({ row: r, action });
+                }}
+              />
+            );
+          }
           return (
             <Button
               size="sm"
               variant="secondary"
               loading={busyId === r.dealerId}
-              onClick={() => {
-                if (action.kind === 'share') setPending({ row: r, action });
-                else perform(r, action);
-              }}
+              onClick={() => perform(r, action)}
             >
               {action.label}
             </Button>
@@ -286,7 +297,7 @@ export function TodaysBoard({
           pending?.action?.kind === 'share' ? (
             <>
               <p className="mb-3">{pending.action.confirm}</p>
-              <ShareAudiencePicker value={audience} onChange={setAudience} />
+              <ShareAudienceNote audience={audience} />
             </>
           ) : undefined
         }
