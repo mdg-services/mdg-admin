@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { LoadPlan, LoadPlannerOverview } from '@dk/shared';
+import type { LoadPlan, LoadPlannerOverview, ShareAudience, ShareOutcome } from '@dk/shared';
 
 /**
  * The Load Planner's five endpoints, mounted at `/api/v1/load-planner`.
@@ -78,12 +78,7 @@ export function useDrawLoadPlanCard(planId: string | undefined) {
   });
 }
 
-export interface ApproveLoadPlanResult {
-  alreadyShared: boolean;
-  conversationId: string;
-  messageId: string;
-  plan: LoadPlan;
-}
+export type ApproveLoadPlanResult = ShareOutcome & { plan: LoadPlan };
 
 /**
  * Approve a plan and send its card into the dealer's chat.
@@ -94,7 +89,8 @@ export interface ApproveLoadPlanResult {
 export function useApproveLoadPlan(dealerId: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (planId: string) => api.post<ApproveLoadPlanResult>(`/load-planner/plans/${planId}/approve`, {}),
+    mutationFn: ({ planId, audience }: { planId: string; audience?: ShareAudience }) =>
+      api.post<ApproveLoadPlanResult>(`/load-planner/plans/${planId}/approve`, audience ? { audience } : {}),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: loadPlannerKeys.overview(dealerId) });
     },

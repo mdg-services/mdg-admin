@@ -1,4 +1,4 @@
-import type { ServiceRun } from '@dk/shared';
+import type { ServiceRun, ShareOutcome } from '@dk/shared';
 
 /**
  * Local extension of the shared ServiceRun. Until the backend publishes the
@@ -209,8 +209,4 @@ export interface CreditDodSnapshot {
 }
 
 /** Result of POST /credit-dod/snapshots/:id/share. */
-export interface CreditDodShareResult {
-  alreadyShared: boolean;
-  conversationId: string;
-  messageId: string;
-}
+export type CreditDodShareResult = ShareOutcome;

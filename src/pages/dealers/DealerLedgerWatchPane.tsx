@@ -11,6 +11,11 @@ import {
 import * as React from 'react';
 
 import {
+  ShareAudiencePicker,
+  shareResultMessage,
+  useShareAudience,
+} from '@/components/share/ShareAudiencePicker';
+import {
   Badge,
   Button,
   Card,
@@ -725,6 +730,7 @@ function DealerCard({ dealerId }: { dealerId: string }) {
     activeWindow,
   );
   const share = useShareLedgerWatchCard();
+  const [audience, setAudience] = useShareAudience('ledger-watch');
 
   function chooseMode(next: CardMode) {
     setMode(next);
@@ -893,13 +899,13 @@ function DealerCard({ dealerId }: { dealerId: string }) {
 
   function sendIt() {
     share.mutate(
-      { dealerId, window: drawnWindow },
+      { dealerId, window: drawnWindow, audience },
       {
         onSuccess: (r) =>
           toast.success(
-            r.alreadyShared
+            r.alreadyShared && !r.recipients
               ? 'This exact card has already gone to the dealer.'
-              : 'Sent — it is in the dealer’s chat now.',
+              : shareResultMessage(r, 'Sent — it is in the dealer’s chat now.'),
           ),
         onError: (err) =>
           toast.error(err instanceof ApiError ? err.message : 'Could not send the card'),
@@ -964,6 +970,10 @@ function DealerCard({ dealerId }: { dealerId: string }) {
             </Button>
           </div>
         </div>
+
+        {/* Who "Send to dealer" reaches. There is no confirm step on this card,
+            so the choice sits beside the button rather than in a dialog. */}
+        {!empty ? <ShareAudiencePicker value={audience} onChange={setAudience} /> : null}
 
         {/* What is ON the card, in words. An admin approving something that goes
             to a dealer should not have to squint at a thumbnail. */}

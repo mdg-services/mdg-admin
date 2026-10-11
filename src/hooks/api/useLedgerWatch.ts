@@ -7,6 +7,8 @@ import {
 
 import { api } from '@/lib/api';
 import type {
+  ShareAudience,
+  ShareOutcome,
   LedgerFlagDto,
   LedgerFlagKind,
   LedgerFlagSeverity,
@@ -397,11 +399,7 @@ export interface LedgerWatchCard {
   movements: LedgerWatchCardMovement[];
 }
 
-export interface LedgerWatchShareResult {
-  alreadyShared: boolean;
-  conversationId: string;
-  messageId: string;
-}
+export type LedgerWatchShareResult = ShareOutcome;
 
 /**
  * Fetch (and, server-side, draw) the dealer's card.
@@ -454,15 +452,17 @@ export function useShareLedgerWatchCard() {
     mutationFn: ({
       dealerId,
       window,
+      audience,
     }: {
       dealerId: string;
       window?: LedgerWatchCardWindow | null;
+      audience?: ShareAudience;
     }) =>
       api.post<LedgerWatchShareResult>(
         window
           ? `/ledger-watch/dealers/${dealerId}/card/share?from=${encodeURIComponent(window.from)}&to=${encodeURIComponent(window.to)}`
           : `/ledger-watch/dealers/${dealerId}/card/share`,
-        {},
+        audience ? { audience } : {},
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ledgerWatchKeys.all });

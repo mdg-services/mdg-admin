@@ -12,6 +12,11 @@ import {
 import * as React from 'react';
 
 import {
+  ShareAudiencePicker,
+  shareResultMessage,
+  useShareAudience,
+} from '@/components/share/ShareAudiencePicker';
+import {
   Button,
   Dialog,
   DownloadButton,
@@ -70,6 +75,7 @@ export function CreditDodReportCard({
   });
 
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [audience, setAudience] = useShareAudience('credit-dod');
   const [cardOpen, setCardOpen] = React.useState(false);
   const alreadyShared = !!snapshot.shared;
   const imageUrl = cardImageUrl ?? snapshot.artifacts.cardUrl;
@@ -86,12 +92,8 @@ export function CreditDodReportCard({
 
   async function onConfirmShare() {
     try {
-      const result = await shareMutation.mutateAsync();
-      toast.success(
-        result?.alreadyShared
-          ? 'This report had already been shared with the dealer.'
-          : 'Card shared with the dealer.',
-      );
+      const result = await shareMutation.mutateAsync(audience);
+      toast.success(shareResultMessage(result, 'Card shared with the dealer.'));
       setConfirmOpen(false);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Failed to share';
@@ -294,7 +296,7 @@ export function CreditDodReportCard({
             variant="icon"
           />
         }
-        description="Share this Credit & DOD card with the dealer's chat? This will message the dealer."
+        description="Post this card and one short line to the dealer's chat."
         size="sm"
         footer={
           <>
@@ -334,10 +336,7 @@ export function CreditDodReportCard({
             </Notice>
           </div>
         ) : null}
-        <p className="text-sm text-text-muted">
-          The rendered card and its values will be posted to the dealer&apos;s
-          chat.
-        </p>
+        <ShareAudiencePicker value={audience} onChange={setAudience} />
       </Dialog>
 
       <ImageLightbox

@@ -20,6 +20,11 @@ import {
   AssuranceSummaryStrip,
 } from '@/components/dsr/AssurancePanel';
 import {
+  ShareAudiencePicker,
+  shareResultMessage,
+  useShareAudience,
+} from '@/components/share/ShareAudiencePicker';
+import {
   Badge,
   Button,
   Card,
@@ -689,6 +694,7 @@ function DsrShareSection({
   const toast = useToast();
   const share = useShareDsr(report.id);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [audience, setAudience] = useShareAudience('dsr');
 
   const alreadyShared = !!report.shared;
   // Evaluated live rather than read off `report.assurance`: a re-baseline marks
@@ -764,12 +770,8 @@ function DsrShareSection({
       return;
     }
     try {
-      const result = await share.mutateAsync();
-      toast.success(
-        result?.alreadyShared
-          ? 'This report had already been shared with the dealer.'
-          : 'Cards shared with the dealer.',
-      );
+      const result = await share.mutateAsync(audience);
+      toast.success(shareResultMessage(result, 'Cards shared with the dealer.'));
       setConfirmOpen(false);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to share');
@@ -954,7 +956,7 @@ function DsrShareSection({
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         title="Share with dealer"
-        description="Post both cards and a bilingual summary to the dealer's chat? This will message the dealer."
+        description="Post both cards and one short line to the dealer's chat."
         size="sm"
         footer={
           <>
@@ -971,10 +973,7 @@ function DsrShareSection({
           </>
         }
       >
-        <p className="text-sm text-text-muted">
-          The Variation and Daily Sales cards will be posted to the dealer&apos;s
-          chat, along with a short summary they can read.
-        </p>
+        <ShareAudiencePicker value={audience} onChange={setAudience} />
       </Dialog>
 
       <ImageLightbox

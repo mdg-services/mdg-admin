@@ -5,6 +5,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 
+
 import { api } from '@/lib/api';
 import type {
   CreditDodLedgerResponse,
@@ -13,6 +14,7 @@ import type {
   CreditDodVaultResponse,
 } from '@/types/creditDod';
 import type { CreditDodShareResult } from '@/types/serviceRun';
+import type { ShareAudience } from '@dk/shared';
 
 /**
  * Every dealer's PAD ledger digest — the Data Vault's PAD ledger dataset list.
@@ -47,9 +49,10 @@ export function useShareCreditDodSnapshot(
 ) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () =>
+    mutationFn: (audience?: ShareAudience) =>
       api.post<CreditDodShareResult>(
         `/credit-dod/snapshots/${snapshotId}/share`,
+        audience ? { audience } : {},
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['creditDodSnapshot', snapshotId] });

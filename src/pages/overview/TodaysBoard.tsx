@@ -3,6 +3,11 @@ import * as React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import {
+  ShareAudiencePicker,
+  shareResultMessage,
+  useShareAudience,
+} from '@/components/share/ShareAudiencePicker';
+import {
   Badge,
   Button,
   ConfirmDialog,
@@ -12,7 +17,7 @@ import {
 } from '@/components/ui';
 import { useOverviewActionMutation } from '@/hooks/api/useOverview';
 import { dealerCodeLabel } from '@dk/shared';
-import type { DealerDayRow } from '@dk/shared';
+import type { DealerDayRow, ShareOutcome } from '@dk/shared';
 
 import {
   boardAction,
@@ -114,6 +119,8 @@ export function TodaysBoard({
     null,
   );
   const [busyId, setBusyId] = React.useState<string | null>(null);
+  // The same remembered choice as the Share button on the report itself.
+  const [audience, setAudience] = useShareAudience('dsr');
 
   const perform = React.useCallback(
     (row: DealerDayRow, action: BoardAction) => {
@@ -126,13 +133,13 @@ export function TodaysBoard({
       run.mutate(
         {
           path: action.path,
-          body: action.kind === 'share' ? undefined : action.body,
+          body: action.kind === 'share' ? { audience } : action.body,
         },
         {
-          onSuccess: () =>
+          onSuccess: (result) =>
             toast.success(
               action.kind === 'share'
-                ? `Sent to ${dealerCodeLabel(row.dealerCode)}.`
+                ? `${dealerCodeLabel(row.dealerCode)}: ${shareResultMessage(result as ShareOutcome, 'Sent.')}`
                 : `Started for ${dealerCodeLabel(row.dealerCode)} — this takes a minute.`,
             ),
           onError: (e) => toast.error((e as Error).message || 'That did not go through.'),
@@ -143,7 +150,7 @@ export function TodaysBoard({
         },
       );
     },
-    [navigate, run, toast],
+    [navigate, run, toast, audience],
   );
 
   return (
@@ -275,7 +282,14 @@ export function TodaysBoard({
         onConfirm={() => pending && perform(pending.row, pending.action)}
         loading={busyId === pending?.row.dealerId}
         title={pending?.action?.label ?? 'Send'}
-        description={pending?.action?.kind === 'share' ? pending.action.confirm : undefined}
+        description={
+          pending?.action?.kind === 'share' ? (
+            <>
+              <p className="mb-3">{pending.action.confirm}</p>
+              <ShareAudiencePicker value={audience} onChange={setAudience} />
+            </>
+          ) : undefined
+        }
         confirmLabel={pending?.action?.label}
       />
     </>

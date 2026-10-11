@@ -6,6 +6,8 @@ import type { PnlProductInput } from '@/lib/fuelPnl';
 import type {
   DsrReportDigest,
   DsrReportStale,
+  ShareAudience,
+  ShareOutcome,
 } from '@dk/shared';
 
 
@@ -150,11 +152,7 @@ export interface DsrReportView {
 }
 
 /** `POST /dsr/reports/:id/share` result. */
-export interface DsrShareResult {
-  alreadyShared: boolean;
-  conversationId: string;
-  messageId: string;
-}
+export type DsrShareResult = ShareOutcome;
 
 /**
  * One report headline in a dealer's history — `GET /dsr/dealers/:id/reports`.
@@ -470,7 +468,8 @@ export function useRegenerateStaleDsr(dealerId: string) {
 export function useShareDsr(reportId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.post<DsrShareResult>(`/dsr/reports/${reportId}/share`),
+    mutationFn: (audience?: ShareAudience) =>
+      api.post<DsrShareResult>(`/dsr/reports/${reportId}/share`, audience ? { audience } : {}),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: dsrKeys.all });
       // The verdict is keyed on the report id, which is STABLE across a

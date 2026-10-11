@@ -2,6 +2,11 @@ import { RefreshCw } from 'lucide-react';
 import * as React from 'react';
 
 import {
+  ShareAudiencePicker,
+  shareResultMessage,
+  useShareAudience,
+} from '@/components/share/ShareAudiencePicker';
+import {
   ActionRow,
   Button,
   Card,
@@ -56,6 +61,7 @@ export function CardActions({
   const runWatch = useLoadPlannerRunWatcher(dealer.id);
 
   const [approveOpen, setApproveOpen] = React.useState(false);
+  const [audience, setAudience] = useShareAudience('load-plan');
   const [dismissOpen, setDismissOpen] = React.useState(false);
   const [reason, setReason] = React.useState('');
   const [reasonTouched, setReasonTouched] = React.useState(false);
@@ -79,13 +85,16 @@ export function CardActions({
   }
 
   function onApprove() {
-    approve.mutate(plan.id, {
-      onSuccess: (res) => {
-        setApproveOpen(false);
-        toast.success(res.alreadyShared ? 'Already sent — nothing new to send.' : `Sent to ${label}'s chat.`);
+    approve.mutate(
+      { planId: plan.id, audience },
+      {
+        onSuccess: (res) => {
+          setApproveOpen(false);
+          toast.success(shareResultMessage(res, `Sent to ${label}'s chat.`));
+        },
+        onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Could not send the plan'),
       },
-      onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Could not send the plan'),
-    });
+    );
   }
 
   function onDismiss() {
@@ -184,7 +193,12 @@ export function CardActions({
         onCancel={() => setApproveOpen(false)}
         onConfirm={onApprove}
         title="Send this plan?"
-        description={approveConfirmDescription(label)}
+        description={
+          <>
+            <p className="mb-3">{approveConfirmDescription(label)}</p>
+            <ShareAudiencePicker value={audience} onChange={setAudience} />
+          </>
+        }
         confirmLabel="Send"
         loading={approve.isPending}
       />
