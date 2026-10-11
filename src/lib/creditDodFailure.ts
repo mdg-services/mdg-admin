@@ -33,13 +33,27 @@ const UNEXPECTED_COPY: CreditDodFailureCopy = {
 export const CODE_COPY: Record<string, CreditDodFailureCopy> = {
   LOGIN_PAGE_UNREACHABLE: {
     title: "Couldn't reach the SDMS login page.",
-    hint: "SDMS may be down or the server can't reach it. Retry; if it persists, check server connectivity.",
+    hint:
+      'IndianOil may be showing its maintenance page (it did for about 7 hours on 10–11 Oct 2026, while SDMS moved ' +
+      'to utkarsh.indianoil.co.in), the portal may have moved again (check SDMS_LOGIN_URL), or the server cannot ' +
+      'reach it. The failure message says which when the page told us.',
     adminHint:
-      'SDMS may be temporarily down. Please retry in a few minutes; if it keeps happening, contact the MDG team.',
+      'SDMS may be down for maintenance. Please retry in a few minutes; if it keeps happening, contact the MDG team.',
   },
   LOGIN_REJECTED: {
-    title: 'SDMS rejected the login.',
-    hint: "The dealer's SDMS username/password is wrong, or the account is locked. Fix the credentials in the SDMS section and retry.",
+    title: 'SDMS says the ID or password is wrong.',
+    hint:
+      "IndianOil refused the saved ID and password (its own words are in the message). Scheduled runs for this " +
+      "dealer now stop, so the dealer's account is not locked by repeated wrong attempts. Get the current password " +
+      'from the dealer and save it in the SDMS section; checks restart by themselves within 15 minutes.',
+  },
+  LOGIN_NO_RESPONSE: {
+    title: 'SDMS took our sign-in but never answered.',
+    hint:
+      'The answer and password were sent, and the portal neither let us in nor showed an error. Usually a ' +
+      "portal-side wobble that clears by itself; the run's login attempts record what the portal's sign-in " +
+      'service replied. It is retried automatically.',
+    adminHint: "SDMS didn't answer our sign-in this time. We try again automatically — nothing to do.",
   },
   LOGIN_CAPTCHA_EXHAUSTED: {
     title: "Couldn't read the login captcha.",
@@ -49,9 +63,9 @@ export const CODE_COPY: Record<string, CreditDodFailureCopy> = {
   LOGIN_CHALLENGE_EXHAUSTED: {
     title: "SDMS kept refusing the login's security verification.",
     hint:
-      "SDMS now asks an arithmetic question ('3 x 2 = ?') instead of a picture captcha. We read it and answered it " +
-      'correctly every time and the portal still refused, which is usually a portal-side wobble. Retry; if it ' +
-      "persists, check the run's attempt diagnostics — the question and the answer we sent are recorded there.",
+      "SDMS asks an arithmetic question ('3 x 2 = ?'). The portal said our answer was wrong on at least one " +
+      "attempt, and none was accepted. Retry; if it persists, check the run's attempt diagnostics — the question, " +
+      'the answer we sent and what the portal replied are recorded there.',
     adminHint: `SDMS didn't accept our sign-in checks this time. ${CONTACT_MDG}`,
   },
   LOGIN_CHALLENGE_NOT_FOUND: {
@@ -87,8 +101,15 @@ export const CODE_COPY: Record<string, CreditDodFailureCopy> = {
   },
   SESSION_EXPIRED: {
     title: 'The SDMS session expired mid-run.',
-    hint: 'Retry — this usually happens when the captcha took many attempts.',
+    hint: 'The portal dropped our session part-way (it sends us back to its login page). Usually clears on the next attempt, which runs automatically.',
     adminHint: 'Please retry — this usually clears on the next attempt.',
+  },
+  SUPPLY_BACKEND_ERROR: {
+    title: "IndianOil's SAP link didn't answer.",
+    hint:
+      "The RO Supply Status screen showed 'Something went wrong while calling SAP Sync API'. That is IndianOil's " +
+      'own back end, usually for an hour or two at a time. The last good reading stays on screen; the next check tries again.',
+    adminHint: "IndianOil's system didn't answer this time. The last good reading stays — nothing to do.",
   },
   ELEDGER_HANDOFF_FAILED: {
     title: "SDMS wouldn't open the eledger page for this login.",
@@ -102,7 +123,7 @@ export const CODE_COPY: Record<string, CreditDodFailureCopy> = {
   },
   SDMS_CREDENTIALS_MISSING: {
     title: "This dealer has no SDMS login saved.",
-    hint: "Add the dealer's IndianOil SDMS username and password in the SDMS section, then run again. Until then every scheduled run will fail the same way.",
+    hint: "Add the dealer's IndianOil SDMS username and password in the SDMS section. Scheduled runs are on hold until then and restart by themselves within 15 minutes of saving.",
     adminHint:
       "We don't have this dealer's IndianOil login on file yet. Please add it in the dealer's SDMS section, or contact the MDG team.",
   },

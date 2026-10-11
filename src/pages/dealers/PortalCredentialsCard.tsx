@@ -334,7 +334,7 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
         loading={clearing}
         description={
           <>
-            {`The stored ${portal} ID and password are removed. Every service that signs in with them stops running until a new pair is saved.`}
+            {`The stored ${portal} ID and password are removed. Every service that signs in with them stops running until a new pair is saved. A cleared password cannot be recovered — if anyone will need it again, note it first.`}
             {/* `ConfirmDialog`'s title is a plain string, so the help button
                 sits at the foot of the description rather than in a header
                 slot. */}
