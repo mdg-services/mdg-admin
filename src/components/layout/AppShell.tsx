@@ -19,6 +19,7 @@ import {
 
 import { Input, Menu, MenuItem } from '@/components/ui';
 import { useAlertsLive } from '@/hooks/api/useAdminAlerts';
+import { useTicketsLive } from '@/hooks/api/useTickets';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useNavBadges } from '@/hooks/useNavBadges';
@@ -94,6 +95,7 @@ function BrandMark() {
 export function AppShell() {
   usePushBridge(); // register push token + handle deep links from native
   useAlertsLive(); // keep the bell's count current on every screen
+  useTicketsLive(); // ...and the Tickets badge, and any open thread's strip
   const admin = useAuthStore((s) => s.admin);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();

@@ -20,6 +20,7 @@ import {
   RotateCcw,
   ShieldAlert,
   Store,
+  Ticket,
   UserPlus,
   type LucideIcon,
 } from 'lucide-react';
@@ -52,6 +53,7 @@ import {
   replySenderLabel,
 } from '@/features/chat/replyPreview';
 import { ResolveConversationDialog } from '@/features/chat/ResolveConversationDialog';
+import { TicketStrip } from '@/features/chat/TicketStrip';
 import { useConversationSocket } from '@/features/chat/useConversationSocket';
 import { useInboxSocket } from '@/features/chat/useInboxSocket';
 import { UploadRecordDialog } from '@/features/records/UploadRecordDialog';
@@ -187,6 +189,15 @@ const FILTERS: Array<{ key: InboxFilter; label: string }> = [
   // meant `inboxLens('flagged')` rejected the value and every `?lens=flagged`
   // link in the product silently landed on "Mine" instead.
   { key: 'flagged', label: 'Dropped' },
+  // The threads where the AI gave up on a question and a person has not yet
+  // closed the ticket it raised. A lens like the two below, and for the same
+  // reason nothing moves into it or out of another tab — but it is not a subset
+  // of Unassigned: a ticket stays open however the conversation moves, so a
+  // thread somebody has picked up, answered, even resolved, is still listed
+  // here until its ticket is resolved with a note. Placed before the AI lenses
+  // because it is the one that is somebody's job today; the five tabs before it
+  // keep their positions.
+  { key: 'tickets', label: 'Tickets' },
   // A LENS OVER "Unassigned", not a fifth pile. Every row here is also in
   // Unassigned and in All open, and its `status` is the same `OPEN` it always
   // was — the tab only narrows the same query to the threads the AI first line
@@ -395,6 +406,28 @@ function AiRowChip({ conversation }: { conversation: Conversation }) {
   );
 }
 
+/**
+ * "This thread has an open ticket", on the inbox row.
+ *
+ * SHAPE AND TEXT, as the AI chip beside it: a glyph and a count in words. It is
+ * an addition and replaces nothing — the row's preview stays the dealer's own
+ * question — and it is NOT the Waiting flag: that one is a clock on a reply, and
+ * answering the dealer clears it, whereas this one is cleared only by resolving
+ * the ticket.
+ */
+function TicketRowChip({ conversation }: { conversation: Conversation }) {
+  const n = conversation.openTicketCount ?? 0;
+  if (n <= 0) return null;
+  return (
+    <Badge intent="warning" title="An open ticket on this thread. Only resolving it closes it.">
+      <span className="inline-flex items-center gap-0.5">
+        <Ticket width={11} height={11} strokeWidth={2} />
+        {n === 1 ? 'Ticket' : `${n} tickets`}
+      </span>
+    </Badge>
+  );
+}
+
 function formatRelative(iso?: string): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -525,6 +558,15 @@ export function InboxPage() {
     deepLinkId ? 'all' : (inboxLens(searchParams.get('lens')) ?? 'mine'),
   );
   const [selectedId, setSelectedId] = React.useState<string | null>(deepLinkId);
+  // The thread the PAGE opened on its own (the first row, on a desktop), as
+  // opposed to one an admin chose. A ticket is stamped "seen" only for a thread
+  // somebody opened: the dealer's bubble then says "MDG team is looking at it",
+  // and an inbox that merely loaded must not say that on their behalf.
+  const [autoPickedId, setAutoPickedId] = React.useState<string | null>(null);
+  // `/inbox?c=<id>&ticket=<id>` — the way in from the Tickets page, an alert or
+  // a Today row. Read off the URL on every render, not copied into state, so a
+  // second link followed while the inbox is already open still lands.
+  const focusTicketId = searchParams.get('ticket');
   const [contextOpen, setContextOpen] = React.useState(true);
   const [newOpen, setNewOpen] = React.useState(false);
   const [threadMenuOpen, setThreadMenuOpen] = React.useState(false);
@@ -554,6 +596,7 @@ export function InboxPage() {
     const c = searchParams.get('c');
     if (isLg) {
       if (!c) return;
+      setAutoPickedId(null);
       setSelectedId(c);
       setFilter('all');
       const next = new URLSearchParams(searchParams);
@@ -581,6 +624,7 @@ export function InboxPage() {
   const openConversation = React.useCallback(
     (id: string) => {
       if (isLg) {
+        setAutoPickedId(null);
         setSelectedId(id);
       } else {
         const next = new URLSearchParams(searchParams);
@@ -778,6 +822,7 @@ export function InboxPage() {
     flagged: countsQ.data?.flagged,
     ai: countsQ.data?.ai,
     'ai-guard': countsQ.data?.aiGuard,
+    tickets: countsQ.data?.tickets,
   };
 
   // Auto-select first conversation when list loads and nothing selected. Yield
@@ -788,6 +833,7 @@ export function InboxPage() {
     if (!isLg) return;
     if (searchParams.get('c')) return;
     if (!selectedId && conversations.length > 0) {
+      setAutoPickedId(conversations[0]!.id);
       setSelectedId(conversations[0]!.id);
     }
   }, [conversations, selectedId, searchParams, isLg]);
@@ -824,6 +870,8 @@ export function InboxPage() {
     attachments: Attachment[];
   }) {
     if (!conversation) return;
+    // Writing in a thread is as good as choosing it: whoever does is looking.
+    setAutoPickedId(null);
     // An optimistic (tmp-) id can't be replied to server-side; skip the quote.
     const reply = replyTo && !replyTo.id.startsWith('tmp-') ? replyTo : null;
     await sendMessage.mutateAsync({
@@ -839,10 +887,12 @@ export function InboxPage() {
 
   function handlePickUp() {
     if (!conversation) return;
+    setAutoPickedId(null);
     assignConv.mutate({ conversationId: conversation.id });
   }
   function handleTakeOver() {
     if (!conversation) return;
+    setAutoPickedId(null);
     // No admin picker yet — this claims the ticket for the current admin.
     assignConv.mutate({ conversationId: conversation.id });
   }
@@ -921,7 +971,10 @@ export function InboxPage() {
               />
             }
           >
-            <CardTitle className="text-sm">Ticket</CardTitle>
+            {/* "Triage", not "Ticket": a ticket is now the record the AI raises
+                for one question (the strip above the composer). This card is
+                the whole conversation's priority and category. */}
+            <CardTitle className="text-sm">Triage</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
@@ -1291,6 +1344,7 @@ export function InboxPage() {
                           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                             {priorityPill(c.priority)}
                             <TicketFlagBadge conversation={c} now={now} />
+                            <TicketRowChip conversation={c} />
                             <AiRowChip conversation={c} />
                             <p className="min-w-0 flex-[1_1_10rem] truncate text-sm text-text-muted md:flex-1">
                               {c.lastMessagePreview ?? 'No messages yet'}
@@ -1626,6 +1680,18 @@ export function InboxPage() {
                     reporting. A plain block at md. */}
                 <div ref={threadBottomRef}>
                 <div className="max-h-[40dvh] shrink-0 overflow-y-auto overscroll-contain md:max-h-none md:overflow-visible">
+                  {/* First, above the guard banner and the AI strip: an open
+                      ticket is a dealer waiting on a person, and a reply typed
+                      in the box below does not close it. Keyed on the thread so
+                      a half-written resolution never follows the admin to
+                      another dealer. Renders nothing on a thread with none. */}
+                  <TicketStrip
+                    key={conversation.id}
+                    conversationId={conversation.id}
+                    now={now}
+                    focusTicketId={focusTicketId}
+                    stampSeen={selectedId !== autoPickedId}
+                  />
                   <AiGuardBanner conversationId={conversation.id} now={now} />
                   <AiFirstLineStrip
                     conversationId={conversation.id}

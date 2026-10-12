@@ -27,6 +27,16 @@ export function isReplyAlert(alert: AdminAlert): boolean {
   return alert.kind === 'whatsapp_reply';
 }
 
+/**
+ * A ticket's alert is never what closes the ticket. Hiding it only takes the
+ * row off this list; the ticket stays open, and the dealer's question stays
+ * unanswered, until somebody resolves it with a note. The toast says so, because
+ * "Hidden" on its own reads as "dealt with".
+ */
+export function isTicketAlert(alert: AdminAlert): boolean {
+  return alert.kind === 'ticket_open';
+}
+
 /** Whether the row's button closes the alert for good rather than hiding it. */
 export function closesWhenPressed(alert: AdminAlert): boolean {
   return isEventAlert(alert) || isReplyAlert(alert);
@@ -41,6 +51,9 @@ export function hideLabel(alert: AdminAlert): string {
 /** What the toast says once that button has worked. */
 export function hiddenToast(alert: AdminAlert): string {
   if (isReplyAlert(alert)) return 'Marked as read. Their next message will alert you again.';
+  if (isTicketAlert(alert)) {
+    return 'Hidden from this list. The ticket is still open until someone resolves it.';
+  }
   return isEventAlert(alert)
     ? 'Marked as seen.'
     : 'Hidden. It moves to Cleared on its own once it is fixed.';

@@ -26,6 +26,12 @@ import type { Conversation } from '@dk/shared';
  * It also includes ASSIGNED where `ai` excludes it, and that is deliberate: an
  * admin taking the ticket is the RIGHT response to a guard hit, and dropping the
  * row the moment somebody picks it up would hide the ones being handled.
+ *
+ * `tickets` is a THIRD lens, and the one that follows a thread through every
+ * status: the threads with an OPEN ticket (a question the AI could not settle,
+ * held open until a person resolves it with a note). A thread leaves it only
+ * when that ticket is resolved — not when the conversation is picked up,
+ * answered or resolved, which is the whole reason a ticket is its own record.
  */
 export type InboxFilter =
   | 'open'
@@ -34,7 +40,8 @@ export type InboxFilter =
   | 'resolved'
   | 'flagged'
   | 'ai'
-  | 'ai-guard';
+  | 'ai-guard'
+  | 'tickets';
 
 export const conversationsKey = (filter: InboxFilter) =>
   ['conversations', { filter }] as const;
@@ -72,6 +79,11 @@ export interface InboxCounts {
    * both), on the same terms: nothing leaves another tab to be counted here.
    */
   aiGuard: number;
+  /**
+   * The Tickets lens: threads with an OPEN ticket. Counted across every
+   * conversation status, so it can exceed what the active tabs hold.
+   */
+  tickets: number;
 }
 
 // Shares the ['conversations'] prefix so an inbox invalidation refreshes the

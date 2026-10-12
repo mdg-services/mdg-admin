@@ -40,6 +40,13 @@ const AlertsPage = React.lazy(
     import('@/pages/alerts/AlertsPage').then((m) => ({ default: m.AlertsPage })),
   ),
 );
+const TicketsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/tickets/TicketsPage').then((m) => ({
+      default: m.TicketsPage,
+    })),
+  ),
+);
 const AiAnswersPage = React.lazy(
   retryImport(() =>
     import('@/pages/aiAnswers/AiAnswersPage').then((m) => ({
@@ -254,6 +261,18 @@ export default function App() {
         >
           <Route index element={<Navigate to="/inbox" replace />} />
           <Route path="inbox" element={<InboxPage />} />
+          {/* Every question the AI could not settle, held open until a person
+              resolves it with a note. Every admin, not super-admin: the people
+              who answer dealers are the people who close these, and the API
+              behind it is open to any active admin. */}
+          <Route
+            path="tickets"
+            element={
+              <LazyPage>
+                <TicketsPage />
+              </LazyPage>
+            }
+          />
           {/* Everything that needs a person, and the screen behind every alert
               pushed to an admin's phone. Every admin, not super-admin: the
               server already keeps its own health alerts to super-admins. */}

@@ -21,6 +21,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   ShieldPlus,
+  Ticket,
   UserCog,
   Users,
   Warehouse,
@@ -49,6 +50,14 @@ export interface NavItem {
  */
 export const NAV_ITEMS: NavItem[] = [
   { to: '/inbox', label: 'Inbox', icon: MessageSquare },
+  // Dealer questions the AI could not settle, each held open until a person
+  // resolves it with a note — the replacement for a "talk to a person" button,
+  // so it sits straight under Inbox where an admin already is. Not in
+  // `BOTTOM_TAB_ROUTES`: the bar holds four and is full, so on a phone it is the
+  // first row of the More sheet, and its open count rides on the closed More
+  // button (it is not in `HEADER_BADGE_ROUTES`, which is only for what the
+  // header's bell already shows).
+  { to: '/tickets', label: 'Tickets', icon: Ticket },
   // Everything that needs a person, across every outlet — the list behind
   // every alert pushed to an admin's phone. Second, under Inbox, because the
   // two together are the whole of "what is waiting on me". On a phone it is
