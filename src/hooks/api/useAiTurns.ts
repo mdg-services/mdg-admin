@@ -335,8 +335,8 @@ export function useSetAiFirstLineWriterSwitch() {
  * Clear the AI-guard mark on one thread. SUPER-ADMIN ONLY.
  *
  * THE ONLY THING THAT CLEARS IT, and that is the whole design of the field.
- * `Conversation.flagged` is cleared by pickup, by any admin reply, by resolve,
- * by reopen and by a records post — right for an operational alarm, and
+ * `Conversation.flagged` is cleared by pickup, by any admin reply, by resolve
+ * and by reopen — right for an operational alarm, and
  * catastrophic for a security observation, because it would mean an admin
  * ANSWERING THE DEALER silently erases the record that somebody tried to plant a
  * figure in MDG's mouth. So there is no optimistic patch here either: the

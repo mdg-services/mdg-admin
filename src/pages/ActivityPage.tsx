@@ -81,6 +81,9 @@ function actionIntent(action: string): Intent {
   }
   if (
     action === 'RECORD_VIEWED' ||
+    // The retired Reports shelf: one row per old report moved into the chat.
+    // Same tone as a view — it is history being read back, not something new.
+    action === 'RECORD_MIGRATED' ||
     action === 'ARTIFACT_DOWNLOAD' ||
     action === 'ATTACHMENT_DOWNLOAD' ||
     action === 'IRAS_CREDENTIALS_SET' ||

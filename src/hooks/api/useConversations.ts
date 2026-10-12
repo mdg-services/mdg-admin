@@ -18,8 +18,8 @@ import type { Conversation } from '@dk/shared';
  * `ai-guard` is a SECOND lens on the same argument: the threads where somebody
  * tried to plant a figure in MDG's mouth or read the system instruction back
  * out. It is NOT `flagged`, which means one thing — an assigned ticket missed
- * its reply SLA — and is cleared by pickup, by any admin reply, by resolve, by
- * reopen and by a records post. An operational alarm should clear when the work
+ * its reply SLA — and is cleared by pickup, by any admin reply, by resolve and
+ * by reopen. An operational alarm should clear when the work
  * is done; an observation about a person's behaviour must survive being replied
  * to, so it reads `ai.abuse` and only a super-admin pressing Clear removes it.
  *

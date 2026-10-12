@@ -1,4 +1,4 @@
-import { Check, CheckCheck, ChevronDown, Clock, FileText } from 'lucide-react';
+import { Check, CheckCheck, ChevronDown, Clock } from 'lucide-react';
 import * as React from 'react';
 
 import { cn } from '@/lib/cn';
@@ -62,11 +62,23 @@ function formatTime(iso: string): string {
  * `message.body` alone, so an admin watching the thread saw the covering note
  * and never the card that was shared with the dealer.
  *
- * Reactions, delivery ticks, the reply quote and the action menu are all
- * deliberately absent: a notice about the thread is not a message anyone
- * replies to, reacts to, or was "delivered" in the sense the ticks mean.
+ * Delivery ticks, the reply quote and the action menu stay off: an admin does
+ * not answer a notice from here. But the DEALER can now react to one — their
+ * app draws every notice as an ordinary picture message from MDG (ADR 0018) —
+ * so a dealer's 👍 on the day's DSR is shown under it, read-only, and opens
+ * the who-reacted list like any other. Leaving it off meant a dealer who
+ * acknowledged a report was acknowledging it to nobody.
  */
-function SystemMessage({ message }: { message: Message }) {
+function SystemMessage({
+  message,
+  currentUserId,
+  onOpenReactions,
+}: {
+  message: Message;
+  currentUserId: string;
+  onOpenReactions?: (message: Message) => void;
+}) {
+  const reactions = message.reactions ?? [];
   // Was a plain `if (!message.body) return null`, which threw the images away
   // with the empty body. Only an empty notice — no text and no card — is nothing.
   if (!message.body && message.attachments.length === 0) return null;
@@ -92,42 +104,24 @@ function SystemMessage({ message }: { message: Message }) {
           {message.body}
         </p>
       ) : null}
-    </div>
-  );
-}
-
-/**
- * A report/record shared into the thread. Rendered as a centered summary card;
- * the file itself lives in the Reports panel (admins don't fetch signed URLs here).
- */
-function CardMessage({ message }: { message: Message }) {
-  const card = message.card!;
-  return (
-    <div className="flex w-full flex-col items-center gap-1.5">
-      {message.body ? (
-        <p className="max-w-[80%] text-center text-xs text-text-muted">
-          {message.body}
-        </p>
-      ) : null}
-      <div className="flex w-full max-w-[85%] items-start gap-2 rounded-xl border border-border bg-surface px-3 py-2 shadow-sm">
-        <FileText
-          width={16}
-          height={16}
-          strokeWidth={1.75}
-          className="mt-0.5 shrink-0 text-text-muted"
-        />
-        <div className="min-w-0">
-          {/* Wraps below md: "Daily Sales Report — E02 — Sa…" hid the date and
-              the "(revised copy)" that tell two cards apart. */}
-          <p className="break-words text-sm font-medium text-text md:truncate">
-            {card.title}
-          </p>
-          <p className="truncate text-xs text-text-subtle">
-            {card.periodLabel ? `${card.periodLabel} · ` : ''}
-            {card.recordType.toUpperCase()}
-          </p>
+      {reactions.length > 0 ? (
+        <div className="flex flex-wrap justify-center gap-1">
+          {groupReactions(reactions, currentUserId).map((g) => (
+            <button
+              key={g.emoji}
+              type="button"
+              onClick={() => onOpenReactions?.(message)}
+              aria-label={`${g.emoji} ${g.count}, see who reacted`}
+              className="tap-target flex items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-0.5 text-[13px] leading-none shadow-sm"
+            >
+              <span aria-hidden>{g.emoji}</span>
+              {g.count > 1 ? (
+                <span className="text-[11px] text-text-muted">{g.count}</span>
+              ) : null}
+            </button>
+          ))}
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -161,7 +155,7 @@ export const MessageBubble = React.memo(function MessageBubble({
   onOpenReactions,
 }: MessageBubbleProps) {
   // Touch path into the same menu the hover chevron / right-click opens.
-  // Hooks run before the card/system early returns to keep their order stable.
+  // Hooks run before the system early return to keep their order stable.
   const openMenuAtPoint = React.useCallback(
     (point: { x: number; y: number }) => onOpenMenu?.(message, point),
     [message, onOpenMenu],
@@ -175,11 +169,14 @@ export const MessageBubble = React.memo(function MessageBubble({
   // was not.
   const menuWasOpenRef = React.useRef(false);
 
-  if (message.card) {
-    return <CardMessage message={message} />;
-  }
   if (message.system) {
-    return <SystemMessage message={message} />;
+    return (
+      <SystemMessage
+        message={message}
+        currentUserId={currentUserId}
+        onOpenReactions={onOpenReactions}
+      />
+    );
   }
 
   // The admin inbox is a SHARED surface: every admin message — mine or a

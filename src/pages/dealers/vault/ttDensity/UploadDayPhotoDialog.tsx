@@ -22,9 +22,9 @@ import type { PresignUploadResponse } from '@dk/shared';
 /**
  * An admin filing the density-register page for a dealer who did not.
  *
- * Modelled on `features/records/UploadRecordDialog.tsx` — hidden file input, a
- * dashed choose-a-photo button, a chip with an X to clear, then presign → PUT →
- * create. Three deliberate differences.
+ * The usual file-dialog shape — hidden file input, a dashed choose-a-photo
+ * button, a chip with an X to clear, then presign → PUT → create. Three things
+ * here are deliberate.
  *
  * `accept="image/*"` only. The register page is a photograph of a book. A PDF
  * here would be somebody uploading the wrong thing entirely, and the server

@@ -7,7 +7,6 @@ import {
   ChevronRight,
   CornerUpRight,
   FileText,
-  FileUp,
   Flag,
   Inbox,
   Info,
@@ -56,7 +55,6 @@ import { ResolveConversationDialog } from '@/features/chat/ResolveConversationDi
 import { TicketStrip } from '@/features/chat/TicketStrip';
 import { useConversationSocket } from '@/features/chat/useConversationSocket';
 import { useInboxSocket } from '@/features/chat/useInboxSocket';
-import { UploadRecordDialog } from '@/features/records/UploadRecordDialog';
 import {
   useClearAiGuard,
   useConversationAiTurnsQuery,
@@ -68,13 +66,13 @@ import {
   useConversationCounts,
   useConversations,
 } from '@/hooks/api/useConversations';
-import { useDealerRecords } from '@/hooks/api/useDealerRecords';
 import { useMessages } from '@/hooks/api/useMessages';
 import { useReactToMessage } from '@/hooks/api/useReactToMessage';
 import { useReopenConversation } from '@/hooks/api/useReopenConversation';
 import { useResolveConversation } from '@/hooks/api/useResolveConversation';
 import { useSendMessage } from '@/hooks/api/useSendMessage';
 import { useServicesQuery } from '@/hooks/api/useServices';
+import { useShareToOutlet } from '@/hooks/api/useShareToOutlet';
 import { useUpdateTicket } from '@/hooks/api/useUpdateTicket';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -91,6 +89,7 @@ import {
   aiThreadGuard,
   aiTurnAge,
   dealerCodeLabel,
+  describeShareRecipients,
   ticketFlagLevel,
 } from '@dk/shared';
 import type {
@@ -99,6 +98,7 @@ import type {
   Conversation,
   Dealer,
   Message,
+  ShareAudience,
   TicketCategory,
   TicketPriority,
 } from '@dk/shared';
@@ -209,8 +209,8 @@ const FILTERS: Array<{ key: InboxFilter; label: string }> = [
   // out. Nothing moves into it and nothing leaves another tab to be in it.
   //
   // It is NOT the Flagged tab above. Flagged means an assigned ticket missed its
-  // reply SLA and is cleared by pickup, by any admin reply, by resolve, by reopen
-  // and by a records post — right for an operational alarm, and catastrophic for
+  // reply SLA and is cleared by pickup, by any admin reply, by resolve and by
+  // reopen — right for an operational alarm, and catastrophic for
   // a security observation, because it would mean ANSWERING THE DEALER silently
   // erases the record. This one is cleared by exactly one thing: a super-admin
   // pressing Clear on the thread.
@@ -764,6 +764,7 @@ export function InboxPage() {
   }, [messages, currentUserId, markRead]);
 
   const sendMessage = useSendMessage();
+  const shareToOutlet = useShareToOutlet();
   const assignConv = useAssignConversation();
   const resolveConv = useResolveConversation();
   const reopenConv = useReopenConversation();
@@ -807,7 +808,6 @@ export function InboxPage() {
   }, [replyTo, currentUserId]);
 
   const isAdmin = !!admin;
-  const [uploadOpen, setUploadOpen] = React.useState(false);
   const [resolveOpen, setResolveOpen] = React.useState(false);
   const servicesQ = useServicesQuery();
 
@@ -846,8 +846,8 @@ export function InboxPage() {
   }, [selectedId, isLg]);
 
   // The list row already carries `dealerId` (it is what groupByDealer keys on),
-  // so the dealer + records fetches can start alongside `/conversations/:id`
-  // instead of waiting for it. Falls back to the fetched conversation for a
+  // so the dealer fetch can start alongside `/conversations/:id` instead of
+  // waiting for it. Falls back to the fetched conversation for a
   // deep-linked thread that is not in the current filter's page.
   const listedDealerId =
     conversations.find((c) => c.id === selectedId)?.dealerId ?? null;
@@ -861,9 +861,6 @@ export function InboxPage() {
     enabled: !!dealerId && contextOpen,
     retry: false,
   });
-
-  const recordsQ = useDealerRecords(dealerId);
-  const records = recordsQ.data ?? [];
 
   async function handleSend(payload: {
     body?: string;
@@ -883,6 +880,23 @@ export function InboxPage() {
         : {}),
     });
     setReplyTo(null);
+  }
+
+  // The composer's "Send to" choice: the whole outlet rather than this chat —
+  // what the Reports shelf used to do for an uploaded file (ADR 0018). The
+  // toast says who it actually reached; a throw puts the draft back.
+  async function handleShareToOutlet(payload: {
+    body?: string;
+    attachments: Attachment[];
+    audience: ShareAudience;
+  }) {
+    if (!conversation) return;
+    setAutoPickedId(null);
+    const outcome = await shareToOutlet.mutateAsync({
+      conversationId: conversation.id,
+      ...payload,
+    });
+    toast.success(describeShareRecipients(outcome.recipients));
   }
 
   function handlePickUp() {
@@ -1076,66 +1090,6 @@ export function InboxPage() {
             </>
           ) : (
             <DealerQuickLinks dealer={dealerQ.data} />
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle className="text-sm">
-            Reports
-            {records.length > 0 ? (
-              <span className="ml-1.5 text-text-subtle">
-                {records.length}
-              </span>
-            ) : null}
-          </CardTitle>
-          <IconButton
-            aria-label="Upload report"
-            size="xs"
-            onClick={() => setUploadOpen(true)}
-            className="text-text-muted"
-          >
-            <FileUp width={15} height={15} strokeWidth={1.75} />
-          </IconButton>
-        </CardHeader>
-        <CardContent className="text-sm">
-          {recordsQ.isLoading ? (
-            <div className="flex justify-center py-3">
-              <Spinner size={16} />
-            </div>
-          ) : records.length === 0 ? (
-            <p className="text-xs text-text-muted">
-              No reports sent yet.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {records.map((r) => (
-                <li
-                  key={r.id}
-                  className="flex items-start gap-2"
-                >
-                  <FileText
-                    width={14}
-                    height={14}
-                    strokeWidth={1.75}
-                    className="mt-0.5 shrink-0 text-text-muted"
-                  />
-                  <div className="min-w-0">
-                    {/* Wraps below md: the tail is what tells a revised copy
-                        from the original, and there is no pinch-zoom. */}
-                    <p className="break-words text-text md:truncate">
-                      {r.title}
-                    </p>
-                    {r.periodLabel ? (
-                      <p className="truncate text-xs text-text-subtle">
-                        {r.periodLabel}
-                      </p>
-                    ) : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
           )}
         </CardContent>
       </Card>
@@ -1499,7 +1453,7 @@ export function InboxPage() {
               </div>
               {/* Mobile action cluster: the status action as one glyph, and a
                   kebab holding the rest (the same action in words, Details,
-                  Take over, Upload report). Four controls — back chevron,
+                  Take over). Four controls — back chevron,
                   status button, Details, kebab — took ~232px of a 360px header
                   and left the member's name ~110px, so Details moved into the
                   sheet the kebab already opens and the status pill dropped its
@@ -1586,16 +1540,6 @@ export function InboxPage() {
                     Reopen
                   </Button>
                 ) : null}
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setUploadOpen(true)}
-                  leftIcon={
-                    <FileUp width={14} height={14} strokeWidth={1.75} />
-                  }
-                >
-                  Upload report
-                </Button>
                 <button
                   type="button"
                   onClick={() => setMobileContextOpen(true)}
@@ -1716,6 +1660,7 @@ export function InboxPage() {
                   key={conversation.id}
                   conversationId={conversation.id}
                   onSend={handleSend}
+                  onShareToOutlet={handleShareToOutlet}
                   disabled={conversation.status === 'RESOLVED'}
                   replyingTo={composerReply}
                   onCancelReply={handleCancelReply}
@@ -1745,16 +1690,6 @@ export function InboxPage() {
                 </Drawer>
               )}
             </div>
-
-            {dealerId ? (
-              <UploadRecordDialog
-                open={uploadOpen}
-                onClose={() => setUploadOpen(false)}
-                dealerId={dealerId}
-                dealerCode={conversation.dealerCode}
-                conversationId={conversation.id}
-              />
-            ) : null}
 
             <ReactionsDialog
               message={reactionsMessage}
@@ -1837,15 +1772,6 @@ export function InboxPage() {
                   Take over
                 </SheetItem>
               ) : null}
-              <SheetItem
-                icon={<FileUp width={20} height={20} strokeWidth={1.75} />}
-                onClick={() => {
-                  setThreadMenuOpen(false);
-                  setUploadOpen(true);
-                }}
-              >
-                Upload report
-              </SheetItem>
             </Sheet>
           </>
         )}

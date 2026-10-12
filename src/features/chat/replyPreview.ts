@@ -30,7 +30,6 @@ export function buildReplyContext(message: Message): MessageReplyContext {
           ...(firstImage.url ? { imageUrl: firstImage.url } : {}),
         }
       : {}),
-    ...(message.card ? { card: true, cardTitle: message.card.title } : {}),
   };
 }
 
@@ -47,9 +46,8 @@ export function replySenderLabel(
   return ctx.senderName ?? 'Support team';
 }
 
-/** One-line description of the quoted message: body, or an attachment/card hint. */
+/** One-line description of the quoted message: body, or an attachment hint. */
 export function replyPreviewText(ctx: MessageReplyContext): string {
-  if (ctx.card) return ctx.cardTitle ?? 'Report';
   if (ctx.body) return ctx.body;
   if (ctx.attachmentKind === 'image') return '📷 Photo';
   if (ctx.attachmentKind === 'audio') {

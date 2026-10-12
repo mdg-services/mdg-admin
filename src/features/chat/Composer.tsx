@@ -1,9 +1,11 @@
-import { Mic, Paperclip, RotateCcw, Send, Trash2, X } from 'lucide-react';
+import { ChevronDown, Mic, Paperclip, RotateCcw, Send, Trash2, X } from 'lucide-react';
 import * as React from 'react';
 
 
+import { ShareAudienceNote } from '@/components/share/ShareMenu';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
+import { Menu, MenuItem } from '@/components/ui/Menu';
 import { Textarea } from '@/components/ui/Textarea';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { usePublishBottomBar } from '@/hooks/usePublishBottomBar';
@@ -19,7 +21,12 @@ import {
   uploadAttachment,
 } from '@/lib/uploadAttachment';
 import { useVoiceRecorder } from '@/lib/useVoiceRecorder';
-import type { Attachment } from '@dk/shared';
+import {
+  SHARE_AUDIENCE_LABELS,
+  SHARE_AUDIENCES,
+  type Attachment,
+  type ShareAudience,
+} from '@dk/shared';
 
 function extForMime(mimeType: string): string {
   if (mimeType.includes('mp4') || mimeType.includes('aac')) return 'm4a';
@@ -68,7 +75,30 @@ interface ComposerProps {
   onCancelReply?: () => void;
   /** Text pushed in from outside. See {@link ComposerInsert}. */
   insert?: ComposerInsert | null;
+  /**
+   * Send to the whole outlet instead of this one chat — every owner, the
+   * manager, or both. When set, a "Send to" choice sits above the box while
+   * there is something to send; "This chat" is always the default and the
+   * choice falls back to it after every send, so nothing goes to the whole
+   * outlet by accident.
+   */
+  onShareToOutlet?: (payload: {
+    body?: string;
+    attachments: Attachment[];
+    audience: ShareAudience;
+  }) => Promise<void>;
 }
+
+/** Where the composer's message goes: this chat, or one of the outlet choices. */
+type SendTarget = 'chat' | ShareAudience;
+
+/** One line under each choice in the "Send to" list. */
+const TARGET_HINT: Record<SendTarget, string> = {
+  chat: 'Only the people in this chat',
+  owners: 'Every owner, in their own chat',
+  managers: 'The manager, in the group chat',
+  both: 'Every owner and the manager',
+};
 
 const LINE_HEIGHT = 20;
 /*
@@ -87,8 +117,10 @@ export function Composer({
   replyingTo,
   onCancelReply,
   insert,
+  onShareToOutlet,
 }: ComposerProps) {
   const [body, setBody] = React.useState('');
+  const [target, setTarget] = React.useState<SendTarget>('chat');
   const [files, setFiles] = React.useState<StagedFile[]>([]);
   const [sending, setSending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -212,10 +244,17 @@ export function Composer({
       const uploaded = await Promise.all(
         files.map((s) => uploadAttachment(s.file, conversationId)),
       );
-      await onSend({
+      const payload = {
         body: body.trim() ? body.trim() : undefined,
         attachments: uploaded,
-      });
+      };
+      // A reply belongs to this chat: the quote names a message only it holds.
+      if (target !== 'chat' && onShareToOutlet && !replyingTo) {
+        await onShareToOutlet({ ...payload, audience: target });
+      } else {
+        await onSend(payload);
+      }
+      setTarget('chat');
       files.forEach((s) => {
         if (s.previewUrl) URL.revokeObjectURL(s.previewUrl);
       });
@@ -379,6 +418,37 @@ export function Composer({
       ) : null}
       {error ? (
         <p className="mb-1 text-xs text-danger">{error}</p>
+      ) : null}
+      {onShareToOutlet && hasContent && !replyingTo && !isRecording ? (
+        <div className="mb-2 flex flex-col gap-1">
+          <div className="flex items-center gap-2 text-xs text-text-muted">
+            <span>Send to</span>
+            <Menu
+              label="Send to"
+              title="Send to"
+              align="start"
+              triggerVariant="secondary"
+              triggerSize="sm"
+              triggerDisabled={busy}
+              trigger={
+                <>
+                  <span>{target === 'chat' ? 'This chat' : SHARE_AUDIENCE_LABELS[target]}</span>
+                  <ChevronDown width={14} height={14} strokeWidth={1.75} aria-hidden />
+                </>
+              }
+            >
+              {(['chat', ...SHARE_AUDIENCES] as SendTarget[]).map((t) => (
+                <MenuItem key={t} onSelect={() => setTarget(t)}>
+                  <span className="block font-medium text-text">
+                    {t === 'chat' ? 'This chat' : SHARE_AUDIENCE_LABELS[t]}
+                  </span>
+                  <span className="block text-xs text-text-muted">{TARGET_HINT[t]}</span>
+                </MenuItem>
+              ))}
+            </Menu>
+          </div>
+          {target !== 'chat' ? <ShareAudienceNote audience={target} /> : null}
+        </div>
       ) : null}
       {isRecording ? (
         <div className="flex items-center gap-3">
