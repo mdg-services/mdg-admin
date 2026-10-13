@@ -1,10 +1,12 @@
-import { Check, CheckCheck, ChevronDown, Clock } from 'lucide-react';
+import { Check, CheckCheck, CheckCircle2, ChevronDown, ClipboardList, Clock } from 'lucide-react';
 import * as React from 'react';
 
+import { Badge } from '@/components/ui/Badge';
+import { OPEN_REQUEST_STATUS_LABEL, requestLabel } from '@/lib/chatAsk';
 import { cn } from '@/lib/cn';
 import { linkify } from '@/lib/linkify';
 import { useLongPress } from '@/lib/useLongPress';
-import type { Message, MessageReaction } from '@dk/shared';
+import type { DealerOpenRequest, Message, MessageAsk, MessageReaction } from '@dk/shared';
 
 import { AttachmentPreview } from './AttachmentPreview';
 import { replyPreviewText, replySenderLabel } from './replyPreview';
@@ -21,6 +23,17 @@ interface MessageBubbleProps {
   onJumpTo?: (messageId: string) => void;
   /** Opens the who-reacted dialog. */
   onOpenReactions?: (message: Message) => void;
+  /**
+   * The request this dealer message answered, while it waits for MDG to check it
+   * (ADR 0019). Drawn as an "Answer to…" chip under the message. Handed in by the
+   * thread, which reads the dealer's requests once — a bubble is memoised and
+   * must not fetch.
+   */
+  pendingAnswer?: DealerOpenRequest;
+  /** Where the request an ask notice carries stands, when the thread knows. */
+  askStatus?: DealerOpenRequest['status'];
+  /** Opens "Mark received" for this message — the chip's one tap. */
+  onOpenAnswer?: (message: Message) => void;
 }
 
 /** WhatsApp-style delivery state for one of the current user's own messages. */
@@ -72,16 +85,19 @@ function formatTime(iso: string): string {
 function SystemMessage({
   message,
   currentUserId,
+  askStatus,
   onOpenReactions,
 }: {
   message: Message;
   currentUserId: string;
+  askStatus?: DealerOpenRequest['status'];
   onOpenReactions?: (message: Message) => void;
 }) {
   const reactions = message.reactions ?? [];
   // Was a plain `if (!message.body) return null`, which threw the images away
-  // with the empty body. Only an empty notice — no text and no card — is nothing.
-  if (!message.body && message.attachments.length === 0) return null;
+  // with the empty body. Only an empty notice — no text, no card and no request
+  // — is nothing.
+  if (!message.body && message.attachments.length === 0 && !message.ask) return null;
   return (
     <div className="flex w-full flex-col items-center gap-1.5">
       {message.attachments.length > 0 ? (
@@ -93,6 +109,7 @@ function SystemMessage({
           ))}
         </div>
       ) : null}
+      {message.ask ? <AskLabel ask={message.ask} status={askStatus} /> : null}
       {/* `rounded-lg`, not `rounded-full`: the pill shape is only right for a
           one-line note. A system message can run to a dozen lines — a
           bilingual service notice does — and a 9999px radius on a 152px-tall
@@ -126,6 +143,52 @@ function SystemMessage({
   );
 }
 
+/**
+ * What an ask notice asked for, as a small label above its words.
+ *
+ * The notice's text is written for the dealer, in their language, and says
+ * "tap Send photo". The admin reading the thread needs the plain fact — what is
+ * being asked for, for which day — and, when the thread knows, whether the
+ * dealer has answered. The title is the one the dealer saw.
+ */
+function AskLabel({
+  ask,
+  status,
+}: {
+  ask: MessageAsk;
+  status?: DealerOpenRequest['status'];
+}) {
+  return (
+    <div className="flex max-w-[85%] flex-col items-center gap-1 text-xs">
+      {/* The glyph and the words are one unit: wrapped apart, a long title left
+          the glyph alone on a line above it. */}
+      <span className="flex items-start gap-1.5">
+        <ClipboardList
+          width={13}
+          height={13}
+          strokeWidth={1.75}
+          className="mt-px shrink-0 text-text-muted"
+          aria-hidden
+        />
+        <span className="min-w-0 font-medium text-text [overflow-wrap:anywhere]">
+          Asked for: {ask.title}
+          {ask.periodLabel ? (
+            <span className="whitespace-nowrap font-normal text-text-muted">
+              {' '}
+              · {ask.periodLabel}
+            </span>
+          ) : null}
+        </span>
+      </span>
+      {status ? (
+        <Badge intent={status === 'sent' ? 'warning' : 'neutral'}>
+          {OPEN_REQUEST_STATUS_LABEL[status]}
+        </Badge>
+      ) : null}
+    </div>
+  );
+}
+
 /** Group reactions into per-emoji chips, first-seen order, own flagged. */
 function groupReactions(
   reactions: MessageReaction[],
@@ -153,6 +216,9 @@ export const MessageBubble = React.memo(function MessageBubble({
   onOpenMenu,
   onJumpTo,
   onOpenReactions,
+  pendingAnswer,
+  askStatus,
+  onOpenAnswer,
 }: MessageBubbleProps) {
   // Touch path into the same menu the hover chevron / right-click opens.
   // Hooks run before the system early return to keep their order stable.
@@ -174,6 +240,7 @@ export const MessageBubble = React.memo(function MessageBubble({
       <SystemMessage
         message={message}
         currentUserId={currentUserId}
+        askStatus={askStatus}
         onOpenReactions={onOpenReactions}
       />
     );
@@ -314,6 +381,30 @@ export const MessageBubble = React.memo(function MessageBubble({
           </div>
         ) : null}
       </div>
+      {pendingAnswer && onOpenAnswer ? (
+        // The request a dealer's picture answered, waiting for MDG. A chip under
+        // the message and not only a menu entry: the long-press is invisible, and
+        // this is the one thing in the thread the admin has to do something about.
+        // `text-warning-strong` at every width — it is a button, read outdoors —
+        // and a real 44px target below md rather than a halo, since the reaction
+        // chips just under it carry halos of their own.
+        <button
+          type="button"
+          onClick={() => onOpenAnswer(message)}
+          className="flex min-h-11 max-w-[85%] items-center gap-1.5 rounded-lg border border-warning bg-warning-soft px-2.5 py-1 text-left text-xs font-medium text-warning-strong [overflow-wrap:anywhere] md:min-h-0 md:max-w-[75%]"
+        >
+          <CheckCircle2
+            width={13}
+            height={13}
+            strokeWidth={2}
+            className="shrink-0"
+            aria-hidden
+          />
+          <span className="min-w-0">
+            Answer to: {requestLabel(pendingAnswer)} — mark received
+          </span>
+        </button>
+      ) : null}
       {reactions.length > 0 ? (
         <div
           className={cn(

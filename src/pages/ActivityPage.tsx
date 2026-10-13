@@ -70,13 +70,20 @@ function actionIntent(action: string): Intent {
     action === 'CONVERSATION_STARTED' ||
     action === 'CONVERSATION_RESOLVED' ||
     action === 'CREDIT_DOD_SHARE' ||
+    // A dealer's chat photo marked received for a request (ADR 0019).
+    action === 'CHAT_ASK_RECEIVED' ||
     action === 'BANK_HOLIDAY_CONFIRM' ||
     action === 'DEPOT_HOLIDAY_CONFIRM' ||
     action === 'LOAD_PLAN_APPROVE_AND_SHARE'
   ) {
     return 'success';
   }
-  if (action === 'STATUS_CHANGE' || action === 'CONVERSATION_REOPENED') {
+  if (
+    action === 'STATUS_CHANGE' ||
+    action === 'CONVERSATION_REOPENED' ||
+    // The same photo sent back with a reason — the dealer is asked again.
+    action === 'CHAT_ASK_SENT_BACK'
+  ) {
     return 'warning';
   }
   if (

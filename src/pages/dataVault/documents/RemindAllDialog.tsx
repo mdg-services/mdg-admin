@@ -183,8 +183,8 @@ export function RemindAllDialog({ open, onClose, rows }: RemindAllDialogProps) {
               ) : null}
             </ul>
             <p className="text-xs text-text-subtle">
-              Each dealer gets one notification on their phone, in Hindi. Anyone reminded within
-              the last hour is refused and will be named below.
+              Each dealer gets one message in their chat, in Hindi, with a Send photo button on it.
+              Anyone reminded within the last hour is refused and will be named below.
             </p>
           </>
         )}
@@ -193,7 +193,7 @@ export function RemindAllDialog({ open, onClose, rows }: RemindAllDialogProps) {
           <Callout intent="warning">
             {ringInstead.map((c) => dealerCodeLabel(c)).join(', ')}{' '}
             {ringInstead.length === 1 ? 'has' : 'have'} now been asked three times or more. Ring
-            them — another notification will not help.
+            them — another message will not help.
           </Callout>
         ) : null}
       </div>

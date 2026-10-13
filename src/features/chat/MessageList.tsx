@@ -3,7 +3,7 @@ import * as React from 'react';
 
 import { useToast } from '@/components/ui/Toast';
 import { useStickToBottom } from '@/hooks/useStickToBottom';
-import type { Message } from '@dk/shared';
+import type { DealerOpenRequest, Message } from '@dk/shared';
 
 import { MessageActionsMenu, type MenuAnchor } from './MessageActionsMenu';
 import { MessageBubble } from './MessageBubble';
@@ -20,6 +20,23 @@ interface MessageListProps {
   onToggleReaction?: (message: Message, emoji: string) => void;
   onOpenReactions?: (message: Message) => void;
   onOpenInfo?: (message: Message) => void;
+  /** Mark a dealer's picture received for one of their requests (message menu, and the "Answer to" chip). */
+  onMarkReceived?: (message: Message) => void;
+  /** Send a dealer's answer back with a reason (message menu). */
+  onSendBack?: (message: Message) => void;
+  /**
+   * The requests a dealer has answered and MDG has not yet checked, by the id of
+   * the message that carried the answer. Computed once for the thread, so no
+   * bubble fetches anything.
+   */
+  pendingAnswers?: ReadonlyMap<string, DealerOpenRequest>;
+  /** Where each request in the thread stands, by ref, for the label on an ask notice. */
+  askStatuses?: ReadonlyMap<string, DealerOpenRequest['status']>;
+  /**
+   * Scroll to, and flash, this message — loading older pages for it if needed.
+   * A fresh `nonce` asks again for the same message ("Show message" twice).
+   */
+  jumpTo?: { id: string; nonce: number } | null;
 }
 
 /** How many older pages the jump-to-quote loop will fetch before giving up. */
@@ -70,6 +87,11 @@ export function MessageList({
   onToggleReaction,
   onOpenReactions,
   onOpenInfo,
+  onMarkReceived,
+  onSendBack,
+  pendingAnswers,
+  askStatuses,
+  jumpTo,
 }: MessageListProps) {
   const toast = useToast();
 
@@ -161,6 +183,13 @@ export function MessageList({
     [scrollToMessage],
   );
 
+  // An outside request to show one message — the Open requests card's "Show
+  // message". It rides the same loop as a tapped quote, so an answer that is
+  // several pages back is fetched for rather than reported as not found.
+  React.useEffect(() => {
+    if (jumpTo) handleJumpTo(jumpTo.id);
+  }, [jumpTo, handleJumpTo]);
+
   React.useEffect(() => {
     if (!pendingJump) return;
     if (scrollToMessage(pendingJump.id)) {
@@ -221,6 +250,9 @@ export function MessageList({
           onOpenMenu={openMenu}
           onJumpTo={handleJumpTo}
           onOpenReactions={onOpenReactions}
+          pendingAnswer={pendingAnswers?.get(m.id)}
+          askStatus={m.ask ? askStatuses?.get(m.ask.ref) : undefined}
+          onOpenAnswer={onMarkReceived}
         />
       </div>,
     );
@@ -276,6 +308,8 @@ export function MessageList({
           onReply={onReply}
           onToggleReaction={onToggleReaction}
           onOpenInfo={onOpenInfo}
+          onMarkReceived={onMarkReceived}
+          onSendBack={onSendBack}
           onClose={closeMenu}
         />
       ) : null}

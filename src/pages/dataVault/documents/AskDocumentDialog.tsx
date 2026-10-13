@@ -247,7 +247,7 @@ export function AskDocumentDialog({
       onClose={onClose}
       title="Ask for a document"
       help={<HowThisWorks surface="admin-ask-document" label="Ask for a document" variant="icon" />}
-      description="The dealer gets a notification straight away, in Hindi, with your words under it."
+      description="The dealer gets a message in their chat straight away, in Hindi, with a Send photo button on it and your words under it. They answer there."
       size="lg"
       footer={
         <>
@@ -389,7 +389,7 @@ export function AskDocumentDialog({
               rows={2}
               maxLength={DOCUMENT_ASK_NOTE_MAX}
               disabled={running}
-              placeholder="Shown under the title on their phone, word for word."
+              placeholder="Shown under the title in their chat, word for word."
               onChange={(e) => setNote(e.target.value)}
             />
           </div>

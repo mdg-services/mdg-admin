@@ -156,9 +156,10 @@ export function RequestEvidenceDialog({
         )}
 
         <p className="text-sm text-text">
-          The dealer will be asked for{' '}
+          The dealer will be asked in their chat for{' '}
           <strong className="font-semibold">{wanted}</strong> for{' '}
-          <strong className="font-semibold">{row.labelEn}</strong>.
+          <strong className="font-semibold">{row.labelEn}</strong>. They answer there, and the photo
+          waits for someone at MDG to check it.
         </p>
 
         <div>
@@ -174,7 +175,7 @@ export function RequestEvidenceDialog({
             maxLength={500}
           />
           <p className="mt-1 text-xs text-text-subtle">
-            Shown to the dealer as written. Leave it blank for the standard ask.
+            Shown in the chat message as written. Leave it blank for the standard ask.
           </p>
         </div>
 

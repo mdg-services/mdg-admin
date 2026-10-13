@@ -1,4 +1,4 @@
-import { Copy, Download, Info, Reply } from 'lucide-react';
+import { CheckCircle2, Copy, Download, Info, Reply, Undo2 } from 'lucide-react';
 import * as React from 'react';
 
 import { Portal } from '@/components/ui/Portal';
@@ -6,6 +6,7 @@ import { Sheet } from '@/components/ui/Sheet';
 import { useToast } from '@/components/ui/Toast';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useOverlayEntry } from '@/hooks/useOverlayStack';
+import { isAnswerableMessage } from '@/lib/chatAsk';
 import { copyText } from '@/lib/clipboard';
 import { cn } from '@/lib/cn';
 import { downloadAttachment } from '@/lib/downloadAttachment';
@@ -25,6 +26,14 @@ interface MessageActionsMenuProps {
   onReply: (message: Message) => void;
   onToggleReaction: (message: Message, emoji: string) => void;
   onOpenInfo: (message: Message) => void;
+  /**
+   * Mark a dealer's picture or file received for one of their open requests
+   * (ADR 0019). Optional: a surface that cannot act on requests omits both and
+   * the two rows are not drawn.
+   */
+  onMarkReceived?: (message: Message) => void;
+  /** Send a dealer's answer back with a reason. Paired with `onMarkReceived`. */
+  onSendBack?: (message: Message) => void;
   onClose: () => void;
 }
 
@@ -64,6 +73,8 @@ export function MessageActionsMenu({
   onReply,
   onToggleReaction,
   onOpenInfo,
+  onMarkReceived,
+  onSendBack,
   onClose,
 }: MessageActionsMenuProps) {
   const toast = useToast();
@@ -124,6 +135,10 @@ export function MessageActionsMenu({
 
   const isTemp = message.id.startsWith('tmp-');
   const own = message.senderId === currentUserId;
+  // A dealer's picture or file only — not MDG's own message, not a notice, not a
+  // bare voice note. The same test decides whether the thread draws the
+  // "Answer to" chip, so the menu and the chip cannot disagree.
+  const canActOnAnswer = isAnswerableMessage(message);
   const ownEmoji = message.reactions?.find(
     (r) => r.userId === currentUserId,
   )?.emoji;
@@ -198,6 +213,26 @@ export function MessageActionsMenu({
           onClick={() => void handleDownload(a)}
         />
       ))}
+      {canActOnAnswer && onMarkReceived ? (
+        <MenuRow
+          icon={<CheckCircle2 width={15} height={15} strokeWidth={1.75} />}
+          label="Mark received…"
+          onClick={() => {
+            onClose();
+            onMarkReceived(message);
+          }}
+        />
+      ) : null}
+      {canActOnAnswer && onSendBack ? (
+        <MenuRow
+          icon={<Undo2 width={15} height={15} strokeWidth={1.75} />}
+          label="Send back…"
+          onClick={() => {
+            onClose();
+            onSendBack(message);
+          }}
+        />
+      ) : null}
       {own && !isTemp ? (
         <MenuRow
           icon={<Info width={15} height={15} strokeWidth={1.75} />}

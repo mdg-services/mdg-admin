@@ -45,13 +45,19 @@ import { MediaGalleryCard } from '@/features/chat/MediaGalleryCard';
 import { MessageInfoDialog } from '@/features/chat/MessageInfoDialog';
 import { MessageList } from '@/features/chat/MessageList';
 import { NewConversationDialog } from '@/features/chat/NewConversationDialog';
+import { OpenRequestsCard } from '@/features/chat/OpenRequestsCard';
 import { ReactionsDialog } from '@/features/chat/ReactionsDialog';
+import {
+  type AskActionTarget,
+  ReceiveAskDialog,
+} from '@/features/chat/ReceiveAskDialog';
 import {
   buildReplyContext,
   replyPreviewText,
   replySenderLabel,
 } from '@/features/chat/replyPreview';
 import { ResolveConversationDialog } from '@/features/chat/ResolveConversationDialog';
+import { SendBackAskDialog } from '@/features/chat/SendBackAskDialog';
 import { TicketStrip } from '@/features/chat/TicketStrip';
 import { useConversationSocket } from '@/features/chat/useConversationSocket';
 import { useInboxSocket } from '@/features/chat/useInboxSocket';
@@ -60,6 +66,7 @@ import {
   useConversationAiTurnsQuery,
 } from '@/hooks/api/useAiTurns';
 import { useAssignConversation } from '@/hooks/api/useAssignConversation';
+import { useDealerOpenRequestsQuery } from '@/hooks/api/useChatAsks';
 import { useConversation } from '@/hooks/api/useConversation';
 import {
   type InboxFilter,
@@ -79,6 +86,12 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { usePublishBottomBar } from '@/hooks/usePublishBottomBar';
 import { useSafeBack } from '@/hooks/useSafeBack';
 import { ApiError, api } from '@/lib/api';
+import {
+  countRequests,
+  mdgRepliedMessageIds,
+  pendingAnswersByMessage,
+  statusByRef,
+} from '@/lib/chatAsk';
 import { cn } from '@/lib/cn';
 import type { Intent } from '@/lib/statusIntent';
 import { useAuthStore } from '@/store/auth';
@@ -97,6 +110,7 @@ import type {
   Attachment,
   Conversation,
   Dealer,
+  DealerOpenRequest,
   Message,
   ShareAudience,
   TicketCategory,
@@ -686,6 +700,20 @@ export function InboxPage() {
     null,
   );
 
+  // "Mark received…" and "Send back…" each act on one dealer message. `message`
+  // is null when the action came from the card for a message that is not loaded
+  // here — in another chat, or on an older page.
+  const [receiveTarget, setReceiveTarget] = React.useState<AskActionTarget | null>(null);
+  const [sendBackTarget, setSendBackTarget] = React.useState<AskActionTarget | null>(null);
+  // "Show message": the message to scroll to, with a nonce so a second press on
+  // the same one scrolls again. `pendingFocus` waits for another chat to open.
+  const [jumpTo, setJumpTo] = React.useState<{ id: string; nonce: number } | null>(null);
+  const [pendingFocus, setPendingFocus] = React.useState<{
+    conversationId: string;
+    messageId: string;
+  } | null>(null);
+  const jumpSeq = React.useRef(0);
+
   /**
    * The "Put in composer" request from the AI strip.
    *
@@ -727,6 +755,9 @@ export function InboxPage() {
     setInfoForId(null);
     setReactionsForId(null);
     setComposerInsert(null);
+    setReceiveTarget(null);
+    setSendBackTarget(null);
+    setJumpTo(null);
   }, [selectedId]);
 
   const infoMessage = infoForId
@@ -861,6 +892,105 @@ export function InboxPage() {
     enabled: !!dealerId && contextOpen,
     retry: false,
   });
+
+  /*
+   * What MDG is waiting on from this outlet, and what the dealer has answered in
+   * the chat that nobody has checked (ADR 0019). Read WITHOUT waiting for the
+   * details panel to open: the "Answer to…" chip under a dealer's photo and the
+   * status on an ask notice need it, and the panel is shut by default on a phone.
+   * One query feeds the card, the chips and both dialogs.
+   */
+  const openRequestsQ = useDealerOpenRequestsQuery(dealerId);
+  const openRequests = openRequestsQ.data;
+  // A refetch that fails after a good read keeps the old list on screen; only
+  // the absence of any list is a failure to show.
+  const openRequestsFailed = openRequestsQ.isError && !openRequests;
+  // `refetch` is stable across renders; the query object is not.
+  const { refetch: refetchOpenRequests } = openRequestsQ;
+  const retryOpenRequests = React.useCallback(
+    () => void refetchOpenRequests(),
+    [refetchOpenRequests],
+  );
+  // What this thread already shows: which messages are loaded (is the dealer's
+  // photo on screen?) and which a person has replied to (is the request already
+  // dealt with?). Only this thread can be read; the other chat's are not in it.
+  const loadedMessageIds = React.useMemo(
+    () => new Set(messages.map((m) => m.id)),
+    [messages],
+  );
+  const repliedMessageIds = React.useMemo(() => mdgRepliedMessageIds(messages), [messages]);
+  const pendingAnswers = React.useMemo(
+    () => pendingAnswersByMessage(openRequests ?? [], repliedMessageIds),
+    [openRequests, repliedMessageIds],
+  );
+  const askStatuses = React.useMemo(
+    () => statusByRef(openRequests ?? []),
+    [openRequests],
+  );
+  const requestsToCheck = countRequests(openRequests ?? [], repliedMessageIds).toCheck;
+
+  // From the message menu and the "Answer to…" chip: this very message, whichever
+  // request it turns out to answer — the dialog starts on that one.
+  const handleMarkReceivedForMessage = React.useCallback((m: Message) => {
+    setReceiveTarget({ conversationId: m.conversationId, messageId: m.id, message: m });
+  }, []);
+  const handleSendBackForMessage = React.useCallback((m: Message) => {
+    setSendBackTarget({ conversationId: m.conversationId, messageId: m.id, message: m });
+  }, []);
+
+  // From the card: the answered request names its message, and the dialog starts
+  // on that request. The message itself is only at hand when it is in THIS thread.
+  const targetForRequest = React.useCallback(
+    (r: DealerOpenRequest): AskActionTarget | null => {
+      if (!r.answeredBy) return null;
+      const { conversationId, messageId } = r.answeredBy;
+      const message =
+        conversationId === selectedId ? (messages.find((m) => m.id === messageId) ?? null) : null;
+      return { conversationId, messageId, message, preselectRef: r.ref };
+    },
+    [messages, selectedId],
+  );
+  const handleCardMarkReceived = React.useCallback(
+    (r: DealerOpenRequest) => {
+      const target = targetForRequest(r);
+      if (target) setReceiveTarget(target);
+    },
+    [targetForRequest],
+  );
+  const handleCardSendBack = React.useCallback(
+    (r: DealerOpenRequest) => {
+      const target = targetForRequest(r);
+      if (target) setSendBackTarget(target);
+    },
+    [targetForRequest],
+  );
+
+  // "Show message": scroll to and flash the dealer's answer. When it lives in
+  // another of the outlet's chats, open that chat first and scroll once it is up.
+  const handleShowMessage = React.useCallback(
+    (r: DealerOpenRequest) => {
+      if (!r.answeredBy) return;
+      const { conversationId, messageId } = r.answeredBy;
+      // Below lg the card is inside the Details drawer, which would cover it.
+      setMobileContextOpen(false);
+      if (conversationId === selectedId) {
+        jumpSeq.current += 1;
+        setJumpTo({ id: messageId, nonce: jumpSeq.current });
+        return;
+      }
+      setPendingFocus({ conversationId, messageId });
+      openConversation(conversationId);
+    },
+    [selectedId, openConversation],
+  );
+  // Declared after the thread-change reset above, so that on the render which
+  // opens the other chat this sets the jump and the reset does not erase it.
+  React.useEffect(() => {
+    if (!pendingFocus || selectedId !== pendingFocus.conversationId) return;
+    jumpSeq.current += 1;
+    setJumpTo({ id: pendingFocus.messageId, nonce: jumpSeq.current });
+    setPendingFocus(null);
+  }, [pendingFocus, selectedId]);
 
   async function handleSend(payload: {
     body?: string;
@@ -1057,6 +1187,21 @@ export function InboxPage() {
             </div>
           </CardContent>
         </Card>
+      ) : null}
+      {/* Above the Dealer card: it is the one card here an admin acts from. */}
+      {dealerId ? (
+        <OpenRequestsCard
+          conversationId={conversation.id}
+          loadedMessageIds={loadedMessageIds}
+          repliedMessageIds={repliedMessageIds}
+          requests={openRequests}
+          loading={openRequestsQ.isLoading}
+          failed={openRequestsFailed}
+          onRetry={retryOpenRequests}
+          onShowMessage={handleShowMessage}
+          onMarkReceived={handleCardMarkReceived}
+          onSendBack={handleCardSendBack}
+        />
       ) : null}
       <Card>
         <CardHeader>
@@ -1472,11 +1617,26 @@ export function InboxPage() {
                 <button
                   type="button"
                   onClick={() => setThreadMenuOpen(true)}
-                  aria-label="More actions"
+                  aria-label={
+                    requestsToCheck > 0
+                      ? `More actions — ${requestsToCheck} to check`
+                      : 'More actions'
+                  }
                   aria-expanded={threadMenuOpen}
-                  className="flex h-11 w-11 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text"
+                  className="relative flex h-11 w-11 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text"
                 >
                   <MoreVertical width={18} height={18} strokeWidth={1.75} />
+                  {/* Details is a row in the sheet this opens, and the Open
+                      requests card is inside it: the count is the only sign, from
+                      the thread itself, that a dealer's answer is waiting. */}
+                  {requestsToCheck > 0 ? (
+                    <span
+                      aria-hidden
+                      className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-strong px-1 text-[10px] font-semibold leading-none text-white"
+                    >
+                      {requestsToCheck}
+                    </span>
+                  ) : null}
                 </button>
               </div>
 
@@ -1543,10 +1703,25 @@ export function InboxPage() {
                 <button
                   type="button"
                   onClick={() => setMobileContextOpen(true)}
-                  aria-label="Show details"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text lg:hidden"
+                  aria-label={
+                    requestsToCheck > 0
+                      ? `Show details — ${requestsToCheck} to check`
+                      : 'Show details'
+                  }
+                  className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text lg:hidden"
                 >
                   <Info width={18} height={18} strokeWidth={1.75} />
+                  {/* The Open requests card is in the Details panel, which a
+                      phone keeps shut: this is the only sign from the thread that
+                      a dealer has sent something MDG has not checked. */}
+                  {requestsToCheck > 0 ? (
+                    <span
+                      aria-hidden
+                      className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-strong px-1 text-[10px] font-semibold leading-none text-white"
+                    >
+                      {requestsToCheck}
+                    </span>
+                  ) : null}
                 </button>
                 <button
                   type="button"
@@ -1597,6 +1772,11 @@ export function InboxPage() {
                       onToggleReaction={handleToggleReaction}
                       onOpenReactions={handleOpenReactions}
                       onOpenInfo={handleOpenInfo}
+                      onMarkReceived={handleMarkReceivedForMessage}
+                      onSendBack={handleSendBackForMessage}
+                      pendingAnswers={pendingAnswers}
+                      askStatuses={askStatuses}
+                      jumpTo={jumpTo}
                     />
                   )}
                 </div>
@@ -1705,6 +1885,26 @@ export function InboxPage() {
               onClose={() => setInfoForId(null)}
             />
 
+            <ReceiveAskDialog
+              target={receiveTarget}
+              dealerId={dealerId}
+              requests={openRequests}
+              loading={openRequestsQ.isLoading}
+              failed={openRequestsFailed}
+              onRetry={retryOpenRequests}
+              onClose={() => setReceiveTarget(null)}
+            />
+
+            <SendBackAskDialog
+              target={sendBackTarget}
+              dealerId={dealerId}
+              requests={openRequests}
+              loading={openRequestsQ.isLoading}
+              failed={openRequestsFailed}
+              onRetry={retryOpenRequests}
+              onClose={() => setSendBackTarget(null)}
+            />
+
             <ResolveConversationDialog
               open={resolveOpen}
               onClose={() => setResolveOpen(false)}
@@ -1758,7 +1958,7 @@ export function InboxPage() {
                   setMobileContextOpen(true);
                 }}
               >
-                Details
+                {requestsToCheck > 0 ? `Details · ${requestsToCheck} to check` : 'Details'}
               </SheetItem>
               {conversation.status === 'ASSIGNED' &&
               conversation.assignedAdminId !== currentUserId ? (
