@@ -131,11 +131,11 @@ export const NAV_ITEMS: NavItem[] = [
   // place a reply is read. Super-admin for the reason the two above are: they
   // are members of the public, with their numbers and their words.
   { to: '/whatsapp', label: 'WhatsApp replies', icon: MessageCircle, superAdminOnly: true },
-  // What people have reported on the website's grievance page. Each one stays
-  // open until a person resolves it with a note, and carries an open count
-  // badge (`useNavBadges`) because the person who wrote in was promised an
-  // answer. Super-admin: strangers' words and numbers, and a grievance may be
-  // about our own staff.
+  // What people have reported on the website's grievance page, or to the
+  // assistant. Each one stays open until a person resolves it with a note, and
+  // carries an open count badge (`useNavBadges`) because the person who wrote
+  // in was promised an answer. Super-admin: strangers' words and numbers, and
+  // a grievance may be about our own staff.
   { to: '/grievances', label: 'Grievances', icon: MessageSquareWarning, superAdminOnly: true },
   // Everyone who has filled in "Register your pump", on the site or in the app.
   // Until this existed the only record was an email to our own inbox. Counts

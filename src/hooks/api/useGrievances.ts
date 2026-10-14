@@ -11,7 +11,7 @@ export const grievancesKey = (view: GrievanceView) => ['grievances', view] as co
 export const grievanceCountsKey = ['grievances', 'counts'] as const;
 
 /**
- * What people have sent from the website's grievance page.
+ * What people have sent from the website's grievance page, or told the assistant.
  *
  * `open` is what still needs a person; `all` is everything ever sent, newest
  * first, cut at the newest 500. The counts in the reply are true totals, so a

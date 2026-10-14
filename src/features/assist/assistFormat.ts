@@ -1,4 +1,5 @@
 import { inrFormat } from '@/lib/format';
+import { istStamp } from '@/lib/intake';
 import type {
   AssistChannel,
   AssistCostSplit,
@@ -7,6 +8,7 @@ import type {
   AssistFollowupStatus,
   AssistGuardStage,
   AssistLang,
+  AssistSessionGrievance,
   AssistSessionStatus,
 } from '@dk/shared';
 
@@ -253,4 +255,38 @@ export function docLabel(docId: string): string {
 /** `p.7`, or `p.7–9` when the passage straddles a page break. */
 export function pageLabel(pageFrom: number, pageTo: number): string {
   return pageTo > pageFrom ? `p.${pageFrom}–${pageTo}` : `p.${pageFrom}`;
+}
+
+/**
+ * Where a grievance filed in a conversation is read and resolved: the Grievances
+ * page on its Everything tab. Not Open — one resolved a minute ago has already
+ * left that tab, and a link from a transcript must not land on a page that
+ * looks as if the grievance never existed.
+ */
+export const GRIEVANCES_ALL_HREF = '/grievances?view=all';
+
+/**
+ * The grievances filed in this conversation, oldest first. Usually none.
+ *
+ * The API always sends the list now. The tolerance is for the console left
+ * open across the deploy that added it, whose next reply carries none: that
+ * must read as "nothing filed", not throw on `.length` and blank the drawer.
+ */
+export function grievancesOf(detail: {
+  grievances?: AssistSessionGrievance[];
+}): AssistSessionGrievance[] {
+  return Array.isArray(detail.grievances) ? detail.grievances : [];
+}
+
+/**
+ * "Filed 12 Oct, 14:05". India time, the clock the Grievances page prints its
+ * own Sent column in, so the two can be read against each other. Just "Filed"
+ * when the time is missing or unreadable.
+ */
+export function grievanceFiledLine(
+  g: Pick<AssistSessionGrievance, 'filedAt'>,
+  now: number = Date.now(),
+): string {
+  const when = istStamp(g.filedAt, now);
+  return when ? `Filed ${when}` : 'Filed';
 }

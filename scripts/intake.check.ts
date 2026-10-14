@@ -1,6 +1,8 @@
 /**
  * Checks for the decisions behind the Grievances and Registrations pages
- * (`src/lib/intake.ts` and the two pages' `format.ts`).
+ * (`src/lib/intake.ts` and the two pages' `format.ts`), and for the one place
+ * the Assistant console's conversation drawer meets them: the grievances filed
+ * in a conversation (`src/features/assist/assistFormat.ts`).
  *
  * This app has no test runner, so these are plain `node:test` checks over the
  * pure modules, run through the `tsx` the repo root already carries:
@@ -19,6 +21,12 @@ import {
   markEnrolmentContactedSchema,
   resolveGrievanceSchema,
 } from '../shared/src/schemas/websiteIntake';
+import { GRIEVANCE_SOURCES, GRIEVANCE_SOURCE_LABELS } from '../shared/src/types/websiteIntake';
+import {
+  GRIEVANCES_ALL_HREF,
+  grievanceFiledLine,
+  grievancesOf,
+} from '../src/features/assist/assistFormat';
 import {
   agoLabel,
   cutShortNote,
@@ -30,9 +38,13 @@ import {
 import {
   GRIEVANCE_NOTE_MAX,
   GRIEVANCE_NOTE_MIN,
+  conversationHref,
+  hasEmail,
   languageNote,
+  madeWithAssistant,
   noteProblem as grievanceNoteProblem,
   replySubject,
+  resolveWarning,
   resolvedLine as grievanceResolvedLine,
 } from '../src/pages/grievances/format';
 import {
@@ -236,5 +248,88 @@ describe('the row lines', () => {
     assert.equal(languageNote({ lang: 'hi' }), 'Written in Hindi');
     assert.equal(languageNote({ lang: 'en' }), null);
     assert.equal(replySubject({ ref: 'G-0007' }), 'Your grievance G-0007');
+  });
+});
+
+describe('where a grievance was made', () => {
+  it('has a label for every source the shared contract lists', () => {
+    // A new source added in @dk/shared without a label would print as its raw id.
+    for (const source of GRIEVANCE_SOURCES) {
+      assert.ok(GRIEVANCE_SOURCE_LABELS[source], source);
+    }
+    assert.equal(GRIEVANCE_SOURCE_LABELS['assistant-call'], 'Call with the assistant');
+  });
+
+  it('colours the two assistant sources and leaves the website form plain', () => {
+    assert.equal(madeWithAssistant({ source: 'assistant-chat' }), true);
+    assert.equal(madeWithAssistant({ source: 'assistant-call' }), true);
+    assert.equal(madeWithAssistant({ source: 'website' }), false);
+    assert.equal(madeWithAssistant({ source: undefined as never }), false);
+  });
+
+  it('links a grievance to the conversation it was made in, and only then', () => {
+    assert.equal(
+      conversationHref({ assistSessionId: '6710f0a1b2c3d4e5f6a7b8c9' }),
+      '/assist?session=6710f0a1b2c3d4e5f6a7b8c9',
+    );
+    // The website form has no conversation, and neither has a row that predates the field.
+    assert.equal(conversationHref({ assistSessionId: null }), null);
+    assert.equal(conversationHref({ assistSessionId: undefined as never }), null);
+    assert.equal(conversationHref({ assistSessionId: '' }), null);
+  });
+
+  it('never lets an id add a second query parameter', () => {
+    assert.equal(
+      conversationHref({ assistSessionId: 'abc&view=x' }),
+      '/assist?session=abc%26view%3Dx',
+    );
+  });
+});
+
+describe('telling the person the outcome', () => {
+  it('points at phone or email when there is an address', () => {
+    assert.equal(
+      resolveWarning({ name: 'Ravi', email: 'ravi@example.com' }),
+      'Resolving does not email Ravi. Tell them yourself, by phone or email.',
+    );
+    assert.equal(hasEmail({ email: 'ravi@example.com' }), true);
+  });
+
+  it('says plainly that they left no email, and to call the mobile', () => {
+    for (const email of [null, '', '   ']) {
+      assert.equal(hasEmail({ email }), false, JSON.stringify(email));
+      const line = resolveWarning({ name: 'Ravi', email });
+      assert.match(line, /left no email/);
+      assert.match(line, /call them on the mobile/);
+      assert.doesNotMatch(line, /by phone or email/);
+    }
+  });
+});
+
+describe('grievances filed in a conversation', () => {
+  it('lists them as the server sent them, and treats a missing list as none', () => {
+    const filed = [
+      { id: 'a1', ref: 'G-0012', filedAt: '2026-10-12T08:35:00Z' },
+      { id: 'a2', ref: 'G-0013', filedAt: '2026-10-12T08:41:00Z' },
+    ];
+    assert.deepEqual(grievancesOf({ grievances: filed }), filed);
+    assert.deepEqual(grievancesOf({ grievances: [] }), []);
+    // The console left open across the deploy that added the list.
+    assert.deepEqual(grievancesOf({}), []);
+    assert.deepEqual(grievancesOf({ grievances: null as never }), []);
+  });
+
+  it('prints when it was filed in India time, the way the Grievances page does', () => {
+    const now = Date.parse('2026-10-14T06:00:00Z');
+    assert.match(
+      grievanceFiledLine({ filedAt: '2026-10-12T08:35:00Z' }, now),
+      /^Filed 12 Oct,? 14:05$/,
+    );
+    assert.equal(grievanceFiledLine({ filedAt: 'not a date' }, now), 'Filed');
+    assert.equal(grievanceFiledLine({ filedAt: '' }, now), 'Filed');
+  });
+
+  it('links to Everything, so a grievance resolved a minute ago is still found', () => {
+    assert.equal(GRIEVANCES_ALL_HREF, '/grievances?view=all');
   });
 });

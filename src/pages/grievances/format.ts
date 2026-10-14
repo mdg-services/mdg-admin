@@ -42,6 +42,42 @@ export function languageNote(g: Pick<Grievance, 'lang'>): string | null {
   return g.lang === 'hi' ? 'Written in Hindi' : null;
 }
 
+/**
+ * Whether the assistant took it down. Those are the ones that are new to this
+ * page, so their badge is coloured; the website form is the plain default.
+ */
+export function madeWithAssistant(g: Pick<Grievance, 'source'>): boolean {
+  return g.source === 'assistant-chat' || g.source === 'assistant-call';
+}
+
+/**
+ * The Assistant console's page for the conversation a grievance was made in, or
+ * `null` for one that was not made in a conversation (the website form). The
+ * console reads `?session=` and opens that conversation, transcript and
+ * recording included.
+ */
+export function conversationHref(g: Pick<Grievance, 'assistSessionId'>): string | null {
+  return g.assistSessionId ? `/assist?session=${encodeURIComponent(g.assistSessionId)}` : null;
+}
+
+/** Whether there is an address to write to. A blank one is as good as none. */
+export function hasEmail(g: Pick<Grievance, 'email'>): boolean {
+  return !!g.email?.trim();
+}
+
+/**
+ * What the Resolve dialog says about telling the person the outcome.
+ *
+ * Resolving sends nothing either way. What differs is how the admin reaches
+ * them: a grievance made through the assistant may carry no email, because
+ * nobody spells an address out on a call, and then the mobile is the only way.
+ */
+export function resolveWarning(g: Pick<Grievance, 'name' | 'email'>): string {
+  return hasEmail(g)
+    ? `Resolving does not email ${g.name}. Tell them yourself, by phone or email.`
+    : `Resolving does not tell ${g.name} anything. They left no email, so call them on the mobile.`;
+}
+
 /** What the Reply by email link puts on the subject line. */
 export function replySubject(g: Pick<Grievance, 'ref'>): string {
   return `Your grievance ${g.ref}`;

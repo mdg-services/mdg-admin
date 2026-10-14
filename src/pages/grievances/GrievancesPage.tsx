@@ -1,6 +1,6 @@
-import { CheckCircle2, MessageSquareWarning, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, MessageSquareWarning, MessagesSquare, TriangleAlert } from 'lucide-react';
 import * as React from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -18,26 +18,39 @@ import { ContactLinks } from '@/features/intake/ContactLinks';
 import { useGrievancesQuery, useReopenGrievance } from '@/hooks/api/useGrievances';
 import { useBusyIds } from '@/hooks/useBusyIds';
 import { cutShortNote } from '@/lib/intake';
-import { GRIEVANCE_CATEGORY_LABELS } from '@dk/shared';
+import { GRIEVANCE_CATEGORY_LABELS, GRIEVANCE_SOURCE_LABELS } from '@dk/shared';
 import type { Grievance, GrievanceView } from '@dk/shared';
 
-import { languageNote, replySubject, resolvedLine, sentAgo, sentAt } from './format';
+import {
+  conversationHref,
+  languageNote,
+  madeWithAssistant,
+  replySubject,
+  resolvedLine,
+  sentAgo,
+  sentAt,
+} from './format';
 
 function viewFromParam(v: string | null): GrievanceView {
   return v === 'all' ? 'all' : 'open';
 }
 
 /**
- * Everything people have sent from the grievance page on mdgservices.in.
+ * Everything people have sent from the grievance page on mdgservices.in, and
+ * everything the site's assistant has taken down from a visitor who was
+ * complaining about us.
  *
  * The website emails the person an acknowledgement with their number the moment
- * they send it, and hands the grievance to us. After that it is ours: it sits
- * here, and raises an alert on every super-admin's phone, until somebody
- * resolves it with a note.
+ * they send it; the assistant shows the number on screen instead, and its
+ * visitor may leave no email at all. Either way the grievance is handed to us.
+ * After that it is ours: it sits here, and raises an alert on every
+ * super-admin's phone, until somebody resolves it with a note.
  *
  * Resolving sends nothing. The outcome is told to the person by a human, by
  * phone or email, and this page cannot know which — the dialog says so, and
- * that is also why the number and email on every row are links.
+ * that is also why the number and email on every row are links. A row from the
+ * assistant also links to the conversation it came out of, because the visitor's
+ * own words before and after are often the context the note needs.
  *
  * The view lives in the URL (`?view=all`), so Back and a shared link land on the
  * same one.
@@ -115,7 +128,7 @@ export function GrievancesPage() {
     <div>
       <PageHeader
         title="Grievances"
-        subtitle="Reported on the website. Each one stays open until someone resolves it."
+        subtitle="Sent from the website or taken down by the assistant. Each one stays open until someone resolves it."
         tools={
           <RefreshTool
             label="Refresh the grievances"
@@ -168,7 +181,7 @@ export function GrievancesPage() {
               description={
                 everythingResolved
                   ? 'Every grievance has been resolved. A new one reaches your phone as an alert.'
-                  : 'Grievances sent from the website appear here.'
+                  : 'Grievances from the website and the assistant appear here.'
               }
             />
           )
@@ -196,6 +209,13 @@ export function GrievancesPage() {
                   </Badge>
                   {/* An unknown category (a newer website) is shown as sent. */}
                   <Badge>{GRIEVANCE_CATEGORY_LABELS[g.category] ?? g.category}</Badge>
+                  {/* Where it was made. An unknown source (a newer server) is
+                      shown as sent, and a row with none prints no badge. */}
+                  {g.source ? (
+                    <Badge intent={madeWithAssistant(g) ? 'info' : 'neutral'}>
+                      {GRIEVANCE_SOURCE_LABELS[g.source] ?? g.source}
+                    </Badge>
+                  ) : null}
                   {languageNote(g) ? <Badge>{languageNote(g)}</Badge> : null}
                 </div>
                 {/* The table has its own Sent column; a phone card has no room
@@ -215,6 +235,7 @@ export function GrievancesPage() {
                 <p className="mt-2 select-text whitespace-pre-wrap text-sm text-text">
                   {g.message}
                 </p>
+                <ConversationLink grievance={g} />
                 {g.state === 'RESOLVED' ? (
                   <div className="mt-2 rounded-md border border-border bg-surface-2 p-2">
                     <p className="text-xs text-text-subtle">{resolvedLine(g, now)}</p>
@@ -256,5 +277,24 @@ export function GrievancesPage() {
 
       <ResolveGrievanceDialog grievance={resolving} onClose={() => setResolving(null)} />
     </div>
+  );
+}
+
+/**
+ * "Read the conversation" — only on a grievance the assistant took down, and
+ * only as a link to the console, which opens the transcript and the recording.
+ * The same 44px-on-a-phone target as the phone and email links beside it.
+ */
+function ConversationLink({ grievance }: { grievance: Grievance }) {
+  const href = conversationHref(grievance);
+  if (!href) return null;
+  return (
+    <Link
+      to={href}
+      className="mt-1 inline-flex min-h-11 max-w-full items-center gap-1 rounded-sm text-sm text-brand underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:min-h-0"
+    >
+      <MessagesSquare width={13} height={13} strokeWidth={1.75} aria-hidden className="shrink-0" />
+      Read the conversation
+    </Link>
   );
 }

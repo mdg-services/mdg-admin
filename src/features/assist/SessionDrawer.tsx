@@ -1,5 +1,6 @@
 import { AlertCircle, Ban, Flag, Phone } from 'lucide-react';
 import * as React from 'react';
+import { Link } from 'react-router-dom';
 
 import {
   Badge,
@@ -31,6 +32,7 @@ import type {
   AssistFollowupStatus,
   AssistRecordingSegmentView,
   AssistSessionDetail,
+  AssistSessionGrievance,
   AssistTurn,
   AssistTurnTrace,
 } from '@dk/shared';
@@ -43,6 +45,9 @@ import {
   flagReasonText,
   followupLabel,
   formatPaise,
+  GRIEVANCES_ALL_HREF,
+  grievanceFiledLine,
+  grievancesOf,
   guardStageText,
   langLabel,
   pageLabel,
@@ -56,7 +61,8 @@ import { CallPlayer } from './CallPlayer';
  * The person reading this is deciding whether to ring a stranger back or to
  * turn them away, so the panel is ordered the way that decision is made: what
  * kind of visit it was, what was actually said, who they are and what we owe
- * them, then the recording, and only then the engineering detail.
+ * them (a callback, and any grievance they made), then the recording, and only
+ * then the engineering detail.
  *
  * The mobile number appears exactly once, in the lead panel, where it is the
  * thing being acted on. It is deliberately not in the drawer title, not in any
@@ -91,6 +97,7 @@ export function SessionDrawer({ sessionId, onClose }: SessionDrawerProps) {
     React.useState<AssistRecordingSegmentView | null>(null);
 
   const followup = useFollowupDraft(sessionId, detail);
+  const grievances = detail ? grievancesOf(detail) : [];
 
   // A closed drawer must not leave the last call's highlight behind.
   React.useEffect(() => {
@@ -181,6 +188,12 @@ export function SessionDrawer({ sessionId, onClose }: SessionDrawerProps) {
           <Section title="Who they are">
             <LeadPanel detail={detail} followup={followup} />
           </Section>
+
+          {grievances.length > 0 ? (
+            <Section title={grievances.length === 1 ? 'Grievance filed' : 'Grievances filed'}>
+              <GrievancesFiled items={grievances} />
+            </Section>
+          ) : null}
 
           {detail.recording.length > 0 ? (
             // Pinned to the bottom of the sheet below md. Play-along was
@@ -649,6 +662,41 @@ function Field({ label, value }: { label: string; value?: string }) {
       <dd className="mt-0.5 break-words text-sm text-text md:truncate">
         {value || <span className="text-text-subtle">Not given</span>}
       </dd>
+    </div>
+  );
+}
+
+/* ─────────────────────────────── Grievances ──────────────────────────────── */
+
+/**
+ * The grievances this visitor made to the assistant: the number each was given
+ * and when. They are read and resolved on the Grievances page, so each number
+ * is a link there — the transcript above is the context, and this is the way on
+ * to the work. Back from that page returns to this conversation, because the
+ * session is in the URL.
+ *
+ * Only the number and the time: what they wrote is already the transcript, and
+ * the mobile number stays in the lead panel, the one place it is printed.
+ */
+function GrievancesFiled({ items }: { items: AssistSessionGrievance[] }) {
+  return (
+    <div className="rounded-md border border-border bg-surface-2 p-2 md:p-3">
+      <ul className="grid gap-1">
+        {items.map((g) => (
+          <li key={g.id} className="flex flex-wrap items-center gap-x-3">
+            <Link
+              to={GRIEVANCES_ALL_HREF}
+              className="inline-flex min-h-11 items-center rounded-sm text-sm font-semibold tabular-nums text-brand underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:min-h-0"
+            >
+              {g.ref}
+            </Link>
+            <span className="text-xs text-text-subtle">{grievanceFiledLine(g)}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1 text-xs text-text-muted">
+        Open the number to read it on the Grievances page and resolve it there.
+      </p>
     </div>
   );
 }

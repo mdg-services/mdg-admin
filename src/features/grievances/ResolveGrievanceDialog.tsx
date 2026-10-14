@@ -3,7 +3,12 @@ import * as React from 'react';
 import { Button, Callout, Dialog, FieldError, Label, Textarea, useToast } from '@/components/ui';
 import { ContactLinks } from '@/features/intake/ContactLinks';
 import { useResolveGrievance } from '@/hooks/api/useGrievances';
-import { GRIEVANCE_NOTE_MAX, noteProblem, replySubject } from '@/pages/grievances/format';
+import {
+  GRIEVANCE_NOTE_MAX,
+  noteProblem,
+  replySubject,
+  resolveWarning,
+} from '@/pages/grievances/format';
 import { GRIEVANCE_CATEGORY_LABELS } from '@dk/shared';
 import type { Grievance } from '@dk/shared';
 
@@ -15,7 +20,8 @@ import type { Grievance } from '@dk/shared';
  * go down. It says in plain words what resolving does NOT do: the person is not
  * emailed. They were sent an acknowledgement with their number when they
  * submitted, and nothing since; telling them the outcome is the admin's job,
- * so their number and email are on this dialog to do it from.
+ * so their number and email are on this dialog to do it from. One made through
+ * the assistant may have no email at all, and then the dialog says to call.
  *
  * It owns its own request and its own toasts. `grievance` is the one being
  * resolved; `null` is closed.
@@ -104,9 +110,7 @@ export function ResolveGrievanceDialog({
             </div>
           </div>
 
-          <Callout intent="warning">
-            Resolving does not email {grievance.name}. Tell them yourself, by phone or email.
-          </Callout>
+          <Callout intent="warning">{resolveWarning(grievance)}</Callout>
 
           <div>
             <Label htmlFor={noteId} required>
