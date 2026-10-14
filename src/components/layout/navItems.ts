@@ -4,6 +4,7 @@ import {
   Building2,
   CalendarDays,
   Clapperboard,
+  ClipboardPen,
   Database,
   FileBarChart2,
   FileClock,
@@ -14,6 +15,7 @@ import {
   ListChecks,
   MessageCircle,
   MessageSquare,
+  MessageSquareWarning,
   PartyPopper,
   Plug,
   ScanLine,
@@ -129,6 +131,16 @@ export const NAV_ITEMS: NavItem[] = [
   // place a reply is read. Super-admin for the reason the two above are: they
   // are members of the public, with their numbers and their words.
   { to: '/whatsapp', label: 'WhatsApp replies', icon: MessageCircle, superAdminOnly: true },
+  // What people have reported on the website's grievance page. Each one stays
+  // open until a person resolves it with a note, and carries an open count
+  // badge (`useNavBadges`) because the person who wrote in was promised an
+  // answer. Super-admin: strangers' words and numbers, and a grievance may be
+  // about our own staff.
+  { to: '/grievances', label: 'Grievances', icon: MessageSquareWarning, superAdminOnly: true },
+  // Everyone who has filled in "Register your pump", on the site or in the app.
+  // Until this existed the only record was an email to our own inbox. Counts
+  // the ones nobody has been in touch with yet. Super-admin, as above.
+  { to: '/registrations', label: 'Registrations', icon: ClipboardPen, superAdminOnly: true },
   { to: '/services', label: 'Service Catalog', icon: Plug, superAdminOnly: true },
   { to: '/runs', label: 'Run History', icon: Activity, superAdminOnly: true },
   { to: '/users', label: 'All Users', icon: Users, superAdminOnly: true },

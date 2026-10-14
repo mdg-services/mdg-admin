@@ -145,6 +145,20 @@ const WhatsAppRepliesPage = React.lazy(
     })),
   ),
 );
+const GrievancesPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/grievances/GrievancesPage').then((m) => ({
+      default: m.GrievancesPage,
+    })),
+  ),
+);
+const RegistrationsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/registrations/RegistrationsPage').then((m) => ({
+      default: m.RegistrationsPage,
+    })),
+  ),
+);
 const FilmsPage = React.lazy(
   retryImport(() =>
     import('@/pages/FilmsPage').then((m) => ({ default: m.FilmsPage })),
@@ -487,6 +501,35 @@ export default function App() {
               <RequireSuperAdmin>
                 <LazyPage>
                   <WhatsAppRepliesPage />
+                </LazyPage>
+              </RequireSuperAdmin>
+            }
+          />
+          {/* What people have reported on the website's grievance page, behind
+              the `grievance_open` alert. Super-admin, as the API is
+              (`requireSuperAdmin`): members of the public with their numbers
+              and their words, and a grievance may be about one of our own
+              staff. Keep in step with `superAdminOnly` in navItems.ts. */}
+          <Route
+            path="grievances"
+            element={
+              <RequireSuperAdmin>
+                <LazyPage>
+                  <GrievancesPage />
+                </LazyPage>
+              </RequireSuperAdmin>
+            }
+          />
+          {/* Everyone who has filled in "Register your pump" — the website's
+              form and the app's sign-up screen — behind the `enrolment_new`
+              alert. Super-admin for the same reason as the page above. Keep in
+              step with `superAdminOnly` in navItems.ts. */}
+          <Route
+            path="registrations"
+            element={
+              <RequireSuperAdmin>
+                <LazyPage>
+                  <RegistrationsPage />
                 </LazyPage>
               </RequireSuperAdmin>
             }

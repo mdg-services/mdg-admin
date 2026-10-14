@@ -2,12 +2,15 @@ import { useOpenAlertCount } from './api/useAdminAlerts';
 import { useAiTurnCountsQuery } from './api/useAiTurns';
 import { useBankHolidayPendingQuery } from './api/useBankHolidays';
 import { useConversations } from './api/useConversations';
+import { useNewEnrolmentCount } from './api/useEnrolments';
+import { useOpenGrievanceCount } from './api/useGrievances';
 import { useOpenTicketCount } from './api/useTickets';
 
 /**
  * The count badge each nav destination carries, keyed by its route: unread
  * chats, open tickets, open alerts, AI answers nobody has judged yet,
- * unconfirmed national holidays.
+ * unconfirmed national holidays, website grievances nobody has resolved and
+ * registrations nobody has been in touch with.
  *
  * ONE place, because there were two and they had drifted. The desktop sidebar
  * (`AppShell`) and the phone's tab bar (`MobileTabBar`) each computed their
@@ -19,7 +22,9 @@ import { useOpenTicketCount } from './api/useTickets';
  * reach the phone, where `/ai-answers` lives inside the More sheet. Every query
  * here shares its cache entry with the page it counts for, so a second caller
  * costs no second request, and judging a turn on the page takes the number
- * down everywhere at once.
+ * down everywhere at once. The two website counts are the exception: they are
+ * their own small requests, because their pages hold up to 500 rows of a
+ * stranger's words and the shell must not fetch those to print a number.
  */
 export function useNavBadges(): Record<string, number> {
   const mineQ = useConversations('mine');
@@ -27,11 +32,17 @@ export function useNavBadges(): Record<string, number> {
   const pendingHolidaysQ = useBankHolidayPendingQuery();
   const openAlerts = useOpenAlertCount();
   const openTickets = useOpenTicketCount();
+  // Both are super-admin only, and both hooks stay silent for everyone else.
+  // Each asks the server for the counts alone (`limit=0`), not for the list.
+  const openGrievances = useOpenGrievanceCount();
+  const newRegistrations = useNewEnrolmentCount();
   return {
     '/inbox': (mineQ.data ?? []).filter((c) => c.unreadByAdmin).length,
     '/tickets': openTickets,
     '/alerts': openAlerts,
     '/ai-answers': aiCountsQ.data?.unreviewed ?? 0,
     '/bank-holidays': pendingHolidaysQ.data?.totalCount ?? 0,
+    '/grievances': openGrievances,
+    '/registrations': newRegistrations,
   };
 }

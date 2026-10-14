@@ -37,6 +37,24 @@ export function isTicketAlert(alert: AdminAlert): boolean {
   return alert.kind === 'ticket_open';
 }
 
+/**
+ * A grievance's or a registration's alert is the same: hiding it only takes the
+ * row off this list. The grievance stays open until somebody resolves it with a
+ * note, and the registration stays new until somebody has been in touch, so the
+ * toast says so.
+ *
+ * Worded for one row and for the summary alike. Past 50 waiting the server
+ * raises ONE alert for the lot ("Grievances · 57 waiting") in place of a row
+ * each, and the toast for hiding it must not read as if one grievance were
+ * meant. The summary's own key (`:backlog`) never reaches the app, so the
+ * wording cannot branch on it and does not need to.
+ */
+const STILL_STANDING: Partial<Record<AdminAlertKind, string>> = {
+  grievance_open: 'Hidden from this list. Grievances stay open until someone resolves them.',
+  enrolment_new:
+    'Hidden from this list. Registrations stay new until someone marks them as contacted.',
+};
+
 /** Whether the row's button closes the alert for good rather than hiding it. */
 export function closesWhenPressed(alert: AdminAlert): boolean {
   return isEventAlert(alert) || isReplyAlert(alert);
@@ -54,6 +72,8 @@ export function hiddenToast(alert: AdminAlert): string {
   if (isTicketAlert(alert)) {
     return 'Hidden from this list. The ticket is still open until someone resolves it.';
   }
+  const standing = STILL_STANDING[alert.kind];
+  if (standing) return standing;
   return isEventAlert(alert)
     ? 'Marked as seen.'
     : 'Hidden. It moves to Cleared on its own once it is fixed.';

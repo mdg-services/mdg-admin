@@ -26,6 +26,7 @@ import { useNavBadges } from '@/hooks/useNavBadges';
 import { usePushBridge } from '@/hooks/usePushBridge';
 import { useSafeBack } from '@/hooks/useSafeBack';
 import { useSoftKeyboard } from '@/hooks/useSoftKeyboard';
+import { useWebsiteIntakeLive } from '@/hooks/useWebsiteIntakeLive';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/store/auth';
 
@@ -96,6 +97,7 @@ export function AppShell() {
   usePushBridge(); // register push token + handle deep links from native
   useAlertsLive(); // keep the bell's count current on every screen
   useTicketsLive(); // ...and the Tickets badge, and any open thread's strip
+  useWebsiteIntakeLive(); // ...and the Grievances and Registrations badges
   const admin = useAuthStore((s) => s.admin);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
