@@ -1,109 +1,163 @@
-# Dealer Kavach - Frontend
+# Dealer Kavach — Admin
 
-Admin portal for Dealer Kavach. Vite + React 18 + TypeScript, Tailwind CSS, TanStack Query, React Router, Zustand, React Hook Form + Zod, and `@rjsf/core` (with Ajv8) for plugin config forms.
+The staff portal at **https://admin.mdgservices.in**. MDG's admins answer dealer chats and
+tickets, run each dealer's services and Kavach programme, and read the data the services
+collect. It also runs on staff phones, inside the Admin Dealer Kavach app (`mdg-admin-app`).
 
-## Prerequisites
+Vite + React 18 + TypeScript, Tailwind, TanStack Query, React Router, Zustand, React Hook Form
+with Zod, and a socket.io connection to the API for live updates.
 
-- Node 20 (`.nvmrc` at repo root)
-- npm 10+
-- Backend running locally (see repo root `README.md`)
+## Run it
 
-## Install
-
-From the repo root:
-
-```bash
-npm install
-```
-
-This installs all workspaces, including this one and `@dk/shared`.
-
-## Environment
-
-Copy `.env.example` to `.env`:
+Needs Node 20 or newer.
 
 ```bash
-cp frontend/.env.example frontend/.env
+npm install                  # at the monorepo root, once: installs this app as a workspace
+cd mdg-admin
+cp .env.example .env         # VITE_API_BASE_URL, default http://localhost:4000/api/v1
+npm run dev                  # http://localhost:5173
 ```
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `VITE_API_BASE_URL` | `http://localhost:4000/api/v1` | Base URL the fetch client points at. |
+The root install also supplies `eslint` and `tsx`, which this package uses but does not list.
+In a standalone clone of this repo, `npm install` here is enough to run and build (Vercel does
+exactly that), but not to lint.
+Port 5173 matters: it is the one origin the local API accepts by default (`CORS_ORIGINS` in
+`mdg-backend/.env.example`). Never point a laptop at the production database to try a page; see
+"Local stack for UI checks" below.
 
-## Run
+## Check it
 
 ```bash
-npm --workspace frontend run dev
+npm run typecheck
+npm run lint
+npm run build            # tsc, then vite build
+npm run check:intake     # plain-logic checks, run with node's test runner through tsx
+npx tsx --test scripts/chatAsk.check.ts
 ```
 
-The Vite dev server boots on http://localhost:5173.
+**There is no UI test runner.** Keep every decision that can be tested in a plain module
+(a `format.ts` beside the page) so a runner, when one arrives, has something to run.
 
-## Build / typecheck
+## Deploy
 
-```bash
-npm --workspace frontend run typecheck
-npm --workspace frontend run build
+**A push to `main` is a production deploy** of admin.mdgservices.in, through Vercel. To stage
+a change, push a branch: it builds a preview, but a preview address cannot reach the API,
+which answers only the origins on its allow-list.
+
+Deploy by hand with `vercel --prod --yes --force` from this folder. Then open the live page and
+check that the `/assets/index-*.js` name changed. Vite names files by content, so an unchanged
+name means unchanged code, whatever the dashboard says. A string added to a shared module lands
+in that module's own chunk, not in `index-*.js`.
+
+## Shared types
+
+`shared/` is one of four byte-identical copies of `@dk/shared`: the canonical `shared/` at the
+monorepo root, plus the copies in `mdg-backend`, `mdg-admin` and `mdg-client`. Vite points
+`@dk/shared` at `./shared/src`. Change the canonical copy, copy the change into all three, and
+check that `md5` agrees across the four. The root commit hook reformats `shared/`, so run the
+copy after that commit, not before.
+
+## Who sees what
+
+Staff sign in at `/login`. `/` goes to the Inbox.
+
+- **Admin.** The everyday pages below, and every tab on a dealer's page except Custom requests.
+- **Super-admin** (`isSuperAdmin` on the account). Everything: the 16 pages in the second
+  table, and the Custom requests tab. A super-admin creates other admins on the Team page. A
+  promotion shows without signing in again, because the app reads `/auth/me`.
+
+A nav entry flagged `superAdminOnly` in `src/components/layout/navItems.ts` only hides the
+link. Its route in `App.tsx` must also be wrapped in `RequireSuperAdmin`, and the API checks as
+well.
+
+## Pages
+
+Everyday pages (`navItems.ts`, in sidebar order):
+
+| Page | Path | What it is |
+| --- | --- | --- |
+| Inbox | `/inbox` | Every dealer's chats. Reply, ask for a paper or photo, mark it received or send it back. |
+| Tickets | `/tickets` | Dealer questions the AI could not settle. Each stays open until someone resolves it with a note. |
+| Alerts | `/alerts` | Everything that needs a person, across every outlet. Each clears itself once fixed. |
+| AI answers | `/ai-answers` | Every answer the AI first line gave a dealer, with a verdict button on each. |
+| Overview | `/overview` | Titled "Today": what needs a person now, and a board of every dealer's day. |
+| Dealers | `/dealers`, `/dealers/:id` | The list, and one dealer's page (tabs below). |
+| Kavach | `/kavach` | The work queue: tasks to verify now, across dealers. Only an MDG admin certifies a task. |
+| Kavach standing | `/kavach/dashboard` | Where each dealer stands, and how long since MDG last verified them. |
+| Ledger watch | `/ledger-watch` | Every PAD ledger movement that is not the routine buy-and-pay pair. |
+| Data Vault | `/data-vault` | Each dealer's collected IRAS shift data, with a day editor at `/data-vault/dealers/:dealerId/days/:businessDate`. |
+| Documents | `/documents` | Every paper MDG holds for every outlet, and when it expires. |
+| Daily Sales Report | `/dsr` | The day-book each dealer receives. A dealer's reports at `/dsr/dealers/:dealerId`, their fuel P&L at `.../pnl`. |
+| Withheld reports | `/assurance` | Every report the correctness gate refused to send. |
+
+Super-admin pages:
+
+| Page | Path | What it is |
+| --- | --- | --- |
+| Assistant | `/assist` | The website assistant's console: visitors' transcripts and call-back requests. |
+| Films | `/films` | Views, drop-off and share links for the two films on mdgservices.in. |
+| WhatsApp replies | `/whatsapp` | What people wrote back to the number our messages go out from. |
+| Grievances | `/grievances` | Sent from the website or taken down by the assistant. Each stays open until resolved. |
+| Registrations | `/registrations` | "Register your pump" sign-ups, from the site or the app. |
+| Service Catalog | `/services` | The services (plugins) that can be attached to a dealer. |
+| Run History | `/runs` | Timeline of every service run. |
+| All Users | `/users` | Every dealer's users, and the platform admins. |
+| Work list | `/work-list` | The default staff work catalogue every dealer starts from. |
+| Kavach defaults | `/kavach/defaults` | The global Kavach task catalogue. |
+| Document catalog | `/document-kinds` | What MDG can ask a dealer for, and how far ahead each expiring paper is chased. |
+| Bank holidays | `/bank-holidays` | The holidays the Credit & DOD service treats as non-working days. |
+| Depot holidays | `/depot-holidays` | The depot closure calendar the Load Planner reads. |
+| Festival greeting | `/festival` | The seasonal band on the report images shared with dealers. |
+| Activity | `/activity` | The audit trail of every action in the portal. |
+| Team | `/settings/team` | Create and manage admin accounts. |
+
+A dealer's page (`/dealers/:id`) has 14 tabs: Info, Onboarding, Services, Kavach, Kavach tasks,
+Warriors & points, Team, Work list, Data Vault, Documents, Password vault, Services provided,
+Run history and Custom requests. Only Custom requests is super-admin only.
+
+## On a phone
+
+It works down to a 360 px phone. The bottom bar holds Inbox, Overview, Dealers and Kavach; a
+More sheet holds the rest. The rules every screen follows, and the catalogue of shared pieces
+(sheets, sticky bars, card lists), are in `docs/MOBILE.md`.
+
+## Layout
+
+```
+src/
+├── App.tsx            routes, each page loaded only when opened (retries if a piece fails)
+├── pages/             one screen per route; bigger ones have a folder of their own
+├── features/          assist, chat, films, grievances, intake, registrations, tickets, users
+├── components/ui/     shared primitives; components/layout/ holds the shell, nav and guards
+├── hooks/api/         TanStack Query hooks, one file per resource
+├── hooks/             phone layout (overlay stack, safe insets, soft keyboard), live updates
+├── lib/               API client, socket, formatters, and nativeBridge.ts for the phone app
+├── store/auth.ts      the signed-in admin, persisted
+└── types/             the one local type file (Credit & DOD)
 ```
 
-`npm run build` runs `tsc -b` then `vite build`; the production bundle lands in `frontend/dist`.
+## Local stack for UI checks
 
-## Project structure
+To look at a page with real data, without production credentials or the production database:
 
-```
-frontend/
-├── index.html
-├── src/
-│   ├── App.tsx                 # router + error boundary
-│   ├── main.tsx                # providers (Query, Router, Toast)
-│   ├── index.css               # Tailwind directives + style-guide CSS variables
-│   ├── lib/
-│   │   ├── api.ts              # typed fetch client (Bearer token, ApiError)
-│   │   ├── queryClient.ts      # TanStack Query client
-│   │   ├── statusIntent.ts     # single source of truth for status -> intent
-│   │   ├── cn.ts               # className helper
-│   │   └── format.ts           # date / duration helpers
-│   ├── store/auth.ts           # Zustand persisted auth store
-│   ├── components/
-│   │   ├── ui/                 # shadcn-style primitives (no external CLI)
-│   │   └── layout/             # AppShell, Breadcrumbs, ProtectedRoute, ErrorBoundary, PageHeader
-│   ├── hooks/api/              # TanStack Query hooks (one file per resource)
-│   ├── pages/                  # route components + per-page sub-components
-│   └── types/overview.ts       # local mirror of OverviewSnapshot until @dk/shared ships it
-```
+1. Start an in-memory Mongo (`mongodb-memory-server`) on port 27099.
+2. Start the backend against it, with the risky switches off, from `mdg-backend`:
+   `MONGODB_URI='mongodb://127.0.0.1:27099/dk_local' SCHEDULER_ENABLED=false PUSH_ENABLED=false ASSIST_ENABLED=false PORT=4100 CORS_ORIGINS='http://localhost:5199' npx tsx src/index.ts`.
+   The shell beats `.env`, but check with `ps eww -p <pid>` that it really is on the in-memory
+   database before you do anything else.
+3. Insert an admin user straight into that database (role `admin`, status `ACTIVE`, a
+   `bcryptjs` hash at cost 12, `isSuperAdmin` as you need).
+4. Run the admin against it: `VITE_API_BASE_URL='http://localhost:4100/api/v1' npx vite --port 5199 --strictPort`.
+5. Drive it with Playwright (`chromium.launch({ channel: 'chrome', headless: true })`), run with
+   plain `node`. Under `tsx` the page scripts fail in ways that look like a broken portal.
 
-## Routing
+This catches what `tsc` cannot: a Tailwind class that does not exist, a prop that is ignored,
+a phone-width layout that breaks.
 
-| Path | Page | Notes |
-|---|---|---|
-| `/login` | LoginPage | Public; redirects to `/` on success. |
-| `/` | OverviewPage | Protected; KPI cards + recent failures + upcoming runs. |
-| `/dealers` | DealersPage | Search, status filter, pagination, "Add dealer" drawer. |
-| `/dealers/:id` | DealerDetailPage | Tabs: Info / Services / Run history / Custom requests. |
-| `/services` | ServiceCatalogPage | Plugin catalog cards + JSON Schema preview drawer. |
-| `/runs` | RunHistoryPage | Timeline grouped by day + filters + run detail dialog. |
-| `*` | NotFoundPage | Fallback. |
+## Not built
 
-## UX conventions
-
-- Every list page exposes a loading skeleton, an empty state, and an error state.
-- Every mutation surfaces a toast (success or `ApiError.message`).
-- All status displays go through `statusIntent()` + `<StatusChip>` (success / warning / danger / info / neutral).
-- Dark mode is wired via the `class` strategy on `<html>` (toggle via `document.documentElement.classList.add('dark')`). No in-app toggle ships in this milestone.
-- Responsive down to the `md` breakpoint.
-
-## Deviations
-
-- `OverviewSnapshot` type is mirrored locally at `src/types/overview.ts`. The API contract notes that this type will live in `@dk/shared/types/overview.ts` once the backend agent picks it up; we will switch the import to `@dk/shared` then.
-- A dark-mode toggle UI is intentionally omitted from this milestone; the tokens + `darkMode: 'class'` plumbing are in place. Toggle by adding/removing `dark` on `<html>`.
-- The `custom-request` plugin tab assumes a plugin with id `custom-request` is attached to the dealer. If not attached, the tab shows guidance to attach it from the Services tab.
-- Run-now uses `configOverride` as the payload-merging mechanism for custom requests, matching `runNowSchema` in `@dk/shared/schemas`.
-- The topbar search input is a placeholder (disabled); a global search lands when the backend exposes a multi-entity search endpoint.
-- `@dk/shared` is aliased in `vite.config.ts` to point at the package's TypeScript source (rather than the prebuilt CJS `dist`). This removes a build-order dependency on `npm --workspace shared run build` and lets Vite tree-shake. TypeScript still resolves the same source via the package's `"types"` exports.
-- The frontend uses a single `tsconfig.json` (no project references / `tsconfig.node.json`). The Vite config is small, ESM, and validated by the build itself, so a separate Node-targeted TS project is not worth the indirection.
-- The optimistic-update aspiration in the agent brief is implemented as a "toast + cache invalidation" pattern rather than RHF-style optimistic state. Mutations call `queryClient.invalidateQueries` on success; this is simpler, race-free, and visually indistinguishable on a fast LAN.
-
-## Verification
-
-- `npm install` - succeeds.
-- `npm --workspace frontend run typecheck` - succeeds (no errors).
-- `npm --workspace frontend run build` - succeeds; output in `frontend/dist`. Vite emits a single ~680 kB (~211 kB gzipped) JS bundle and ~18 kB CSS. The bundle warning about >500 kB is acknowledged; code-splitting per route is a follow-up.
+- **No dark-mode switch.** The colour tokens and Tailwind's `class` strategy are ready; adding
+  `dark` to `<html>` turns it on.
+- **The top-bar search box is a disabled placeholder** ("Search (coming soon)"), on desktop only.
+- **The Custom requests tab** needs the `custom-request` service attached to the dealer first;
+  without it the tab says to attach it from the Services tab.

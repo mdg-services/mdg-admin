@@ -13,7 +13,9 @@ Targets: **360×640, 390×844, 411×891** must all work. **≥768px must not cha
 
 Status: Phase 0 built the primitives; nine per-area packets wired every screen to them and a
 reconcile pass folded the gaps they hit back into the primitives. The catalogue below is the
-current API. What is still open is at the end, under [Known limits](#known-limits).
+current API. What is still open is at the end, under [Known limits](#known-limits). This file
+replaced the July 2026 responsive spec and friction audit; where an entry says it "absorbed the
+proposed" block, that spec is what proposed it.
 
 ---
 
@@ -164,6 +166,23 @@ export function useNavBadges(): Record<string, number> // keyed by route
 The nav count badges — unread chats, unjudged AI answers, unconfirmed holidays — for the
 sidebar AND the tab bar. There were two copies and the phone's had never learned about bank
 holidays. Add a new badge here and both get it.
+
+#### `useBusyIds` — `@/hooks/useBusyIds`
+```ts
+export function useBusyIds(): { isBusy(id: string): boolean; run<T>(id: string, fn: () => Promise<T>): Promise<T> }
+```
+**Use it when a list has a button on every row.** Pair `run(id, …)` with `mutateAsync` so only
+the tapped row greys out. A mutation's `isPending` is one flag for the whole list, and `mutate`'s
+callbacks only hear its latest call, so a second row tapped mid-save never got the first one's
+result.
+
+#### `useRevealOnChange` — `@/hooks/useRevealOnChange`
+```ts
+export function useRevealOnChange<T extends HTMLElement = HTMLDivElement>(value: unknown, again?: unknown): React.RefObject<T>
+```
+**Attach it to a form's error line in a sheet.** A failed Save puts the reason above where the
+admin is looking; the ref scrolls it into view (`block: 'nearest'`) whenever `value` turns
+truthy or changes. Pass a counter as `again` so the same mistake made twice still scrolls.
 
 #### Dates — `@/lib/format`
 ```ts
@@ -411,6 +430,10 @@ the actions on the title row at every width.
 
 The `dense` subtitle wraps to two lines below md (`line-clamp-2`) and is the single truncated
 line it was at md. On a dealer it carries the outlet's address, which is printed nowhere else.
+
+**`RefreshTool`** (`@/components/ui/RefreshTool`, `{ onRefresh, loading?, label }`) is the
+Refresh for the `tools` slot: the labelled ghost button at md and up, a 44px icon below md.
+`label` says what is refreshed in full ("Refresh the queue"); below md it is the icon's only name.
 
 #### `Tabs` — `pinnedActiveBelowMd`
 ```ts
@@ -1041,8 +1064,11 @@ Real, current, and deliberately not closed. Do not assume otherwise.
 
 ### Not verified anywhere
 
-- **Nothing has run on a device.** This repo has no test runner and this session had no
-  emulator. `ZoomableImage`'s gestures, `Table`'s scroll hint and frozen column,
+- **The phone checklist has not been run on a device.** Admin Dealer Kavach has been on staff
+  phones through Play internal testing since 5 Oct 2026, but nothing records a §14 pass on one.
+  There is no UI test runner; the only automated checks are plain-logic ones in
+  `scripts/*.check.ts` (`npm run check:intake`, `npx tsx --test scripts/chatAsk.check.ts`).
+  `ZoomableImage`'s gestures, `Table`'s scroll hint and frozen column,
   `StickyActionBar`'s `fixed` mode, and the Assist call player's re-tap recovery are
   type-checked, linted and built — nothing more. The §14 checklist at 360 / 390 / 411 is still
   owed on every screen.
