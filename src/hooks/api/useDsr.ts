@@ -6,8 +6,10 @@ import type { PnlProductInput } from '@/lib/fuelPnl';
 import type {
   DsrReportDigest,
   DsrReportStale,
+  DsrShareOutcome,
+  DsrShareStatus,
+  DsrSheetPlan,
   ShareAudience,
-  ShareOutcome,
 } from '@dk/shared';
 
 
@@ -151,8 +153,24 @@ export interface DsrReportView {
   assurance?: AssuranceVerdict | null;
 }
 
-/** `POST /dsr/reports/:id/share` result. */
-export type DsrShareResult = ShareOutcome;
+/** `POST /dsr/reports/:id/share` result: the common part, plus who now holds each sheet. */
+export type DsrShareResult = DsrShareOutcome;
+
+/**
+ * What one send asks for. `sheets` is the share window's per-sheet choice
+ * (`saveRule` keeps it as the outlet's rule). A bare audience is the Today
+ * board's Owners / Manager / Both pick, held server-side to the outlet's rule.
+ * Nothing at all is "send it as usual".
+ */
+export type DsrShareVars =
+  | ShareAudience
+  | { sheets: DsrSheetPlan; saveRule?: boolean }
+  | undefined;
+
+/** `PUT /dsr/dealers/:dealerId/share-rule` result. */
+export interface DsrShareRuleResult {
+  rule: DsrSheetPlan | null;
+}
 
 /**
  * One report headline in a dealer's history — `GET /dsr/dealers/:id/reports`.
@@ -228,6 +246,8 @@ export const dsrKeys = {
     ['dsr', 'reports', dealerId] as const,
   report: (id: string | undefined) => ['dsr', 'report', id] as const,
   stale: (dealerId: string | undefined) => ['dsr', 'stale', dealerId] as const,
+  shareStatus: (reportId: string | undefined) =>
+    ['dsr', 'share-status', reportId] as const,
   setupDraft: (dealerId: string | undefined) =>
     ['dsr', 'setup-draft', dealerId] as const,
   pnl: (dealerId: string | undefined, from: string, to: string) =>
@@ -410,6 +430,25 @@ export function useDsrStaleReports(dealerId: string | undefined, enabled = true)
   });
 }
 
+/**
+ * Where one report's sheets stand: who is on the app, who holds which sheet, who
+ * still holds an older copy, and the outlet's saved rule. This is what the share
+ * window is built from, so it hangs off the `dsr` prefix: a regeneration, a send
+ * or a rule change refreshes it with everything else.
+ *
+ * Counted in people on the app NOW, so it is short-lived rather than held for
+ * minutes like the report: an owner who joined a moment ago must show up.
+ */
+export function useDsrShareStatus(reportId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: dsrKeys.shareStatus(reportId),
+    queryFn: () => api.get<DsrShareStatus>(`/dsr/reports/${reportId}/share-status`),
+    enabled: !!reportId && enabled,
+    retry: retryUnlessClientError,
+    staleTime: 10_000,
+  });
+}
+
 /* ────────────────────────────── Mutations ───────────────────────────────── */
 
 /**
@@ -460,16 +499,28 @@ export function useRegenerateStaleDsr(dealerId: string) {
   });
 }
 
+/** The request body for a send: sheets, a plain audience, or nothing. */
+function shareBody(vars: DsrShareVars): Record<string, unknown> {
+  if (vars === undefined) return {};
+  if (typeof vars === 'string') return { audience: vars };
+  return { sheets: vars.sheets, ...(vars.saveRule ? { saveRule: true } : {}) };
+}
+
 /**
- * Share a generated report's two cards into the dealer's chat. Idempotent
- * server-side. On success we invalidate the whole `dsr` prefix so the report's
- * `shared` marker (and the "Shared" state in every view) refreshes.
+ * Send a generated report's sheets into the dealer's chats — the first send, or a
+ * later one to the people who do not have them yet. Idempotent server-side: each
+ * sheet reaches each chat at most once.
+ *
+ * After a send we refresh everything that reads who holds what: the `dsr` prefix
+ * (the report's `shared` marker, the share status, the history), the correctness
+ * verdict, and the Today board, whose Sent cell and triage rows follow the same
+ * record.
  */
 export function useShareDsr(reportId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (audience?: ShareAudience) =>
-      api.post<DsrShareResult>(`/dsr/reports/${reportId}/share`, audience ? { audience } : {}),
+    mutationFn: (vars?: DsrShareVars) =>
+      api.post<DsrShareResult>(`/dsr/reports/${reportId}/share`, shareBody(vars)),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: dsrKeys.all });
       // The verdict is keyed on the report id, which is STABLE across a
@@ -477,6 +528,24 @@ export function useShareDsr(reportId: string) {
       // panel keeps serving the pre-regeneration answer and the Share button
       // stays dead after the figures were fixed — or stays live after they broke.
       void qc.invalidateQueries({ queryKey: ['assurance'] });
+      void qc.invalidateQueries({ queryKey: ['overview'] });
+    },
+  });
+}
+
+/**
+ * Save an outlet's rule for who gets each DSR sheet, or clear it with `null`.
+ * Every later share, the Today board and a corrected re-send follow it, so the
+ * share status (which carries the rule) and the board both refresh.
+ */
+export function useSaveDsrShareRule(dealerId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (rule: DsrSheetPlan | null) =>
+      api.put<DsrShareRuleResult>(`/dsr/dealers/${dealerId}/share-rule`, { rule }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: dsrKeys.all });
+      void qc.invalidateQueries({ queryKey: ['overview'] });
     },
   });
 }

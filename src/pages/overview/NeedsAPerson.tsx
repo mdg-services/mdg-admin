@@ -2,6 +2,9 @@ import { CheckCircle2 } from 'lucide-react';
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { ShareAudienceNote, ShareMenu } from '@/components/share/ShareMenu';
+import { shareResultMessage } from '@/components/share/shareToast';
+import { useShareToast } from '@/components/share/useShareToast';
 import {
   Badge,
   Button,
@@ -13,9 +16,10 @@ import {
 } from '@/components/ui';
 import { useOverviewActionMutation } from '@/hooks/api/useOverview';
 import { cn } from '@/lib/cn';
-import type { TriageItem } from '@dk/shared';
+import { OWNERS_ONLY_AUDIENCES, OWNERS_ONLY_REASON } from '@dk/shared';
+import type { DsrShareOutcome, ShareAudience, ShareOutcome, TriageItem } from '@dk/shared';
 
-import { triageBadge, triageIntent } from './format';
+import { isCreditShare, triageBadge, triageIntent } from './format';
 
 /**
  * The morning's work: everything outstanding that is NOT per-dealer-per-day, so
@@ -41,8 +45,15 @@ export function NeedsAPerson({
 }) {
   const navigate = useNavigate();
   const toast = useToast();
+  const showShare = useShareToast();
   const run = useOverviewActionMutation(selectedDate);
-  const [pending, setPending] = React.useState<TriageItem | null>(null);
+  // A credit card send carries the audience picked from its menu; every other
+  // one-tap posts nothing, and the server decides (the corrected report goes to
+  // whoever holds the old copy — the confirm text says who).
+  const [pending, setPending] = React.useState<{
+    item: TriageItem;
+    audience?: ShareAudience;
+  } | null>(null);
   const [busyId, setBusyId] = React.useState<string | null>(null);
 
   const [expanded, setExpanded] = React.useState(false);
@@ -52,15 +63,25 @@ export function NeedsAPerson({
   const context = items.filter((i) => i.bucket === 'context');
 
   const perform = React.useCallback(
-    (item: TriageItem) => {
+    (item: TriageItem, audience?: ShareAudience) => {
       if (!item.action) return;
       setBusyId(item.id);
       run.mutate(
-        { path: item.action.path },
+        { path: item.action.path, ...(audience ? { body: { audience } } : {}) },
         {
           // Both paths toast. Mutations are configured `retry: 0`, so a failed
           // write is final and a silent failure would read as success.
-          onSuccess: () => toast.success('Done.'),
+          onSuccess: (result) => {
+            const out = result as Partial<DsrShareOutcome> | null | undefined;
+            // A send says who it reached; anything else is just done.
+            if (out && typeof out.alreadyShared === 'boolean') {
+              // The message already carries what did not go out; `showShare`
+              // turns that case into a warning that stays up, not a green toast.
+              showShare(shareResultMessage(out as ShareOutcome, 'Done.'), out);
+            } else {
+              toast.success('Done.');
+            }
+          },
           onError: (e) =>
             toast.error((e as Error).message || 'That did not go through.'),
           onSettled: () => {
@@ -70,7 +91,7 @@ export function NeedsAPerson({
         },
       );
     },
-    [run, toast],
+    [run, showShare, toast],
   );
 
   if (loading) {
@@ -141,21 +162,39 @@ export function NeedsAPerson({
         // ONE button, and `DataList` drops `cardActions` entirely in that case
         // because a button cannot nest inside a button. `rowActions` is the slot
         // that stops the click reaching the row, so the fix survives on a phone.
-        rowActions={(i) =>
-          i.action ? (
+        rowActions={(i) => {
+          if (!i.action) return null;
+          // Credit figures go to owners only: the menu is still shown, with the
+          // other choices dead and the reason under them, so the rule reads as a
+          // rule and not as a missing feature.
+          if (isCreditShare(i)) {
+            return (
+              <ShareMenu
+                label={i.action.label}
+                size="sm"
+                variant="secondary"
+                align="end"
+                allowed={OWNERS_ONLY_AUDIENCES}
+                unavailableReason={OWNERS_ONLY_REASON}
+                loading={busyId === i.id}
+                onPick={(audience) => setPending({ item: i, audience })}
+              />
+            );
+          }
+          return (
             <Button
               size="sm"
               variant="secondary"
               loading={busyId === i.id}
               onClick={() => {
-                if (i.action?.confirm) setPending(i);
+                if (i.action?.confirm) setPending({ item: i });
                 else perform(i);
               }}
             >
               {i.action.label}
             </Button>
-          ) : null
-        }
+          );
+        }}
       />
 
       {hidden > 0 ? (
@@ -200,11 +239,18 @@ export function NeedsAPerson({
       <ConfirmDialog
         open={!!pending}
         onCancel={() => setPending(null)}
-        onConfirm={() => pending && perform(pending)}
-        loading={busyId === pending?.id}
-        title={pending?.action?.label ?? 'Confirm'}
-        description={pending?.action?.confirm}
-        confirmLabel={pending?.action?.label}
+        onConfirm={() => pending && perform(pending.item, pending.audience)}
+        loading={busyId === pending?.item.id}
+        title={pending?.item.action?.label ?? 'Confirm'}
+        description={
+          pending ? (
+            <>
+              <p className={pending.audience ? 'mb-3' : undefined}>{pending.item.action?.confirm}</p>
+              {pending.audience ? <ShareAudienceNote audience={pending.audience} /> : null}
+            </>
+          ) : undefined
+        }
+        confirmLabel={pending?.item.action?.label}
       />
     </>
   );

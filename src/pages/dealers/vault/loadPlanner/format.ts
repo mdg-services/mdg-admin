@@ -1,7 +1,13 @@
 
+import {
+  hasMissingPeople,
+  missingPeople,
+  type ShareReachView,
+} from '@/components/share/shareReach';
 import { formatDmy, formatInrWhole, formatLitres, formatYmd, inrFormat } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
 import {
+  audienceSides,
   daysBetweenIsoDays,
   type LoadPlan,
   type LoadPlanChamber,
@@ -16,6 +22,7 @@ import {
   type LoadPlanSummary,
   type LoadPlanTank,
   type LoadPlanTruck,
+  type ShareAudience,
 } from '@dk/shared';
 
 /**
@@ -451,6 +458,135 @@ export function cannotActReason(plan: Pick<LoadPlan, 'status' | 'backfilled'>): 
 
 export function approveConfirmDescription(dealerLabel: string): string {
   return `Send this plan to ${dealerLabel}'s chat? They will see the card above.`;
+}
+
+/* ───────────────────── section 8b — who has the card ───────────────────── */
+
+/**
+ * A sent plan's record as the server serves it: the shared `shared` fields plus
+ * the audience that was REACHED and who holds the card now (`reach`). Both are
+ * absent on an older server and on a plan sent before copies were recorded.
+ */
+export type LoadPlanSharedView = NonNullable<LoadPlan['shared']> & {
+  audience?: ShareAudience;
+  reach?: ShareReachView;
+};
+
+/** Who holds the card of a sent plan, or `null` for a plan never sent. */
+export function planReachOf(plan: Pick<LoadPlan, 'shared'>): ShareReachView | null {
+  return (plan.shared as LoadPlanSharedView | null)?.reach ?? null;
+}
+
+/**
+ * The people on the app who still lack a sent plan's card — and so whether the
+ * "send to the people who missed it" control shows at all. Only for the plan
+ * that was sent and is still the one on screen: a draft has nothing to top up,
+ * and a plan made after the fact was never sent.
+ */
+export function canSendToMissing(plan: Pick<LoadPlan, 'status' | 'backfilled' | 'shared'>): boolean {
+  if (plan.status !== 'APPROVED' || plan.backfilled) return false;
+  const reach = planReachOf(plan);
+  return reach !== null && hasMissingPeople(reach);
+}
+
+/**
+ * The audiences the top-up menu offers: only those that reach someone who lacks
+ * the card. Owners missing → Owners; the manager missing → Manager; both → all
+ * three (Both reaches exactly the people who are missing).
+ */
+export function topUpAudiences(view: ShareReachView): ShareAudience[] {
+  const m = missingPeople(view);
+  const out: ShareAudience[] = [];
+  if (m.owners > 0) out.push('owners');
+  if (m.manager) out.push('managers');
+  if (m.owners > 0 && m.manager) out.push('both');
+  return out;
+}
+
+/**
+ * Why a choice in the top-up menu is dead. One reason for all of them said
+ * "Already has it" under Both when only the manager lacked the card, and under
+ * Manager at an outlet that has no manager on the app.
+ *
+ * Owners / Manager: nobody of that side is on the app, or everybody on the app
+ * of that side already holds the card. Both is dead when only one side lacks it,
+ * and the reason names the choice that does the job.
+ */
+export function topUpUnavailableReason(view: ShareReachView, audience: ShareAudience): string {
+  const noOwner = view.outlet.owners === 0;
+  const noManager = !view.outlet.manager;
+  if (audience === 'owners') return noOwner ? 'No owner on the app yet' : 'Already has it';
+  if (audience === 'managers') return noManager ? 'No manager on the app yet' : 'Already has it';
+  // Both: dead because at most one side is missing the card.
+  const m = missingPeople(view);
+  if (m.owners > 0) {
+    return noManager
+      ? 'No manager on the app yet — use Owners'
+      : 'Use Owners — the manager already has it';
+  }
+  if (m.manager) {
+    return noOwner
+      ? 'No owner on the app yet — use Manager'
+      : 'Use Manager — the owners already have it';
+  }
+  return 'Already has it';
+}
+
+/** "1 owner and the manager" — who a top-up to `audience` would reach, from who lacks it. */
+export function topUpPeopleLine(view: ShareReachView, audience: ShareAudience): string {
+  const m = missingPeople(view, [audience]);
+  const parts: string[] = [];
+  if (m.owners > 0) parts.push(m.owners === 1 ? '1 owner' : `${m.owners} owners`);
+  if (m.manager) parts.push('the manager');
+  return parts.length > 0 ? parts.join(' and ') : 'nobody';
+}
+
+export function topUpConfirmDescription(dealerLabel: string, view: ShareReachView, audience: ShareAudience): string {
+  return (
+    `Send the same card to ${topUpPeopleLine(view, audience)} at ${dealerLabel}, who do not have it yet? ` +
+    'Everyone who already has it gets nothing new.'
+  );
+}
+
+/**
+ * Does this send put the plan's picture in front of the manager? A first send
+ * does when the audience includes the manager; a top-up does only when the
+ * manager is among the people still missing it (`missing` = the reach it is
+ * judged against).
+ */
+export function sendReachesManager(audience: ShareAudience, missing: ShareReachView | null): boolean {
+  if (missing) return missingPeople(missing, [audience]).manager;
+  return audienceSides(audience).managers;
+}
+
+/**
+ * Does the card carry the credit line? The same test the card is drawn by
+ * (`creditHtml`): a band is printed whenever the planner could work out the
+ * shortfall, "deposit" or "covered", and nothing when it could not.
+ */
+export function cardShowsCreditBand(plan: Pick<LoadPlan, 'credit'>): boolean {
+  return plan.credit.shortBy != null;
+}
+
+/**
+ * The confirm line when a send puts the credit band in front of the manager — or
+ * `null` when it does not. The picture is one image sent to everyone chosen; the
+ * manager's chat is the group, which every owner can open, and nothing posted
+ * can be taken back.
+ */
+export function creditBandWarning(
+  plan: Pick<LoadPlan, 'credit'>,
+  audience: ShareAudience,
+  missing: ShareReachView | null = null,
+): string | null {
+  if (!cardShowsCreditBand(plan) || !sendReachesManager(audience, missing)) return null;
+  const { shortBy, available } = plan.credit;
+  const band =
+    shortBy! > 0
+      ? `“Deposit ${formatInrWhole(shortBy)} before ordering”`
+      : `“Credit covers this tanker (${formatInrWhole(available ?? 0)} available)”`;
+  const what = shortBy! > 0 ? 'the credit amount' : 'the credit position';
+  return `This picture shows ${what} — ${band} — and anyone in the group chat can read it. It cannot be taken back once sent.`;
 }
 
 const MIN_DISMISS_REASON = 3;

@@ -20,28 +20,20 @@ import {
   AssuranceSummaryStrip,
 } from '@/components/dsr/AssurancePanel';
 import {
-  ShareAudienceNote,
-  ShareMenu,
-  shareResultMessage,
-} from '@/components/share/ShareMenu';
-import {
   Badge,
   Button,
   Card,
   CardContent,
-  Dialog,
   DownloadButton,
   HowThisWorks,
   ImageLightbox,
   KeyValueList,
   WideReportViewer,
-  useToast,
   type KeyValueItem,
 } from '@/components/ui';
 import { useAssuranceReport } from '@/hooks/api/useAssurance';
-import { useShareDsr, type DsrReportView } from '@/hooks/api/useDsr';
+import { useDsrShareStatus, type DsrReportView } from '@/hooks/api/useDsr';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { ApiError } from '@/lib/api';
 import { isHolding, shareBlockedReason } from '@/lib/assurance';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatLitres } from '@/lib/format';
@@ -53,11 +45,23 @@ import {
   type DsrProductReport,
   type DsrTankReading,
   type DsrVariationSummary,
-  type ShareAudience,
 } from '@dk/shared';
 
+import { DsrShareDialog } from './DsrShareDialog';
+import {
+  holdersSummary,
+  oldHolderLines,
+  shareEntry,
+  triggerBlock,
+} from './dsrShareFormat';
 import { DsrStaleNotice } from './DsrStaleNotice';
-import { describeChange, supersededHeadline, supersededSeverity } from './supersededShare';
+import {
+  describeChange,
+  supersededAdvice,
+  supersededBannerShown,
+  supersededHeadline,
+  supersededSeverity,
+} from './supersededShare';
 
 /** `YYYY-MM-DD` → `Thu, 23 Jul 2026`, read as a calendar date, not an instant. */
 export function dsrDateLabel(iso: string): string {
@@ -674,16 +678,18 @@ function ProductFigures({
 /**
  * The two cards the dealer receives (Variation + Daily Sales) with the
  * admin-approved Share action — the DSR twin of the Credit & DOD share card.
- * An admin reviews the images, then Share posts them plus a bilingual summary to
- * the dealer's chat. Idempotent: once shared, the button becomes a disabled
- * "Shared" with a timestamp.
+ * An admin reviews the images, then "Share with dealer" opens the "Who gets
+ * what" window: each sheet goes to the people chosen for it, and a later "Send to
+ * more people" reaches whoever does not have a sheet yet. Once anything is out,
+ * the panel says who holds which sheet — not just when it was shared.
  *
- * TWO GATES, NOT ONE. `alreadyShared` has always been here. The second is the
- * pre-send correctness check, and it exists because nothing posted to a dealer
- * can be recalled — there is no message delete and no message edit endpoint
- * anywhere. 1E's 2,646,765 L report was flagged, marked stale, and still one
- * confirm click from the dealer's phone. So a held report takes the button away
- * rather than warning beside it.
+ * TWO GATES, NOT ONE. The first is who already has what, which the window and
+ * the server settle between them. The second is the pre-send correctness check,
+ * and it exists because nothing posted to a dealer can be recalled — there is no
+ * message delete and no message edit endpoint anywhere. 1E's 2,646,765 L report
+ * was flagged, marked stale, and still one confirm click from the dealer's
+ * phone. So a held report takes the button away rather than warning beside it.
+ * The hold is on the report, so it stops BOTH sheets, and a top-up send too.
  */
 function DsrShareSection({
   report,
@@ -692,12 +698,13 @@ function DsrShareSection({
   report: DsrReportView;
   className?: string;
 }) {
-  const toast = useToast();
-  const share = useShareDsr(report.id);
-  const [confirmOpen, setConfirmOpen] = React.useState(false);
-  const [audience, setAudience] = React.useState<ShareAudience>('owners');
+  const [dialogOpen, setDialogOpen] = React.useState(false);
 
   const alreadyShared = !!report.shared;
+  // Who is on the app and who holds which sheet. The sent state, the old-copy
+  // banner and the "Who gets what" window are all built from this one answer.
+  const statusQ = useDsrShareStatus(report.id);
+  const status = statusQ.data;
   // Evaluated live rather than read off `report.assurance`: a re-baseline marks
   // an EXISTING report stale hours after it was generated, which is exactly how
   // 1E slipped through, so the stored verdict is not the last word. Same query
@@ -714,10 +721,15 @@ function DsrShareSection({
   // yet know whether this report may be sent, and the honest reading of "do not
   // know" on the last click before something unrecallable is "wait".
   const verdictPending = assuranceQ.isPending;
-  const shareBlocked = held || verdictPending;
-  const blockedReason = held
-    ? shareBlockedReason(assuranceQ.data)
-    : 'Checking this report before it can be sent…';
+  const { blocked: shareBlocked, reason: blockedReason } = triggerBlock({
+    held,
+    holdReason: shareBlockedReason(assuranceQ.data),
+    verdictPending,
+    statusState: status ? 'ready' : statusQ.isError ? 'failed' : 'loading',
+  });
+  // What the section offers: the first send, more people, a quiet "change who
+  // has it" when the outlet's rule is met, or nothing and why.
+  const entry = shareEntry(status, alreadyShared);
   const cards: {
     url?: string;
     label: string;
@@ -758,26 +770,6 @@ function DsrShareSection({
     label: string;
     alt: string;
   } | null>(null);
-
-  async function onConfirm() {
-    // Re-checked at the moment of the click, not only when the dialog opened.
-    // The verdict refetches on window focus, so a report can become held while
-    // this dialog sits open — and `disabled` on the button that OPENED it does
-    // nothing about the button inside it. The server refuses too, but this is the
-    // last click before a message that cannot be deleted or edited.
-    if (isHolding(assuranceQ.data)) {
-      setConfirmOpen(false);
-      toast.error(shareBlockedReason(assuranceQ.data) ?? 'This report is being withheld.');
-      return;
-    }
-    try {
-      const result = await share.mutateAsync(audience);
-      toast.success(shareResultMessage(result, 'Cards shared with the dealer.'));
-      setConfirmOpen(false);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to share');
-    }
-  }
 
   return (
     <div className={className}>
@@ -860,8 +852,18 @@ function DsrShareSection({
           {/* The dealer already has an EARLIER version of this day, and a
               regeneration is what took the "Shared" chip away. Saying so here is
               the difference between the operator remembering to re-share a
-              corrected report and the dealer acting on the old figures. */}
-          {!alreadyShared && report.sharedSuperseded ? (
+              corrected report and the dealer acting on the old figures.
+
+              It stays while the share status says somebody still holds an old
+              copy of a sheet they have not been sent the new one for: a partial
+              re-send, or one to the wrong people, used to hide it and leave
+              whoever was missed looking at the wrong figures. */}
+          {report.sharedSuperseded &&
+          supersededBannerShown({
+            hasSuperseded: true,
+            alreadyShared,
+            oldHolders: status?.oldHolders,
+          }) ? (
             (() => {
               // WHAT moved, not just that something did. A cosmetic rebuild and
               // a correction that flips a dealer's 5.1.11 verdict used to read
@@ -889,12 +891,20 @@ function DsrShareSection({
                         ))}
                       </ul>
                     ) : null}
+                    {status?.oldHolders ? (
+                      <div className="mt-1">
+                        <p className="font-medium">Still holding the old copy:</p>
+                        <ul className="mt-0.5 space-y-0.5">
+                          {oldHolderLines(status.oldHolders).map((line) => (
+                            <li key={line}>{line}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                     <p className="mt-1">
                       Shared {formatDateTime(report.sharedSuperseded.at)}, and rebuilt since (
                       {formatDateTime(report.sharedSuperseded.supersededAt)}).{' '}
-                      {severity === 'unchanged'
-                        ? 'Their copy still reads true, so re-sharing is optional.'
-                        : 'Share it again so they are looking at the corrected figures.'}
+                      {supersededAdvice(severity, alreadyShared)}
                     </p>
                   </div>
                 </div>
@@ -911,32 +921,72 @@ function DsrShareSection({
               widens the card past `main`, which is `overflow-x-hidden`, so the
               overhang is clipped rather than scrollable. */}
           <div className="min-w-0">
+            {/* Once anything is out, WHO has it, per sheet — not only when. The
+                time alone is what made "Owners only" and "everyone" look the
+                same to a colleague opening the report later. */}
+            {alreadyShared ? (
+              <div className="mb-3 grid gap-1">
+                <p className="inline-flex items-center gap-1.5 text-sm font-medium text-text">
+                  <Check
+                    width={14}
+                    height={14}
+                    strokeWidth={1.75}
+                    aria-hidden
+                    className="shrink-0 text-success-strong md:text-success"
+                  />
+                  Shared {formatDateTime(report.shared?.at)}
+                </p>
+                {status ? (
+                  <p className="text-sm text-text-muted">
+                    {holdersSummary(status.holders, status.unrecorded)}
+                  </p>
+                ) : statusQ.isError ? (
+                  <p className="text-sm text-text-muted">
+                    Who has it could not be loaded.{' '}
+                    <button
+                      type="button"
+                      onClick={() => void statusQ.refetch()}
+                      className="min-h-11 font-medium text-brand underline-offset-2 hover:underline md:min-h-0"
+                    >
+                      Try again
+                    </button>
+                  </p>
+                ) : (
+                  <p className="text-sm text-text-subtle">Checking who has it…</p>
+                )}
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-center gap-2">
-              {alreadyShared ? (
+              {entry.kind === 'none' ? (
+                // Nobody left to send to (everyone on the app has both sheets, or
+                // nobody is on the app): a button here would open a window that
+                // can only say "nothing new". The sentence says which.
+                <p className="text-sm text-text-muted">{entry.note}</p>
+              ) : entry.kind === 'change' ? (
+                // The outlet's rule is met. The window is still one click away as
+                // the one-off override, but it must not read as "someone is missing".
                 <>
+                  <p className="text-sm text-text-muted">{entry.note}</p>
                   <Button
-                    variant="secondary"
-                    disabled
-                    leftIcon={<Check width={14} height={14} strokeWidth={1.75} />}
+                    variant="ghost"
+                    size="sm"
+                    disabled={shareBlocked}
+                    onClick={() => setDialogOpen(true)}
                   >
-                    Shared
+                    {entry.label}
                   </Button>
-                  <span className="text-xs text-text-subtle">
-                    {formatDateTime(report.shared?.at)}
-                  </span>
                 </>
               ) : (
                 <>
-                  <ShareMenu
-                    label="Share with dealer"
+                  <Button
+                    variant={alreadyShared ? 'secondary' : 'primary'}
                     disabled={shareBlocked}
-                    icon={<Share2 width={14} height={14} strokeWidth={1.75} aria-hidden />}
-                    onPick={(a) => {
-                      setAudience(a);
-                      setConfirmOpen(true);
-                    }}
-                  />
-                  {!haveImages && !shareBlocked ? (
+                    leftIcon={<Share2 width={14} height={14} strokeWidth={1.75} aria-hidden />}
+                    onClick={() => setDialogOpen(true)}
+                  >
+                    {entry.label}
+                  </Button>
+                  {!alreadyShared && !haveImages && !shareBlocked ? (
                     <span className="text-xs text-text-subtle">
                       The cards render when you share.
                     </span>
@@ -947,37 +997,24 @@ function DsrShareSection({
             {/* The reason the button is dead, as TEXT UNDER IT. Not a `title`
                 and not an `aria-disabled` hint: `title` never fires on touch,
                 and this admin is used on phones, so a tooltip is a reason
-                nobody reads. */}
-            {!alreadyShared && blockedReason ? (
+                nobody reads. Shown after a send too: a top-up is judged by the
+                same check as the first send. */}
+            {blockedReason ? (
               <p className="mt-2 text-sm text-text-muted">{blockedReason}</p>
             ) : null}
           </div>
         </CardContent>
       </Card>
 
-      <Dialog
-        open={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
-        title="Share with dealer"
-        description="Post both cards and one short line to the dealer's chat."
-        size="sm"
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => setConfirmOpen(false)}
-              disabled={share.isPending}
-            >
-              Cancel
-            </Button>
-            <Button onClick={onConfirm} loading={share.isPending}>
-              Share
-            </Button>
-          </>
-        }
-      >
-        <ShareAudienceNote audience={audience} />
-      </Dialog>
+      {status ? (
+        <DsrShareDialog
+          open={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          report={report}
+          status={status}
+          sentBefore={alreadyShared}
+        />
+      ) : null}
 
       <ImageLightbox
         open={viewing !== null}

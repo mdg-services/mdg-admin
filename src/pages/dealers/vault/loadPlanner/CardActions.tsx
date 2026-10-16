@@ -6,6 +6,7 @@ import {
   ShareMenu,
   shareResultMessage,
 } from '@/components/share/ShareMenu';
+import { reachSummary } from '@/components/share/shareReach';
 import {
   ActionRow,
   Button,
@@ -32,7 +33,18 @@ import {
 import { ApiError } from '@/lib/api';
 import { dealerCodeLabel, type Dealer, type LoadPlan, type ShareAudience } from '@dk/shared';
 
-import { approveConfirmDescription, canActOnPlan, cannotActReason, dismissReasonProblem } from './format';
+import {
+  approveConfirmDescription,
+  canActOnPlan,
+  canSendToMissing,
+  cannotActReason,
+  creditBandWarning,
+  dismissReasonProblem,
+  planReachOf,
+  topUpAudiences,
+  topUpConfirmDescription,
+  topUpUnavailableReason,
+} from './format';
 import { useLoadPlannerRunWatcher } from './useLoadPlannerRunWatcher';
 
 /**
@@ -42,6 +54,10 @@ import { useLoadPlannerRunWatcher } from './useLoadPlannerRunWatcher';
  * Approve and Dismiss share one gate — {@link canActOnPlan} — and the reason it
  * is disabled is printed under the buttons rather than left for the admin to
  * guess: a plan already sent, dismissed or replaced has nothing left to decide.
+ *
+ * Once a plan is sent the card says who has it, and when somebody on the app
+ * does not (the manager, an owner who joined later, a copy that failed) a second
+ * menu sends the same card to just them. Nobody who has it gets another copy.
  */
 export function CardActions({
   dealer,
@@ -62,12 +78,19 @@ export function CardActions({
 
   const [approveOpen, setApproveOpen] = React.useState(false);
   const [audience, setAudience] = React.useState<ShareAudience>('owners');
+  // True when the open confirm is for the people who missed an already-sent plan.
+  const [topUp, setTopUp] = React.useState(false);
   const [dismissOpen, setDismissOpen] = React.useState(false);
   const [reason, setReason] = React.useState('');
   const [reasonTouched, setReasonTouched] = React.useState(false);
 
   const canAct = canActOnPlan(plan);
   const disabledReason = cannotActReason(plan);
+  const reach = planReachOf(plan);
+  const canTopUp = canSendToMissing(plan);
+  // What the open confirm is about to do, judged against who lacks the card now.
+  const missingView = topUp ? reach : null;
+  const creditWarning = creditBandWarning(plan, audience, missingView);
   const label = dealerCodeLabel(dealer.code);
   const reasonProblem = reasonTouched ? dismissReasonProblem(reason) : null;
   const running = runNow.isPending || runWatch.busy;
@@ -182,6 +205,7 @@ export function CardActions({
             align="end"
             disabled={!canAct || !cardQ.data}
             onPick={(a) => {
+              setTopUp(false);
               setAudience(a);
               setApproveOpen(true);
             }}
@@ -192,17 +216,52 @@ export function CardActions({
         ) : !cardQ.data ? (
           <p className="text-xs text-text-subtle">Draw the card before it can be sent.</p>
         ) : null}
+
+        {reach ? (
+          <div className="grid gap-2 border-t border-border pt-3">
+            <p className="text-sm text-text">{reachSummary(reach)}</p>
+            {canTopUp ? (
+              <ActionRow below="stack" align="start">
+                <ShareMenu
+                  label="Send to the people who missed it"
+                  variant="secondary"
+                  size="sm"
+                  align="start"
+                  disabled={!cardQ.data}
+                  allowed={topUpAudiences(reach)}
+                  unavailableReason={(a) => topUpUnavailableReason(reach, a)}
+                  onPick={(a) => {
+                    setTopUp(true);
+                    setAudience(a);
+                    setApproveOpen(true);
+                  }}
+                />
+              </ActionRow>
+            ) : null}
+          </div>
+        ) : null}
       </CardContent>
 
       <ConfirmDialog
         open={approveOpen}
         onCancel={() => setApproveOpen(false)}
         onConfirm={onApprove}
-        title="Send this plan?"
+        title={topUp ? 'Send to the people who missed it?' : 'Send this plan?'}
         description={
           <>
-            <p className="mb-3">{approveConfirmDescription(label)}</p>
-            <ShareAudienceNote audience={audience} />
+            {topUp && reach ? (
+              <p>{topUpConfirmDescription(label, reach, audience)}</p>
+            ) : (
+              <>
+                <p className="mb-3">{approveConfirmDescription(label)}</p>
+                <ShareAudienceNote audience={audience} />
+              </>
+            )}
+            {creditWarning ? (
+              <p className="mt-3 rounded-md border border-warning/40 bg-warning-soft/40 p-2 text-text">
+                {creditWarning}
+              </p>
+            ) : null}
           </>
         }
         confirmLabel="Send"

@@ -11,9 +11,30 @@
  */
 
 import type { Intent } from '@/lib/statusIntent';
-import type { DealerDayRow, OverviewDay, TriageItem } from '@dk/shared';
-import { dealerCodeLabel } from '@dk/shared';
+import type {
+  DealerDayRow,
+  DsrSheet,
+  DsrSheetAudience,
+  DsrSheetHolders,
+  DsrSheetPlan,
+  OverviewDay,
+  ShareAudience,
+  TriageItem,
+} from '@dk/shared';
+import {
+  DSR_SHEET_LABELS,
+  DSR_SHEETS,
+  dealerCodeLabel,
+  dsrPlanSendsAnything,
+} from '@dk/shared';
 
+
+/**
+ * A board row as the server sends it. `sent.outlet` is who is on the app at the
+ * outlet today (owners counted, manager yes or no). Missing means the server
+ * could not read it, or is an older one.
+ */
+export type BoardRow = DealerDayRow;
 
 /** A rendered cell: the word, its colour, and where tapping it goes. */
 export interface CellState {
@@ -22,6 +43,12 @@ export interface CellState {
   href: string;
   /** Long-form, shown as the row's hint on a phone where there is room. */
   hint?: string;
+  /**
+   * Who the cell is about, written after the badge rather than inside it: a
+   * badge is one nowrap line of fixed height, and "Sent 09:12 · owners and
+   * manager" does not fit in half a phone card.
+   */
+  who?: string;
 }
 
 const SPELLED = [
@@ -120,6 +147,16 @@ export function triageIntent(item: TriageItem): Intent {
   }
 }
 
+/**
+ * Is this row's one-tap a credit card send? Those go to owners only (the card
+ * prints the outlet's credit position, and the manager's group chat cannot be
+ * un-posted), so the row asks through a menu where Manager and Both are shown
+ * greyed out, with the reason.
+ */
+export function isCreditShare(item: TriageItem): boolean {
+  return item.kind === 'credit_card_superseded' || item.kind === 'credit_card_unsent';
+}
+
 /** The badge on the left of a triage row: how long, or how many. */
 export function triageBadge(item: TriageItem, now: number): string {
   const age = ageSince(item.sinceIso, now);
@@ -165,16 +202,28 @@ export function shiftCell(row: DealerDayRow, reportingDate: string): CellState {
   return { label: 'No data', intent: 'danger', href: editor };
 }
 
-/** Was the day-book built, and is it still valid? */
-export function dsrCell(row: DealerDayRow): CellState {
-  const href = row.dsr.reportId
+/** The report's own page, or the outlet's DSR page when there is no report yet. */
+function reportHref(row: DealerDayRow): string {
+  return row.dsr.reportId
     ? `/dsr/dealers/${row.dealerId}?report=${row.dsr.reportId}`
     : `/dsr/dealers/${row.dealerId}`;
+}
+
+/** Was the day-book built, and is it still valid? */
+export function dsrCell(row: DealerDayRow): CellState {
+  const href = reportHref(row);
   if (!row.dsr.attached) return { label: 'Not set up', intent: 'neutral', href };
   if (!row.dsr.reportId) return { label: 'Not generated', intent: 'warning', href };
   // Stale outranks warnings: a receipt correction invalidates the edited day and
   // every later one, so the figures on it are known to be wrong, not merely odd.
-  if (row.dsr.stale) return { label: 'Figures moved', intent: 'danger', href };
+  if (row.dsr.stale) {
+    return {
+      label: 'Figures moved',
+      intent: 'danger',
+      href,
+      hint: row.sent.sharedAt ? STALE_SENT_REASON : STALE_REASON,
+    };
+  }
   if (row.dsr.warningCount > 0) {
     return {
       label: `${row.dsr.warningCount} warning${row.dsr.warningCount === 1 ? '' : 's'}`,
@@ -186,16 +235,108 @@ export function dsrCell(row: DealerDayRow): CellState {
   return { label: 'Generated', intent: 'success', href };
 }
 
-/** Did it actually reach the dealer? */
-export function sentCell(row: DealerDayRow): CellState {
-  const href = row.dsr.reportId
-    ? `/dsr/dealers/${row.dealerId}?report=${row.dsr.reportId}`
-    : `/dsr/dealers/${row.dealerId}`;
+/** "owners and manager", "owners", "manager", or '' — the people, without counts. */
+export function holdersWords(h: DsrSheetHolders): string {
+  if (h.owners > 0 && h.manager) return 'owners and manager';
+  if (h.owners > 0) return 'owners';
+  if (h.manager) return 'manager';
+  return '';
+}
+
+/** Everyone who holds at least one of the two sheets. */
+function anyHolder(holders: Record<DsrSheet, DsrSheetHolders>): DsrSheetHolders {
+  return {
+    owners: Math.max(holders.sales.owners, holders.variation.owners),
+    manager: holders.sales.manager || holders.variation.manager,
+  };
+}
+
+/**
+ * Which sheet reached whom, but only when it differs between the sheets. When
+ * both went to the same people the cell's own words already say it, and a
+ * second sentence repeating them is noise on a phone card. Short names and no
+ * counts: this has to fit a half-width tile.
+ */
+export function sheetsHint(holders: Record<DsrSheet, DsrSheetHolders>): string | undefined {
+  const { sales, variation } = holders;
+  if (sales.owners === variation.owners && sales.manager === variation.manager) return undefined;
+  const short: Record<DsrSheet, string> = { sales: 'Sales', variation: 'Variation' };
+  return DSR_SHEETS.map((sheet) => `${short[sheet]}: ${holdersWords(holders[sheet]) || 'not sent'}.`).join(
+    ' ',
+  );
+}
+
+/** Did a sheet reach this side — somebody of it holds the sheet. */
+function sidesOf(h: DsrSheetHolders): { owners: boolean; manager: boolean } {
+  return { owners: h.owners > 0, manager: h.manager };
+}
+
+/**
+ * The people a sent report reached, in words that stay true when the two sheets
+ * went to different people.
+ *
+ * "owners and manager" alone, for a report whose stock variation sheet went to
+ * the owners only, reads as if the manager got the verdict too. So when the
+ * sides differ the narrower sheet is named right in the text: "owners and
+ * manager · variation owners only". Where neither sheet sits inside the other
+ * (sales to the manager, variation to the owners) each is spelled out.
+ */
+export function sentWho(holders: Record<DsrSheet, DsrSheetHolders>): string {
+  const union = holdersWords(anyHolder(holders));
+  const sales = sidesOf(holders.sales);
+  const variation = sidesOf(holders.variation);
+  if (sales.owners === variation.owners && sales.manager === variation.manager) return union;
+  const none = (x: { owners: boolean; manager: boolean }) => !x.owners && !x.manager;
+  if (none(variation)) return `${union} · variation not sent`;
+  if (none(sales)) return `${union} · sales not sent`;
+  const inside = (x: { owners: boolean; manager: boolean }, y: { owners: boolean; manager: boolean }) =>
+    (!x.owners || y.owners) && (!x.manager || y.manager);
+  if (inside(variation, sales)) return `${union} · variation ${holdersWords(holders.variation)} only`;
+  if (inside(sales, variation)) return `${union} · sales ${holdersWords(holders.sales)} only`;
+  return `sales ${holdersWords(holders.sales)} · variation ${holdersWords(holders.variation)}`;
+}
+
+/** Said when nobody from the outlet is on the app, so there is nobody to send to. */
+export const NOBODY_ON_APP_HINT = 'Nobody from this outlet is on the app yet.';
+
+/** Did it actually reach the dealer — and whom? */
+export function sentCell(row: BoardRow): CellState {
+  const href = reportHref(row);
   if (row.sent.supersededSharedAt && !row.sent.sharedAt) {
     return { label: 'Old copy with dealer', intent: 'danger', href };
   }
   if (row.sent.sharedAt) {
-    return { label: `Sent ${timeOfDay(row.sent.sharedAt)}`, intent: 'success', href };
+    const label = `Sent ${timeOfDay(row.sent.sharedAt)}`;
+    const holders = row.sent.holders;
+    if (holders) {
+      const who = sentWho(holders);
+      // Sent, and nobody who got it is on the app now (an owner was replaced).
+      // That is not "done" in any sense that matters to the dealer.
+      if (!holdersWords(anyHolder(holders))) {
+        // Nobody at all on the app: the report has no button to send again, so
+        // the hint must not send the admin there to look for one.
+        const outlet = row.sent.outlet;
+        const nobodyAtAll = !!outlet && outlet.owners === 0 && !outlet.manager;
+        return {
+          label,
+          intent: 'warning',
+          href,
+          who: nobodyAtAll ? 'nobody on the app' : 'nobody on the app now',
+          hint: nobodyAtAll
+            ? NOBODY_ON_APP_HINT
+            : 'Nobody who was sent this is on the app now. Open the report to send it again.',
+        };
+      }
+      return { label, intent: 'success', href, who, hint: sheetsHint(holders) };
+    }
+    // `null` is a fact about the report (sent before copies were listed);
+    // missing is only that the server could not read the outlet's people just now.
+    return {
+      label,
+      intent: 'success',
+      href,
+      ...(holders === null ? { hint: 'Sent before MDG recorded who got it.' } : {}),
+    };
   }
   if (!row.dsr.reportId) return { label: '—', intent: 'neutral', href };
   return { label: 'Not sent', intent: 'warning', href };
@@ -268,8 +409,61 @@ export type BoardAction =
   | { kind: 'collect'; label: string; path: string; body: Record<string, string> }
   | { kind: 'type'; label: string; href: string }
   | { kind: 'generate'; label: string; path: string; body: Record<string, string> }
-  | { kind: 'share'; label: string; path: string; confirm: string }
+  | {
+      kind: 'share';
+      label: string;
+      path: string;
+      confirm: string;
+      /**
+       * The outlet's saved rule for who gets each sheet. Set: the row gets one
+       * Send button, whose confirm states the rule and which posts nothing but
+       * `{}` — the server applies the rule, so the screen cannot disagree with it.
+       * Null: the outlet has no rule, and the row asks who (Owners / Manager / Both).
+       */
+      rule: DsrSheetPlan | null;
+    }
+  // A report that must not be sent as it is. The admin is taken to it instead.
+  | { kind: 'blocked'; label: string; reason: string; href: string }
   | null;
+
+/** Why a stale report is not offered for sending. */
+const STALE_REASON =
+  'The figures behind this report changed after it was built. Regenerate it before it is sent.';
+const STALE_SENT_REASON =
+  'The figures changed after this was sent. Regenerate it and send the corrected copy.';
+
+const AUDIENCE_PHRASE: Record<DsrSheetAudience, string> = {
+  none: 'not sent',
+  owners: 'owners only',
+  managers: 'the manager only',
+  both: 'owners and the manager',
+};
+
+/**
+ * An outlet's rule in plain words, for the confirm:
+ * "Daily sales → owners and the manager. Stock variation → owners only."
+ */
+export function ruleSentence(rule: DsrSheetPlan): string {
+  return DSR_SHEETS.map((sheet) => `${DSR_SHEET_LABELS[sheet]} → ${AUDIENCE_PHRASE[rule[sheet]]}.`).join(
+    ' ',
+  );
+}
+
+/**
+ * What the confirm must say when an outlet with NO saved rule is sent to the
+ * manager: that BOTH sheets go, including the stock variation sheet with its
+ * within-limit or over-limit verdict. A pick of "Manager" or "Both" gives the
+ * same people both sheets, and nothing else on the confirm says there are two.
+ * Null for "Owners", which is what a send has always meant.
+ */
+export function noRuleSheetsNote(audience: ShareAudience | undefined): string | null {
+  if (audience !== 'managers' && audience !== 'both') return null;
+  const who = audience === 'both' ? 'the owners and the manager' : 'the manager';
+  return (
+    `Both sheets go to ${who}: daily sales, and stock variation with its within-limit or over-limit verdict. ` +
+    'To keep variation to the owners, open the report and choose who gets each sheet, or save a rule there.'
+  );
+}
 
 export function boardAction(row: DealerDayRow, reportingDate: string): BoardAction {
   const who = dealerCodeLabel(row.dealerCode);
@@ -297,11 +491,32 @@ export function boardAction(row: DealerDayRow, reportingDate: string): BoardActi
     };
   }
   if (row.dsr.reportId && !row.sent.sharedAt) {
+    // A stale report is one the server's own check refuses to release (and, where
+    // the check only observes, would send with figures known to be out of date).
+    // The Report cell already says "Figures moved"; the button must not say Send.
+    if (row.dsr.stale) {
+      return {
+        kind: 'blocked',
+        label: 'Regenerate first',
+        reason: STALE_REASON,
+        href: reportHref(row),
+      };
+    }
+    const rule = row.dsr.shareRule && dsrPlanSendsAnything(row.dsr.shareRule) ? row.dsr.shareRule : null;
+    const day = dayInWords(reportingDate);
+    // Only a chat that holds the old copy gets the "revised" banner; the sentence
+    // says so rather than promising it to everybody.
+    const revised = row.sent.supersededSharedAt
+      ? ' Anyone who has the old copy gets it marked as revised.'
+      : '';
     return {
       kind: 'share',
       label: row.sent.supersededSharedAt ? 'Send the new copy' : 'Send',
       path: `/dsr/reports/${row.dsr.reportId}/share`,
-      confirm: `Send the ${dayInWords(reportingDate)} report to ${who}? The dealer sees it in their chat straight away.`,
+      confirm: rule
+        ? `Send the ${day} report to ${who}? ${ruleSentence(rule)}${revised}`
+        : `Send the ${day} report to ${who}? The dealer sees it in their chat straight away.${revised}`,
+      rule,
     };
   }
   return null;

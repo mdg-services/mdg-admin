@@ -14,7 +14,7 @@
  * days, because the banner gave no reason to hurry.
  */
 import { formatLitres } from '@/lib/format';
-
+import type { DsrShareStatus } from '@dk/shared';
 
 /** One product's variation, before and after the regeneration. */
 export interface SupersededChange {
@@ -62,4 +62,35 @@ export function supersededHeadline(severity: SupersededSeverity): string {
     default:
       return 'The dealer already has an older version of this report';
   }
+}
+
+/**
+ * Whether the "older copy" banner shows.
+ *
+ * It used to show only while the report was UNSHARED, so the first send of the
+ * corrected figures — to the wrong people, or to only some of them — hid it, and
+ * whoever still held the old card was forgotten. Now it stays while the share
+ * status says somebody holds an old copy of a sheet they have not been sent the
+ * new one for.
+ *
+ * Until the status has loaded (`oldHolders` undefined) it behaves as before, and
+ * a report not yet re-sent always shows it: the old copy is out there whether or
+ * not the status can name who has it.
+ */
+export function supersededBannerShown(input: {
+  hasSuperseded: boolean;
+  alreadyShared: boolean;
+  oldHolders: DsrShareStatus['oldHolders'] | undefined;
+}): boolean {
+  if (!input.hasSuperseded) return false;
+  if (!input.alreadyShared) return true;
+  return input.oldHolders != null;
+}
+
+/** The closing sentence of the banner, matched to how wrong the old copy is. */
+export function supersededAdvice(severity: SupersededSeverity, alreadyShared: boolean): string {
+  if (severity === 'unchanged') return 'Their copy still reads true, so re-sending is optional.';
+  return alreadyShared
+    ? 'Send the corrected sheets to them, so everybody is looking at the right figures.'
+    : 'Share it again so they are looking at the corrected figures.';
 }

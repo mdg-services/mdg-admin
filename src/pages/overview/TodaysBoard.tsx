@@ -2,11 +2,9 @@ import { Building2 } from 'lucide-react';
 import * as React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
-import {
-  ShareAudienceNote,
-  ShareMenu,
-  shareResultMessage,
-} from '@/components/share/ShareMenu';
+import { ShareAudienceNote, ShareMenu } from '@/components/share/ShareMenu';
+import { shareResultMessage } from '@/components/share/shareToast';
+import { useShareToast } from '@/components/share/useShareToast';
 import {
   Badge,
   Button,
@@ -17,13 +15,14 @@ import {
 } from '@/components/ui';
 import { useOverviewActionMutation } from '@/hooks/api/useOverview';
 import { dealerCodeLabel } from '@dk/shared';
-import type { DealerDayRow, ShareAudience, ShareOutcome } from '@dk/shared';
+import type { DealerDayRow, DsrShareOutcome, ShareAudience } from '@dk/shared';
 
 import {
   boardAction,
   chatCell,
   dsrCell,
   kavachCell,
+  noRuleSheetsNote,
   sentCell,
   shiftCell,
   type BoardAction,
@@ -43,11 +42,13 @@ function Cell({ state, label }: { state: CellState; label: string }) {
   return (
     <Link
       to={state.href}
-      className="tap-target -m-1 inline-flex p-1"
-      title={state.hint}
-      aria-label={`${label}: ${state.label}`}
+      className="tap-target -m-1 inline-flex items-center p-1"
+      title={state.hint ?? state.who}
+      aria-label={`${label}: ${state.label}${state.who ? ` · ${state.who}` : ''}`}
     >
       <Badge intent={state.intent}>{state.label}</Badge>
+      {/* Beside the badge, not inside it: a badge is one nowrap line. */}
+      {state.who ? <span className="ml-1.5 text-xs text-text-muted">· {state.who}</span> : null}
     </Link>
   );
 }
@@ -74,23 +75,26 @@ function BoardTiles({ cells }: { cells: { label: string; state: CellState }[] })
     // for the viewport and capping at the slot makes every card's grid the
     // card's full width.
     <span className="mt-1 grid w-screen max-w-full grid-cols-2 gap-2">
-      {cells.map(({ label, state }) => (
-        <Link
-          key={label}
-          to={state.href}
-          // `relative` so the tile paints above the dealer link's tap halo,
-          // which reaches 12px down from the card's title.
-          className="relative flex min-h-11 min-w-0 flex-col items-start justify-center gap-0.5 rounded-md border border-border px-2 py-1 text-left"
-        >
-          <span className="text-xs text-text-muted">{label}</span>
-          <Badge intent={state.intent}>{state.label}</Badge>
-          {state.hint ? (
-            <span className="line-clamp-2 break-words text-xs text-text-muted">
-              {state.hint}
-            </span>
-          ) : null}
-        </Link>
-      ))}
+      {cells.map(({ label, state }) => {
+        // The hint says more than `who` whenever both exist (it is the per-sheet
+        // version), so it wins; `who` alone is the plain "owners and manager".
+        const note = state.hint ?? state.who;
+        return (
+          <Link
+            key={label}
+            to={state.href}
+            // `relative` so the tile paints above the dealer link's tap halo,
+            // which reaches 12px down from the card's title.
+            className="relative flex min-h-11 min-w-0 flex-col items-start justify-center gap-0.5 rounded-md border border-border px-2 py-1 text-left"
+          >
+            <span className="text-xs text-text-muted">{label}</span>
+            <Badge intent={state.intent}>{state.label}</Badge>
+            {note ? (
+              <span className="line-clamp-3 break-words text-xs text-text-muted">{note}</span>
+            ) : null}
+          </Link>
+        );
+      })}
     </span>
   );
 }
@@ -114,17 +118,23 @@ export function TodaysBoard({
 }) {
   const navigate = useNavigate();
   const toast = useToast();
+  const showShare = useShareToast();
   const run = useOverviewActionMutation(selectedDate);
-  const [pending, setPending] = React.useState<{ row: DealerDayRow; action: BoardAction } | null>(
-    null,
-  );
+  // The audience a menu pick chose lives WITH the thing it was picked for. It used
+  // to sit in a table-wide state, so the confirm and the request each read
+  // whatever the last pick anywhere on the board had been.
+  const [pending, setPending] = React.useState<{
+    row: DealerDayRow;
+    action: BoardAction;
+    /** Set only when the admin picked from the menu; a saved rule sends no audience. */
+    audience?: ShareAudience;
+  } | null>(null);
   const [busyId, setBusyId] = React.useState<string | null>(null);
-  const [audience, setAudience] = React.useState<ShareAudience>('owners');
 
   const perform = React.useCallback(
-    (row: DealerDayRow, action: BoardAction) => {
+    (row: DealerDayRow, action: BoardAction, audience?: ShareAudience) => {
       if (!action) return;
-      if (action.kind === 'type') {
+      if (action.kind === 'type' || action.kind === 'blocked') {
         navigate(action.href);
         return;
       }
@@ -132,15 +142,23 @@ export function TodaysBoard({
       run.mutate(
         {
           path: action.path,
-          body: action.kind === 'share' ? { audience } : action.body,
+          // A saved rule is applied by the server, so the request carries no
+          // audience at all; a menu pick carries only what was picked.
+          body: action.kind === 'share' ? (audience ? { audience } : {}) : action.body,
         },
         {
-          onSuccess: (result) =>
-            toast.success(
-              action.kind === 'share'
-                ? `${dealerCodeLabel(row.dealerCode)}: ${shareResultMessage(result as ShareOutcome, 'Sent.')}`
-                : `Started for ${dealerCodeLabel(row.dealerCode)} — this takes a minute.`,
-            ),
+          onSuccess: (result) => {
+            const who = dealerCodeLabel(row.dealerCode);
+            if (action.kind !== 'share') {
+              toast.success(`Started for ${who} — this takes a minute.`);
+              return;
+            }
+            const out = result as DsrShareOutcome;
+            // `shareResultMessage` already says what did not go out (a side with
+            // nobody on the app, a copy that failed), so it is not added again;
+            // `showShare` makes that case a warning that stays, not a green toast.
+            showShare(`${who}: ${shareResultMessage(out, 'Sent.')}`, out);
+          },
           onError: (e) => toast.error((e as Error).message || 'That did not go through.'),
           onSettled: () => {
             setBusyId(null);
@@ -149,8 +167,9 @@ export function TodaysBoard({
         },
       );
     },
-    [navigate, run, toast, audience],
+    [navigate, run, showShare, toast],
   );
+  const sheetsNote = noRuleSheetsNote(pending?.audience);
 
   return (
     <>
@@ -246,6 +265,20 @@ export function TodaysBoard({
           const action = boardAction(r, reportingDate);
           if (!action) return null;
           if (action.kind === 'share') {
+            // The outlet has a saved rule: one button, and the confirm states the
+            // rule. Without one, ask who (the same people for both sheets).
+            if (action.rule) {
+              return (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={busyId === r.dealerId}
+                  onClick={() => setPending({ row: r, action })}
+                >
+                  {action.label}
+                </Button>
+              );
+            }
             return (
               <ShareMenu
                 label={action.label}
@@ -253,11 +286,22 @@ export function TodaysBoard({
                 variant="secondary"
                 align="end"
                 loading={busyId === r.dealerId}
-                onPick={(a) => {
-                  setAudience(a);
-                  setPending({ row: r, action });
-                }}
+                onPick={(a) => setPending({ row: r, action, audience: a })}
               />
+            );
+          }
+          if (action.kind === 'blocked') {
+            // Not a Send: the report is not fit to go. The reason is the button's
+            // tooltip and the Report cell's hint; the click opens the report.
+            return (
+              <Button
+                size="sm"
+                variant="secondary"
+                title={action.reason}
+                onClick={() => perform(r, action)}
+              >
+                {action.label}
+              </Button>
             );
           }
           return (
@@ -290,14 +334,22 @@ export function TodaysBoard({
       <ConfirmDialog
         open={!!pending}
         onCancel={() => setPending(null)}
-        onConfirm={() => pending && perform(pending.row, pending.action)}
+        onConfirm={() => pending && perform(pending.row, pending.action, pending.audience)}
         loading={busyId === pending?.row.dealerId}
         title={pending?.action?.label ?? 'Send'}
         description={
           pending?.action?.kind === 'share' ? (
             <>
-              <p className="mb-3">{pending.action.confirm}</p>
-              <ShareAudienceNote audience={audience} />
+              <p className={pending.audience ? 'mb-3' : undefined}>{pending.action.confirm}</p>
+              {pending.audience ? <ShareAudienceNote audience={pending.audience} /> : null}
+              {/* No saved rule, so Manager / Both gives that person BOTH sheets.
+                  Said here because nothing else on this confirm mentions that
+                  there are two, or that one carries the verdict. */}
+              {sheetsNote ? (
+                <p className="mt-3 rounded-md border border-warning/40 bg-warning-soft/40 p-2 text-text">
+                  {sheetsNote}
+                </p>
+              ) : null}
             </>
           ) : undefined
         }

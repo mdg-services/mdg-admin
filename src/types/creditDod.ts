@@ -261,6 +261,13 @@ export interface CreditDodSnapshotRecord {
    * without the late transactions above, so the dealer is holding stale figures.
    */
   supersededSharedAt: string | null;
+  /**
+   * Who is on the app at this outlet today, also for a snapshot nobody has been
+   * sent: with no owner, the Owners choice is switched off before a first send.
+   * Absent when the outlet could not be read, and on a stand-in rebuilt from a
+   * run's output.
+   */
+  outlet?: { owners: number; manager: boolean };
   preparedAt: string;
   openLots: CreditDodOpenLot[];
   artifacts: CreditDodSnapshotArtifacts;

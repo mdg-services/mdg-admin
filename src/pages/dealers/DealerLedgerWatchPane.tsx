@@ -10,7 +10,18 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
-import { ShareMenu, shareResultMessage } from '@/components/share/ShareMenu';
+import { ShareAudienceNote, ShareMenu } from '@/components/share/ShareMenu';
+import {
+  audienceForMissing,
+  hasMissingPeople,
+  holdersPhrase,
+  missingPeople,
+  NO_OWNER_NOTE,
+  ownersOnlyMenu,
+  reachSummary,
+} from '@/components/share/shareReach';
+import { shareResultMessage } from '@/components/share/shareToast';
+import { useShareToast } from '@/components/share/useShareToast';
 import {
   Badge,
   Button,
@@ -18,6 +29,7 @@ import {
   CardContent,
   CardHeader,
   DateRangeFilter,
+  Dialog,
   dateRangeForPreset,
   DownloadButton,
   EmptyState,
@@ -45,7 +57,13 @@ import { cn } from '@/lib/cn';
 import { formatDate, formatDateTime, formatDmy, inrFormat, istTodayYmd } from '@/lib/format';
 import { StatTileRow } from '@/pages/dataVault/StatTile';
 import { IgnoreFindingDialog } from '@/pages/ledgerWatch/IgnoreFindingDialog';
-import type { LedgerFlagDto, LedgerFlagStatus, ShareAudience } from '@dk/shared';
+import {
+  OWNERS_ONLY_AUDIENCES,
+  OWNERS_ONLY_REASON,
+  type LedgerFlagDto,
+  type LedgerFlagStatus,
+  type ShareAudience,
+} from '@dk/shared';
 
 import {
   FLAG_KIND_LABEL,
@@ -691,6 +709,7 @@ type CardMode = 'latest' | 'range';
  */
 function DealerCard({ dealerId }: { dealerId: string }) {
   const toast = useToast();
+  const showShare = useShareToast();
   const [open, setOpen] = React.useState(false);
   const [mode, setMode] = React.useState<CardMode>('latest');
 
@@ -726,6 +745,12 @@ function DealerCard({ dealerId }: { dealerId: string }) {
     activeWindow,
   );
   const share = useShareLedgerWatchCard();
+  /**
+   * Who the admin picked, while the confirm is open; null when it is closed.
+   * Picking is no longer sending: the card goes to a dealer's owners and cannot
+   * be taken back, so the pick opens a confirmation that says who and what.
+   */
+  const [confirming, setConfirming] = React.useState<ShareAudience | null>(null);
 
   function chooseMode(next: CardMode) {
     setMode(next);
@@ -892,21 +917,44 @@ function DealerCard({ dealerId }: { dealerId: string }) {
   const drawnWindow = card.window;
   const truncated = card.movements.length < card.totalMovements;
 
-  // No confirm step on this card: picking who it goes to IS the send.
+  // Who holds this exact picture, against who is on the app now.
+  const sent = card.shared;
+  const missing = sent ? missingPeople(sent.reach, OWNERS_ONLY_AUDIENCES) : null;
+  const canTopUp = !!sent && hasMissingPeople(sent.reach, OWNERS_ONLY_AUDIENCES);
+  // Before a first send: no owner on the app means nobody can be sent it, which
+  // the menu says up front instead of after Owners > confirm > Send.
+  const firstSend = ownersOnlyMenu(card.outlet);
+
   function sendIt(audience: ShareAudience) {
     share.mutate(
       { dealerId, window: drawnWindow, audience },
       {
-        onSuccess: (r) =>
-          toast.success(
+        onSuccess: (r) => {
+          setConfirming(null);
+          // `shareResultMessage` already says which owners' copies did not post;
+          // the toast then stays up as a warning rather than a green "sent".
+          showShare(
             r.alreadyShared && !r.recipients
               ? 'This exact card has already gone to the dealer.'
-              : shareResultMessage(r, 'Sent — it is in the dealer’s chat now.'),
-          ),
+              : shareResultMessage(r, 'Sent — it is in the owners’ chats now.'),
+            r,
+          );
+        },
+        // The confirmation stays open, so a refusal can be read and cancelled.
         onError: (err) =>
           toast.error(err instanceof ApiError ? err.message : 'Could not send the card'),
       },
     );
+  }
+
+  /** What the confirmation says is being sent: the entries and what they add up to. */
+  function sendSummary(): string {
+    const n = card.totalMovements;
+    const entries = `${n} ${n === 1 ? 'entry' : 'entries'}`;
+    const scope = drawnWindow
+      ? `${entries} ${periodPhrase(drawnWindow)}${truncated ? `, ${card.movements.length} drawn` : ''}`
+      : `The last ${card.movements.length} of ${entries}`;
+    return `${scope}. Charged ${inrFormat(card.charged)}, received ${inrFormat(card.received)}.`;
   }
 
   /** One sentence saying what is on the card and what its figures cover. */
@@ -938,6 +986,16 @@ function DealerCard({ dealerId }: { dealerId: string }) {
           <div className="min-w-0">
             <p className="text-base font-semibold text-text">Card for the dealer</p>
             <p className="mt-0.5 text-sm text-text-muted">{describe()}</p>
+            {/* Whether this exact picture went out, and to whom. The only trace
+                of a send used to be a toast that disappeared. */}
+            {sent ? (
+              <>
+                <p className="mt-1 text-xs text-text-subtle">
+                  Shared {sent.at ? formatDateTime(sent.at) : 'earlier'}
+                </p>
+                <p className="text-xs text-text-muted">{reachSummary(sent.reach)}</p>
+              </>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             {/* `downloadUrl`, never `viewUrl` + a `download` attribute: that
@@ -955,17 +1013,87 @@ function DealerCard({ dealerId }: { dealerId: string }) {
               variant="secondary"
               size="sm"
             />
-            <ShareMenu
-              label="Send to dealer"
-              size="sm"
-              align="end"
-              disabled={empty}
-              loading={share.isPending}
-              icon={<Send width={14} height={14} strokeWidth={1.75} aria-hidden />}
-              onPick={sendIt}
-            />
+            {sent ? (
+              // Already sent: the only thing left to do is give it to an owner who
+              // does not have it, so that is the only button.
+              canTopUp ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={share.isPending}
+                  onClick={() => setConfirming(audienceForMissing(sent.reach, OWNERS_ONLY_AUDIENCES))}
+                  leftIcon={<Send width={14} height={14} strokeWidth={1.75} aria-hidden />}
+                >
+                  {missing && missing.owners > 1
+                    ? 'Send to the owners who missed it'
+                    : 'Send to the owner who missed it'}
+                </Button>
+              ) : null
+            ) : (
+              <ShareMenu
+                label="Send to dealer"
+                size="sm"
+                align="end"
+                disabled={empty}
+                loading={share.isPending}
+                icon={<Send width={14} height={14} strokeWidth={1.75} aria-hidden />}
+                allowed={firstSend.allowed}
+                unavailableReason={firstSend.unavailableReason}
+                onPick={setConfirming}
+              />
+            )}
           </div>
         </div>
+        {!sent && firstSend.noOwner && !empty ? (
+          <p className="text-xs text-text-muted">{NO_OWNER_NOTE}</p>
+        ) : null}
+
+        <Dialog
+          open={confirming !== null}
+          onClose={() => setConfirming(null)}
+          title={sent ? 'Send to the owners who missed it' : 'Send to the dealer'}
+          description={
+            sent
+              ? "Post this same card to the owners who don't have it yet."
+              : "Post this card and one short line into every owner's chat."
+          }
+          size="sm"
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setConfirming(null)}
+                disabled={share.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => confirming && sendIt(confirming)}
+                loading={share.isPending}
+                disabled={confirming === null}
+              >
+                Send
+              </Button>
+            </>
+          }
+        >
+          <div className="grid gap-2">
+            <p className="text-sm text-text">{sendSummary()}</p>
+            {sent && missing ? (
+              <p className="text-sm text-text-muted">
+                Sending to{' '}
+                <span className="font-semibold text-text">{holdersPhrase(missing)}</span> —
+                they don&apos;t have it yet. Everyone who has it is left alone.
+              </p>
+            ) : confirming ? (
+              <ShareAudienceNote audience={confirming} />
+            ) : null}
+            <p className="text-xs text-text-subtle">
+              {OWNERS_ONLY_REASON} The manager is not sent it, and a sent card can&apos;t be taken
+              back.
+            </p>
+          </div>
+        </Dialog>
 
         {/* What is ON the card, in words. An admin approving something that goes
             to a dealer should not have to squint at a thumbnail. */}

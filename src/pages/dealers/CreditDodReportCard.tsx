@@ -7,15 +7,23 @@ import {
   ChevronRight,
   FileText,
   HelpCircle,
+  Send,
   Share2,
 } from 'lucide-react';
 import * as React from 'react';
 
+import { ShareAudienceNote, ShareMenu } from '@/components/share/ShareMenu';
 import {
-  ShareAudienceNote,
-  ShareMenu,
-  shareResultMessage,
-} from '@/components/share/ShareMenu';
+  audienceForMissing,
+  hasMissingPeople,
+  holdersPhrase,
+  missingPeople,
+  NO_OWNER_NOTE,
+  ownersOnlyMenu,
+  reachSummary,
+} from '@/components/share/shareReach';
+import { shareResultMessage } from '@/components/share/shareToast';
+import { useShareToast } from '@/components/share/useShareToast';
 import {
   Button,
   Dialog,
@@ -25,13 +33,13 @@ import {
   ImageLightbox,
   useToast,
 } from '@/components/ui';
-import { useShareCreditDodSnapshot } from '@/hooks/api/useCreditDod';
+import { creditDodShareOf, useShareCreditDodSnapshot } from '@/hooks/api/useCreditDod';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, formatDmy, inrFormat } from '@/lib/format';
 import type { CreditDodSnapshotRecord } from '@/types/creditDod';
 import type { CreditDodRunOutput } from '@/types/serviceRun';
-import type { ShareAudience } from '@dk/shared';
+import { OWNERS_ONLY_AUDIENCES, OWNERS_ONLY_REASON, type ShareAudience } from '@dk/shared';
 
 interface Props {
   /** The stored snapshot — the single source of truth for the whole report. */
@@ -69,6 +77,7 @@ export function CreditDodReportCard({
   shareDisabled,
 }: Props) {
   const toast = useToast();
+  const showShare = useShareToast();
   const isSuperAdmin = useIsSuperAdmin();
   const shareMutation = useShareCreditDodSnapshot(snapshot.id, {
     runId,
@@ -80,6 +89,15 @@ export function CreditDodReportCard({
   const [cardOpen, setCardOpen] = React.useState(false);
   const alreadyShared = !!snapshot.shared;
   const imageUrl = cardImageUrl ?? snapshot.artifacts.cardUrl;
+  // Who holds the card, read live by the server against who is on the app now. A
+  // card sent to the owners of the day does not reach one who joined after.
+  const sharedState = creditDodShareOf(snapshot);
+  const reach = sharedState?.reach;
+  const missing = reach ? missingPeople(reach, OWNERS_ONLY_AUDIENCES) : null;
+  const canTopUp = !!reach && hasMissingPeople(reach, OWNERS_ONLY_AUDIENCES);
+  // Before a first send: no owner on the app means nobody can be sent it, which
+  // the menu says up front instead of after Owners > confirm > Share.
+  const firstSend = ownersOnlyMenu(snapshot.outlet);
 
   // The API refuses both of these for a plain admin (400), so the dialog has to
   // say so before the click rather than let it come back as a failed toast.
@@ -94,7 +112,9 @@ export function CreditDodReportCard({
   async function onConfirmShare() {
     try {
       const result = await shareMutation.mutateAsync(audience);
-      toast.success(shareResultMessage(result, 'Card shared with the dealer.'));
+      // The message already says which owners' copies did not post; the toast
+      // then stays up as a warning rather than a green "shared".
+      showShare(shareResultMessage(result, 'Card shared with the owners.'), result);
       setConfirmOpen(false);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Failed to share';
@@ -264,34 +284,64 @@ export function CreditDodReportCard({
               : "Open this report from the dealer's Credit & DOD tab to share it."}
           </p>
         ) : alreadyShared ? (
-          <>
-            <Button
-              variant="secondary"
-              disabled
-              leftIcon={<Check width={14} height={14} strokeWidth={1.75} />}
-            >
-              Shared
-            </Button>
-            <span className="text-xs text-text-subtle">
-              {formatDateTime(snapshot.shared?.at)}
-            </span>
-          </>
+          <div className="grid gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                disabled
+                leftIcon={<Check width={14} height={14} strokeWidth={1.75} />}
+              >
+                Shared
+              </Button>
+              <span className="text-xs text-text-subtle">
+                {formatDateTime(snapshot.shared?.at)}
+              </span>
+            </div>
+            {/* Who has it. Without this the only trace of who a share reached was a
+                toast that disappeared, and a colleague could not tell whether an
+                owner who joined later ever got the card. */}
+            {reach ? <p className="text-xs text-text-muted">{reachSummary(reach)}</p> : null}
+            {canTopUp ? (
+              <div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setAudience(audienceForMissing(reach!, OWNERS_ONLY_AUDIENCES) ?? 'owners');
+                    setConfirmOpen(true);
+                  }}
+                  leftIcon={<Send width={14} height={14} strokeWidth={1.75} aria-hidden />}
+                >
+                  {missing && missing.owners > 1
+                    ? 'Send to the owners who missed it'
+                    : 'Send to the owner who missed it'}
+                </Button>
+              </div>
+            ) : null}
+          </div>
         ) : (
-          <ShareMenu
-            label="Share with dealer"
-            icon={<Share2 width={14} height={14} strokeWidth={1.75} aria-hidden />}
-            onPick={(a) => {
-              setAudience(a);
-              setConfirmOpen(true);
-            }}
-          />
+          <>
+            <ShareMenu
+              label="Share with dealer"
+              icon={<Share2 width={14} height={14} strokeWidth={1.75} aria-hidden />}
+              allowed={firstSend.allowed}
+              unavailableReason={firstSend.unavailableReason}
+              onPick={(a) => {
+                setAudience(a);
+                setConfirmOpen(true);
+              }}
+            />
+            {firstSend.noOwner ? (
+              <p className="basis-full text-xs text-text-muted">{NO_OWNER_NOTE}</p>
+            ) : null}
+          </>
         )}
       </div>
 
       <Dialog
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        title="Share with dealer"
+        title={alreadyShared ? 'Send to the owners who missed it' : 'Share with dealer'}
         help={
           <HowThisWorks
             surface="admin-credit-dod-report-card"
@@ -299,7 +349,11 @@ export function CreditDodReportCard({
             variant="icon"
           />
         }
-        description="Post this card and one short line to the dealer's chat."
+        description={
+          alreadyShared
+            ? "Post this same card and one short line to the owners who don't have it yet."
+            : "Post this card and one short line into every owner's chat."
+        }
         size="sm"
         footer={
           <>
@@ -339,7 +393,20 @@ export function CreditDodReportCard({
             </Notice>
           </div>
         ) : null}
-        <ShareAudienceNote audience={audience} />
+        {alreadyShared && missing ? (
+          // A top-up posts to the people who lack the card, not to every owner:
+          // the note says who, so the sentence under "Sending to" is true.
+          <p className="text-sm text-text-muted">
+            Sending to{' '}
+            <span className="font-semibold text-text">{holdersPhrase(missing)}</span> —
+            they don&apos;t have it yet. Everyone who has it is left alone.
+          </p>
+        ) : (
+          <ShareAudienceNote audience={audience} />
+        )}
+        <p className="mt-2 text-xs text-text-subtle">
+          {OWNERS_ONLY_REASON} The manager is not sent it, and a sent card can&apos;t be taken back.
+        </p>
       </Dialog>
 
       <ImageLightbox

@@ -5,6 +5,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 
+import type { ShareReachView } from '@/components/share/shareReach';
 import { api } from '@/lib/api';
 import type {
   ShareAudience,
@@ -396,10 +397,35 @@ export interface LedgerWatchCard {
    * card with a period it does not cover.
    */
   window: LedgerWatchCardWindow | null;
+  /**
+   * Who is on the app at this outlet today — also for a picture nobody has been
+   * sent, so the Owners choice can be switched off with its reason before a
+   * first send. Absent when the outlet could not be read.
+   */
+  outlet?: { owners: number; manager: boolean };
+  /**
+   * Null until THIS exact picture is sent. Once it is, who holds it against who
+   * is on the app now — an owner who joined after the send shows as missing, and
+   * the screen offers to send it to them.
+   */
+  shared: LedgerWatchCardShared | null;
   movements: LedgerWatchCardMovement[];
 }
 
-export type LedgerWatchShareResult = ShareOutcome;
+/** A sent card, as `GET /ledger-watch/dealers/:id/card` publishes it. */
+export interface LedgerWatchCardShared {
+  /** When it was sent; null on a record that never kept the time. */
+  at: string | null;
+  by: string | null;
+  audience?: ShareAudience;
+  reach: ShareReachView;
+}
+
+/**
+ * The answer to a send: the common part, plus one plain sentence per owner's copy
+ * that was asked for and did not post. Absent when everything went out.
+ */
+export type LedgerWatchShareResult = ShareOutcome & { notReached?: string[] };
 
 /**
  * Fetch (and, server-side, draw) the dealer's card.
@@ -437,11 +463,12 @@ export function useLedgerWatchCard(
 }
 
 /**
- * Send the card into the dealer's chat.
+ * Send the card into the owners' chats. OWNERS ONLY — the server refuses any
+ * other audience (400).
  *
- * Idempotent per picture: sending the identical card twice returns the original
- * message with `alreadyShared`, while a card that has changed because a new fee
- * landed can be sent again.
+ * Idempotent per picture: sending the identical card again posts it only to the
+ * owners who do not hold it yet (nobody missing returns `alreadyShared`), while a
+ * card that has changed because a new fee landed can be sent to everyone again.
  */
 export function useShareLedgerWatchCard() {
   const qc = useQueryClient();

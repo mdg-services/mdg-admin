@@ -78,10 +78,19 @@ export function useDrawLoadPlanCard(planId: string | undefined) {
   });
 }
 
+/**
+ * `plan` is the plan as it now stands. A sent plan's `shared` also carries the
+ * audience that was reached and `reach` — who holds the card, in people on the
+ * app now (typed `LoadPlanSharedView` in `loadPlanner/format.ts`, read with
+ * `planReachOf`).
+ */
 export type ApproveLoadPlanResult = ShareOutcome & { plan: LoadPlan };
 
 /**
- * Approve a plan and send its card into the dealer's chat.
+ * Approve a plan and send its card into the dealer's chat — or, for a plan that
+ * is already sent and still the current one, send the same card to the people of
+ * `audience` who do not hold it yet (the answer's `recipients` is just those).
+ * Nobody who holds it gets a second copy, so asking again is harmless.
  *
  * `dealerId` is only here to invalidate the right overview — the request itself
  * needs nothing but the plan id, which the server already owns the dealer of.

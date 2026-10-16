@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-query';
 
 
+import type { ShareReachView } from '@/components/share/shareReach';
 import { api } from '@/lib/api';
 import type {
   CreditDodLedgerResponse,
@@ -13,8 +14,33 @@ import type {
   CreditDodSnapshotRecord,
   CreditDodVaultResponse,
 } from '@/types/creditDod';
-import type { CreditDodShareResult } from '@/types/serviceRun';
+import type { CreditDodShareResult, CreditDodShareState } from '@/types/serviceRun';
 import type { ShareAudience } from '@dk/shared';
+
+/**
+ * The answer to a Credit & DOD share: the common part, plus one plain sentence
+ * per owner's copy that was asked for and did not post. Absent when everything
+ * went out.
+ */
+export type CreditDodOwnersShareResult = CreditDodShareResult & { notReached?: string[] };
+
+/**
+ * A sent snapshot's `shared` record as the server publishes it: when it went,
+ * the sides it reached, and — read live — who holds it against who is on the app
+ * now. `audience` and `reach` are absent on a snapshot shared before MDG
+ * recorded them, and on a stand-in rebuilt from a run's output.
+ */
+export interface CreditDodShareWithReach extends CreditDodShareState {
+  audience?: ShareAudience;
+  reach?: ShareReachView;
+}
+
+/** The snapshot's share record with the fields `CreditDodShareState` does not type. */
+export function creditDodShareOf(snapshot: {
+  shared: CreditDodShareState | null;
+}): CreditDodShareWithReach | null {
+  return snapshot.shared as CreditDodShareWithReach | null;
+}
 
 /**
  * Every dealer's PAD ledger digest — the Data Vault's PAD ledger dataset list.
@@ -39,9 +65,12 @@ export function useCreditDodSnapshot(snapshotId: string | undefined) {
 }
 
 /**
- * Shares the rendered Credit & DOD card with the dealer's chat. On success we
+ * Shares the rendered Credit & DOD card into the owners' chats. On success we
  * invalidate the snapshot, the dealer's snapshot list (so the Shared column in
  * Report history updates) and the owning run.
+ *
+ * OWNERS ONLY — the server refuses any other audience (400). Sending again posts
+ * the same card to the owners who do not hold it yet, and to nobody else.
  */
 export function useShareCreditDodSnapshot(
   snapshotId: string,
@@ -50,7 +79,7 @@ export function useShareCreditDodSnapshot(
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (audience?: ShareAudience) =>
-      api.post<CreditDodShareResult>(
+      api.post<CreditDodOwnersShareResult>(
         `/credit-dod/snapshots/${snapshotId}/share`,
         audience ? { audience } : {},
       ),
