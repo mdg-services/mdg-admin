@@ -51,6 +51,7 @@ import {
   guardStageText,
   langLabel,
   pageLabel,
+  productLabel,
   sessionStatusLabel,
 } from './assistFormat';
 import { CallPlayer } from './CallPlayer';
@@ -112,6 +113,7 @@ export function SessionDrawer({ sessionId, onClose }: SessionDrawerProps) {
         formatDuration(detail.durationMs),
         langLabel(detail.lang),
         `${detail.turnCount} ${detail.turnCount === 1 ? 'turn' : 'turns'}`,
+        `About ${productLabel(detail.product)}`,
       ].join(' · ')
     : undefined;
 

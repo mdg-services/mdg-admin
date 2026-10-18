@@ -1,5 +1,6 @@
 import { inrFormat } from '@/lib/format';
 import { istStamp } from '@/lib/intake';
+import { ASSIST_PRODUCT_LABELS } from '@dk/shared';
 import type {
   AssistChannel,
   AssistCostSplit,
@@ -8,6 +9,7 @@ import type {
   AssistFollowupStatus,
   AssistGuardStage,
   AssistLang,
+  AssistProduct,
   AssistSessionGrievance,
   AssistSessionStatus,
 } from '@dk/shared';
@@ -90,6 +92,25 @@ export function channelLabel(channel: AssistChannel): string {
 
 export function langLabel(lang: AssistLang): string {
   return lang === 'hi' ? 'Hindi' : 'English';
+}
+
+/**
+ * Which app the conversation was about, for whoever rings the lead back.
+ *
+ * A row with no `product` came from an API older than the field, which only
+ * ever knew Dealer's Kavach — so that is what it reads as.
+ */
+export function productLabel(product: AssistProduct | undefined): string {
+  return ASSIST_PRODUCT_LABELS[product ?? 'dealer-kavach'];
+}
+
+/**
+ * True for the rows worth a tag in the list. Dealer's Kavach is what nearly
+ * every conversation is about, so tagging it too would be a badge on every row
+ * that says nothing; the tag marks the exception.
+ */
+export function isKhataKavach(row: { product?: AssistProduct }): boolean {
+  return row.product === 'khata-kavach';
 }
 
 export function sessionStatusLabel(status: AssistSessionStatus): string {
@@ -245,6 +266,7 @@ const DOC_LABELS: Record<string, string> = {
   'first-aid-kit': 'First aid kit',
   'toilet-cleanliness': 'Toilet cleanliness advisory',
   'mdg-services': 'What MDG does',
+  'khata-kavach': 'Khata Kavach',
 };
 
 /** `mdg-2024` → `MDG 2024`. An unknown id is shown as-is rather than hidden. */

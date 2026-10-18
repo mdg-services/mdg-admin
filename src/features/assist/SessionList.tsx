@@ -33,7 +33,9 @@ import {
   flagReasonText,
   followupLabel,
   formatPaise,
+  isKhataKavach,
   langLabel,
+  productLabel,
 } from './assistFormat';
 import { sessionLength } from './assistParams';
 
@@ -154,9 +156,17 @@ export function SessionListTab({
             ),
             meta:
               tab === 'flagged' ? (
-                <FlagReasons session={s} />
+                <div className="grid gap-1.5">
+                  {isKhataKavach(s) ? (
+                    <div>
+                      <ProductTag session={s} />
+                    </div>
+                  ) : null}
+                  <FlagReasons session={s} />
+                </div>
               ) : (
                 <div className="flex flex-wrap items-start gap-1.5">
+                  <ProductTag session={s} />
                   <FlagChips session={s} />
                   <Badge intent={s.followupStatus === 'new' ? 'warning' : 'neutral'}>
                     {followupLabel(s.followupStatus)}
@@ -302,8 +312,13 @@ function SessionTable({
             <TD className="truncate text-right tabular-nums">{sessionLength(s)}</TD>
             <TD className="text-right tabular-nums">{s.turnCount}</TD>
             <TD>
-              <span className="block truncate text-text-muted" title={s.opening}>
-                {s.opening || '—'}
+              {/* The tag first and fixed, the opening line truncating beside it:
+                  the tag is the thing the caller needs before dialling. */}
+              <span className="flex min-w-0 items-center gap-1.5">
+                <ProductTag session={s} />
+                <span className="min-w-0 truncate text-text-muted" title={s.opening}>
+                  {s.opening || '—'}
+                </span>
               </span>
             </TD>
             <TD>
@@ -397,6 +412,15 @@ function LeadCell({
       ) : null}
     </span>
   );
+}
+
+/**
+ * "Khata Kavach" on a row whose conversation was about it, and nothing on the
+ * rest: see `isKhataKavach`.
+ */
+function ProductTag({ session }: { session: AssistSessionSummary }) {
+  if (!isKhataKavach(session)) return null;
+  return <Badge intent="info">{productLabel(session.product)}</Badge>;
 }
 
 /** Chips shown on a row before the rest are folded into "+N more". */
