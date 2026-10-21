@@ -96,7 +96,7 @@ Super-admin pages:
 | --- | --- | --- |
 | Assistant | `/assist` | The website assistant's console: visitors' transcripts and call-back requests. |
 | Films | `/films` | Views, drop-off and share links for the two films on mdgservices.in. |
-| WhatsApp replies | `/whatsapp` | What people wrote back to the number our messages go out from. |
+| WhatsApp | `/whatsapp` | The inbox for the WhatsApp numbers we run: a chat for every lead we message and everyone who writes to us, with replies, unread and needs-reply lists, quick replies and live alerts. `?chat=` opens one. |
 | Grievances | `/grievances` | Sent from the website or taken down by the assistant. Each stays open until resolved. |
 | Registrations | `/registrations` | "Register your pump" sign-ups, from the site or the app. |
 | Service Catalog | `/services` | The services (plugins) that can be attached to a dealer. |

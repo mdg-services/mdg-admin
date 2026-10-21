@@ -138,10 +138,10 @@ const DsrVaultPage = React.lazy(
     import('@/pages/DsrVaultPage').then((m) => ({ default: m.DsrVaultPage })),
   ),
 );
-const WhatsAppRepliesPage = React.lazy(
+const WhatsAppInboxPage = React.lazy(
   retryImport(() =>
-    import('@/pages/whatsapp/WhatsAppRepliesPage').then((m) => ({
-      default: m.WhatsAppRepliesPage,
+    import('@/pages/whatsapp/WhatsAppInboxPage').then((m) => ({
+      default: m.WhatsAppInboxPage,
     })),
   ),
 );
@@ -492,15 +492,17 @@ export default function App() {
               </RequireSuperAdmin>
             }
           />
-          {/* Replies to our WhatsApp number, behind the `whatsapp_reply` alert.
-              Super-admin, as the API is (`requireSuperAdmin`). Keep in step
-              with `superAdminOnly` in navItems.ts. */}
+          {/* The WhatsApp inbox: every chat on our WhatsApp numbers, read and
+              answered here. A reply raises the `whatsapp_reply` alert, whose
+              link opens that person's chat (`/whatsapp?chat=`). Super-admin, as
+              the API is (`requireSuperAdmin`). Keep in step with
+              `superAdminOnly` in navItems.ts. */}
           <Route
             path="whatsapp"
             element={
               <RequireSuperAdmin>
                 <LazyPage>
-                  <WhatsAppRepliesPage />
+                  <WhatsAppInboxPage />
                 </LazyPage>
               </RequireSuperAdmin>
             }

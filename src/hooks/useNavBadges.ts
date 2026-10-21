@@ -5,12 +5,14 @@ import { useConversations } from './api/useConversations';
 import { useNewEnrolmentCount } from './api/useEnrolments';
 import { useOpenGrievanceCount } from './api/useGrievances';
 import { useOpenTicketCount } from './api/useTickets';
+import { useWhatsAppUnreadChats } from './api/useWhatsAppInbox';
 
 /**
  * The count badge each nav destination carries, keyed by its route: unread
  * chats, open tickets, open alerts, AI answers nobody has judged yet,
- * unconfirmed national holidays, website grievances nobody has resolved and
- * registrations nobody has been in touch with.
+ * unconfirmed national holidays, website grievances nobody has resolved,
+ * registrations nobody has been in touch with and WhatsApp chats with
+ * something unread.
  *
  * ONE place, because there were two and they had drifted. The desktop sidebar
  * (`AppShell`) and the phone's tab bar (`MobileTabBar`) each computed their
@@ -36,6 +38,9 @@ export function useNavBadges(): Record<string, number> {
   // Each asks the server for the counts alone (`limit=0`), not for the list.
   const openGrievances = useOpenGrievanceCount();
   const newRegistrations = useNewEnrolmentCount();
+  // Chats with something unread, from the same small request the page title
+  // reads. Super-admin only, and silent — no request at all — for everyone else.
+  const whatsappUnread = useWhatsAppUnreadChats();
   return {
     '/inbox': (mineQ.data ?? []).filter((c) => c.unreadByAdmin).length,
     '/tickets': openTickets,
@@ -44,5 +49,6 @@ export function useNavBadges(): Record<string, number> {
     '/bank-holidays': pendingHolidaysQ.data?.totalCount ?? 0,
     '/grievances': openGrievances,
     '/registrations': newRegistrations,
+    '/whatsapp': whatsappUnread,
   };
 }

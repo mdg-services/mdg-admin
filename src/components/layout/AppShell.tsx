@@ -27,6 +27,7 @@ import { usePushBridge } from '@/hooks/usePushBridge';
 import { useSafeBack } from '@/hooks/useSafeBack';
 import { useSoftKeyboard } from '@/hooks/useSoftKeyboard';
 import { useWebsiteIntakeLive } from '@/hooks/useWebsiteIntakeLive';
+import { useWhatsAppLive } from '@/hooks/useWhatsAppLive';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/store/auth';
 
@@ -98,6 +99,7 @@ export function AppShell() {
   useAlertsLive(); // keep the bell's count current on every screen
   useTicketsLive(); // ...and the Tickets badge, and any open thread's strip
   useWebsiteIntakeLive(); // ...and the Grievances and Registrations badges
+  useWhatsAppLive(); // ...and the WhatsApp badge, toasts, sound and tab title
   const admin = useAuthStore((s) => s.admin);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
@@ -110,8 +112,13 @@ export function AppShell() {
 
   // A full-screen drill-in: `/dealers/:id` (guarded against the `/dealers` list).
   const isDealerDetail = !!matchPath('/dealers/:id', location.pathname);
-  // A thread is open when `?c=<id>` rides on the Inbox URL (§3.1).
-  const inThread = location.pathname === '/inbox' && searchParams.has('c');
+  // A thread is open when `?c=<id>` rides on the Inbox URL (§3.1) — or
+  // `?chat=<person>` on the WhatsApp one, which is the same kind of screen:
+  // the chat's own header carries Back, and the tab bar and the shell's bar
+  // above it would only cost it height.
+  const inThread =
+    (location.pathname === '/inbox' && searchParams.has('c')) ||
+    (location.pathname === '/whatsapp' && searchParams.has('chat'));
   // The bottom bar shows on top-level list screens and hides on full-screen
   // drill-ins so chat/detail own the whole viewport (native "push hides tabs").
   const showTabBar = !isDealerDetail && !inThread;

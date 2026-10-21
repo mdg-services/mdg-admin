@@ -1,0 +1,122 @@
+/*
+ * The WhatsApp look, for the WhatsApp inbox only.
+ *
+ * The page's chrome — dialogs, menus, toasts, buttons — uses the app's own
+ * tokens. This file holds just the palette that makes the chat list, the thread
+ * and the box at the bottom read as WhatsApp, kept as variables on one scope so
+ * the dark values sit in one place. The app does not switch to dark mode today
+ * (nothing sets `.dark`), so those values wait until it does.
+ */
+.wa-scope {
+  --wa-wallpaper: #efeae2;
+  --wa-dot: rgba(11, 20, 26, 0.045);
+  --wa-in: #ffffff;
+  --wa-out: #d9fdd3;
+  --wa-text: #111b21;
+  --wa-meta: #667781;
+  --wa-link: #027eb5;
+  --wa-footer: #f0f2f5;
+  --wa-field: #ffffff;
+  --wa-green: #25d366;
+  /* The green for anything with words or numbers on it: white on it measures 4.9:1. */
+  --wa-green-strong: #008069;
+  /* The round send button, where the glyph is large. */
+  --wa-send: #00a884;
+  --wa-tick-read: #53bdeb;
+  --wa-selected: #f0f2f5;
+  --wa-flash: #d9fdd3;
+  --wa-notice: #ffeecd;
+  --wa-notice-text: #54656f;
+  --wa-pill: #ffffff;
+  --wa-pill-text: #54656f;
+  --wa-quote-in: #53bdeb;
+  --wa-quote-out: #06cf9c;
+}
+
+.dark .wa-scope {
+  --wa-wallpaper: #0b141a;
+  --wa-dot: rgba(233, 237, 239, 0.035);
+  --wa-in: #202c33;
+  --wa-out: #005c4b;
+  --wa-text: #e9edef;
+  --wa-meta: #8696a0;
+  --wa-link: #53bdeb;
+  --wa-footer: #202c33;
+  --wa-field: #2a3942;
+  --wa-selected: #2a3942;
+  --wa-flash: #005c4b;
+  --wa-notice: #182229;
+  --wa-notice-text: #ffd279;
+  --wa-pill: #182229;
+  --wa-pill-text: #8696a0;
+}
+
+/*
+ * The wallpaper: two grids of faint dots, one shifted half a cell, so the
+ * pattern is never a visible lattice. Painted with gradients — no image file.
+ */
+.wa-wallpaper {
+  background-color: var(--wa-wallpaper);
+  background-image:
+    radial-gradient(circle at 20px 20px, var(--wa-dot) 1.5px, transparent 2px),
+    radial-gradient(circle at 60px 60px, var(--wa-dot) 1px, transparent 1.6px);
+  background-size: 80px 80px;
+}
+
+/*
+ * The small tail on the first bubble of a run. A triangle cut from a square
+ * that wears the bubble's own colour, so the two always match.
+ */
+.wa-tail-in::before,
+.wa-tail-out::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 13px;
+}
+.wa-tail-in::before {
+  left: -8px;
+  background: var(--wa-in);
+  clip-path: polygon(100% 0, 0 0, 100% 100%);
+}
+.wa-tail-out::before {
+  right: -8px;
+  background: var(--wa-out);
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+
+/* A row that just changed: its background fades from tinted to nothing, once. */
+@keyframes wa-flash {
+  from {
+    background-color: var(--wa-flash);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.wa-flash {
+  animation: wa-flash 1.4s ease-out;
+}
+
+/* A bubble arriving: a short rise, so a new message is seen to land. */
+@keyframes wa-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.wa-rise {
+  animation: wa-rise 160ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wa-flash,
+  .wa-rise {
+    animation: none;
+  }
+}

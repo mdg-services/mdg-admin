@@ -11,6 +11,11 @@ export interface Toast {
   intent: Intent;
   /** ms; 0 = sticky */
   duration?: number;
+  /**
+   * One button beside the words — "Open", for a toast that points somewhere.
+   * Pressing it runs `onSelect` and clears the toast.
+   */
+  action?: { label: string; onSelect: () => void };
 }
 
 interface ToastContextValue {
@@ -140,6 +145,18 @@ function ToastViewport({
               </p>
             ) : null}
           </div>
+          {t.action ? (
+            <button
+              type="button"
+              onClick={() => {
+                t.action?.onSelect();
+                dismiss(t.id);
+              }}
+              className="-my-1 flex min-h-11 shrink-0 items-center rounded-sm px-2 text-sm font-semibold text-brand hover:bg-surface-2 md:min-h-0 md:py-1"
+            >
+              {t.action.label}
+            </button>
+          ) : null}
           {/* 44px below md: this is the only way out of a toast, and at 22px
               it was smaller than the finger trying to hit it. `md:h-auto
               md:w-auto md:p-1` is today's desktop button exactly. */}

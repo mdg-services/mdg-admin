@@ -126,11 +126,12 @@ export const NAV_ITEMS: NavItem[] = [
   // The two Dealer Kavach films on mdgservices.in: views, how far people get,
   // where they stop, and the share links that send people there (ADR 0015).
   { to: '/films', label: 'Films', icon: Clapperboard, superAdminOnly: true },
-  // What people have written back to the WhatsApp number our promotions go
-  // out from. There is no handset behind that number, so this is the only
-  // place a reply is read. Super-admin for the reason the two above are: they
-  // are members of the public, with their numbers and their words.
-  { to: '/whatsapp', label: 'WhatsApp replies', icon: MessageCircle, superAdminOnly: true },
+  // Every chat on the WhatsApp numbers we run: the leads we have messaged and
+  // everyone who has written back. There is no handset behind those numbers, so
+  // this is the only place a message is read or answered. Carries an unread
+  // chats badge (`useNavBadges`). Super-admin for the reason the two above are:
+  // they are members of the public, with their numbers and their words.
+  { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, superAdminOnly: true },
   // What people have reported on the website's grievance page, or to the
   // assistant. Each one stays open until a person resolves it with a note, and
   // carries an open count badge (`useNavBadges`) because the person who wrote
