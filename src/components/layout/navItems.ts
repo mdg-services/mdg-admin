@@ -3,6 +3,7 @@ import {
   Bell,
   Building2,
   CalendarDays,
+  ChartColumn,
   Clapperboard,
   ClipboardPen,
   Database,
@@ -131,7 +132,13 @@ export const NAV_ITEMS: NavItem[] = [
   // this is the only place a message is read or answered. Carries an unread
   // chats badge (`useNavBadges`). Super-admin for the reason the two above are:
   // they are members of the public, with their numbers and their words.
-  { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, superAdminOnly: true },
+  // `end`: `/whatsapp` is a prefix of `/whatsapp/results` below, and without it
+  // both links light up on the results page.
+  { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, superAdminOnly: true, end: true },
+  // What happened to the promotions we sent from those numbers: how many
+  // reached a phone, were opened, had their link tapped, were answered or
+  // stopped. Super-admin for the inbox's reason — every line is a person.
+  { to: '/whatsapp/results', label: 'Message results', icon: ChartColumn, superAdminOnly: true },
   // What people have reported on the website's grievance page, or to the
   // assistant. Each one stays open until a person resolves it with a note, and
   // carries an open count badge (`useNavBadges`) because the person who wrote

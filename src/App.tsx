@@ -145,6 +145,13 @@ const WhatsAppInboxPage = React.lazy(
     })),
   ),
 );
+const WhatsAppResultsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/whatsapp/WhatsAppResultsPage').then((m) => ({
+      default: m.WhatsAppResultsPage,
+    })),
+  ),
+);
 const GrievancesPage = React.lazy(
   retryImport(() =>
     import('@/pages/grievances/GrievancesPage').then((m) => ({
@@ -503,6 +510,19 @@ export default function App() {
               <RequireSuperAdmin>
                 <LazyPage>
                   <WhatsAppInboxPage />
+                </LazyPage>
+              </RequireSuperAdmin>
+            }
+          />
+          {/* What happened to the promotions sent from those numbers. Same
+              gate as the inbox, for the same reason. Keep in step with
+              `superAdminOnly` in navItems.ts. */}
+          <Route
+            path="whatsapp/results"
+            element={
+              <RequireSuperAdmin>
+                <LazyPage>
+                  <WhatsAppResultsPage />
                 </LazyPage>
               </RequireSuperAdmin>
             }
