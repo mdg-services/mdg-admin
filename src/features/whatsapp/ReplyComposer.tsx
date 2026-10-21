@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, FileText, MessageCircle, SendHorizontal, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, FileText, Link2, MessageCircle, SendHorizontal, X } from 'lucide-react';
 import * as React from 'react';
 
 import { IconButton } from '@/components/ui/IconButton';
@@ -15,13 +15,16 @@ import {
 
 import { getDraft, setDraft } from './drafts';
 import {
+  LINK_ROUTE_LINE,
   composerRouteLine,
   effectiveMode,
   filterQuickReplies,
   isImeKeystroke,
+  linkLabel,
   pickerQuery,
   planSend,
   quoteWords,
+  readLink,
 } from './format';
 
 /** Lines the box grows to before it scrolls inside itself: six at a desk, four on a phone with a keyboard up. */
@@ -38,7 +41,8 @@ export interface ReplyComposerProps {
   replyTo: WhatsAppChatMessage | null;
   contactName: string;
   onCancelReply: () => void;
-  onSend: (text: string) => void;
+  /** `link` is the checked address for the button, or null for a message without one. */
+  onSend: (text: string, link: string | null) => void;
   now: number;
 }
 
@@ -54,6 +58,12 @@ export interface ReplyComposerProps {
  * Keyed on the chat by its parent, and the draft is kept per chat
  * (`drafts.ts`): the half-written answer to one lead cannot be sent to
  * another, and is still there when the admin comes back.
+ *
+ * A link can be added (once the server says its template is approved): the
+ * message then goes in the link template whatever the window says, with a
+ * button that opens the link through our own address, so each tap is counted
+ * on the Message results page. The link is not part of the draft — it is
+ * cleared when the message goes or the chat changes.
  */
 export function ReplyComposer({ person, config, detail, replyTo, contactName, onCancelReply, onSend, now }: ReplyComposerProps) {
   const [value, setValue] = React.useState(() => getDraft(person));
@@ -61,20 +71,30 @@ export function ReplyComposer({ person, config, detail, replyTo, contactName, on
   const [pickerIndex, setPickerIndex] = React.useState(0);
   // Escape closes the picker; it stays closed until the box no longer starts with a slash.
   const [pickerDismissed, setPickerDismissed] = React.useState(false);
+  const [linkOpen, setLinkOpen] = React.useState(false);
+  const [linkValue, setLinkValue] = React.useState('');
   const taRef = React.useRef<HTMLTextAreaElement>(null);
+  const linkRef = React.useRef<HTMLInputElement>(null);
   const coarse = useMediaQuery('(pointer: coarse)');
   const isMd = useMediaQuery('(min-width: 768px)');
   const quickReplies = useWhatsAppQuickReplies();
   const ids = React.useId();
   const listId = `${ids}-quick`;
   const previewId = `${ids}-preview`;
+  const linkHelpId = `${ids}-link-help`;
 
   // The server's word on how it goes, unless the window has run out since it
   // gave it: then the words, the preview and the length limit are the template's.
-  const mode = effectiveMode(detail.chat, detail.reply, now);
-  const plan = planSend(value, mode, config);
+  // A link overrides both: it only goes in its own template.
+  const linkTemplate = config.linkTemplate;
+  const link = linkOpen && linkTemplate ? readLink(linkValue) : ({ state: 'none' } as const);
+  const linked = link.state === 'ok';
+  const mode = linked ? 'template' : effectiveMode(detail.chat, detail.reply, now);
+  const plan = planSend(value, mode, config, linked);
   const typed = value.trim();
-  const canSend = typed.length > 0 && !plan.tooLong;
+  // On the stop list, a template cannot go: the words can still go as an ordinary answer, the link cannot.
+  const linkStopped = linked && detail.chat.optedOut;
+  const canSend = typed.length > 0 && !plan.tooLong && link.state !== 'bad' && !linkStopped;
 
   // ── the box grows with what is typed, up to a few lines ──
   React.useEffect(() => {
@@ -126,11 +146,25 @@ export function ReplyComposer({ person, config, detail, replyTo, contactName, on
 
   function submit() {
     if (!canSend) return;
-    onSend(typed);
+    onSend(typed, link.state === 'ok' ? link.target : null);
     setValue('');
     setDraft(person, '');
     setPreviewOpen(false);
     setPickerDismissed(false);
+    setLinkOpen(false);
+    setLinkValue('');
+  }
+
+  function toggleLink() {
+    if (linkOpen) {
+      setLinkOpen(false);
+      setLinkValue('');
+      taRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    setLinkOpen(true);
+    // After the box has painted.
+    window.setTimeout(() => linkRef.current?.focus({ preventScroll: true }), 0);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -172,6 +206,7 @@ export function ReplyComposer({ person, config, detail, replyTo, contactName, on
   }
 
   const quoting = mode === 'text' && replyTo !== null;
+  const templateButton = linked ? (linkTemplate?.button ?? null) : config.template.button;
   const quoteOurs = replyTo?.direction === 'out';
 
   return (
@@ -182,8 +217,8 @@ export function ReplyComposer({ person, config, detail, replyTo, contactName, on
         ) : (
           <FileText width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-warning-strong" aria-hidden />
         )}
-        <span className="min-w-0 flex-1 [overflow-wrap:anywhere]" title={detail.reply.reason}>
-          {composerRouteLine(detail.chat, detail.reply, now)}
+        <span className="min-w-0 flex-1 [overflow-wrap:anywhere]" title={linked ? undefined : detail.reply.reason}>
+          {linked ? LINK_ROUTE_LINE : composerRouteLine(detail.chat, detail.reply, now)}
         </span>
         {mode === 'template' ? (
           <button
@@ -211,10 +246,16 @@ export function ReplyComposer({ person, config, detail, replyTo, contactName, on
           <div className="rounded-lg bg-[var(--wa-out)] px-2.5 py-1.5 text-[14.2px] leading-[19px] text-[var(--wa-text)] shadow-sm">
             <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{plan.preview ?? renderSimpleTemplate('…')}</p>
           </div>
-          {config.template.button ? (
-            <div className="mt-0.5 rounded-lg bg-[var(--wa-out)] py-2 text-center text-sm font-medium text-[var(--wa-link)] shadow-sm">
-              {config.template.button}
+          {templateButton ? (
+            <div className="mt-0.5 flex items-center justify-center gap-1.5 rounded-lg bg-[var(--wa-out)] py-2 text-sm font-medium text-[var(--wa-link)] shadow-sm">
+              {linked ? <Link2 width={14} height={14} strokeWidth={2} aria-hidden /> : null}
+              {templateButton}
             </div>
+          ) : null}
+          {link.state === 'ok' ? (
+            <p className="mt-1.5 text-xs text-[var(--wa-meta)] [overflow-wrap:anywhere]">
+              The button opens {linkLabel(link.target)}, through our own address so each tap is counted.
+            </p>
           ) : null}
           {plan.joinsLines ? (
             <p className="mt-1.5 text-xs text-warning-strong">
@@ -289,7 +330,78 @@ export function ReplyComposer({ person, config, detail, replyTo, contactName, on
         </div>
       ) : null}
 
+      {linkOpen && linkTemplate ? (
+        <div className="mx-2 mt-2 md:mx-3">
+          <div className="flex items-center gap-2 rounded-lg bg-[var(--wa-field)] pl-3 pr-1">
+            <Link2 width={16} height={16} strokeWidth={2} className="shrink-0 text-[var(--wa-meta)]" aria-hidden />
+            <input
+              ref={linkRef}
+              // Text, not "url": the browser's own check would refuse an
+              // address typed without https://, which is how people type them.
+              type="text"
+              inputMode="url"
+              value={linkValue}
+              onChange={(e) => setLinkValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  toggleLink();
+                }
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  taRef.current?.focus();
+                }
+              }}
+              placeholder="Paste the link, e.g. mdgservices.in/film"
+              aria-label="Link"
+              aria-invalid={link.state === 'bad' || linkStopped}
+              aria-describedby={linkHelpId}
+              autoComplete="off"
+              spellCheck={false}
+              className="min-h-11 w-full min-w-0 bg-transparent py-2 text-base text-[var(--wa-text)] placeholder:text-[var(--wa-meta)] focus-visible:outline-none md:min-h-9 md:text-[15px]"
+            />
+            <IconButton aria-label="Remove the link" size="xs" onClick={toggleLink}>
+              <X width={16} height={16} strokeWidth={2} />
+            </IconButton>
+          </div>
+          <p
+            id={linkHelpId}
+            role={link.state === 'bad' || linkStopped ? 'alert' : undefined}
+            className={cn(
+              'mt-1 px-1 text-xs [overflow-wrap:anywhere]',
+              link.state === 'bad' || linkStopped ? 'font-medium text-danger-strong' : 'text-[var(--wa-meta)]',
+            )}
+          >
+            {link.state === 'bad'
+              ? 'That is not a web address. Paste the whole link, like https://mdgservices.in/film.'
+              : linkStopped
+                ? 'They asked us to stop promotions, and a message with a link always goes as one. Remove the link to answer them.'
+                : link.state === 'ok'
+                  ? `Opens ${linkLabel(link.target)} · we count each tap, and who comes back to it`
+                  : 'They get a button that opens it. We count each tap on the Message results page.'}
+          </p>
+        </div>
+      ) : null}
+
       <div className="flex items-end gap-2 px-2 pb-2 pt-1.5 md:px-3">
+        {linkTemplate ? (
+          <button
+            type="button"
+            aria-label={linkOpen ? 'Remove the link' : 'Add a link'}
+            aria-pressed={linkOpen}
+            title={linkOpen ? 'Remove the link' : 'Add a link we can count'}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={toggleLink}
+            className={cn(
+              'flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+              linkOpen
+                ? 'bg-[var(--wa-green-strong)] text-white'
+                : 'text-[var(--wa-meta)] hover:bg-black/[0.06]',
+            )}
+          >
+            <Link2 width={20} height={20} strokeWidth={2} aria-hidden />
+          </button>
+        ) : null}
         <textarea
           ref={taRef}
           value={value}

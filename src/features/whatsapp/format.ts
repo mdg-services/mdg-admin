@@ -12,9 +12,12 @@
  */
 import type { Intent } from '@/lib/statusIntent';
 import {
+  renderLinkTemplate,
   renderSimpleTemplate,
+  toLinkTarget,
   toTemplateParam,
   WHATSAPP_CHAT_FILTERS,
+  WHATSAPP_LINK_TEMPLATE,
   WHATSAPP_SIMPLE_TEMPLATE,
   WHATSAPP_STAGES,
   type WhatsAppChatFilter,
@@ -420,6 +423,34 @@ export function composerRouteLine(
     : 'Goes in the greeting template — window closed';
 }
 
+/** The same slim line when a link has been added: the link always has its own template. */
+export const LINK_ROUTE_LINE = 'With a link · goes in the greeting template with a button, and we count each tap';
+
+/**
+ * What the link box holds, read the way the server will read it: nothing
+ * typed (no link), an address (where the button will go), or something that
+ * is not one (say so, and do not send).
+ */
+export type LinkInput = { state: 'none' } | { state: 'ok'; target: string } | { state: 'bad' };
+
+export function readLink(typed: string): LinkInput {
+  if (!typed.trim()) return { state: 'none' };
+  const target = toLinkTarget(typed);
+  return target ? { state: 'ok', target } : { state: 'bad' };
+}
+
+/** "mdgservices.in/film" — an address short enough for a line under a button. */
+export function linkLabel(target: string): string {
+  try {
+    const url = new URL(target);
+    const rest = `${url.pathname === '/' ? '' : url.pathname}${url.search}`;
+    const host = url.hostname.replace(/^www\./, '');
+    return rest.length > 40 ? `${host}${rest.slice(0, 39)}…` : `${host}${rest}`;
+  } catch {
+    return target;
+  }
+}
+
 export interface SendPlan {
   /** How much of the limit the typed words take. */
   used: number;
@@ -442,6 +473,8 @@ export function planSend(
   text: string,
   mode: 'text' | 'template',
   config: Pick<WhatsAppInboxConfig, 'textMaxLength' | 'template'>,
+  /** It goes with a link: the link template, whose words are measured the same way. */
+  linked = false,
 ): SendPlan {
   const typed = text.trim();
   if (mode === 'text') {
@@ -457,14 +490,14 @@ export function planSend(
     };
   }
   const used = toTemplateParam(typed).length;
-  const limit = config.template.maxLength;
+  const limit = linked ? WHATSAPP_LINK_TEMPLATE.maxLength : config.template.maxLength;
   return {
     used,
     limit,
     tooLong: used > limit,
     showCounter: used >= limit * 0.8,
     joinsLines: typed.includes('\n'),
-    preview: typed ? renderSimpleTemplate(typed) : null,
+    preview: typed ? (linked ? renderLinkTemplate(typed) : renderSimpleTemplate(typed)) : null,
   };
 }
 
@@ -636,6 +669,8 @@ export interface PendingMessage {
   text: string;
   /** How the server said it would go when this was sent. Decides what the bubble shows. */
   mode: 'text' | 'template';
+  /** The link it carries, as typed; null without one. With one it is always the link template. */
+  link: string | null;
   at: string;
   status: 'sending' | 'failed' | 'unknown';
   /** Plain reason, once it failed. */
@@ -677,16 +712,21 @@ export function pendingAsMessage(
   p: PendingMessage,
   me: { id: string; name: string } | null,
 ): WhatsAppChatMessage {
-  const template = p.mode === 'template';
+  const template = p.mode === 'template' || p.link !== null;
+  const linked = p.link !== null;
   return {
     id: `pending:${p.clientId}`,
     direction: 'out',
     at: p.at,
     kind: template ? 'template' : 'text',
-    text: template ? renderSimpleTemplate(p.text) : p.text,
-    via: p.mode,
-    template: template ? WHATSAPP_SIMPLE_TEMPLATE.name : null,
-    buttons: template && WHATSAPP_SIMPLE_TEMPLATE.button ? [WHATSAPP_SIMPLE_TEMPLATE.button] : [],
+    text: linked ? renderLinkTemplate(p.text) : template ? renderSimpleTemplate(p.text) : p.text,
+    via: template ? 'template' : 'text',
+    template: linked ? WHATSAPP_LINK_TEMPLATE.name : template ? WHATSAPP_SIMPLE_TEMPLATE.name : null,
+    buttons: linked
+      ? [WHATSAPP_LINK_TEMPLATE.button]
+      : template && WHATSAPP_SIMPLE_TEMPLATE.button
+        ? [WHATSAPP_SIMPLE_TEMPLATE.button]
+        : [],
     sentBy: me,
     delivery: p.status === 'sending' ? 'accepted' : p.status === 'failed' ? 'failed' : 'unknown',
     error: p.status === 'failed' ? { code: null, reason: p.error ?? 'That did not go through.' } : null,
@@ -968,9 +1008,19 @@ export function typedTextOf(m: WhatsAppChatMessage): string | null {
   return null;
 }
 
-/** A failed message of ours the admin can send again: one that came from this inbox. */
+/**
+ * A failed message of ours the admin can send again: one that came from this
+ * inbox. Not one that carried a link — the chat does not hold the address, and
+ * sending the words again without it would be a different message.
+ */
 export function canRetry(m: WhatsAppChatMessage): boolean {
-  return m.direction === 'out' && m.delivery === 'failed' && m.clientId !== null && typedTextOf(m) !== null;
+  return (
+    m.direction === 'out' &&
+    m.delivery === 'failed' &&
+    m.clientId !== null &&
+    m.template !== WHATSAPP_LINK_TEMPLATE.name &&
+    typedTextOf(m) !== null
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────

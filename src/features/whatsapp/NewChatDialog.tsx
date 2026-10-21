@@ -1,3 +1,4 @@
+import { Link2 } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/Button';
@@ -10,7 +11,7 @@ import { newClientId, useNewWhatsAppChat } from '@/hooks/api/useWhatsAppInbox';
 import { cn } from '@/lib/cn';
 import { renderSimpleTemplate, type WhatsAppInboxConfig } from '@dk/shared';
 
-import { describeSendError, indianMobile, planSend } from './format';
+import { describeSendError, indianMobile, linkLabel, planSend, readLink } from './format';
 
 export interface NewChatDialogProps {
   open: boolean;
@@ -40,12 +41,18 @@ export interface NewChatDialogProps {
  * changed (a different message), and when the dialog opens again. And when the
  * outcome is unsure, Send is not left open for a blind second go: the dialog
  * closes and the chat opens, where the unsure message is.
+ *
+ * A link is optional, and offered only once the server says its template is
+ * approved. With one, the message goes in the link template: the same words,
+ * and a button that opens the link through our own address, so each tap is
+ * counted on the Message results page.
  */
 export function NewChatDialog({ open, onClose, config, onStarted }: NewChatDialogProps) {
   const start = useNewWhatsAppChat();
   const [phone, setPhone] = React.useState('');
   const [name, setName] = React.useState('');
   const [text, setText] = React.useState('');
+  const [linkValue, setLinkValue] = React.useState('');
   const [phoneTouched, setPhoneTouched] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const id = React.useId();
@@ -58,6 +65,7 @@ export function NewChatDialog({ open, onClose, config, onStarted }: NewChatDialo
     setPhone('');
     setName('');
     setText('');
+    setLinkValue('');
     setPhoneTouched(false);
     setError(null);
     start.reset();
@@ -66,9 +74,18 @@ export function NewChatDialog({ open, onClose, config, onStarted }: NewChatDialo
   }, [open]);
 
   const number = indianMobile(phone);
-  const plan = config ? planSend(text, 'template', config) : null;
+  const linkTemplate = config?.linkTemplate ?? null;
+  const link = linkTemplate ? readLink(linkValue) : ({ state: 'none' } as const);
+  const linked = link.state === 'ok';
+  const plan = config ? planSend(text, 'template', config, linked) : null;
   const sendingOff = config ? !config.sendingEnabled : false;
-  const ready = number !== null && text.trim().length > 0 && plan !== null && !plan.tooLong && !sendingOff;
+  const ready =
+    number !== null &&
+    text.trim().length > 0 &&
+    plan !== null &&
+    !plan.tooLong &&
+    !sendingOff &&
+    link.state !== 'bad';
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -84,6 +101,7 @@ export function NewChatDialog({ open, onClose, config, onStarted }: NewChatDialo
         name: name.trim() === '' ? null : name.trim(),
         text: text.trim(),
         clientId,
+        ...(link.state === 'ok' ? { link: link.target } : {}),
       });
       onStarted(result.person);
       onClose();
@@ -188,6 +206,38 @@ export function NewChatDialog({ open, onClose, config, onStarted }: NewChatDialo
           ) : null}
         </div>
 
+        {linkTemplate ? (
+          <div>
+            <Label htmlFor={`${id}-link`} hint="Optional">
+              Link
+            </Label>
+            <Input
+              id={`${id}-link`}
+              // Text, not "url": the browser's own check refuses an address
+              // typed without https://, which is how people type them.
+              type="text"
+              inputMode="url"
+              autoComplete="off"
+              spellCheck={false}
+              value={linkValue}
+              placeholder="mdgservices.in/film"
+              invalid={link.state === 'bad'}
+              onChange={(e) => {
+                setLinkValue(e.target.value);
+                clientIdRef.current = null;
+              }}
+            />
+            {link.state === 'bad' ? (
+              <FieldError message="That is not a web address. Paste the whole link, like https://mdgservices.in/film." />
+            ) : (
+              <p className="mt-1 text-xs text-text-muted">
+                They get a button that opens it. We count each tap, and who comes back to it, on the Message results
+                page.
+              </p>
+            )}
+          </div>
+        ) : null}
+
         <div>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-subtle">What they will receive</p>
           <div className="wa-scope wa-wallpaper rounded-lg p-3">
@@ -196,12 +246,22 @@ export function NewChatDialog({ open, onClose, config, onStarted }: NewChatDialo
                 {text.trim() ? renderSimpleTemplate(text) : renderSimpleTemplate('…')}
               </p>
             </div>
-            {config?.template.button ? (
+            {linked && linkTemplate ? (
+              <div className="ml-auto mt-0.5 flex max-w-[90%] items-center justify-center gap-1.5 rounded-lg bg-[var(--wa-out)] py-2 text-sm font-medium text-[var(--wa-link)] shadow-sm">
+                <Link2 width={14} height={14} strokeWidth={2} aria-hidden />
+                {linkTemplate.button}
+              </div>
+            ) : config?.template.button ? (
               <div className="ml-auto mt-0.5 max-w-[90%] rounded-lg bg-[var(--wa-out)] py-2 text-center text-sm font-medium text-[var(--wa-link)] shadow-sm">
                 {config.template.button}
               </div>
             ) : null}
           </div>
+          {link.state === 'ok' ? (
+            <p className="mt-1.5 text-xs text-text-muted [overflow-wrap:anywhere]">
+              The button opens {linkLabel(link.target)}.
+            </p>
+          ) : null}
           <p className="mt-1.5 text-xs text-text-muted">
             Somebody new has not written to us in the last 24 hours, so WhatsApp only lets this go in the greeting
             template. {plan?.joinsLines ? 'Line breaks in your message become one paragraph.' : ''}

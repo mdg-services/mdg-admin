@@ -1,10 +1,10 @@
-import { ChevronDown, CornerUpLeft } from 'lucide-react';
+import { ChevronDown, CornerUpLeft, ExternalLink } from 'lucide-react';
 import * as React from 'react';
 
 import { cn } from '@/lib/cn';
 import { linkify } from '@/lib/linkify';
 import { useLongPress } from '@/lib/useLongPress';
-import type { WhatsAppChatMessage } from '@dk/shared';
+import { WHATSAPP_LINK_TEMPLATE, type WhatsAppChatMessage } from '@dk/shared';
 
 import type { BubbleAnchor } from './BubbleActions';
 import {
@@ -285,7 +285,12 @@ export const ThreadBubble = React.memo(function ThreadBubble({
                 key={label}
                 className="flex items-center justify-center gap-1.5 border-t border-black/10 px-3 py-2 text-sm font-medium text-[var(--wa-link)] first:border-t-0"
               >
-                <CornerUpLeft width={14} height={14} strokeWidth={2} aria-hidden />
+                {/* The link template's button opens a page, and WhatsApp draws it so. */}
+                {message.template === WHATSAPP_LINK_TEMPLATE.name ? (
+                  <ExternalLink width={14} height={14} strokeWidth={2} aria-hidden />
+                ) : (
+                  <CornerUpLeft width={14} height={14} strokeWidth={2} aria-hidden />
+                )}
                 {label}
               </li>
             ))}

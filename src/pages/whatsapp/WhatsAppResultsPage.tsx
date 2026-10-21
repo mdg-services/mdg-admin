@@ -19,7 +19,7 @@ import {
   Select,
   Skeleton,
 } from '@/components/ui';
-import { phoneLabel } from '@/features/whatsapp/format';
+import { linkLabel, phoneLabel } from '@/features/whatsapp/format';
 import { useWhatsAppResultsQuery } from '@/hooks/api/useWhatsAppResults';
 import { ApiError } from '@/lib/api';
 import {
@@ -182,8 +182,9 @@ export function WhatsAppResultsPage() {
           <Callout intent="info">
             <span className="font-medium">What WhatsApp does not tell us.</span> It reports an open
             only once, the first time — never a second open. People with blue ticks turned off count
-            as opened only when they tapped, replied or said stop. And only the film invite&apos;s
-            button can be counted as a tap; a link typed into a message cannot.
+            as opened only when they tapped, replied or said stop. And only a link that goes through
+            our own address can be counted as a tap — the film invite&apos;s button, or a link added
+            in the inbox. A link typed into a message&apos;s words cannot.
           </Callout>
 
           <Card>
@@ -320,6 +321,20 @@ function SendLine({
           This one was sent outside the inbox, so its words were not saved here.
         </p>
       )}
+      {send.link ? (
+        <p className="mt-1 text-xs text-text-muted [overflow-wrap:anywhere]">
+          Its button opened{' '}
+          <a
+            href={send.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-brand hover:underline"
+          >
+            {linkLabel(send.link)}
+          </a>
+          . Everyone had their own copy, so each tap is theirs.
+        </p>
+      ) : null}
     </>
   );
 }

@@ -252,6 +252,8 @@ export interface SendArgs {
   /** How the server said this would go. Decides what the waiting bubble looks like. */
   mode: 'text' | 'template';
   replyTo: PendingMessage['replyTo'];
+  /** An address for the button, as typed; null without one. With one it goes in the link template. */
+  link?: string | null;
 }
 
 /**
@@ -275,7 +277,8 @@ async function deliver(qc: QueryClient, p: PendingMessage): Promise<void> {
     const result = await api.post<WhatsAppSendResult>(`${BASE}/chats/${enc(p.person)}/messages`, {
       text: p.text,
       clientId: p.clientId,
-      replyTo: p.mode === 'text' ? (p.replyTo?.id ?? null) : null,
+      replyTo: p.mode === 'text' && !p.link ? (p.replyTo?.id ?? null) : null,
+      ...(p.link ? { link: p.link } : {}),
     });
     // The pending bubble is not removed here. The thread drops it the moment the
     // server's copy (same clientId) is in the list, so there is no frame in
@@ -333,7 +336,9 @@ export function useSendWhatsApp(): WhatsAppSender {
         clientId,
         person: args.person,
         text: args.text,
-        mode: args.mode,
+        // A link always goes in its template, whatever the window says.
+        mode: args.link ? 'template' : args.mode,
+        link: args.link ?? null,
         at: new Date().toISOString(),
         status: 'sending',
         error: null,
@@ -350,13 +355,18 @@ export function useSendWhatsApp(): WhatsAppSender {
       retry: (pending, mode) => {
         const current = getPending(pending.person, pending.clientId) ?? pending;
         if (current.status === 'sending') return;
+        // A message with a link stays one: it goes in its template, window or not.
+        const next = current.link ? 'template' : mode;
         if (current.networkLost) {
-          updatePending(current.person, current.clientId, { status: 'sending', error: null, code: null, mode });
-          void deliver(qc, { ...current, status: 'sending', error: null, code: null, mode });
+          updatePending(current.person, current.clientId, { status: 'sending', error: null, code: null, mode: next });
+          void deliver(qc, { ...current, status: 'sending', error: null, code: null, mode: next });
           return;
         }
         removePending(current.person, current.clientId);
-        start({ person: current.person, text: current.text, mode, replyTo: current.replyTo }, newClientId());
+        start(
+          { person: current.person, text: current.text, mode: next, replyTo: current.replyTo, link: current.link },
+          newClientId(),
+        );
       },
       remove: (pending) => removePending(pending.person, pending.clientId),
     };

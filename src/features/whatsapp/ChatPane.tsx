@@ -195,17 +195,19 @@ export function ChatPane({
   const [replyTo, setReplyTo] = React.useState<WhatsAppChatMessage | null>(null);
   const [bottomToken, setBottomToken] = React.useState(0);
 
-  const send = (text: string) => {
+  const send = (text: string, link: string | null) => {
     if (!detail) return;
     // Worked out now, not from the minute-old clock: the waiting bubble should
     // look like what the server will send, and a window can close mid-sentence.
-    const sendMode = effectiveMode(detail.chat, detail.reply, Date.now());
+    // A link always goes in its template.
+    const sendMode = link ? 'template' : effectiveMode(detail.chat, detail.reply, Date.now());
     const quoted = sendMode === 'text' ? replyTo : null;
     sender.send({
       person,
       text,
       mode: sendMode,
       replyTo: quoted ? { id: quoted.id, direction: quoted.direction, text: quoted.text, kind: quoted.kind } : null,
+      link,
     });
     setReplyTo(null);
     setBottomToken((n) => n + 1);
