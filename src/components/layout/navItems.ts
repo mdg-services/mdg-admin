@@ -18,6 +18,7 @@ import {
   MessageSquare,
   MessageSquareWarning,
   PartyPopper,
+  PhoneCall,
   Plug,
   ScanLine,
   ScrollText,
@@ -149,6 +150,10 @@ export const NAV_ITEMS: NavItem[] = [
   // Until this existed the only record was an email to our own inbox. Counts
   // the ones nobody has been in touch with yet. Super-admin, as above.
   { to: '/registrations', label: 'Registrations', icon: ClipboardPen, superAdminOnly: true },
+  // Everyone who asked us to call them on the website: the film pages' form,
+  // the home page, the Khata Kavach page, the assistant. Counts the ones nobody
+  // has called yet. Super-admin, as above.
+  { to: '/callbacks', label: 'Call-backs', icon: PhoneCall, superAdminOnly: true },
   { to: '/services', label: 'Service Catalog', icon: Plug, superAdminOnly: true },
   { to: '/runs', label: 'Run History', icon: Activity, superAdminOnly: true },
   { to: '/users', label: 'All Users', icon: Users, superAdminOnly: true },

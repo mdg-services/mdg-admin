@@ -4,6 +4,7 @@ import * as React from 'react';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
 
+import { callbacksRoot } from './api/useCallbacks';
 import { enrolmentsRoot } from './api/useEnrolments';
 import { grievancesRoot } from './api/useGrievances';
 
@@ -39,6 +40,7 @@ export function useWebsiteIntakeLive(): void {
     const onChanged = () => {
       void qc.invalidateQueries({ queryKey: grievancesRoot });
       void qc.invalidateQueries({ queryKey: enrolmentsRoot });
+      void qc.invalidateQueries({ queryKey: callbacksRoot });
     };
     socket.on('alerts:changed', onChanged);
     return () => {
@@ -55,6 +57,7 @@ export function useWebsiteIntakeLive(): void {
       if (document.visibilityState === 'visible') {
         void qc.invalidateQueries({ queryKey: grievancesRoot });
         void qc.invalidateQueries({ queryKey: enrolmentsRoot });
+        void qc.invalidateQueries({ queryKey: callbacksRoot });
       }
     };
     document.addEventListener('visibilitychange', onVisible);

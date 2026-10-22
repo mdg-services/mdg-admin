@@ -1,6 +1,7 @@
 import { useOpenAlertCount } from './api/useAdminAlerts';
 import { useAiTurnCountsQuery } from './api/useAiTurns';
 import { useBankHolidayPendingQuery } from './api/useBankHolidays';
+import { useNewCallbackCount } from './api/useCallbacks';
 import { useConversations } from './api/useConversations';
 import { useNewEnrolmentCount } from './api/useEnrolments';
 import { useOpenGrievanceCount } from './api/useGrievances';
@@ -38,6 +39,7 @@ export function useNavBadges(): Record<string, number> {
   // Each asks the server for the counts alone (`limit=0`), not for the list.
   const openGrievances = useOpenGrievanceCount();
   const newRegistrations = useNewEnrolmentCount();
+  const newCallbacks = useNewCallbackCount();
   // Chats with something unread, from the same small request the page title
   // reads. Super-admin only, and silent — no request at all — for everyone else.
   const whatsappUnread = useWhatsAppUnreadChats();
@@ -49,6 +51,7 @@ export function useNavBadges(): Record<string, number> {
     '/bank-holidays': pendingHolidaysQ.data?.totalCount ?? 0,
     '/grievances': openGrievances,
     '/registrations': newRegistrations,
+    '/callbacks': newCallbacks,
     '/whatsapp': whatsappUnread,
   };
 }

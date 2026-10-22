@@ -375,6 +375,40 @@ export function BreakdownsCard({
   );
 }
 
+/* ─────────────────────────────── WhatsApp reply ─────────────────────────── */
+
+/** How many opened the page and tapped the green "reply on WhatsApp". An older server sends no figure. */
+export function ReplyTapsCard({ stats }: { stats: FilmStats }) {
+  if (stats.replyTaps === undefined) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>Replies on WhatsApp</CardTitle>
+          <CardSubtitle>
+            The page asks viewers to reply in our WhatsApp chat. Their messages are in the
+            WhatsApp inbox.
+          </CardSubtitle>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <StatTileGrid columnsAtMd={2}>
+          <StatTile
+            label="Tapped “reply on WhatsApp”"
+            value={formatCount(stats.replyTaps)}
+            caption="Page opens that pressed the green button"
+          />
+          <StatTile
+            label="Share of page opens"
+            value={formatPercent(stats.totals.opens ? stats.replyTaps / stats.totals.opens : 0)}
+            caption="A tap opens the chat with the message typed; sending it is up to them"
+          />
+        </StatTileGrid>
+      </CardContent>
+    </Card>
+  );
+}
+
 /* ─────────────────────────────── Short → full ───────────────────────────── */
 
 export function ShortToFullCard({ stats }: { stats: FilmStats }) {

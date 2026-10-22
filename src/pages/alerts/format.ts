@@ -53,6 +53,7 @@ const STILL_STANDING: Partial<Record<AdminAlertKind, string>> = {
   grievance_open: 'Hidden from this list. Grievances stay open until someone resolves them.',
   enrolment_new:
     'Hidden from this list. Registrations stay new until someone marks them as contacted.',
+  callback_new: 'Hidden from this list. Call-backs stay new until someone marks them as called.',
 };
 
 /** Whether the row's button closes the alert for good rather than hiding it. */

@@ -18,6 +18,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  markCallbackCalledSchema,
   markEnrolmentContactedSchema,
   resolveGrievanceSchema,
 } from '../shared/src/schemas/websiteIntake';
@@ -47,6 +48,14 @@ import {
   resolveWarning,
   resolvedLine as grievanceResolvedLine,
 } from '../src/pages/grievances/format';
+import {
+  CALLBACK_NOTE_MAX,
+  calledLine,
+  chatHref,
+  noteProblem as callbackNoteProblem,
+  refLine,
+  whereLine,
+} from '../src/pages/callbacks/format';
 import {
   ENROLMENT_NOTE_MAX,
   contactedLine,
@@ -331,5 +340,71 @@ describe('grievances filed in a conversation', () => {
 
   it('links to Everything, so a grievance resolved a minute ago is still found', () => {
     assert.equal(GRIEVANCES_ALL_HREF, '/grievances?view=all');
+  });
+});
+
+describe('the Call-backs page', () => {
+  const NOW = Date.parse('2026-10-22T08:00:00Z');
+  const base = { ref: null, refSend: null, refLabel: null };
+
+  it('holds the note to the same length the server does', () => {
+    assert.equal(callbackNoteProblem('x'.repeat(CALLBACK_NOTE_MAX)), null);
+    assert.notEqual(callbackNoteProblem('x'.repeat(CALLBACK_NOTE_MAX + 1)), null);
+    assert.equal(callbackNoteProblem(`  ${'x'.repeat(CALLBACK_NOTE_MAX)}  `), null);
+    assert.equal(
+      markCallbackCalledSchema.safeParse({ note: 'x'.repeat(CALLBACK_NOTE_MAX) }).success,
+      true,
+    );
+    assert.equal(
+      markCallbackCalledSchema.safeParse({ note: 'x'.repeat(CALLBACK_NOTE_MAX + 1) }).success,
+      false,
+    );
+  });
+
+  it('says which film page, or just the website', () => {
+    assert.equal(whereLine({ source: 'film', film: 'kavach' }), 'Film page · the full film');
+    assert.equal(
+      whereLine({ source: 'film', film: 'kavach-short' }),
+      'Film page · the 40-second film',
+    );
+    assert.equal(whereLine({ source: 'film', film: null }), 'Film page');
+    assert.equal(whereLine({ source: 'website', film: null }), 'Website');
+  });
+
+  it('names who the film link went to, the share link, the bare code, or nothing', () => {
+    assert.equal(refLine(base, NOW), null);
+    const sent = {
+      ref: 'Xk3pQ9vT',
+      refSend: {
+        name: 'Ramesh ji',
+        phone: '919800000001',
+        sentAt: '2026-10-20T10:00:00Z',
+        sameNumber: true,
+      },
+      refLabel: null,
+    };
+    assert.match(
+      refLine(sent, NOW)!,
+      /^From the WhatsApp film message sent to Ramesh ji on 20 Oct/,
+    );
+    assert.equal(chatHref(sent), '/whatsapp?chat=919800000001');
+    // a forwarded link: the film went to Ramesh, a friend of his is asking
+    const forwarded = { ...sent, refSend: { ...sent.refSend, sameNumber: false } };
+    assert.match(refLine(forwarded, NOW)!, /^Opened from a link first sent to Ramesh ji/);
+    assert.equal(chatHref(forwarded), null);
+    assert.equal(
+      refLine({ ref: 'grp01', refSend: null, refLabel: 'Kanpur group' }, NOW),
+      'From the share link "Kanpur group"',
+    );
+    assert.equal(refLine({ ...base, ref: 'zzz' }, NOW), 'Link code zzz');
+    assert.equal(chatHref(base), null);
+  });
+
+  it('says who called and when, leaving out what is not known', () => {
+    assert.match(
+      calledLine({ calledByName: 'Asha', calledAt: '2026-10-22T07:00:00Z' }, NOW),
+      /^Called by Asha · /,
+    );
+    assert.equal(calledLine({ calledByName: null, calledAt: null }, NOW), 'Called');
   });
 });

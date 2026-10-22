@@ -22,6 +22,7 @@ import {
   DropoffsCard,
   FilmKpis,
   ReachCard,
+  ReplyTapsCard,
   ShortToFullCard,
 } from '@/features/films/FilmSections';
 import { RecentViewsCard } from '@/features/films/RecentViewsCard';
@@ -360,6 +361,7 @@ function FilmBody({
             <ReachCard stats={stats} />
           </div>
 
+          <ReplyTapsCard stats={stats} />
           {stats.shortToFull ? <ShortToFullCard stats={stats} /> : null}
 
           <DailyCard stats={stats} />

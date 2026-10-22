@@ -166,6 +166,13 @@ const RegistrationsPage = React.lazy(
     })),
   ),
 );
+const CallbacksPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/callbacks/CallbacksPage').then((m) => ({
+      default: m.CallbacksPage,
+    })),
+  ),
+);
 const FilmsPage = React.lazy(
   retryImport(() =>
     import('@/pages/FilmsPage').then((m) => ({ default: m.FilmsPage })),
@@ -552,6 +559,20 @@ export default function App() {
               <RequireSuperAdmin>
                 <LazyPage>
                   <RegistrationsPage />
+                </LazyPage>
+              </RequireSuperAdmin>
+            }
+          />
+          {/* Everyone who asked us to call them on the website — the film pages'
+              form above all — behind the `callback_new` alert. Super-admin for
+              the same reason as the two pages above. Keep in step with
+              `superAdminOnly` in navItems.ts. */}
+          <Route
+            path="callbacks"
+            element={
+              <RequireSuperAdmin>
+                <LazyPage>
+                  <CallbacksPage />
                 </LazyPage>
               </RequireSuperAdmin>
             }

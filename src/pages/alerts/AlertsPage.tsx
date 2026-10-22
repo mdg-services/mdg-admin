@@ -182,10 +182,11 @@ export function AlertsPage() {
                 <p className="mt-0.5 break-words text-sm text-text-muted">{a.body}</p>
                 <p className="mt-1 text-xs text-text-subtle">
                   {view === 'dismissed'
-                    ? `${hiddenBy(a)} · ${ADMIN_ALERT_KIND_INFO[a.kind].clearsWhen}`
+                    ? `${hiddenBy(a)} · ${ADMIN_ALERT_KIND_INFO[a.kind]?.clearsWhen ?? ''}`
                     : view === 'cleared'
                       ? howItCleared(a)
-                      : ADMIN_ALERT_KIND_INFO[a.kind].clearsWhen}
+                      : // A kind newer than this build has no entry: say nothing rather than crash the page.
+                        (ADMIN_ALERT_KIND_INFO[a.kind]?.clearsWhen ?? '')}
                 </p>
               </div>
             ),
