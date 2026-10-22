@@ -53,6 +53,23 @@ export interface NavItem {
  * can import it without a circular dependency.
  */
 export const NAV_ITEMS: NavItem[] = [
+  // Films and the WhatsApp pair sit first, by request (23 Oct 2026).
+  // The two Dealer Kavach films on mdgservices.in: views, how far people get,
+  // where they stop, and the share links that send people there (ADR 0015).
+  // Every admin since 22 Oct 2026.
+  { to: '/films', label: 'Films', icon: Clapperboard },
+  // Every chat on the WhatsApp numbers we run: the leads we have messaged and
+  // everyone who has written back. There is no handset behind those numbers, so
+  // this is the only place a message is read or answered. Carries an unread
+  // chats badge (`useNavBadges`). Every admin since 22 Oct 2026: the whole team
+  // reads and answers these chats.
+  // `end`: `/whatsapp` is a prefix of `/whatsapp/results` below, and without it
+  // both links light up on the results page.
+  { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, end: true },
+  // What happened to the promotions we sent from those numbers: how many
+  // reached a phone, were opened, had their link tapped, were answered or
+  // stopped. Super-admin for the inbox's reason — every line is a person.
+  { to: '/whatsapp/results', label: 'Message results', icon: ChartColumn, superAdminOnly: true },
   { to: '/inbox', label: 'Inbox', icon: MessageSquare },
   // Dealer questions the AI could not settle, each held open until a person
   // resolves it with a note — the replacement for a "talk to a person" button,
@@ -125,22 +142,6 @@ export const NAV_ITEMS: NavItem[] = [
   // The landing-page assistant's console (ADR 0009). Super-admin only: these
   // are strangers' transcripts and, where they left one, their phone number.
   { to: '/assist', label: 'Assistant', icon: Headset, superAdminOnly: true },
-  // The two Dealer Kavach films on mdgservices.in: views, how far people get,
-  // where they stop, and the share links that send people there (ADR 0015).
-  // Every admin since 22 Oct 2026.
-  { to: '/films', label: 'Films', icon: Clapperboard },
-  // Every chat on the WhatsApp numbers we run: the leads we have messaged and
-  // everyone who has written back. There is no handset behind those numbers, so
-  // this is the only place a message is read or answered. Carries an unread
-  // chats badge (`useNavBadges`). Every admin since 22 Oct 2026: the whole team
-  // reads and answers these chats.
-  // `end`: `/whatsapp` is a prefix of `/whatsapp/results` below, and without it
-  // both links light up on the results page.
-  { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, end: true },
-  // What happened to the promotions we sent from those numbers: how many
-  // reached a phone, were opened, had their link tapped, were answered or
-  // stopped. Super-admin for the inbox's reason — every line is a person.
-  { to: '/whatsapp/results', label: 'Message results', icon: ChartColumn, superAdminOnly: true },
   // What people have reported on the website's grievance page, or to the
   // assistant. Each one stays open until a person resolves it with a note, and
   // carries an open count badge (`useNavBadges`) because the person who wrote
