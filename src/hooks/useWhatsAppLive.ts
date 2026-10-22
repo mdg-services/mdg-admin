@@ -14,7 +14,6 @@ import {
   useWhatsAppUnreadChats,
   whatsAppKeys,
 } from '@/hooks/api/useWhatsAppInbox';
-import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
 import type { WhatsAppChangedEvent, WhatsAppIncomingEvent } from '@dk/shared';
@@ -33,7 +32,7 @@ const REFRESH_THROTTLE_MS = 2500;
 
 /**
  * The WhatsApp inbox, alive on every screen — mounted once, in the app shell,
- * and only doing anything for a super-admin.
+ * doing its work for every signed-in admin.
  *
  * - Keeps the lists, the open chat, the nav badge and the page title current
  *   from the server's `whatsapp:changed`, and again whenever the tab comes back
@@ -55,7 +54,7 @@ const REFRESH_THROTTLE_MS = 2500;
 export function useWhatsAppLive(): void {
   const qc = useQueryClient();
   const token = useAuthStore((s) => s.token);
-  const isSuperAdmin = useIsSuperAdmin();
+  const signedIn = !!token;
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
@@ -82,7 +81,7 @@ export function useWhatsAppLive(): void {
   }, [navigate, location.pathname, location.search, toast]);
 
   React.useEffect(() => {
-    if (!isSuperAdmin) return;
+    if (!signedIn) return;
     const socket = getSocket();
     if (!socket) return;
 
@@ -164,10 +163,10 @@ export function useWhatsAppLive(): void {
     // `token` is a dependency even though the effect never reads it: a new
     // login can swap the instance `getSocket()` returns, and a listener on a
     // discarded socket is an inbox that has silently stopped updating.
-  }, [qc, token, isSuperAdmin, toast]);
+  }, [qc, token, signedIn, toast]);
 
   React.useEffect(() => {
-    if (!isSuperAdmin) return;
+    if (!signedIn) return;
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         void qc.invalidateQueries({ queryKey: whatsAppKeys.all });
@@ -175,11 +174,11 @@ export function useWhatsAppLive(): void {
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [qc, isSuperAdmin]);
+  }, [qc, signedIn]);
 
   // Browsers keep sound off until the page has been touched once.
   React.useEffect(() => {
-    if (!isSuperAdmin) return;
+    if (!signedIn) return;
     const unlock = () => unlockSound();
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
@@ -187,14 +186,14 @@ export function useWhatsAppLive(): void {
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
     };
-  }, [isSuperAdmin]);
+  }, [signedIn]);
 
   React.useEffect(() => {
-    if (!isSuperAdmin || unread <= 0) return;
+    if (!signedIn || unread <= 0) return;
     const plain = document.title.replace(/^\(\d+\)\s*/, '');
     document.title = `(${unread}) ${plain}`;
     return () => {
       document.title = plain;
     };
-  }, [isSuperAdmin, unread]);
+  }, [signedIn, unread]);
 }

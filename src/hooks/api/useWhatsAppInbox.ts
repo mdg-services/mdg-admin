@@ -16,8 +16,8 @@ import {
   type StageFilter,
 } from '@/features/whatsapp/format';
 import { addPending, getPending, removePending, updatePending } from '@/features/whatsapp/pendingStore';
-import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { api, ApiError } from '@/lib/api';
+import { useAuthStore } from '@/store/auth';
 import type {
   WhatsAppChatDetail,
   WhatsAppChatFilter,
@@ -119,16 +119,15 @@ export function useWhatsAppConfig() {
 }
 
 /**
- * What the nav badge and the page title carry. Asked for only by a super-admin:
- * the endpoint refuses everyone else, and a plain admin must not send a request
- * that comes back 403 on every poll for ever.
+ * What the nav badge and the page title carry. Every signed-in admin asks for
+ * it (the inbox is every admin's since 22 Oct 2026); nobody signed out does.
  */
 export function useWhatsAppSummary() {
-  const isSuperAdmin = useIsSuperAdmin();
+  const signedIn = useAuthStore((s) => !!s.token);
   return useQuery({
     queryKey: whatsAppKeys.summary,
     queryFn: ({ signal }) => api.get<WhatsAppInboxSummary>(`${BASE}/summary`, undefined, signal),
-    enabled: isSuperAdmin,
+    enabled: signedIn,
     staleTime: 15_000,
     refetchInterval: POLL_MS,
   });

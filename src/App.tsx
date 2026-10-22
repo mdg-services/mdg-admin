@@ -508,17 +508,15 @@ export default function App() {
           />
           {/* The WhatsApp inbox: every chat on our WhatsApp numbers, read and
               answered here. A reply raises the `whatsapp_reply` alert, whose
-              link opens that person's chat (`/whatsapp?chat=`). Super-admin, as
-              the API is (`requireSuperAdmin`). Keep in step with
-              `superAdminOnly` in navItems.ts. */}
+              link opens that person's chat (`/whatsapp?chat=`). Every admin,
+              as the API is (`requireRole('admin')`). Keep in step with
+              navItems.ts. */}
           <Route
             path="whatsapp"
             element={
-              <RequireSuperAdmin>
-                <LazyPage>
-                  <WhatsAppInboxPage />
-                </LazyPage>
-              </RequireSuperAdmin>
+              <LazyPage>
+                <WhatsAppInboxPage />
+              </LazyPage>
             }
           />
           {/* What happened to the promotions sent from those numbers. Same

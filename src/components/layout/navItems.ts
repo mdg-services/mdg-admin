@@ -131,11 +131,11 @@ export const NAV_ITEMS: NavItem[] = [
   // Every chat on the WhatsApp numbers we run: the leads we have messaged and
   // everyone who has written back. There is no handset behind those numbers, so
   // this is the only place a message is read or answered. Carries an unread
-  // chats badge (`useNavBadges`). Super-admin for the reason the two above are:
-  // they are members of the public, with their numbers and their words.
+  // chats badge (`useNavBadges`). Every admin since 22 Oct 2026: the whole team
+  // reads and answers these chats.
   // `end`: `/whatsapp` is a prefix of `/whatsapp/results` below, and without it
   // both links light up on the results page.
-  { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, superAdminOnly: true, end: true },
+  { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, end: true },
   // What happened to the promotions we sent from those numbers: how many
   // reached a phone, were opened, had their link tapped, were answered or
   // stopped. Super-admin for the inbox's reason — every line is a person.
