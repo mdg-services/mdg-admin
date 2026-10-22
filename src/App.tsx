@@ -492,18 +492,14 @@ export default function App() {
             }
           />
           {/* The two films on mdgservices.in and how they are watched (ADR
-              0015). Super-admin, the same gate as the assistant console: it is
-              the company's marketing funnel, and the API behind it is
-              `requireSuperAdmin`. Keep in step with `superAdminOnly` in
-              navItems.ts — the flag only hides the link, this guards the URL. */}
+              0015). Every admin, as the API is (`requireRole('admin')`). Keep
+              in step with navItems.ts. */}
           <Route
             path="films"
             element={
-              <RequireSuperAdmin>
-                <LazyPage>
-                  <FilmsPage />
-                </LazyPage>
-              </RequireSuperAdmin>
+              <LazyPage>
+                <FilmsPage />
+              </LazyPage>
             }
           />
           {/* The WhatsApp inbox: every chat on our WhatsApp numbers, read and

@@ -5,8 +5,8 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 
-import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/store/auth';
 import type {
   FilmId,
   FilmSessionPage,
@@ -18,11 +18,9 @@ import type {
 import type { CreateFilmShareLinkInput } from '@dk/shared/schemas';
 
 /**
- * The two films on mdgservices.in, as the super-admin "Films" page reads them
- * (docs/films/FILM_PAGES_SPEC.md §3.3). Every query is gated on
- * `useIsSuperAdmin()` as well as by the endpoint's own `requireSuperAdmin`, the
- * same as the assistant console: a plain admin who lands on the URL never sends
- * the request.
+ * The two films on mdgservices.in, as the admins' "Films" page reads them
+ * (docs/films/FILM_PAGES_SPEC.md §3.3). Every admin since 22 Oct 2026 — the
+ * endpoint is `requireRole('admin')` — so the queries only wait for a sign-in.
  */
 
 export const filmsKey = ['films'] as const;
@@ -34,11 +32,11 @@ export const filmSessionsKey = (film: FilmId, tag: string | undefined) =>
 export const filmLinksKey = (film: FilmId) => ['films', 'links', film] as const;
 
 export function useFilmsQuery() {
-  const isSuperAdmin = useIsSuperAdmin();
+  const signedIn = useAuthStore((s) => !!s.token);
   return useQuery({
     queryKey: filmListKey,
     queryFn: () => api.get<{ items: FilmSummary[] }>('/admin/films'),
-    enabled: isSuperAdmin,
+    enabled: signedIn,
     select: (d) => d.items,
   });
 }
@@ -55,7 +53,7 @@ export function useFilmStatsQuery(
   tag: string | undefined,
   enabled: boolean,
 ) {
-  const isSuperAdmin = useIsSuperAdmin();
+  const signedIn = useAuthStore((s) => !!s.token);
   return useQuery({
     queryKey: filmStatsKey(film, range.from, range.to, tag),
     queryFn: () =>
@@ -64,7 +62,7 @@ export function useFilmStatsQuery(
         to: range.to,
         tag,
       }),
-    enabled: isSuperAdmin && enabled,
+    enabled: signedIn && enabled,
     staleTime: 60_000,
     placeholderData: (prev, prevQuery) =>
       // Only across a range or tag change on the SAME film — the other film's
@@ -77,7 +75,7 @@ const SESSIONS_PAGE = 25;
 
 /** Recent page loads, newest first, paged by `before`. */
 export function useFilmSessionsQuery(film: FilmId, tag: string | undefined, enabled: boolean) {
-  const isSuperAdmin = useIsSuperAdmin();
+  const signedIn = useAuthStore((s) => !!s.token);
   return useInfiniteQuery({
     queryKey: filmSessionsKey(film, tag),
     queryFn: ({ pageParam }) =>
@@ -88,17 +86,17 @@ export function useFilmSessionsQuery(film: FilmId, tag: string | undefined, enab
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextBefore ?? undefined,
-    enabled: isSuperAdmin && enabled,
+    enabled: signedIn && enabled,
   });
 }
 
 /** This film's live share links, each with how it has done (all time). */
 export function useFilmLinksQuery(film: FilmId) {
-  const isSuperAdmin = useIsSuperAdmin();
+  const signedIn = useAuthStore((s) => !!s.token);
   return useQuery({
     queryKey: filmLinksKey(film),
     queryFn: () => api.get<{ items: FilmShareLinkRow[] }>('/admin/films/links', { film }),
-    enabled: isSuperAdmin,
+    enabled: signedIn,
     select: (d) => d.items,
   });
 }

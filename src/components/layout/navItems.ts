@@ -127,7 +127,8 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/assist', label: 'Assistant', icon: Headset, superAdminOnly: true },
   // The two Dealer Kavach films on mdgservices.in: views, how far people get,
   // where they stop, and the share links that send people there (ADR 0015).
-  { to: '/films', label: 'Films', icon: Clapperboard, superAdminOnly: true },
+  // Every admin since 22 Oct 2026.
+  { to: '/films', label: 'Films', icon: Clapperboard },
   // Every chat on the WhatsApp numbers we run: the leads we have messaged and
   // everyone who has written back. There is no handset behind those numbers, so
   // this is the only place a message is read or answered. Carries an unread
