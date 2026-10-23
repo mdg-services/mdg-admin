@@ -1,6 +1,11 @@
-import { formatDate, formatDateTime } from '@/lib/format';
+import { formatDate, formatDateTime, formatInrWhole } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
-import type { WhatsAppResultOutcome, WhatsAppResultPerson, WhatsAppResultSend } from '@dk/shared';
+import type {
+  WhatsAppResultCounts,
+  WhatsAppResultOutcome,
+  WhatsAppResultPerson,
+  WhatsAppResultSend,
+} from '@dk/shared';
 
 /**
  * The words the Message results page prints. Kept apart from the page so the
@@ -24,6 +29,123 @@ export const OUTCOME_WORDS: Record<WhatsAppResultOutcome, { label: string; inten
   held_back: { label: 'Held back by WhatsApp', intent: 'warning' },
   not_delivered: { label: 'Did not arrive', intent: 'danger' },
 };
+
+/** Meta's "message undeliverable": most often a number that is not on WhatsApp. */
+const UNDELIVERABLE_CODE = 131026;
+
+/** The person's badge: "Did not arrive" says why when WhatsApp's reason is the usual one. */
+export function outcomeLabel(p: WhatsAppResultPerson): string {
+  if (p.outcome === 'not_delivered' && p.failureCode === UNDELIVERABLE_CODE)
+    return 'Not on WhatsApp?';
+  return OUTCOME_WORDS[p.outcome].label;
+}
+
+/**
+ * What one promotion costs once it reaches a phone: Meta's ₹0.8631 for a
+ * marketing message in India, plus 18% GST. Read off published rate pages in
+ * October 2026, not Meta's own rate card, so the page says "about". Held back
+ * and undelivered messages are not charged.
+ */
+export const RUPEES_PER_PROMOTION = 1.02;
+
+export const costLabel = (reached: number): string =>
+  `≈ ${formatInrWhole(reached * RUPEES_PER_PROMOTION)}`;
+
+/**
+ * Outlets, when one has several numbers: a list made from an outlet sheet
+ * names every number after its outlet, so people who share a name are one
+ * outlet. An outlet is reached when any of its numbers is. Nameless people
+ * count one each.
+ */
+export function outletsOf(people: readonly WhatsAppResultPerson[]): {
+  outlets: number;
+  reached: number;
+} {
+  const reached = new Map<string, boolean>();
+  for (const p of people) {
+    const key = p.name?.trim().toLowerCase() || `person:${p.person}`;
+    const got = p.outcome === 'opened' || p.outcome === 'reached';
+    reached.set(key, (reached.get(key) ?? false) || got);
+  }
+  return { outlets: reached.size, reached: [...reached.values()].filter(Boolean).length };
+}
+
+/** "Modak Automobiles, Gem Motors and 3 more". */
+export function namesLine(people: readonly WhatsAppResultPerson[], max = 3): string {
+  const names = people.map((p) => p.name ?? p.phone ?? 'Someone');
+  if (names.length <= max) {
+    return names.length <= 1
+      ? (names[0] ?? '')
+      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  }
+  return `${names.slice(0, max).join(', ')} and ${names.length - max} more`;
+}
+
+/** The film meter's caption: who watched, and for how long, while that is a few people. */
+export function filmWatchLine(
+  people: readonly WhatsAppResultPerson[],
+  c: WhatsAppResultCounts,
+): string {
+  const tapped = people.filter((p) => p.linkTaps > 0);
+  if (tapped.length === 0) return 'Nobody has opened it yet.';
+  const twice =
+    c.tappedLinkTwice > 0
+      ? ` · ${plural(c.tappedLinkTwice, 'person', 'people')} opened it 2+ times`
+      : '';
+  if (tapped.length > 3) return `${plural(c.linkTaps, 'open', 'opens')} in all${twice}`;
+  const who = tapped
+    .map((p) => {
+      const name = p.name ?? p.phone ?? 'Someone';
+      return p.watchedSeconds ? `${name} watched ${secondsLabel(p.watchedSeconds)}` : name;
+    })
+    .join(' · ');
+  return `${who}${twice}`;
+}
+
+/** One line of "Did not reach them": what, how many, and what it means. */
+export interface MissedRow {
+  label: string;
+  value: number;
+  note: string;
+}
+
+/** Where the messages that did not reach a phone went, largest cause first; empty rows left out. */
+export function missedRows(c: WhatsAppResultCounts): MissedRow[] {
+  const otherReason = c.notDelivered - c.notOnWhatsApp;
+  const rows: MissedRow[] = [
+    {
+      label: 'Held back by WhatsApp',
+      value: c.heldBack,
+      note: 'Its limit on promotions per person. Not charged. Can be sent again 24 hours later.',
+    },
+    {
+      label: 'Could not be delivered',
+      value: c.notDelivered,
+      note:
+        otherReason === 0
+          ? 'Probably not on WhatsApp. Not charged.'
+          : c.notOnWhatsApp === 0
+            ? "Not charged. Hover the person's badge for WhatsApp's reason."
+            : `${c.notOnWhatsApp} probably not on WhatsApp, ${otherReason} for another reason. Not charged.`,
+    },
+    {
+      label: 'Not on the phone yet',
+      value: c.waiting,
+      note: 'Usually a phone that is off. It can still arrive.',
+    },
+  ];
+  return rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value);
+}
+
+/** The people list's filter. */
+export type PeopleFilter = 'all' | 'opened' | 'call' | 'missed';
+
+export function inFilter(p: WhatsAppResultPerson, f: PeopleFilter): boolean {
+  if (f === 'opened') return p.outcome === 'opened';
+  if (f === 'call') return p.askedCall;
+  if (f === 'missed') return p.outcome !== 'opened' && p.outcome !== 'reached';
+  return true;
+}
 
 /** How long a typical open took: "Under a minute", "12 min", "3 h 5 min". */
 export function minutesLabel(min: number | null): string {
