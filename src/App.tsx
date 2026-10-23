@@ -211,6 +211,13 @@ const LedgerWatchPage = React.lazy(
     })),
   ),
 );
+const PaymentsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/payments/PaymentsPage').then((m) => ({
+      default: m.PaymentsPage,
+    })),
+  ),
+);
 const OverviewPage = React.lazy(
   retryImport(() =>
     import('@/pages/OverviewPage').then((m) => ({ default: m.OverviewPage })),
@@ -392,6 +399,21 @@ export default function App() {
             element={
               <LazyPage>
                 <LedgerWatchPage />
+              </LazyPage>
+            }
+          />
+          {/* What outlets owe MDG and what they have paid, through Razorpay
+              (ADR 0022). Every admin, as the API is (`requireRole('admin')`):
+              raising and cancelling a payment is everyday account work. Only the
+              refund button is a super-admin's, and the server refuses a refund
+              from anyone else as well. The audit log and the `payment_problem`
+              alert open a payment here with `?payment=`. Keep in step with
+              navItems.ts. */}
+          <Route
+            path="payments"
+            element={
+              <LazyPage>
+                <PaymentsPage />
               </LazyPage>
             }
           />
