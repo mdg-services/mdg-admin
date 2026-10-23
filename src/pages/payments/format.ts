@@ -212,6 +212,7 @@ export function methodLabel(method: string | null): string {
 const CHANNEL_LABELS: Record<PaymentChannel, string> = {
   link: 'Payment link',
   checkout: 'On the website',
+  manual: 'Recorded by hand',
 };
 
 export function channelLabel(channel: PaymentChannel | null): string {
