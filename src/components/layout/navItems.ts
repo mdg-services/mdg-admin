@@ -12,6 +12,7 @@ import {
   FileCog,
   Gauge,
   Headset,
+  IndianRupee,
   LayoutDashboard,
   ListChecks,
   MessageCircle,
@@ -118,6 +119,14 @@ export const NAV_ITEMS: NavItem[] = [
   // the dealer's call is the person who needs it. Not in `BOTTOM_TAB_ROUTES`
   // either: the bar holds four, so it falls into the More sheet.
   { to: '/ledger-watch', label: 'Ledger watch', icon: ScanLine },
+  // What outlets owe MDG and what they have paid, through Razorpay (ADR 0022):
+  // raise a payment, copy its link into WhatsApp, cancel it, and — a
+  // super-admin only — refund it. Sits right under Ledger watch as the other
+  // money screen: that one is the outlet's money with the oil company, this one
+  // is the outlet's money with us. Deliberately NOT `superAdminOnly`: the API is
+  // `requireRole('admin')` and raising a payment is everyday account work. Not
+  // in `BOTTOM_TAB_ROUTES`, so on a phone it falls into the More sheet.
+  { to: '/payments', label: 'Payments', icon: IndianRupee },
   // Every dealer's collected IRAS shift data in one place — an everyday admin
   // surface, so deliberately NOT `superAdminOnly`.
   { to: '/data-vault', label: 'Data Vault', icon: Database },
