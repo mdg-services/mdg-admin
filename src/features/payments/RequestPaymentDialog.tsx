@@ -16,10 +16,14 @@ import {
 import { useDealersQuery } from '@/hooks/api/useDealers';
 import { type CreatedPayment, useCreatePayment, usePaymentLink } from '@/hooks/api/usePayments';
 import {
+  EMPTY_BILL_TO,
   PAYMENT_NOTE_MAX,
   type RequestDraft,
+  billToForOutlet,
+  billToState,
   linkSentLine,
   sentence,
+  taxSplitHint,
   validateRequest,
 } from '@/pages/payments/format';
 import {
@@ -31,6 +35,8 @@ import {
   parseRupeesToPaise,
 } from '@dk/shared';
 
+import { BillToFields } from './BillToFields';
+
 const EMPTY_DRAFT: RequestDraft = {
   dealerId: '',
   title: '',
@@ -41,6 +47,7 @@ const EMPTY_DRAFT: RequestDraft = {
   sendLink: true,
   phone: '',
   email: '',
+  billTo: EMPTY_BILL_TO,
 };
 
 /**
@@ -52,7 +59,13 @@ const EMPTY_DRAFT: RequestDraft = {
  * The amount is typed in rupees and shown back in the same Indian grouping the
  * list uses, so a slipped comma is seen before the request goes. The server
  * reads the amount off the payment it makes; nothing the outlet's browser sends
- * can change it later.
+ * can change it later. The amount includes GST, and the line under it shows how
+ * that splits for the state being billed (ADR 0022 §11).
+ *
+ * "Bill to" is who the GST invoice is made out to. The outlet's GSTIN is filled
+ * in from its record and the state follows it; the name and address are typed,
+ * because an outlet has none on file. It may be left empty — the payment is
+ * raised anyway and the invoice waits until someone adds it from the drawer.
  *
  * It never closes on its own after a success. The next thing an admin wants is
  * the link, to paste into WhatsApp, and the link is on the screen the success
@@ -85,6 +98,9 @@ export function RequestPaymentDialog({
   const [created, setCreated] = React.useState<CreatedPayment | null>(null);
   // A link made after the fact, for a payment raised without one.
   const [madeLink, setMadeLink] = React.useState<string | null>(null);
+  // The outlet whose GSTIN is in the Bill to boxes now: how a change of outlet
+  // is told from the first fill.
+  const [billToFor, setBillToFor] = React.useState<string | null>(null);
 
   // A fresh, empty form every time it opens.
   React.useEffect(() => {
@@ -93,6 +109,7 @@ export function RequestPaymentDialog({
     setAttempted(false);
     setCreated(null);
     setMadeLink(null);
+    setBillToFor(null);
   }, [open, defaultDealerId]);
 
   const dealers = React.useMemo(
@@ -103,6 +120,16 @@ export function RequestPaymentDialog({
         .sort((a, b) => compareDealerCodes(a.code, b.code)),
     [dealersQ.data],
   );
+
+  // Fill the outlet's GSTIN (and so its state) into Bill to — once the outlets
+  // have loaded, for the one the page was already filtered to, and again when a
+  // different outlet is picked.
+  React.useEffect(() => {
+    if (!open || !draft.dealerId || !dealersQ.data || billToFor === draft.dealerId) return;
+    const gst = dealers.find((d) => d.id === draft.dealerId)?.gst;
+    setDraft((d) => ({ ...d, billTo: billToForOutlet(d.billTo, gst, billToFor !== null) }));
+    setBillToFor(draft.dealerId);
+  }, [open, draft.dealerId, dealers, dealersQ.data, billToFor]);
 
   const { input, problems } = validateRequest(draft);
   const shown = attempted ? problems : {};
@@ -200,6 +227,13 @@ export function RequestPaymentDialog({
               No link was made. Make one when you want to paste it into WhatsApp.
             </p>
           )}
+
+          {!created.billTo ? (
+            <p className="text-sm text-text-muted">
+              Nobody is named to bill yet, so the GST invoice will wait. Open the payment to add who
+              to bill.
+            </p>
+          ) : null}
 
           {link ? (
             <Copyable
@@ -299,6 +333,12 @@ export function RequestPaymentDialog({
                 </p>
               ) : null}
             </div>
+            {/* The amount includes GST; this is the split the invoice will show. */}
+            {paise !== null && !problems.amount ? (
+              <p className="text-xs tabular-nums text-text-muted md:col-span-2">
+                {taxSplitHint(paise, billToState(draft.billTo))}
+              </p>
+            ) : null}
           </div>
 
           <div>
@@ -349,6 +389,31 @@ export function RequestPaymentDialog({
               </span>
             </div>
           </div>
+
+          <section
+            className="grid gap-3 border-y border-border py-3"
+            aria-labelledby={`${uid}-billto`}
+          >
+            <div>
+              <h3 id={`${uid}-billto`} className="text-sm font-semibold text-text">
+                Bill to
+              </h3>
+              <p className="mt-0.5 text-xs text-text-muted">
+                Printed on the GST invoice. Leave the name and address empty and the invoice waits
+                until you add them.
+              </p>
+            </div>
+            <BillToFields
+              value={draft.billTo}
+              onChange={(billTo) => set('billTo', billTo)}
+              problems={{
+                name: shown.billToName,
+                gstin: shown.billToGstin,
+                address: shown.billToAddress,
+                stateCode: shown.billToState,
+              }}
+            />
+          </section>
 
           <Checkbox
             checked={draft.sendLink}

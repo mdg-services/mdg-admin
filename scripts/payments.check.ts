@@ -1,8 +1,10 @@
 /**
  * Checks for the decisions behind the Payments page (`src/pages/payments/
  * format.ts`): which buttons a payment allows, how much can be refunded, what a
- * typed amount means, and whether the "Request a payment" form agrees with the
- * shared schema it is sent through.
+ * typed amount means, whether the "Request a payment" form agrees with the
+ * shared schema it is sent through, and the GST invoice pieces — who to bill,
+ * the tax split shown for an amount, and what the drawer says about an invoice
+ * that has not been issued.
  *
  * This app has no test runner, so these are plain `node:test` checks over the
  * pure module, run through the `tsx` the repo root already carries:
@@ -19,19 +21,29 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  INVOICE_BLOCKERS,
   PAYMENT_MAX_PAISE,
   PAYMENT_MIN_PAISE,
   PAYMENT_STATUSES,
   type AdminPayment,
+  type GstDocumentSummary,
   type PaymentStatus,
 } from '../shared/src/types/payment';
-import { parseRupeesToPaise } from '../shared/src/lib/money';
+import { gstinCheckChar, splitGstInclusive } from '../shared/src/lib/gst';
+import { formatPaise, parseRupeesToPaise } from '../shared/src/lib/money';
 import {
+  billToSchema,
   cancelPaymentSchema,
   createPaymentSchema,
   refundPaymentSchema,
 } from '../shared/src/schemas/payment';
 import {
+  BILL_TO_ADDRESS_MAX,
+  BILL_TO_ADDRESS_MIN,
+  BILL_TO_NAME_MAX,
+  BILL_TO_NAME_MIN,
+  type BillToDraft,
+  EMPTY_BILL_TO,
   PAYMENT_NOTE_MAX,
   PAYMENT_REASON_MAX,
   PAYMENT_REASON_MIN,
@@ -40,13 +52,27 @@ import {
   type RequestDraft,
   allowedActions,
   amountProblem,
+  billToDraftFrom,
+  billToFacts,
+  billToForOutlet,
+  billToHint,
+  billToState,
+  canEditBillTo,
+  canIssueInvoice,
   cancelSentence,
+  checkBillTo,
   checkOutcome,
+  creditNoteLine,
   dashboardUrl,
   extraCaptureLine,
   hasOpenProblem,
   idFromParam,
+  invoiceBlockerSentence,
+  invoiceSentence,
+  invoiceState,
+  isBlankBillTo,
   isPastDue,
+  issuedMessage,
   linkSentLine,
   newestFirst,
   pageFromParam,
@@ -57,11 +83,17 @@ import {
   rupeesText,
   sendSmsLabel,
   sentence,
+  splitText,
+  stateForGstin,
+  stateLabel,
   statusFromParam,
   statusHint,
   statusTone,
+  taxSplitHint,
   tidyPhone,
   validateRequest,
+  wasPaid,
+  withGstin,
 } from '../src/pages/payments/format';
 
 const DEALER_ID = '65f0c0ffee0123456789abcd';
@@ -102,6 +134,50 @@ function payment(over: Partial<AdminPayment> = {}): AdminPayment {
     linkSentTo: null,
     problem: null,
     updatedAt: '2026-10-23T05:00:00.000Z',
+    invoice: null,
+    creditNotes: [],
+    billTo: null,
+    invoiceBlocker: null,
+    ...over,
+  };
+}
+
+/** A real GSTIN for a state: the shared check character is worked out, not copied from anywhere. */
+function gstin(state: string): string {
+  const first14 = `${state}ABCDE1234F1Z`;
+  return `${first14}${gstinCheckChar(first14)}`;
+}
+const GSTIN_HARYANA = gstin('06');
+const GSTIN_MAHARASHTRA = gstin('27');
+
+const BILL_TO_SAVED = {
+  name: 'Shree Ram Fuels',
+  gstin: GSTIN_HARYANA as string | null,
+  address: 'NH 48, Sector 14, Gurugram, Haryana 122001',
+  stateCode: '06',
+};
+
+const BILL_TO: BillToDraft = {
+  name: 'Shree Ram Fuels',
+  gstin: GSTIN_HARYANA,
+  address: 'NH 48, Sector 14, Gurugram, Haryana 122001',
+  stateCode: '06',
+};
+
+/** A stored invoice or credit note, with whatever a test needs changed. */
+function document(over: Partial<GstDocumentSummary> = {}): GstDocumentSummary {
+  return {
+    id: '65f0c0ffee0123456789abcf',
+    kind: 'invoice',
+    number: 'MDG/26-27/00001',
+    issuedAt: '2026-10-24T05:00:00.000Z',
+    taxablePaise: 300_000,
+    cgstPaise: 27_000,
+    sgstPaise: 27_000,
+    igstPaise: 0,
+    roundOffPaise: 0,
+    totalPaise: 354_000,
+    againstNumber: null,
     ...over,
   };
 }
@@ -440,6 +516,7 @@ describe('validateRequest', () => {
     sendLink: true,
     phone: '',
     email: '',
+    billTo: EMPTY_BILL_TO,
   };
 
   it('turns a good form into exactly what the server wants, in paise', () => {
@@ -526,5 +603,399 @@ describe('validateRequest', () => {
 
   it('tidies a phone number the way people write it', () => {
     assert.equal(tidyPhone('+91 98765-43210'), '+919876543210');
+  });
+});
+
+describe('the state follows the GSTIN', () => {
+  it('reads the state from the first two digits, and from nothing else', () => {
+    assert.equal(stateForGstin(GSTIN_HARYANA), '06');
+    assert.equal(stateForGstin(` ${GSTIN_MAHARASHTRA.toLowerCase()} `), '27');
+    assert.equal(stateForGstin('06'), '06');
+    for (const none of ['', '0', '99', 'AB1234', 'toString']) {
+      assert.equal(stateForGstin(none), null, none);
+    }
+  });
+
+  it('tidies what is typed, caps it at fifteen, and moves the state with it', () => {
+    const typed = withGstin(EMPTY_BILL_TO, ` ${GSTIN_MAHARASHTRA.toLowerCase()}999 `);
+    assert.equal(typed.gstin, GSTIN_MAHARASHTRA);
+    assert.equal(typed.stateCode, '27');
+  });
+
+  it('leaves the state alone while the first two digits are not yet a state, and when the box is cleared', () => {
+    const picked = { ...EMPTY_BILL_TO, stateCode: '07' };
+    assert.equal(withGstin(picked, '9').stateCode, '07');
+    assert.equal(withGstin(withGstin(picked, GSTIN_HARYANA), '').stateCode, '06');
+  });
+
+  it('lets the GSTIN’s state win over a state picked earlier', () => {
+    assert.equal(billToState({ gstin: GSTIN_HARYANA, stateCode: '27' }), '06');
+    assert.equal(billToState({ gstin: '', stateCode: '27' }), '27');
+  });
+
+  it('names a state with its code, and a code it does not know as it is', () => {
+    assert.equal(stateLabel('06'), 'Haryana (06)');
+    assert.equal(stateLabel('99'), '99');
+    assert.equal(stateLabel(''), '—');
+  });
+});
+
+describe('billToForOutlet', () => {
+  it('puts the outlet’s own GSTIN in the box, and the state with it', () => {
+    const d = billToForOutlet(EMPTY_BILL_TO, ` ${GSTIN_MAHARASHTRA.toLowerCase()} `, false);
+    assert.equal(d.gstin, GSTIN_MAHARASHTRA);
+    assert.equal(d.stateCode, '27');
+  });
+
+  it('leaves the GSTIN empty for an outlet that has none', () => {
+    assert.deepEqual(billToForOutlet(EMPTY_BILL_TO, undefined, false), EMPTY_BILL_TO);
+    assert.deepEqual(billToForOutlet(EMPTY_BILL_TO, null, false), EMPTY_BILL_TO);
+  });
+
+  it('keeps what was already typed on the first fill', () => {
+    const typed = { ...EMPTY_BILL_TO, name: 'Shree Ram Fuels', gstin: GSTIN_HARYANA };
+    const d = billToForOutlet(typed, GSTIN_MAHARASHTRA, false);
+    assert.equal(d.name, 'Shree Ram Fuels');
+    assert.equal(d.gstin, GSTIN_HARYANA);
+  });
+
+  it('starts again on a different outlet, so one outlet’s name never sits on another’s invoice', () => {
+    const d = billToForOutlet(BILL_TO, GSTIN_MAHARASHTRA, true);
+    assert.equal(d.name, '');
+    assert.equal(d.address, '');
+    assert.equal(d.gstin, GSTIN_MAHARASHTRA);
+    assert.equal(d.stateCode, '27');
+    // …and an outlet with no GSTIN does not inherit the last one's.
+    assert.deepEqual(billToForOutlet(BILL_TO, undefined, true), EMPTY_BILL_TO);
+  });
+
+  it('reads a saved bill-to back as a draft, an unregistered buyer as an empty GSTIN', () => {
+    assert.deepEqual(
+      billToDraftFrom({ name: 'A B', gstin: null, address: 'Somewhere, 12345', stateCode: '06' }),
+      { name: 'A B', gstin: '', address: 'Somewhere, 12345', stateCode: '06' },
+    );
+    assert.deepEqual(billToDraftFrom(null), EMPTY_BILL_TO);
+  });
+});
+
+describe('checkBillTo', () => {
+  it('says nothing was given when there is no name and no address — the outlet’s own GSTIN is not an answer', () => {
+    assert.equal(isBlankBillTo(EMPTY_BILL_TO), true);
+    assert.equal(isBlankBillTo({ ...EMPTY_BILL_TO, gstin: GSTIN_HARYANA, stateCode: '06' }), true);
+    assert.deepEqual(checkBillTo({ ...EMPTY_BILL_TO, gstin: 'junk' }, false), { kind: 'blank' });
+    assert.equal(isBlankBillTo({ ...EMPTY_BILL_TO, name: 'A' }), false);
+  });
+
+  it('turns a full form into exactly what the server wants', () => {
+    assert.deepEqual(checkBillTo({ ...BILL_TO, name: '  Shree Ram Fuels ' }, false), {
+      kind: 'ok',
+      billTo: {
+        name: 'Shree Ram Fuels',
+        gstin: GSTIN_HARYANA,
+        address: 'NH 48, Sector 14, Gurugram, Haryana 122001',
+        stateCode: '06',
+      },
+    });
+  });
+
+  it('sends no GSTIN for a buyer who is not registered, and takes the state that was picked', () => {
+    const r = checkBillTo({ ...BILL_TO, gstin: '', stateCode: '27' }, false);
+    assert.equal(r.kind, 'ok');
+    assert.deepEqual(r.kind === 'ok' ? [r.billTo.gstin, r.billTo.stateCode] : null, [null, '27']);
+  });
+
+  it('takes the GSTIN’s state when the picked one disagrees, instead of failing on it', () => {
+    const r = checkBillTo({ ...BILL_TO, stateCode: '27' }, false);
+    assert.equal(r.kind === 'ok' ? r.billTo.stateCode : null, '06');
+  });
+
+  it('asks for the missing half, in words, once either half is given', () => {
+    const noAddress = checkBillTo({ ...BILL_TO, address: '' }, false);
+    assert.equal(noAddress.kind, 'bad');
+    assert.deepEqual(Object.keys(noAddress.kind === 'bad' ? noAddress.problems : {}), ['address']);
+    const noName = checkBillTo({ ...BILL_TO, name: ' ' }, false);
+    assert.deepEqual(Object.keys(noName.kind === 'bad' ? noName.problems : {}), ['name']);
+  });
+
+  it('does not accept an empty form when the bill-to is the whole point', () => {
+    const r = checkBillTo(EMPTY_BILL_TO, true);
+    assert.equal(r.kind, 'bad');
+    assert.deepEqual(Object.keys(r.kind === 'bad' ? r.problems : {}).sort(), [
+      'address',
+      'name',
+      'stateCode',
+    ]);
+  });
+
+  it('refuses a GSTIN with one wrong character, and a state nobody can pick', () => {
+    const wrongCheck = GSTIN_HARYANA.slice(0, 14) + (GSTIN_HARYANA.endsWith('A') ? 'B' : 'A');
+    const r = checkBillTo({ ...BILL_TO, gstin: wrongCheck }, false);
+    assert.equal(
+      r.kind === 'bad' ? r.problems.gstin : null,
+      'That is not a valid GSTIN. Check it letter by letter against the outlet’s GST certificate.',
+    );
+    const noState = checkBillTo({ ...BILL_TO, gstin: '', stateCode: '' }, false);
+    assert.equal(
+      noState.kind === 'bad' ? noState.problems.stateCode : null,
+      'Pick the state the outlet is in.',
+    );
+    assert.equal(checkBillTo({ ...BILL_TO, gstin: '', stateCode: '99' }, false).kind, 'bad');
+    assert.equal(checkBillTo({ ...BILL_TO, gstin: '', stateCode: 'toString' }, false).kind, 'bad');
+  });
+
+  it('agrees with the shared schema about how long the name and the address may be', () => {
+    const lengths = (min: number, max: number) => [min - 1, min, max, max + 1];
+    for (const len of lengths(BILL_TO_NAME_MIN, BILL_TO_NAME_MAX)) {
+      const draft = { ...BILL_TO, name: 'n'.repeat(len) };
+      const here = checkBillTo(draft, false).kind === 'ok';
+      const there = billToSchema.safeParse(draft).success;
+      assert.equal(here, there, `name of ${len}`);
+    }
+    for (const len of lengths(BILL_TO_ADDRESS_MIN, BILL_TO_ADDRESS_MAX)) {
+      const draft = { ...BILL_TO, address: 'a'.repeat(len) };
+      const here = checkBillTo(draft, false).kind === 'ok';
+      const there = billToSchema.safeParse(draft).success;
+      assert.equal(here, there, `address of ${len}`);
+    }
+  });
+});
+
+describe('the tax split shown for an amount', () => {
+  it('writes ₹3,540 as ₹3,000 plus CGST and SGST in Haryana', () => {
+    assert.equal(
+      splitText(splitGstInclusive(354_000, '06')),
+      '₹3,540 = ₹3,000 + CGST ₹270 + SGST ₹270',
+    );
+  });
+
+  it('writes the same amount as one IGST line anywhere else', () => {
+    assert.equal(splitText(splitGstInclusive(354_000, '27')), '₹3,540 = ₹3,000 + IGST ₹540');
+  });
+
+  it('shows the paise when there are some, as the list does', () => {
+    assert.equal(
+      splitText(splitGstInclusive(499_900, '06')),
+      '₹4,999 = ₹4,236.44 + CGST ₹381.28 + SGST ₹381.28',
+    );
+  });
+
+  it('shows the round off a paisa of rounding leaves, with its sign', () => {
+    // ₹1: ₹0.85 + two lots of ₹0.08 is ₹1.01, so one paisa has to come off.
+    assert.equal(
+      splitText(splitGstInclusive(100, '06')),
+      '₹1 = ₹0.85 + CGST ₹0.08 + SGST ₹0.08 − round off ₹0.01',
+    );
+    // And ₹1.09: ₹0.92 + two lots of ₹0.08 is ₹1.08, so a paisa has to be added.
+    assert.equal(
+      splitText(splitGstInclusive(109, '06')),
+      '₹1.09 = ₹0.92 + CGST ₹0.08 + SGST ₹0.08 + round off ₹0.01',
+    );
+  });
+
+  it('adds up to the total it started from, for any amount, and the line opens with that total', () => {
+    for (const total of [100, 101, 105, 118, 999, 12_345, 354_000, 499_900, 50_000_000]) {
+      for (const state of ['06', '27']) {
+        const s = splitGstInclusive(total, state);
+        assert.equal(
+          s.taxablePaise + s.cgstPaise + s.sgstPaise + s.igstPaise + s.roundOffPaise,
+          total,
+        );
+        assert.ok(splitText(s).startsWith(`${formatPaise(total)} = `), `${total} in ${state}`);
+      }
+    }
+  });
+
+  it('reads a stored invoice as it was issued, without working it out again', () => {
+    // Figures a different rounding would not give: the document is the record.
+    assert.equal(
+      splitText(
+        document({ taxablePaise: 300_001, cgstPaise: 26_999, sgstPaise: 27_000, roundOffPaise: 0 }),
+      ),
+      '₹3,540 = ₹3,000.01 + CGST ₹269.99 + SGST ₹270',
+    );
+    assert.equal(
+      splitText(document({ cgstPaise: 0, sgstPaise: 0, igstPaise: 54_000 })),
+      '₹3,540 = ₹3,000 + IGST ₹540',
+    );
+  });
+
+  it('says what is missing when the state is not known, instead of guessing', () => {
+    assert.equal(
+      taxSplitHint(354_000, ''),
+      'Includes 18% GST. Pick the state under Bill to to see how it splits.',
+    );
+    assert.equal(
+      taxSplitHint(354_000, '06'),
+      'Includes 18% GST: ₹3,540 = ₹3,000 + CGST ₹270 + SGST ₹270.',
+    );
+    assert.equal(taxSplitHint(354_000, '27'), 'Includes 18% GST: ₹3,540 = ₹3,000 + IGST ₹540.');
+  });
+});
+
+describe('the invoice section', () => {
+  const paid = payment({ status: 'paid', paidAt: '2026-10-24T05:00:00.000Z' });
+
+  it('knows a payment was paid even after some or all of it was given back', () => {
+    for (const status of PAYMENT_STATUSES) {
+      assert.equal(
+        wasPaid(status),
+        status === 'paid' || status === 'partially_refunded' || status === 'refunded',
+        status,
+      );
+    }
+  });
+
+  it('tells issued, blocked, waiting and nothing-to-do apart', () => {
+    assert.equal(invoiceState({ ...paid, invoice: document() }), 'issued');
+    assert.equal(invoiceState({ ...paid, invoiceBlocker: 'no_bill_to' }), 'blocked');
+    assert.equal(invoiceState(paid), 'pending');
+    assert.equal(invoiceState(payment()), 'none');
+    assert.equal(invoiceState(payment({ status: 'cancelled' })), 'none');
+    // Given back in full but never invoiced: it still waits for one, and a credit note needs it.
+    assert.equal(invoiceState({ ...paid, status: 'refunded' }), 'pending');
+  });
+
+  it('says why in a sentence for every reason the shared contract knows', () => {
+    for (const blocker of INVOICE_BLOCKERS) {
+      assert.match(invoiceBlockerSentence(blocker), /\.$/, blocker);
+    }
+    assert.equal(invoiceBlockerSentence('no_bill_to'), 'Add who to bill, then issue the invoice.');
+    assert.match(
+      invoiceBlockerSentence('gst_not_configured'),
+      /^The company’s GST details are not set on the server yet\./,
+    );
+  });
+
+  it('opens with that sentence while the invoice is blocked, and with nothing once it is issued or not yet due', () => {
+    assert.equal(
+      invoiceSentence({ ...paid, invoiceBlocker: 'no_bill_to' }),
+      'Add who to bill, then issue the invoice.',
+    );
+    assert.match(invoiceSentence(paid) ?? '', /^The invoice has not been issued yet\./);
+    assert.equal(invoiceSentence({ ...paid, invoice: document() }), null);
+    assert.equal(invoiceSentence(payment()), null);
+  });
+
+  it('offers Issue invoice only where pressing it can work', () => {
+    // The company's details are missing: an admin cannot fix that, but can try again once it is.
+    assert.equal(canIssueInvoice({ ...paid, invoiceBlocker: 'gst_not_configured' }), true);
+    // Nobody to bill, and nobody added: the server would refuse, so the button waits for the card.
+    assert.equal(canIssueInvoice({ ...paid, invoiceBlocker: 'no_bill_to' }), false);
+    assert.equal(
+      canIssueInvoice({ ...paid, invoiceBlocker: 'no_bill_to', billTo: BILL_TO_SAVED }),
+      true,
+    );
+    assert.equal(canIssueInvoice(paid), true);
+    assert.equal(canIssueInvoice({ ...paid, invoice: document() }), false);
+    assert.equal(canIssueInvoice(payment()), false);
+  });
+
+  it('lets who to bill change until the invoice is issued, and not after', () => {
+    assert.equal(canEditBillTo(payment()), true);
+    assert.equal(canEditBillTo(paid), true);
+    // Corrected while it waits for the invoice, with a bill-to already saved.
+    assert.equal(canEditBillTo(payment({ ...paid, billTo: BILL_TO_SAVED })), true);
+    assert.equal(canEditBillTo({ ...paid, invoice: document() }), false);
+    // A withdrawn payment is never invoiced.
+    assert.equal(canEditBillTo(payment({ status: 'cancelled' })), false);
+  });
+
+  it('says what the Bill to card is for, and whether it can still change', () => {
+    assert.match(billToHint(payment()), /made as soon as the payment is paid\.$/);
+    assert.match(billToHint(paid), /correct it until the invoice is issued\.$/);
+    assert.match(billToHint({ ...paid, invoice: document() }), /can no longer be changed\.$/);
+  });
+
+  it('prints the saved bill-to in four lines, an unregistered buyer as such', () => {
+    assert.deepEqual(billToFacts(BILL_TO_SAVED), {
+      name: 'Shree Ram Fuels',
+      gstin: GSTIN_HARYANA,
+      address: 'NH 48, Sector 14, Gurugram, Haryana 122001',
+      state: 'Haryana (06)',
+    });
+    assert.equal(billToFacts({ ...BILL_TO_SAVED, gstin: null }).gstin, 'Not registered for GST');
+  });
+
+  it('names the invoice in the toast when the server sent the payment back with it', () => {
+    assert.equal(issuedMessage({ invoice: document() }), 'Invoice MDG/26-27/00001 issued.');
+    assert.equal(issuedMessage({ invoice: null }), 'Asked the server to issue the invoice.');
+    assert.equal(issuedMessage(undefined), 'Asked the server to issue the invoice.');
+  });
+
+  it('puts the amount and the invoice a credit note reduces on one line', () => {
+    assert.equal(
+      creditNoteLine(
+        document({
+          kind: 'credit_note',
+          number: 'MDGCN/26-27/0001',
+          totalPaise: 50_000,
+          againstNumber: 'MDG/26-27/00001',
+        }),
+      ),
+      '₹500 · against MDG/26-27/00001',
+    );
+    assert.equal(
+      creditNoteLine(document({ kind: 'credit_note', totalPaise: 50_000, againstNumber: null })),
+      '₹500 · against the invoice',
+    );
+  });
+});
+
+describe('validateRequest with who to bill', () => {
+  const good: RequestDraft = {
+    dealerId: DEALER_ID,
+    title: 'Dealer Kavach, October 2026',
+    purpose: 'subscription',
+    amount: '3,540',
+    dueDate: '',
+    note: '',
+    sendLink: true,
+    phone: '',
+    email: '',
+    billTo: BILL_TO,
+  };
+
+  it('sends who to bill with the payment, the GSTIN tidied and the state from it', () => {
+    const { input, problems } = validateRequest({
+      ...good,
+      billTo: { ...BILL_TO, gstin: ` ${GSTIN_HARYANA.toLowerCase()} `, stateCode: '' },
+    });
+    assert.deepEqual(problems, {});
+    assert.deepEqual(input?.billTo, {
+      name: 'Shree Ram Fuels',
+      gstin: GSTIN_HARYANA,
+      address: 'NH 48, Sector 14, Gurugram, Haryana 122001',
+      stateCode: '06',
+    });
+    assert.equal(input?.amountPaise, 354_000);
+  });
+
+  it('raises the payment anyway when nobody is named to bill — the invoice waits', () => {
+    const { input, problems } = validateRequest({
+      ...good,
+      // The outlet's own GSTIN is in the box, but no name and no address.
+      billTo: { ...EMPTY_BILL_TO, gstin: GSTIN_HARYANA, stateCode: '06' },
+    });
+    assert.deepEqual(problems, {});
+    assert.equal(input !== null, true);
+    assert.equal('billTo' in (input ?? {}), false);
+  });
+
+  it('says which box is wrong, under its own name, and stops the request', () => {
+    const { input, problems } = validateRequest({
+      ...good,
+      billTo: { ...BILL_TO, gstin: 'NOTAGSTIN' },
+    });
+    assert.equal(input, null);
+    assert.deepEqual(Object.keys(problems).sort(), ['billToGstin']);
+    const half = validateRequest({ ...good, billTo: { ...BILL_TO, address: '' } });
+    assert.equal(half.input, null);
+    assert.deepEqual(Object.keys(half.problems), ['billToAddress']);
+  });
+
+  it('is not held up by a bill-to problem that is hidden because nothing was entered', () => {
+    // A junk GSTIN alone (say, an outlet record with "NA" in it) must not stop a payment.
+    const { input } = validateRequest({ ...good, billTo: { ...EMPTY_BILL_TO, gstin: 'NA' } });
+    assert.equal(input !== null, true);
   });
 });

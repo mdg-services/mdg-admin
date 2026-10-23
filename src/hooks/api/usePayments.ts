@@ -1,12 +1,19 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { AdminPayment, AdminPaymentsList, PaymentLink, PaymentsConfig } from '@dk/shared';
+import type {
+  AdminPayment,
+  AdminPaymentsList,
+  GstDocumentDownload,
+  PaymentLink,
+  PaymentsConfig,
+} from '@dk/shared';
 import type {
   AdminPaymentsQuery,
   CancelPaymentInput,
   CreatePaymentInput,
   RefundPaymentInput,
+  UpdateBillToInput,
 } from '@dk/shared/schemas';
 
 /** Every payment query hangs off this prefix, so one invalidation refreshes them all. */
@@ -170,5 +177,46 @@ export function useMarkPaymentProblemChecked() {
   return useMutation({
     mutationFn: (id: string) => api.post<AdminPayment>(`/admin/payments/${id}/problem-checked`),
     onSettled: refresh,
+  });
+}
+
+/**
+ * Say who the GST invoice is made out to, or correct it. The server refuses once
+ * the invoice has been issued (the name and figures on it are the legal record),
+ * and the drawer stops offering the edit at the same point.
+ */
+export function useUpdateBillTo() {
+  const refresh = useRefreshAfterChange();
+  return useMutation({
+    mutationFn: ({ id, billTo }: { id: string } & UpdateBillToInput) =>
+      api.patch<AdminPayment>(`/admin/payments/${id}/bill-to`, { billTo }),
+    onSettled: refresh,
+  });
+}
+
+/**
+ * Issue the GST invoice now, for a paid payment that was waiting on who to bill
+ * or on the company's GST details. Issuing is idempotent on the server, so
+ * pressing it twice does no harm. Refreshes the drawer so the invoice appears.
+ */
+export function useIssueInvoice() {
+  const refresh = useRefreshAfterChange();
+  return useMutation({
+    mutationFn: (id: string) => api.post<AdminPayment>(`/admin/payments/${id}/invoice`),
+    onSettled: refresh,
+  });
+}
+
+/**
+ * A GST invoice or credit note, as a short-lived link to the PDF and the name to
+ * save it under. A mutation rather than a query on purpose: it is asked for on a
+ * press of Download, the link expires within minutes so it must never be served
+ * from a cache, and the first ask can take a few seconds while the server draws
+ * the PDF. It changes nothing a screen shows, so there is nothing to refresh.
+ */
+export function useGstDocumentDownload() {
+  return useMutation({
+    mutationFn: ({ paymentId, docId }: { paymentId: string; docId: string }) =>
+      api.get<GstDocumentDownload>(`/admin/payments/${paymentId}/documents/${docId}`),
   });
 }

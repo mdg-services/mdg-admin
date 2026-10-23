@@ -33,6 +33,7 @@ import {
   allowedActions,
   attemptTone,
   byAt,
+  canEditBillTo,
   channelLabel,
   checkOutcome,
   dashboardUrl,
@@ -46,6 +47,7 @@ import {
   sendSmsLabel,
   statusHint,
   statusTone,
+  wasPaid,
 } from '@/pages/payments/format';
 import {
   PAYMENT_PURPOSE_LABELS,
@@ -55,7 +57,9 @@ import {
 } from '@dk/shared';
 import type { AdminPayment } from '@dk/shared';
 
+import { BillToDialog } from './BillToDialog';
 import { CancelPaymentDialog } from './CancelPaymentDialog';
+import { BillToCard, CreditNotesBody, InvoiceBody } from './GstSections';
 import { RefundPaymentDialog } from './RefundPaymentDialog';
 
 /** The same 44px-on-a-phone link as the other pages' contact links. */
@@ -75,6 +79,10 @@ const LINK =
  * be five of them, and a footer of five buttons on a phone is a third of the
  * screen. They are offered only when the server would accept them
  * (`allowedActions`), and refund is shown to a super-admin alone.
+ *
+ * Below the details come the GST pieces (ADR 0022 §11): who the invoice is made
+ * out to (editable until it is issued), the invoice itself with its Download, and
+ * a credit note for each refund that went through.
  *
  * `id` is the payment to show; `null` is closed.
  */
@@ -128,6 +136,7 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
   const checked = useMarkPaymentProblemChecked();
   const [cancelling, setCancelling] = React.useState(false);
   const [refunding, setRefunding] = React.useState(false);
+  const [editingBillTo, setEditingBillTo] = React.useState(false);
   // The link, shown for copying by hand — only when this device refused to copy it for us.
   const [manualLink, setManualLink] = React.useState<string | null>(null);
 
@@ -136,6 +145,7 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
     setManualLink(null);
     setCancelling(false);
     setRefunding(false);
+    setEditingBillTo(false);
   }, [p.id]);
 
   const can = allowedActions(p, isSuperAdmin);
@@ -286,6 +296,8 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
   const attempts = newestFirst(p.attempts, (a) => a.at);
   const refunds = newestFirst(p.refunds, (r) => r.createdAt);
   const extras = newestFirst(p.extraCaptures, (c) => c.at);
+  // A server that has not been updated yet sends no list; that must not blank the drawer.
+  const creditNotes = p.creditNotes ?? [];
 
   return (
     <div className="grid gap-5">
@@ -392,6 +404,25 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
         <KeyValueList items={details} labelWidth="150px" />
       </section>
 
+      {/* A withdrawn payment with nobody named has nothing to bill: no card at all. */}
+      {p.billTo || canEditBillTo(p) ? (
+        <Section title="Bill to">
+          <BillToCard payment={p} onEdit={() => setEditingBillTo(true)} />
+        </Section>
+      ) : null}
+
+      {p.invoice || wasPaid(p.status) ? (
+        <Section title="GST invoice">
+          <InvoiceBody payment={p} />
+        </Section>
+      ) : null}
+
+      {creditNotes.length > 0 ? (
+        <Section title={`Credit notes (${creditNotes.length})`}>
+          <CreditNotesBody payment={p} />
+        </Section>
+      ) : null}
+
       <Section title="In Razorpay">
         <KeyValueList items={references} labelWidth="150px" />
         <p className="mt-2 text-xs text-text-subtle">
@@ -476,6 +507,7 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
         </Section>
       ) : null}
 
+      <BillToDialog payment={editingBillTo ? p : null} onClose={() => setEditingBillTo(false)} />
       <CancelPaymentDialog payment={cancelling ? p : null} onClose={() => setCancelling(false)} />
       <RefundPaymentDialog payment={refunding ? p : null} onClose={() => setRefunding(false)} />
     </div>

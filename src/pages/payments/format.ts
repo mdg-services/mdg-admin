@@ -14,17 +14,27 @@ import { formatYmd, isYmd } from '@/lib/format';
 import { istStamp, phoneLabel } from '@/lib/intake';
 import type { Intent } from '@/lib/statusIntent';
 import {
+  GST_RATE_PERCENT,
+  GST_STATES,
   PAYMENT_MAX_PAISE,
   PAYMENT_MIN_PAISE,
   PAYMENT_STATUSES,
   PAYMENT_STATUS_LABELS,
+  SETTLED_STATUSES,
+  SUPPLIER_STATE_CODE,
+  cleanGstin,
   dealerCodeLabel,
   formatPaise,
+  isGstin,
   parseRupeesToPaise,
+  splitGstInclusive,
 } from '@dk/shared';
 import type {
   AdminPayment,
+  GstDocumentSummary,
+  InvoiceBlocker,
   PaymentAttempt,
+  PaymentBillTo,
   PaymentChannel,
   PaymentExtraCapture,
   PaymentPurpose,
@@ -32,8 +42,8 @@ import type {
   PaymentStatus,
   RefundStatus,
 } from '@dk/shared';
-import { createPaymentSchema } from '@dk/shared/schemas';
-import type { CreatePaymentInput } from '@dk/shared/schemas';
+import { billToSchema, createPaymentSchema } from '@dk/shared/schemas';
+import type { BillToInput, CreatePaymentInput } from '@dk/shared/schemas';
 
 /**
  * How long the free text may be. Mirror `createPaymentSchema` and
@@ -383,6 +393,317 @@ export function cancelSentence(
   return `This withdraws payment ${p.number}: ${formatPaise(p.amountPaise)} asked from outlet ${dealerCodeLabel(p.dealerCode)}. Its payment link stops working. If they still pay, the money is given back automatically and you get an alert.`;
 }
 
+// ------------------------------------------------------- GST invoices ----
+
+/**
+ * How long the "Bill to" text may be. Mirror `billToSchema` in `@dk/shared`;
+ * `scripts/payments.check.ts` fails if they ever disagree.
+ */
+export const BILL_TO_NAME_MIN = 2;
+export const BILL_TO_NAME_MAX = 160;
+export const BILL_TO_ADDRESS_MIN = 5;
+export const BILL_TO_ADDRESS_MAX = 300;
+
+/**
+ * Who the invoice is made out to, as typed: everything is still text, and the
+ * state may be empty. A dealer has no stored name or address (a dealer is its
+ * code), so an admin types them; only the GSTIN can come from the outlet.
+ */
+export interface BillToDraft {
+  name: string;
+  /** As typed; `cleanGstin` tidies it. Empty for a buyer not registered for GST. */
+  gstin: string;
+  address: string;
+  /** A two-digit GST state code, or empty. */
+  stateCode: string;
+}
+
+export const EMPTY_BILL_TO: BillToDraft = { name: '', gstin: '', address: '', stateCode: '' };
+
+export type BillToField = 'name' | 'gstin' | 'address' | 'stateCode';
+export type BillToProblems = Partial<Record<BillToField | 'form', string>>;
+
+/** Every state a GSTIN can name, in code order, for the state box. */
+export const GST_STATE_OPTIONS: readonly { code: string; label: string }[] = Object.entries(
+  GST_STATES,
+)
+  .map(([code, name]) => ({ code, label: `${name} (${code})` }))
+  .sort((a, b) => a.code.localeCompare(b.code));
+
+function isStateCode(code: string): boolean {
+  return Object.hasOwn(GST_STATES, code);
+}
+
+/** "Haryana (06)", or the code as it came when it is not one we know. */
+export function stateLabel(code: string): string {
+  const name = isStateCode(code) ? GST_STATES[code] : undefined;
+  return name ? `${name} (${code})` : code || '—';
+}
+
+/** Where the company is registered: a buyer here pays CGST + SGST, anywhere else IGST. */
+export const SUPPLIER_STATE_LABEL = stateLabel(SUPPLIER_STATE_CODE);
+
+/** The state a GSTIN names, from its first two digits; `null` while they are not (yet) a state. */
+export function stateForGstin(raw: string): string | null {
+  const code = cleanGstin(raw).slice(0, 2);
+  return isStateCode(code) ? code : null;
+}
+
+/**
+ * The state the invoice is made out for. A GSTIN's own state always wins over
+ * a state picked earlier: the first two digits of a GSTIN ARE the place of
+ * supply, and the shared schema refuses a pair that disagree.
+ */
+export function billToState(d: Pick<BillToDraft, 'gstin' | 'stateCode'>): string {
+  return stateForGstin(d.gstin) ?? d.stateCode;
+}
+
+/**
+ * What typing in the GSTIN box does to the whole bill-to: the text is tidied
+ * (upper case, no spaces, at most 15 characters) and the state follows it.
+ * Clearing the box leaves the state where it was, so it can be picked by hand.
+ */
+export function withGstin(d: BillToDraft, raw: string): BillToDraft {
+  const gstin = cleanGstin(raw).slice(0, 15);
+  return { ...d, gstin, stateCode: stateForGstin(gstin) ?? d.stateCode };
+}
+
+/** A saved bill-to, as a draft to edit. */
+export function billToDraftFrom(b: PaymentBillTo | null | undefined): BillToDraft {
+  return b
+    ? { name: b.name, gstin: b.gstin ?? '', address: b.address, stateCode: b.stateCode }
+    : EMPTY_BILL_TO;
+}
+
+/**
+ * The bill-to once an outlet is picked: the outlet's own GSTIN goes in the box,
+ * and the state with it. The name and address are not kept on an outlet, so they
+ * start empty — and moving to a DIFFERENT outlet empties them again, so one
+ * outlet's name is never left sitting on another's invoice. A GSTIN the admin
+ * has already typed is kept until the outlet changes.
+ */
+export function billToForOutlet(
+  current: BillToDraft,
+  outletGst: string | null | undefined,
+  switched: boolean,
+): BillToDraft {
+  const base = switched ? EMPTY_BILL_TO : current;
+  return withGstin(base, base.gstin.trim() === '' ? (outletGst ?? '') : base.gstin);
+}
+
+/**
+ * No one has been named to bill: no name and no address. The outlet's GSTIN,
+ * filled in for the admin, is not an answer — a payment raised like this has no
+ * bill-to, the server fills what it can from the outlet, and the invoice waits.
+ */
+export function isBlankBillTo(d: BillToDraft): boolean {
+  return d.name.trim() === '' && d.address.trim() === '';
+}
+
+export type BillToCheck =
+  | { kind: 'blank' }
+  | { kind: 'ok'; billTo: BillToInput }
+  | { kind: 'bad'; problems: BillToProblems };
+
+/**
+ * The bill-to form's answer: what to send, that nothing was given, or what is
+ * wrong with which box. With `required` off (raising a payment) an empty form
+ * is fine; with it on (adding who to bill afterwards) it is not.
+ *
+ * Each box gets its own plain sentence, and the shared schema has the last word,
+ * so a rule added there that this does not know about still stops the request.
+ */
+export function checkBillTo(d: BillToDraft, required: boolean): BillToCheck {
+  if (!required && isBlankBillTo(d)) return { kind: 'blank' };
+  const problems: BillToProblems = {};
+
+  const name = d.name.trim();
+  if (name.length < BILL_TO_NAME_MIN) {
+    problems.name = 'Enter the name to print on the invoice.';
+  } else if (name.length > BILL_TO_NAME_MAX) {
+    problems.name = `Keep it under ${BILL_TO_NAME_MAX} characters. It is ${name.length} now.`;
+  }
+
+  const address = d.address.trim();
+  if (address.length < BILL_TO_ADDRESS_MIN) {
+    problems.address = 'Enter the address to print on the invoice.';
+  } else if (address.length > BILL_TO_ADDRESS_MAX) {
+    problems.address = `Keep it under ${BILL_TO_ADDRESS_MAX} characters. It is ${address.length} now.`;
+  }
+
+  const gstin = cleanGstin(d.gstin);
+  if (gstin && !isGstin(gstin)) {
+    problems.gstin =
+      'That is not a valid GSTIN. Check it letter by letter against the outlet’s GST certificate.';
+  }
+
+  const stateCode = billToState(d);
+  if (!isStateCode(stateCode)) problems.stateCode = 'Pick the state the outlet is in.';
+
+  if (Object.keys(problems).length > 0) return { kind: 'bad', problems };
+
+  const parsed = billToSchema.safeParse({ name, gstin: gstin || null, address, stateCode });
+  if (!parsed.success) {
+    return {
+      kind: 'bad',
+      problems: { form: 'Something in who to bill is not right. Check each box.' },
+    };
+  }
+  return { kind: 'ok', billTo: parsed.data };
+}
+
+/** What the figures of a split are called; a stored invoice and a live split both have them. */
+export interface SplitFigures {
+  taxablePaise: number;
+  cgstPaise: number;
+  sgstPaise: number;
+  igstPaise: number;
+  roundOffPaise: number;
+  totalPaise: number;
+}
+
+/**
+ * A split in one line: `₹3,540 = ₹3,000 + CGST ₹270 + SGST ₹270`, or
+ * `… + IGST ₹540` for a buyer in another state, with a `+ round off ₹0.01`
+ * (or `−`) when the rounding left a paisa over. Written from the figures it is
+ * given, so a stored invoice reads exactly as it was issued.
+ */
+export function splitText(s: SplitFigures): string {
+  const parts = [formatPaise(s.taxablePaise)];
+  if (s.igstPaise > 0) parts.push(`IGST ${formatPaise(s.igstPaise)}`);
+  else if (s.cgstPaise > 0 || s.sgstPaise > 0) {
+    parts.push(`CGST ${formatPaise(s.cgstPaise)}`, `SGST ${formatPaise(s.sgstPaise)}`);
+  }
+  let line = `${formatPaise(s.totalPaise)} = ${parts.join(' + ')}`;
+  if (s.roundOffPaise !== 0) {
+    line += ` ${s.roundOffPaise < 0 ? '−' : '+'} round off ${formatPaise(Math.abs(s.roundOffPaise))}`;
+  }
+  return line;
+}
+
+/**
+ * The line under the amount while a payment is being raised: the GST inside it,
+ * split the way the invoice will split it. The place of supply is the state, so
+ * with none known yet it says what is missing rather than guessing.
+ */
+export function taxSplitHint(paise: number, stateCode: string): string {
+  if (!isStateCode(stateCode)) {
+    return `Includes ${GST_RATE_PERCENT}% GST. Pick the state under Bill to to see how it splits.`;
+  }
+  return `Includes ${GST_RATE_PERCENT}% GST: ${splitText(splitGstInclusive(paise, stateCode))}.`;
+}
+
+/** The saved bill-to as the four lines the drawer prints. */
+export function billToFacts(b: PaymentBillTo): {
+  name: string;
+  gstin: string;
+  address: string;
+  state: string;
+} {
+  return {
+    name: b.name,
+    gstin: b.gstin ?? 'Not registered for GST',
+    address: b.address,
+    state: stateLabel(b.stateCode),
+  };
+}
+
+/** A payment that has been paid at some point, even if some or all of it was given back. */
+export function wasPaid(status: PaymentStatus): boolean {
+  return SETTLED_STATUSES.includes(status);
+}
+
+/**
+ * Who to bill can be set or corrected until the invoice is issued, never after
+ * (the figures and the name on it are the legal record). A withdrawn payment
+ * is never invoiced, so there is nothing to bill for.
+ */
+export function canEditBillTo(p: Pick<AdminPayment, 'status' | 'invoice'>): boolean {
+  return !p.invoice && p.status !== 'cancelled';
+}
+
+/** The sentence under "Bill to": what it is for, and whether it can still change. */
+export function billToHint(p: Pick<AdminPayment, 'status' | 'invoice'>): string {
+  if (p.invoice) return 'Printed on the GST invoice, which is issued. It can no longer be changed.';
+  return wasPaid(p.status)
+    ? 'Printed on the GST invoice. You can correct it until the invoice is issued.'
+    : 'Printed on the GST invoice, which is made as soon as the payment is paid.';
+}
+
+/** Why an invoice has not been issued, in a sentence an admin can act on (or pass on). */
+export function invoiceBlockerSentence(blocker: InvoiceBlocker): string {
+  switch (blocker) {
+    case 'no_bill_to':
+      return 'Add who to bill, then issue the invoice.';
+    case 'gst_not_configured':
+      return 'The company’s GST details are not set on the server yet. The invoice is issued once they are.';
+  }
+}
+
+/**
+ * Where a payment's invoice stands: `issued`; `blocked` (the server says why);
+ * `pending` (paid, nothing in the way, not issued yet — the server's retry or
+ * the button will do it); or `none` (not paid, so none to make).
+ */
+export type InvoiceState = 'issued' | 'blocked' | 'pending' | 'none';
+
+export function invoiceState(
+  p: Pick<AdminPayment, 'status' | 'invoice' | 'invoiceBlocker'>,
+): InvoiceState {
+  if (p.invoice) return 'issued';
+  if (p.invoiceBlocker) return 'blocked';
+  return wasPaid(p.status) ? 'pending' : 'none';
+}
+
+/**
+ * The one sentence the Invoice section opens with while a paid payment has no
+ * invoice; `null` when it has one, or when nothing is paid and there is nothing
+ * to say (the Bill to card already says the invoice follows the payment).
+ */
+export function invoiceSentence(
+  p: Pick<AdminPayment, 'status' | 'invoice' | 'invoiceBlocker'>,
+): string | null {
+  switch (invoiceState(p)) {
+    case 'blocked':
+      return p.invoiceBlocker ? invoiceBlockerSentence(p.invoiceBlocker) : null;
+    case 'pending':
+      return 'The invoice has not been issued yet. Press Issue invoice to make it now.';
+    case 'issued':
+    case 'none':
+      return null;
+  }
+}
+
+/**
+ * Whether Issue invoice is worth pressing: a blocked or waiting invoice. With
+ * nobody named to bill it is not — the server would refuse, so the button waits
+ * for the Bill to card to be filled in.
+ */
+export function canIssueInvoice(
+  p: Pick<AdminPayment, 'status' | 'invoice' | 'invoiceBlocker' | 'billTo'>,
+): boolean {
+  switch (invoiceState(p)) {
+    case 'blocked':
+      return p.invoiceBlocker === 'no_bill_to' ? p.billTo !== null : true;
+    case 'pending':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** What the toast says after Issue invoice: the number, when the server sent the payment back with one. */
+export function issuedMessage(after: Pick<AdminPayment, 'invoice'> | null | undefined): string {
+  return after?.invoice
+    ? `Invoice ${after.invoice.number} issued.`
+    : 'Asked the server to issue the invoice.';
+}
+
+/** A credit note in a line: what it gives back, and the invoice it reduces. */
+export function creditNoteLine(doc: GstDocumentSummary): string {
+  return `${formatPaise(doc.totalPaise)} · against ${doc.againstNumber ?? 'the invoice'}`;
+}
+
 // ------------------------------------------------------ the request form ----
 
 /** The "Request a payment" form as typed: everything is still text. */
@@ -398,6 +719,8 @@ export interface RequestDraft {
   sendLink: boolean;
   phone: string;
   email: string;
+  /** Who the GST invoice is made out to. Left empty, the invoice waits. */
+  billTo: BillToDraft;
 }
 
 export type RequestField =
@@ -408,6 +731,10 @@ export type RequestField =
   | 'note'
   | 'phone'
   | 'email'
+  | 'billToName'
+  | 'billToGstin'
+  | 'billToAddress'
+  | 'billToState'
   | 'form';
 export type RequestProblems = Partial<Record<RequestField, string>>;
 
@@ -463,6 +790,18 @@ export function validateRequest(d: RequestDraft): {
     if (email && !LOOKS_LIKE_EMAIL.test(email)) problems.email = 'That email does not look right.';
   }
 
+  // Who to bill is optional here: empty, the payment is raised anyway and the
+  // invoice waits for it. Half-filled is a mistake worth stopping.
+  const billTo = checkBillTo(d.billTo, false);
+  if (billTo.kind === 'bad') {
+    const bad = billTo.problems;
+    if (bad.name) problems.billToName = bad.name;
+    if (bad.gstin) problems.billToGstin = bad.gstin;
+    if (bad.address) problems.billToAddress = bad.address;
+    if (bad.stateCode) problems.billToState = bad.stateCode;
+    if (bad.form) problems.form = bad.form;
+  }
+
   if (Object.keys(problems).length > 0) return { input: null, problems };
 
   const contact =
@@ -478,6 +817,7 @@ export function validateRequest(d: RequestDraft): {
     ...(note ? { note } : {}),
     sendLink: d.sendLink,
     ...(contact ? { contact } : {}),
+    ...(billTo.kind === 'ok' ? { billTo: billTo.billTo } : {}),
   });
   if (!parsed.success) {
     return {
