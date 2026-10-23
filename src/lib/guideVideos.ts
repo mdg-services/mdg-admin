@@ -1,5 +1,20 @@
 /**
- * Which guide videos explain which screen.
+ * Which guide videos explain which screen — and how a row finds its video.
+ *
+ * ── THE VIDEOS PLAY IN THE PORTAL ──────────────────────────────────────────
+ *
+ * This used to link out to a separate video website. That site is retired. The
+ * team's videos are in MDG's own library now (`marketing/explainers/_admin/`),
+ * and "How this works" plays them in a dialog from `GET /admin/guide-videos/:id`.
+ * A row here names a library video by its ID (`admin_credit_dod`) and, for a
+ * deep link, the second it starts at. Its title, one-line summary and length come
+ * from the library itself (`GuideVideoAdminItem`), so there is one place to
+ * correct them: the video's `library.json`.
+ *
+ * Two kinds of row are not a library video:
+ *   - a PUBLIC EXPLAINER (the three-day deposit clock, stock variation) lives on
+ *     mdgservices.in/videos/<slug> now, so its row opens that page in a new tab;
+ *   - the LIBRARY row opens the whole list, inside the same dialog.
  *
  * ── WHY A REGISTRY AND NOT A PROP ──────────────────────────────────────────
  *
@@ -10,7 +25,8 @@
  *
  * So a surface declares an IDENTITY — `<HowThisWorks surface="admin-dsr-generate" />`
  * — and this file decides what that identity is worth. Shipping a new video then
- * needs no admin deploy: the video lives on the guide site and this holds a slug.
+ * needs no admin deploy for the video itself: it joins the library and the list
+ * below picks it up. Only pointing a SCREEN at it is an edit here.
  *
  * ── EVERY SURFACE RESOLVES TO SOMETHING ────────────────────────────────────
  *
@@ -28,129 +44,131 @@
  *      recorded on that exact screen — the three-day clock explains what the
  *      bank-holiday calendar is FOR, and knowing that is most of what an admin
  *      editing it needs.
- *   3. The LIBRARY row, which opens the guide. Honest rather than apologetic:
- *      it does not claim to answer the screen, it offers everything we have.
+ *   3. The LIBRARY row, which opens the whole list. Honest rather than
+ *      apologetic: it does not claim to answer the screen, it offers everything
+ *      we have.
  *
  * A row is never a lie about its own relevance — `LIBRARY` says what it is, and
- * a topic match says the subject rather than the screen. As real walkthroughs
- * for each surface are recorded, they land in tier 1 and displace the rest.
+ * a topic match says the subject rather than the screen.
  */
+import type { GuideVideoAdminItem } from '@dk/shared';
 
-/** Where the guide site lives. */
-export const GUIDE_BASE: string = (
-  (import.meta.env.VITE_GUIDE_BASE_URL as string | undefined) ??
-  'https://guide.mdgservices.in'
-).replace(/\/$/, '');
+/** How closely a row answers the screen the button is on. Drives the caption. */
+export type GuideFit = 'screen' | 'subject' | 'library';
 
-export interface GuideVideo {
-  /** The guide site's page id. `GUIDE_BASE/<video>` is the watch page, or '' for the library. */
-  video: string;
+/** Where the public explainers live now. */
+export const PUBLIC_VIDEOS_BASE = 'https://mdgservices.in/videos';
+
+/** What a screen points at. Resolved to a {@link GuideRow} against the library. */
+export type GuideRef =
+  | {
+      kind: 'video';
+      /** The library id: `admin_credit_dod`. */
+      id: string;
+      /** The video's title as a fallback while the library loads, or the name of the PART a deep link opens. */
+      title: string;
+      /** Start here, in seconds. Must be one of the video's chapter starts. */
+      at?: number;
+      /** True when `title` names a part, so it wins over the video's own title. */
+      titleIsPart?: boolean;
+      fit?: GuideFit;
+    }
+  | {
+      kind: 'videos';
+      /** Every library video whose id starts with this (the staff-points set). */
+      prefix: string;
+      fit?: GuideFit;
+    }
+  | {
+      kind: 'web';
+      href: string;
+      title: string;
+      blurb: string;
+      minutes: string;
+      fit?: GuideFit;
+    }
+  | { kind: 'library'; fit?: GuideFit };
+
+/** One line of the dialog, ready to draw. */
+export interface GuideRow {
+  key: string;
+  kind: 'video' | 'web' | 'library';
+  /** The library id, for a video. */
+  id?: string;
+  /** The page, for a web row. */
+  href?: string;
   title: string;
   blurb: string;
+  /** "3 min", or '' when not known. */
   minutes: string;
-  /** Jump to a moment — the guide's player reads `#t=<seconds>`. */
+  /** Start second, for a deep link. */
   at?: number;
-  /** How closely this answers the screen the button is on. Drives the caption. */
-  fit?: 'screen' | 'subject' | 'library';
+  fit: GuideFit;
+  /** False for a video the library knows but has not got the file for yet. */
+  available: boolean;
+  /** Who it is for ("Team", "WhatsApp only"), shown in the full list. */
+  tag?: string;
 }
 
-const CREDIT_DOD: readonly GuideVideo[] = [
-  {
-    video: 'admin-credit-dod',
-    title: 'What Credit & DOD Monitoring does',
-    blurb:
-      'How the report is built from the dealer’s SDMS account, what each figure means, and how the due date is worked out.',
-    minutes: '3 min',
-    fit: 'screen',
-  },
-  {
-    video: 'admin-credit-dod-portal',
-    title: 'Using it in the admin portal',
-    blurb:
-      'Generate a report, read the checks before you trust it, share it with the dealer, and handle a run that fails.',
-    minutes: '3 min',
-    fit: 'screen',
-  },
+const video = (
+  id: string,
+  title: string,
+  extra: { at?: number; titleIsPart?: boolean } = {},
+): GuideRef => ({
+  kind: 'video',
+  id,
+  title,
+  ...extra,
+});
+
+const CREDIT_DOD: readonly GuideRef[] = [
+  video('admin_credit_dod', 'What Credit & DOD Monitoring does'),
+  video('admin_credit_dod_portal', 'Using it in the admin portal'),
 ];
 
-const DSR: readonly GuideVideo[] = [
-  {
-    video: 'admin-dsr-receipts',
-    title: 'Receipts on a Daily Sales Report',
-    blurb:
-      'Where a delivery on the report comes from, and which day a tanker actually lands on.',
-    minutes: '4 min',
-    fit: 'screen',
-  },
+const DSR: readonly GuideRef[] = [video('admin_dsr_receipts', 'Receipts on a Daily Sales Report')];
+
+const SHIFT_DATA: readonly GuideRef[] = [
+  video('admin_manual_shift_data', 'A day typed in by hand'),
 ];
 
-const SHIFT_DATA: readonly GuideVideo[] = [
-  {
-    video: 'admin-manual-shift-data',
-    title: 'A day typed in by hand',
-    blurb:
-      'Open the day from the Data Vault, start it by hand, type the readings, review and apply, then generate.',
-    minutes: '4 min',
-    fit: 'screen',
-  },
-];
-
-const DOD_CLOCK: GuideVideo = {
-  video: 'gen-dod-clock-hi',
+/** The three-day clock is a public explainer: it lives on the website now. */
+const DOD_CLOCK: GuideRef = {
+  kind: 'web',
+  href: `${PUBLIC_VIDEOS_BASE}/dod-clock`,
   title: 'The three-day deposit clock',
   blurb:
     'Why the due date moves: three days from the credit, pushed on by Sundays and the 2nd and 4th Saturdays.',
   minutes: '1 min',
-  fit: 'subject',
 };
 
-const STAFF: readonly GuideVideo[] = [
-  {
-    video: 'points-system',
-    title: 'How points are worked out',
-    blurb: 'What decides a work’s points, and how a day’s total is arrived at.',
-    minutes: '3 min',
-    fit: 'subject',
-  },
-  {
-    video: 'give-points',
-    title: 'What the dealer sees',
-    blurb: 'The give-points flow on the dealer’s own phone — useful when answering a question about it.',
-    minutes: '3 min',
-    fit: 'subject',
-  },
-];
+/** Same for the stock-variation explainer, which replaced the old stock-sheet walkthrough. */
+const STOCK_VARIATION: GuideRef = {
+  kind: 'web',
+  href: `${PUBLIC_VIDEOS_BASE}/stock-variation`,
+  title: 'What a stock variation is made of',
+  blurb: 'The difference, the two allowances, and how much is outside the limit.',
+  minutes: '1 min',
+};
 
-const STOCK: readonly GuideVideo[] = [
-  {
-    video: 'stock-variation-sheet',
-    title: 'Reading a stock variation sheet',
-    blurb: 'The difference, the allowance, and how much is outside the limit.',
-    minutes: '4 min',
-    fit: 'subject',
-  },
-];
+/** The staff-points videos, from the dealer library (`points_*`): what the dealer sees. */
+const STAFF: readonly GuideRef[] = [{ kind: 'videos', prefix: 'points_' }];
 
 /** The last resort, and never a lie: it offers the library, not an answer. */
-const LIBRARY: GuideVideo = {
-  video: '',
-  title: 'All guide videos',
-  blurb:
-    'A walkthrough for this screen has not been recorded yet. The library has the dealer course, the team walkthroughs and the explainers.',
-  minutes: '',
-  fit: 'library',
-};
+const LIBRARY: GuideRef = { kind: 'library', fit: 'library' };
 
 /** Tier 1: a video that is genuinely about this exact screen. */
-const BY_SURFACE: Record<string, readonly GuideVideo[]> = {
+const BY_SURFACE: Record<string, readonly GuideRef[]> = {
   'admin-credit-dod-card': CREDIT_DOD,
   'admin-credit-dod-report-card': CREDIT_DOD,
   'admin-credit-dod-failure': CREDIT_DOD,
   'admin-dealer-vault-credit-dod': CREDIT_DOD,
   'admin-shift-editor': SHIFT_DATA,
   'admin-shift-data-editor': SHIFT_DATA,
+  // The sheet where the readings are typed: "Three empty tables" is where the
+  // video reaches it. (A chapter start, so the deep link lands on a scene cut.)
   'admin-shift-sheet': [
-    { ...(SHIFT_DATA[0] as GuideVideo), title: 'Typing a day in by hand', at: 96 },
+    video('admin_manual_shift_data', 'Typing a day in by hand', { at: 81.7, titleIsPart: true }),
   ],
   'admin-iras-edit-grid': SHIFT_DATA,
   'admin-dsr-report': DSR,
@@ -170,62 +188,70 @@ const BY_SURFACE: Record<string, readonly GuideVideo[]> = {
  * specific first, because `admin-dealer-vault-credit-dod` contains both `vault`
  * and `credit`.
  */
-const BY_TOPIC: { match: string; videos: readonly GuideVideo[] }[] = [
-  { match: 'credit-dod', videos: CREDIT_DOD },
-  { match: 'dsr', videos: DSR },
-  { match: 'shift', videos: SHIFT_DATA },
-  { match: 'iras', videos: SHIFT_DATA },
-  { match: 'ledger', videos: [DOD_CLOCK, ...CREDIT_DOD] },
-  { match: 'pad', videos: [DOD_CLOCK, ...CREDIT_DOD] },
-  { match: 'holiday', videos: [DOD_CLOCK] },
-  { match: 'staff', videos: STAFF },
-  { match: 'points', videos: STAFF },
-  { match: 'warrior', videos: STAFF },
-  { match: 'work-list', videos: STAFF },
-  { match: 'custom-work', videos: STAFF },
-  { match: 'stock', videos: STOCK },
-  { match: 'variation', videos: STOCK },
-  { match: 'vault', videos: [...SHIFT_DATA, ...DSR] },
-  { match: 'assurance', videos: DSR },
+const BY_TOPIC: { match: string; refs: readonly GuideRef[] }[] = [
+  { match: 'credit-dod', refs: CREDIT_DOD },
+  { match: 'dsr', refs: DSR },
+  { match: 'shift', refs: SHIFT_DATA },
+  { match: 'iras', refs: SHIFT_DATA },
+  { match: 'ledger', refs: [DOD_CLOCK, ...CREDIT_DOD] },
+  { match: 'pad', refs: [DOD_CLOCK, ...CREDIT_DOD] },
+  { match: 'holiday', refs: [DOD_CLOCK] },
+  { match: 'staff', refs: STAFF },
+  { match: 'points', refs: STAFF },
+  { match: 'warrior', refs: STAFF },
+  { match: 'work-list', refs: STAFF },
+  { match: 'custom-work', refs: STAFF },
+  { match: 'stock', refs: [STOCK_VARIATION] },
+  { match: 'variation', refs: [STOCK_VARIATION] },
+  { match: 'vault', refs: [...SHIFT_DATA, ...DSR] },
+  { match: 'assurance', refs: DSR },
 ];
 
+/** The two tiers, for the checks that walk every entry (`scripts/guideVideos.check.ts`). */
+export function guideRegistry(): {
+  bySurface: Readonly<Record<string, readonly GuideRef[]>>;
+  byTopic: readonly { match: string; refs: readonly GuideRef[] }[];
+} {
+  return { bySurface: BY_SURFACE, byTopic: BY_TOPIC };
+}
+
 /**
- * The videos for a surface. Never empty.
+ * What a surface points at. Never empty.
  *
  * Tier 1, then tier 2, then the library — and the library row is appended to
  * every result, because "there is more where this came from" is true on every
  * screen and costs one line in a dialog somebody opened on purpose.
  */
-export function videosForSurface(surface: string): GuideVideo[] {
+export function refsForSurface(surface: string): GuideRef[] {
   const exact = BY_SURFACE[surface];
-  if (exact?.length) return [...exact, LIBRARY];
+  if (exact?.length) return [...exact.map((r) => withFit(r, 'screen')), LIBRARY];
 
   // A topic match is about the SUBJECT, whatever the video was recorded for:
   // the Credit & DOD walkthrough is a 'screen' video on the Credit & DOD card
   // and only a subject video on the PAD ledger that matched 'ledger'. The row
   // caption and the dialog's own sentence both read `fit`, so it is restated.
   const topic = BY_TOPIC.find((r) => surface.includes(r.match));
-  if (topic) {
-    return [...topic.videos.map((v) => ({ ...v, fit: 'subject' as const })), LIBRARY];
-  }
+  if (topic) return [...topic.refs.map((r) => withFit(r, 'subject')), LIBRARY];
 
   return [LIBRARY];
 }
 
-/**
- * The sentence under the "guided videos" heading, by the best fit in the list.
- * The dialog used to promise "showing this exact screen" above a single row
- * saying no walkthrough of this screen had been recorded — on ~94 of the ~108
- * screens that carry the button.
- */
-export function guideDescription(videos: readonly GuideVideo[]): string {
-  if (videos.some((v) => v.fit === 'screen')) {
+function withFit(ref: GuideRef, fit: GuideFit): GuideRef {
+  // The public explainers are about a subject by nature: they never claim to
+  // show the screen, even on a surface that lists them first.
+  if (ref.kind === 'web') return { ...ref, fit: 'subject' };
+  return { ...ref, fit };
+}
+
+/** The sentence under the dialog's heading, by the best fit in the list. */
+export function guideDescription(refs: readonly GuideRef[]): string {
+  if (refs.some((r) => r.kind !== 'library' && r.fit === 'screen')) {
     return 'Short walkthroughs for admins, in Hindi, showing this exact screen.';
   }
-  if (videos.some((v) => v.fit === 'subject')) {
+  if (refs.some((r) => r.kind !== 'library' && r.fit === 'subject')) {
     return 'Short Hindi walkthroughs on this subject — not of this exact screen.';
   }
-  return 'No walkthrough for this screen yet. The guide library has the rest.';
+  return 'No walkthrough for this screen yet. The library has the rest.';
 }
 
 /** Whether this surface has a video genuinely about it, rather than a fallback. */
@@ -233,8 +259,134 @@ export function hasDedicatedVideo(surface: string): boolean {
   return Boolean(BY_SURFACE[surface]?.length);
 }
 
-/** The watch URL for a row — or the library itself, for the fallback. */
-export function guideUrl(v: GuideVideo): string {
-  if (!v.video) return `${GUIDE_BASE}/`;
-  return `${GUIDE_BASE}/${v.video}${v.at ? `#t=${v.at}` : ''}`;
+/** "3 min" — never "0 min": a clip under a minute is "1 min". Empty when the length is unknown. */
+export function minutesLabel(durationMs: number | undefined): string {
+  if (!durationMs || !Number.isFinite(durationMs) || durationMs <= 0) return '';
+  return `${Math.max(1, Math.round(durationMs / 60_000))} min`;
+}
+
+/** `m:ss` for a chapter start or a position in a video. */
+export function clock(sec: number): string {
+  const total = Math.max(0, Math.floor(sec));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** The list can arrive as an array or wrapped in `items`; either is accepted. */
+export function catalogFrom(raw: unknown): GuideVideoAdminItem[] {
+  if (Array.isArray(raw)) return raw as GuideVideoAdminItem[];
+  const items = (raw as { items?: unknown } | null | undefined)?.items;
+  return Array.isArray(items) ? (items as GuideVideoAdminItem[]) : [];
+}
+
+/**
+ * Join what a screen points at with what the library knows.
+ *
+ * `catalog` is undefined while the list is loading (or when it failed): the rows
+ * then show the registry's own titles and stay tappable, and a tap says plainly
+ * if the video cannot be played. A video the library has been asked about and
+ * does NOT list is shown as unavailable rather than dropped, since an admin
+ * video that has gone missing from the library is something to see, not hide.
+ * A `videos` prefix can only expand once the library is there.
+ */
+export function resolveRows(
+  refs: readonly GuideRef[],
+  catalog: readonly GuideVideoAdminItem[] | undefined,
+): GuideRow[] {
+  const rows: GuideRow[] = [];
+  for (const ref of refs) {
+    const fit: GuideFit = ref.fit ?? 'subject';
+    if (ref.kind === 'library') {
+      rows.push({
+        key: 'library',
+        kind: 'library',
+        title: 'All guide videos',
+        blurb:
+          'A walkthrough for this screen has not been recorded yet. The library has the team walkthroughs and the dealer videos.',
+        minutes: '',
+        fit: 'library',
+        available: true,
+      });
+    } else if (ref.kind === 'web') {
+      rows.push({
+        key: `web:${ref.href}`,
+        kind: 'web',
+        href: ref.href,
+        title: ref.title,
+        blurb: ref.blurb,
+        minutes: ref.minutes,
+        fit,
+        available: true,
+      });
+    } else if (ref.kind === 'video') {
+      const item = catalog?.find((v) => v.id === ref.id);
+      rows.push({
+        key: `video:${ref.id}:${ref.at ?? 0}`,
+        kind: 'video',
+        id: ref.id,
+        title: ref.titleIsPart ? ref.title : (item?.title.en ?? ref.title),
+        blurb: item?.summary.en ?? '',
+        minutes: item ? minutesLabel(item.durationMs) : '',
+        ...(ref.at !== undefined ? { at: ref.at } : {}),
+        fit,
+        available: catalog ? Boolean(item?.available) : true,
+      });
+    } else {
+      for (const item of catalog ?? []) {
+        if (!item.id.startsWith(ref.prefix)) continue;
+        rows.push(rowFor(item, fit));
+      }
+    }
+  }
+  return rows;
+}
+
+/** A row for one library entry, as the "all videos" list shows it. */
+export function rowFor(item: GuideVideoAdminItem, fit: GuideFit = 'subject'): GuideRow {
+  return {
+    key: `video:${item.id}:0`,
+    kind: 'video',
+    id: item.id,
+    title: item.title.en,
+    blurb: item.summary.en,
+    minutes: minutesLabel(item.durationMs),
+    fit,
+    available: item.available,
+  };
+}
+
+/**
+ * The whole library for the "all videos" view: the team's own videos first, then
+ * the dealer ones, each group by title. Nothing is left out — an admin sends the
+ * WhatsApp-only video too, and the list is how they find it.
+ */
+export function libraryRows(catalog: readonly GuideVideoAdminItem[] | undefined): GuideRow[] {
+  const items = [...(catalog ?? [])].sort((a, b) => {
+    const team = Number(b.audience === 'admin') - Number(a.audience === 'admin');
+    return team !== 0 ? team : a.title.en.localeCompare(b.title.en);
+  });
+  return items.map((item) => ({ ...rowFor(item, 'library'), tag: audienceTag(item) }));
+}
+
+/** Who a library video is for, as a short tag in the list. */
+export function audienceTag(
+  item: Pick<GuideVideoAdminItem, 'audience' | 'outsideAppOnly'>,
+): string {
+  if (item.outsideAppOnly) return 'WhatsApp only';
+  if (item.audience === 'admin') return 'Team';
+  if (item.audience === 'owner') return 'For owners';
+  if (item.audience === 'manager') return 'For managers';
+  return 'For dealers';
+}
+
+/**
+ * The chapter a position falls in: the last one that starts at or before it.
+ * Chapters come in start order; -1 for no chapters.
+ */
+export function chapterAt(starts: readonly number[], positionSec: number): number {
+  let found = -1;
+  for (let i = 0; i < starts.length; i += 1) {
+    if ((starts[i] ?? 0) <= positionSec + 0.25) found = i;
+    else break;
+  }
+  return found;
 }

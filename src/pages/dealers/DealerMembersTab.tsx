@@ -45,6 +45,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { copyText } from '@/lib/clipboard';
 import { memberLogin } from '@/lib/onboarding';
+import { alsoRunsLine, type MemberWithOutlets } from '@/lib/outlets';
 import { generatePassword } from '@/lib/password';
 import type { Dealer, User } from '@dk/shared';
 
@@ -110,7 +111,7 @@ export function DealerMembersTab({ dealer }: Props) {
    * the person who takes the "I can't sign in" call is the dealer's account
    * manager, and the API has always allowed an admin to set it.
    */
-  const [resetTarget, setResetTarget] = React.useState<User | null>(null);
+  const [resetTarget, setResetTarget] = React.useState<MemberWithOutlets | null>(null);
   const hasMembers = !!users && users.length > 0;
 
   async function messageMember(u: User) {
@@ -248,7 +249,13 @@ export function DealerMembersTab({ dealer }: Props) {
                   {users.map((u) => (
                     <TRow key={u.id}>
                       <TD className="font-medium">{u.name}</TD>
-                      <TD>{memberRoleLabel(u)}</TD>
+                      <TD>
+                        {memberRoleLabel(u)}
+                        {/* ── one person, several outlets ── */}
+                        {alsoRunsLine(u.alsoRuns) ? (
+                          <span className="block text-xs text-text-subtle">{alsoRunsLine(u.alsoRuns)}</span>
+                        ) : null}
+                      </TD>
                       <TD className="font-mono text-xs">{memberLogin(u) || '—'}</TD>
                       <TD>
                         {u.status === 'ACTIVE' ? (
@@ -324,6 +331,12 @@ export function DealerMembersTab({ dealer }: Props) {
                     <span className="block text-xs font-normal text-text-subtle md:ml-2 md:inline">
                       {memberRoleLabel(u)}
                     </span>
+                    {/* ── one person, several outlets ── */}
+                    {alsoRunsLine(u.alsoRuns) ? (
+                      <span className="block text-xs font-normal text-text-subtle">
+                        {alsoRunsLine(u.alsoRuns)}
+                      </span>
+                    ) : null}
                   </span>
                 ),
                 primaryRight:

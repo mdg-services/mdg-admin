@@ -133,6 +133,10 @@ export function timeOfDay(iso: string | null): string {
  * Only bucket A is ever allowed to be red or amber. Bucket B is standing
  * backlog — a Kavach programme starts with about forty never-verified items —
  * and colouring it would drown the four rows that are actually this morning's.
+ *
+ * A bill past its due date (`payment_overdue`) is money, not a to-do, so it is
+ * red like a stale card. The other onboarding rows — a call to make, a step MDG
+ * owes, a held message — are this morning's work and amber like any other.
  */
 export function triageIntent(item: TriageItem): Intent {
   if (item.bucket === 'context') return 'neutral';
@@ -141,6 +145,7 @@ export function triageIntent(item: TriageItem): Intent {
     case 'credit_card_superseded':
     case 'dsr_superseded':
     case 'waiting_urgent':
+    case 'payment_overdue':
       return 'danger';
     default:
       return 'warning';

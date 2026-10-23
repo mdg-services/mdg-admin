@@ -56,6 +56,21 @@ const STILL_STANDING: Partial<Record<AdminAlertKind, string>> = {
   callback_new: 'Hidden from this list. Call-backs stay new until someone marks them as called.',
   payment_problem:
     'Hidden from this list. The payment stays flagged until someone marks it as checked.',
+  // Onboarding. Hiding any of these takes the row off the list; none of them is done by it.
+  onboarding_stalled:
+    'Hidden from this list. It clears on its own once the outlet moves to its next step or the setup is closed.',
+  onboarding_call:
+    'Hidden from this list. Log the call on the outlet to clear it for good; it returns if the dealer stays silent.',
+  onboarding_mdg_waiting: 'Hidden from this list. It clears once MDG does the step.',
+  onboarding_not_me:
+    "Hidden from this list. The owner stays locked out until a super-admin clears it on the outlet's Setup card.",
+  welcome_not_delivered: 'Hidden from this list. It clears once the owner signs in.',
+  no_working_device: "Hidden from this list. It clears once the owner's phone registers for notifications.",
+  password_help:
+    'Hidden from this list. The request stays open until someone marks it done on the Onboarding page.',
+  // ── watch hold ── hiding the alert decides nothing about the messages behind it.
+  held_message:
+    'Hidden from this list. The messages stay held until someone sends or drops them on the Onboarding page, or they expire.',
 };
 
 /** Whether the row's button closes the alert for good rather than hiding it. */

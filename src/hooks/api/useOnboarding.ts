@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { ApiError, api } from '@/lib/api';
+import type { CallBody } from '@/lib/onboardingCalls';
+import { approveBody } from '@/lib/outlets';
 import type {
   ApproveRegistrationResult,
   OnboardingBoard,
   OnboardingBoardView,
+  OnboardingConfig,
   OutletSetupAdmin,
 } from '@dk/shared';
 
@@ -44,7 +47,7 @@ export function useOnboardingBoardQuery(view: OnboardingBoardView) {
 export function useOnboardingConfigQuery(enabled = true) {
   return useQuery({
     queryKey: onboardingConfigKey,
-    queryFn: () => api.get<{ monthlyPricePaise: number }>('/admin/onboarding/config'),
+    queryFn: () => api.get<OnboardingConfig>('/admin/onboarding/config'),
     enabled,
     staleTime: 60_000,
   });
@@ -82,7 +85,7 @@ export function useOutletSetupQuery(dealerId: string | undefined) {
  * registrations count on the nav badge and the alerts that clear with it. Run on
  * SETTLED so a failure also pulls the screen back to the truth.
  */
-function refreshAfterChange(qc: QueryClient, dealerId?: string) {
+export function refreshAfterChange(qc: QueryClient, dealerId?: string) {
   void qc.invalidateQueries({ queryKey: onboardingRoot });
   void qc.invalidateQueries({ queryKey: outletSetupRoot });
   void qc.invalidateQueries({ queryKey: enrolmentsRoot });
@@ -95,12 +98,20 @@ function refreshAfterChange(qc: QueryClient, dealerId?: string) {
 export function useApproveRegistration() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, code }: { id: string; code?: string }) =>
-      api.post<ApproveRegistrationResult>(
-        `/admin/registrations/${id}/approve`,
-        code ? { code } : {},
-      ),
+    // `linkToUserId`: add the registration as another outlet of that owner (`lib/outlets.ts`).
+    mutationFn: ({ id, ...body }: { id: string; code?: string; linkToUserId?: string }) =>
+      api.post<ApproveRegistrationResult>(`/admin/registrations/${id}/approve`, approveBody(body)),
     onSettled: () => refreshAfterChange(qc),
+  });
+}
+
+/** Change the flat monthly price new bills are raised at. Super-admin. */
+export function useSetMonthlyPrice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (monthlyPricePaise: number) =>
+      api.put<{ monthlyPricePaise: number }>('/admin/onboarding/config/price', { monthlyPricePaise }),
+    onSettled: () => void qc.invalidateQueries({ queryKey: onboardingConfigKey }),
   });
 }
 
@@ -115,9 +126,7 @@ export function useCloseRegistration() {
 }
 
 /** The outlet-level steps, all `POST /dealers/:id/setup/<step>`. */
-function useSetupStep<TBody extends object>(
-  step: 'bill' | 'payment' | 'start' | 'watch' | 'close',
-) {
+function useSetupStep<TBody extends object>(step: 'start' | 'watch' | 'close') {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ dealerId, body }: { dealerId: string; body: TBody }) =>
@@ -126,13 +135,7 @@ function useSetupStep<TBody extends object>(
   });
 }
 
-/** "Bill sent": the team sent the bill outside the app and records the amount and due date. */
-export const useSendBill = () => useSetupStep<{ amountPaise: number; dueOn: string }>('bill');
-/** "Payment received": super-admin. */
-export const useRecordSetupPayment = () =>
-  useSetupStep<{ amountPaise: number; paidOn: string; mode: string; reference?: string }>(
-    'payment',
-  );
+// "Send bill", "Record payment" and the pause live in `useBilling.ts`.
 /** "Start services": begins the watch (or goes straight live when it is zero days). */
 export const useStartServices = () =>
   useSetupStep<{ watchDays: number; overrideReason?: string }>('start');
@@ -148,5 +151,37 @@ export function usePasswordHelpDone() {
   return useMutation({
     mutationFn: (id: string) => api.post<unknown>(`/admin/password-help/${id}/done`, {}),
     onSettled: () => void qc.invalidateQueries({ queryKey: onboardingRoot }),
+  });
+}
+
+// ── reminders, calls and the NO reply (workstream B) ─────────────────────────
+
+/** Log a call to an outlet that is on its way. Any admin. Answers the fresh setup, calls included. */
+export function useLogOutletCall() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dealerId, body }: { dealerId: string; body: CallBody }) =>
+      api.post<OutletSetupAdmin>(`/dealers/${dealerId}/setup/calls`, body),
+    onSettled: (_data, _err, vars) => refreshAfterChange(qc, vars.dealerId),
+  });
+}
+
+/** Log a call to a registration that has not become an outlet yet. Any admin. */
+export function useLogRegistrationCall() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: CallBody }) =>
+      api.post<unknown>(`/admin/registrations/${id}/calls`, body),
+    onSettled: () => refreshAfterChange(qc),
+  });
+}
+
+/** "Clear NO": a person has checked and the registration is genuine. Super-admin. */
+export function useClearNotMe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dealerId: string) =>
+      api.post<OutletSetupAdmin>(`/dealers/${dealerId}/setup/not-me/clear`, {}),
+    onSettled: (_data, _err, dealerId) => refreshAfterChange(qc, dealerId),
   });
 }

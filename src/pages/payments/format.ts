@@ -126,6 +126,8 @@ export interface PaymentActions {
   refund: boolean;
   /** Say a person has looked at what went wrong. */
   markChecked: boolean;
+  /** Money came outside Razorpay: record it by hand (super-admin). */
+  recordPayment: boolean;
 }
 
 /**
@@ -140,7 +142,9 @@ export interface PaymentActions {
  *    a fresh one;
  *  - looking a payment up needs something to look up at Razorpay — a cancelled
  *    one still counts, because it may have been paid after it was withdrawn;
- *  - refunding is a super-admin's alone, and only of what is still unreturned.
+ *  - refunding is a super-admin's alone, and only of what is still unreturned;
+ *  - recording money that came outside Razorpay is a super-admin's alone, and only
+ *    while the payment is `due` (one Razorpay is confirming is left to settle).
  */
 export function allowedActions(p: AdminPayment, isSuperAdmin: boolean): PaymentActions {
   const due = p.status === 'due';
@@ -151,6 +155,7 @@ export function allowedActions(p: AdminPayment, isSuperAdmin: boolean): PaymentA
     cancel: due,
     refund: isSuperAdmin && refundable(p) > 0,
     markChecked: hasOpenProblem(p),
+    recordPayment: isSuperAdmin && due,
   };
 }
 
@@ -184,7 +189,10 @@ export function statusHint(p: AdminPayment, today: string): string {
     case 'processing':
       return 'Razorpay has the payment but has not confirmed it yet. It settles by itself; Check with Razorpay looks it up now.';
     case 'paid':
-      return 'Paid in full.';
+      // Money recorded by hand may have come short (tax deducted at source).
+      return p.manual && p.manual.shortfallPaise > 0
+        ? `Paid by hand for ${formatPaise(p.manual.amountPaise)}. ${formatPaise(p.manual.shortfallPaise)} is short of the bill; the invoice is still for the whole of it.`
+        : 'Paid in full.';
     case 'cancelled':
       return 'Withdrawn before anything was paid.';
     case 'partially_refunded':
@@ -201,6 +209,10 @@ const METHOD_LABELS: Record<string, string> = {
   wallet: 'Wallet',
   emi: 'EMI',
   paylater: 'Pay later',
+  // Money recorded by hand (`paidVia: 'manual'`): the receipt's method words.
+  bank_transfer: 'Bank transfer',
+  cash: 'Cash',
+  cheque: 'Cheque',
 };
 
 /** Razorpay's method word as an admin reads it; one this app has not seen is shown as sent. */

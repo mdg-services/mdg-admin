@@ -9,46 +9,29 @@ import {
   FieldError,
   Input,
   Label,
-  Select,
   Textarea,
   useToast,
 } from '@/components/ui';
-import {
-  useChangeWatch,
-  useOnboardingConfigQuery,
-  useRecordSetupPayment,
-  useSendBill,
-  useStartServices,
-} from '@/hooks/api/useOnboarding';
+import { useChangeWatch, useOutletSetupQuery, useStartServices } from '@/hooks/api/useOnboarding';
 import { usePortalLogins } from '@/hooks/api/usePortalLogins';
-import { istTodayYmd } from '@/lib/format';
 import {
   DEFAULT_WATCH_DAYS,
   MAX_WATCH_DAYS,
   OVERRIDE_REASON_MAX,
-  PAYMENT_MODES,
-  PAYMENT_MODE_LABEL,
-  amountProblem,
-  billBody,
-  billProblem,
-  defaultDueOn,
   extendProblem,
-  formatPaise,
-  isDay,
-  paiseToRupeesText,
-  paymentBody,
-  paymentProblem,
   startBody,
   startProblem,
   watchBody,
-  ymdLabel,
 } from '@/lib/onboarding';
 import { serviceLabel } from '@/lib/serviceLabel';
-import { dealerCodeLabel, type OutletSetupAdmin, type SetupPaymentMode } from '@dk/shared';
+import { CHECKLIST_LABEL, checklistOpenKeys, missingChecklist, startNeedsReason } from '@/lib/watchHold';
+import { dealerCodeLabel, type OutletSetupAdmin } from '@dk/shared';
+
+import { SetupChecklist } from './SetupChecklist';
 
 /**
- * The four forms behind MDG's taps after the approval: the bill, the payment,
- * starting the services and extending a watch.
+ * The forms behind MDG's taps after the payment: starting the services and
+ * extending a watch. (The bill, the payment and the pause are in `BillingDialogs`.)
  *
  * They share one shape. `outlet` is the outlet the form is about, `null` is
  * closed. Each export is a thin wrapper that mounts the real form, keyed on the
@@ -85,259 +68,6 @@ function ForOutlet({ outlet }: { outlet: OutletSetupAdmin }) {
   );
 }
 
-// ── Bill sent ───────────────────────────────────────────────────────────────
-
-export function BillSentDialog({ outlet, onClose }: Props) {
-  return outlet ? <BillSentForm key={outlet.dealerId} outlet={outlet} onClose={onClose} /> : null;
-}
-
-function BillSentForm({ outlet, onClose }: FormProps) {
-  const toast = useToast();
-  const send = useSendBill();
-  const config = useOnboardingConfigQuery(true);
-  const amountId = React.useId();
-  const dueId = React.useId();
-  const [amount, setAmount] = React.useState(() => paiseToRupeesText(outlet.payment.amountPaise));
-  const [typed, setTyped] = React.useState(false);
-  const [dueOn, setDueOn] = React.useState(() => defaultDueOn(istTodayYmd()));
-  const [touched, setTouched] = React.useState(false);
-  const today = istTodayYmd();
-
-  // The flat monthly price, until the person types something else. It arrives
-  // after the form opens, so it must not overwrite what has been typed, and it
-  // is not used when the outlet already has a billed amount.
-  const price = config.data?.monthlyPricePaise;
-  const billed = outlet.payment.amountPaise;
-  React.useEffect(() => {
-    if (!typed && !billed && price) setAmount(paiseToRupeesText(price));
-  }, [typed, billed, price]);
-
-  const problem = billProblem({ amountText: amount, dueOn }, today);
-  const amountBad = touched && amountProblem(amount) !== null;
-  const dueBad = touched && (!isDay(dueOn) || dueOn < today);
-
-  async function submit() {
-    if (send.isPending) return;
-    setTouched(true);
-    if (problem) return;
-    try {
-      const body = billBody({ amountText: amount, dueOn });
-      await send.mutateAsync({ dealerId: outlet.dealerId, body });
-      toast.success(
-        `Bill recorded: ${formatPaise(body.amountPaise)}, due ${ymdLabel(body.dueOn)}.`,
-      );
-      onClose();
-    } catch (err) {
-      toast.error(errorText(err));
-    }
-  }
-
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Bill sent"
-      footerBelow="row"
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={() => void submit()} loading={send.isPending}>
-            Record bill
-          </Button>
-        </>
-      }
-    >
-      <form
-        className="grid gap-3"
-        noValidate
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
-        }}
-      >
-        <ForOutlet outlet={outlet} />
-        <div className="grid gap-3 md:grid-cols-2">
-          <div>
-            <Label htmlFor={amountId} required hint="₹, GST included">
-              Amount
-            </Label>
-            <Input
-              id={amountId}
-              inputMode="decimal"
-              autoComplete="off"
-              value={amount}
-              onChange={(e) => {
-                setTyped(true);
-                setAmount(e.target.value);
-              }}
-              placeholder="3540"
-              invalid={amountBad}
-            />
-          </div>
-          <div>
-            <Label htmlFor={dueId} required>
-              Due on
-            </Label>
-            <Input
-              id={dueId}
-              type="date"
-              value={dueOn}
-              min={today}
-              onChange={(e) => setDueOn(e.target.value)}
-              invalid={dueBad}
-            />
-          </div>
-        </div>
-        <FieldError message={touched ? (problem ?? undefined) : undefined} />
-        <p className="text-xs text-text-muted">
-          Send the bill to the dealer on WhatsApp first, then record it here. This does not message
-          them. In the app they see only the amount and the due date, never how to pay.
-        </p>
-      </form>
-    </Dialog>
-  );
-}
-
-// ── Payment received ────────────────────────────────────────────────────────
-
-export function PaymentReceivedDialog({ outlet, onClose }: Props) {
-  return outlet ? (
-    <PaymentReceivedForm key={outlet.dealerId} outlet={outlet} onClose={onClose} />
-  ) : null;
-}
-
-function PaymentReceivedForm({ outlet, onClose }: FormProps) {
-  const toast = useToast();
-  const record = useRecordSetupPayment();
-  const amountId = React.useId();
-  const dayId = React.useId();
-  const modeId = React.useId();
-  const refId = React.useId();
-  const [amount, setAmount] = React.useState(() => paiseToRupeesText(outlet.payment.amountPaise));
-  const [paidOn, setPaidOn] = React.useState(() => istTodayYmd());
-  const [mode, setMode] = React.useState<SetupPaymentMode>('upi');
-  const [reference, setReference] = React.useState('');
-  const [touched, setTouched] = React.useState(false);
-  const today = istTodayYmd();
-
-  const problem = paymentProblem({ amountText: amount, paidOn, mode, reference }, today);
-  const amountBad = touched && amountProblem(amount) !== null;
-  const dayBad = touched && (!isDay(paidOn) || paidOn > today);
-
-  async function submit() {
-    if (record.isPending) return;
-    setTouched(true);
-    if (problem) return;
-    try {
-      const body = paymentBody({ amountText: amount, paidOn, mode, reference });
-      await record.mutateAsync({ dealerId: outlet.dealerId, body });
-      toast.success(`Payment recorded: ${formatPaise(body.amountPaise)}.`);
-      onClose();
-    } catch (err) {
-      toast.error(errorText(err));
-    }
-  }
-
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Payment received"
-      footerBelow="row"
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={() => void submit()} loading={record.isPending}>
-            Record payment
-          </Button>
-        </>
-      }
-    >
-      <form
-        className="grid gap-3"
-        noValidate
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
-        }}
-      >
-        <ForOutlet outlet={outlet} />
-        {outlet.payment.amountPaise ? (
-          <p className="text-xs text-text-muted">
-            Billed {formatPaise(outlet.payment.amountPaise)}
-            {outlet.payment.dueOn ? `, due ${ymdLabel(outlet.payment.dueOn)}` : ''}.
-          </p>
-        ) : null}
-        <div className="grid gap-3 md:grid-cols-2">
-          <div>
-            <Label htmlFor={amountId} required hint="₹, what reached the bank">
-              Amount
-            </Label>
-            <Input
-              id={amountId}
-              inputMode="decimal"
-              autoComplete="off"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              invalid={amountBad}
-            />
-          </div>
-          <div>
-            <Label htmlFor={dayId} required>
-              Paid on
-            </Label>
-            <Input
-              id={dayId}
-              type="date"
-              value={paidOn}
-              max={today}
-              onChange={(e) => setPaidOn(e.target.value)}
-              invalid={dayBad}
-            />
-          </div>
-          <div>
-            <Label htmlFor={modeId} required>
-              How
-            </Label>
-            <Select
-              id={modeId}
-              value={mode}
-              onChange={(e) => setMode(e.target.value as SetupPaymentMode)}
-            >
-              {PAYMENT_MODES.map((m) => (
-                <option key={m} value={m}>
-                  {PAYMENT_MODE_LABEL[m]}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor={refId} hint="Optional">
-              Reference
-            </Label>
-            <Input
-              id={refId}
-              autoComplete="off"
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              placeholder="UTR or cheque number"
-            />
-          </div>
-        </div>
-        <FieldError message={touched ? (problem ?? undefined) : undefined} />
-        <p className="text-xs text-text-muted">
-          Only a super-admin records a payment, and every one is logged. The dealer is told it
-          arrived.
-        </p>
-      </form>
-    </Dialog>
-  );
-}
-
 // ── Start services ──────────────────────────────────────────────────────────
 
 /**
@@ -361,7 +91,14 @@ function StartServicesForm({ outlet, onClose }: FormProps) {
   const [touched, setTouched] = React.useState(false);
 
   const early = outlet.stage !== 'setup';
-  const form = { watchDays: days, reason, needsReason: early };
+  // ── watch hold ── "ready to start?", read fresh: the board only carries it for outlets at
+  // "setting up". Starting with a line open is allowed but needs a reason, as the server says.
+  const fresh = useOutletSetupQuery(outlet.dealerId);
+  const checklist = fresh.data?.checklist ?? outlet.checklist;
+  const openLines = missingChecklist(checklist);
+  const needsReason = startNeedsReason(outlet.stage, checklist);
+  const anyway = early || openLines.length > 0;
+  const form = { watchDays: days, reason, needsReason };
   const problem = startProblem(form);
 
   async function submit() {
@@ -373,7 +110,13 @@ function StartServicesForm({ outlet, onClose }: FormProps) {
       toast.success(`${dealerCodeLabel(outlet.code)}: services started.`);
       onClose();
     } catch (err) {
-      toast.error(errorText(err));
+      // The list moved under the form (a line was open when the server looked).
+      const keys = checklistOpenKeys(err);
+      toast.error(
+        keys
+          ? `Not ready yet${keys.length ? `: ${keys.map((k) => CHECKLIST_LABEL[k]).join(', ')}` : ''}. Give a reason to start anyway.`
+          : errorText(err),
+      );
     }
   }
 
@@ -383,7 +126,7 @@ function StartServicesForm({ outlet, onClose }: FormProps) {
     <Dialog
       open
       onClose={onClose}
-      title={early ? 'Start anyway' : 'Start services'}
+      title={anyway ? 'Start anyway' : 'Start services'}
       footerBelow="row"
       footer={
         <>
@@ -391,7 +134,7 @@ function StartServicesForm({ outlet, onClose }: FormProps) {
             Cancel
           </Button>
           <Button onClick={() => void submit()} loading={start.isPending}>
-            {early ? 'Start anyway' : 'Start services'}
+            {anyway ? 'Start anyway' : 'Start services'}
           </Button>
         </>
       }
@@ -414,6 +157,15 @@ function StartServicesForm({ outlet, onClose }: FormProps) {
                 : 'The bill has not been sent yet.'
               : 'Some portal logins are not saved yet.'}{' '}
             Starting now is allowed, but say why. The reason is kept with the outlet.
+          </Callout>
+        ) : null}
+
+        {/* ── watch hold ── the setup checklist; a line still open needs a reason too */}
+        <SetupChecklist dealerId={outlet.dealerId} items={checklist} />
+        {!early && openLines.length > 0 ? (
+          <Callout intent="warning">
+            The checklist is not complete. Starting now is allowed, but say why. The reason is kept
+            with the outlet.
           </Callout>
         ) : null}
 
@@ -486,7 +238,7 @@ function StartServicesForm({ outlet, onClose }: FormProps) {
           />
         </div>
 
-        {early ? (
+        {needsReason ? (
           <div>
             <Label htmlFor={reasonId} required>
               Why start now

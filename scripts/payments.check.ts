@@ -138,6 +138,8 @@ function payment(over: Partial<AdminPayment> = {}): AdminPayment {
     creditNotes: [],
     billTo: null,
     invoiceBlocker: null,
+    manual: null,
+    subscriptionPeriod: null,
     ...over,
   };
 }
@@ -231,7 +233,20 @@ describe('allowedActions', () => {
       cancel: true,
       refund: false,
       markChecked: false,
+      recordPayment: false,
     });
+  });
+
+  it('lets only a super-admin record money that came outside Razorpay, and only while it is due', () => {
+    assert.equal(allowedActions(payment(), true).recordPayment, true);
+    assert.equal(allowedActions(payment(), false).recordPayment, false);
+    assert.equal(allowedActions(payment({ status: 'processing' }), true).recordPayment, false);
+    assert.equal(allowedActions(PAID, true).recordPayment, false);
+    assert.equal(
+      allowedActions(payment({ status: 'cancelled', cancelledAt: '2026-10-24T05:00:00.000Z' }), true)
+        .recordPayment,
+      false,
+    );
   });
 
   it('cannot text a link that has not been made yet, and has nothing to look up at Razorpay', () => {

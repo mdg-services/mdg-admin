@@ -50,6 +50,7 @@ import {
   mdgTurnCount,
   memberLogin,
   milestoneRows,
+  needsSuperAdminNote,
   PAYMENT_MODES,
   SOURCE_LABEL,
   billingLine,
@@ -234,14 +235,14 @@ describe('what each stage offers', () => {
       'start_anyway',
       'close',
     ]);
-    assert.deepEqual(ids({}), ['record_payment', 'start_anyway', 'close']);
+    assert.deepEqual(ids({}), ['record_payment', 'send_bill', 'start_anyway', 'close']);
     assert.deepEqual(ids({ stage: 'logins' }), ['start_anyway', 'close']);
     assert.deepEqual(ids({ stage: 'setup' }), ['start_services', 'close']);
-    assert.deepEqual(ids({ stage: 'watch' }), ['end_watch', 'extend_watch']);
+    assert.deepEqual(ids({ stage: 'watch' }), ['end_watch', 'extend_watch', 'pause_billing']);
     assert.deepEqual(ids({ stage: 'sign_in' }), ['close']);
     assert.deepEqual(ids({ stage: 'services' }), ['close']);
     assert.deepEqual(ids({ stage: 'billing' }), ['close']);
-    assert.deepEqual(ids({ stage: 'live' }), []);
+    assert.deepEqual(ids({ stage: 'live' }), ['pause_billing']);
     assert.deepEqual(ids({ stage: 'lost' }), []);
   });
 
@@ -255,7 +256,7 @@ describe('what each stage offers', () => {
   });
 
   it('keeps the payment for a super-admin', () => {
-    assert.deepEqual(ids({}, false), ['close']);
+    assert.deepEqual(ids({}, false), ['send_bill', 'close']);
     assert.deepEqual(ids({ payment: { ...outlet().payment, state: 'not_sent' } }, false), [
       'send_bill',
       'close',
@@ -606,5 +607,96 @@ describe('a member’s sign-in name', () => {
     assert.equal(memberLogin({ email: '', phone: '9876543210' }), '9876543210');
     assert.equal(memberLogin({ email: undefined, phone: ' 9876543210 ' }), '9876543210');
     assert.equal(memberLogin({ email: '', phone: '' }), '');
+  });
+});
+
+// ── billing: Send bill, Record payment, the pause (workstream A) ──────────────
+
+describe('billing actions', () => {
+  const hold = { at: '2026-10-22T20:00:00.000Z', byName: 'Asha', reason: 'not paying' };
+  const ids = (o: Partial<OutletSetupAdmin>, superAdmin = true) =>
+    availableActions(outlet(o), superAdmin).map((a) => a.id);
+
+  it('words the two taps as what they do', () => {
+    const unsent = stageActions(outlet({ payment: { ...outlet().payment, state: 'not_sent' } }));
+    assert.equal(unsent.find((a) => a.id === 'send_bill')?.label, 'Send bill…');
+    assert.equal(unsent.find((a) => a.id === 'send_bill')?.primary, true);
+    const sent = stageActions(outlet());
+    assert.equal(sent.find((a) => a.id === 'record_payment')?.label, 'Record payment…');
+    // once it is out the bill can still be sent again, but that is never the primary button
+    assert.equal(sent.find((a) => a.id === 'send_bill')?.label, 'Send bill again…');
+    assert.equal(sent.find((a) => a.id === 'send_bill')?.primary, false);
+  });
+
+  it('offers the pause to a super-admin only, while watching or live', () => {
+    assert.deepEqual(ids({ stage: 'live' }), ['pause_billing']);
+    assert.deepEqual(ids({ stage: 'live' }, false), []);
+    assert.deepEqual(ids({ stage: 'watch' }, false), ['end_watch', 'extend_watch']);
+    for (const stage of [
+      'sign_in',
+      'services',
+      'billing',
+      'payment',
+      'logins',
+      'setup',
+      'lost',
+    ] as const) {
+      assert.ok(!ids({ stage }).includes('pause_billing'), stage);
+    }
+    assert.equal(stageActions(outlet({ stage: 'live' }))[0]!.superAdminOnly, true);
+    assert.equal(stageActions(outlet({ stage: 'live' }))[0]!.primary, false);
+  });
+
+  it('offers resume instead of pause while the outlet is paused, and says who may', () => {
+    const paused = { subscription: { billingHold: hold } };
+    assert.deepEqual(ids({ stage: 'live', ...paused }), ['resume_billing']);
+    assert.deepEqual(ids({ stage: 'watch', ...paused }), [
+      'end_watch',
+      'extend_watch',
+      'resume_billing',
+    ]);
+    assert.deepEqual(ids({ stage: 'live', ...paused }, false), []);
+    assert.equal(
+      needsSuperAdminNote(outlet({ stage: 'live', ...paused }), false),
+      'The services are paused for non-payment. A super-admin resumes them.',
+    );
+    assert.equal(needsSuperAdminNote(outlet({ stage: 'live', ...paused }), true), null);
+    assert.equal(needsSuperAdminNote(outlet({ stage: 'live' }), false), null);
+  });
+
+  it('names the bill by its number, and how a Razorpay payment came', () => {
+    const base = outlet().payment;
+    assert.equal(
+      paymentLine({ ...base, paymentNumber: 'MDG-2026-00012' }),
+      'MDG-2026-00012 · ₹3,540 billed, due 2 Nov 2026',
+    );
+    const paid = {
+      ...base,
+      state: 'paid' as const,
+      paidOn: '2026-10-30',
+      mode: null,
+      reference: null,
+      recordedByName: null,
+      paymentNumber: 'MDG-2026-00012',
+    };
+    assert.equal(
+      paymentLine({ ...paid, paidVia: 'link' }),
+      'MDG-2026-00012 · ₹3,540 paid on 30 Oct 2026 · by Razorpay link',
+    );
+    assert.equal(
+      paymentLine({ ...paid, paidVia: 'checkout' }),
+      'MDG-2026-00012 · ₹3,540 paid on 30 Oct 2026 · by Razorpay on the website',
+    );
+    // money recorded by hand keeps its own words
+    assert.equal(
+      paymentLine({
+        ...paid,
+        paidVia: 'manual',
+        mode: 'bank',
+        reference: 'UTR 1',
+        recordedByName: 'Asha',
+      }),
+      'MDG-2026-00012 · ₹3,540 paid on 30 Oct 2026 · by Bank transfer, UTR 1 · recorded by Asha',
+    );
   });
 });

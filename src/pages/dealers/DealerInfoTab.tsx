@@ -1,4 +1,4 @@
-import { ChevronDown, KeyRound, MessageSquare } from 'lucide-react';
+import { ChevronDown, KeyRound } from 'lucide-react';
 import * as React from 'react';
 
 import {
@@ -13,6 +13,7 @@ import {
   Skeleton,
   StatusChip,
 } from '@/components/ui';
+import { OldOnboardingRecord } from '@/features/onboarding/OldOnboardingRecord';
 import { SetupCard } from '@/features/onboarding/SetupCard';
 import { useDealerAuditQuery } from '@/hooks/api/useDealerAudit';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -54,29 +55,6 @@ export function DealerInfoTab({ dealer, setup = null, onOpenPasswordVault }: Pro
   return (
     <div className="grid gap-3 md:gap-4">
       {setupOnTop && setup ? <SetupCard setup={setup} /> : null}
-      {!setup && dealer.status === 'ONBOARDING' && !dealer.archivedAt ? (
-        <Card>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-text">
-                Onboarding in progress
-              </p>
-              <p className="text-sm text-text-muted">
-                Switch to the Onboarding tab to advance the dealer through the
-                remaining steps.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-text-muted">
-              <MessageSquare width={14} height={14} />
-              <span>
-                {dealer.onboarding.completedStepCount} of{' '}
-                {dealer.onboarding.steps.length || 8} steps complete
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
       {/* NO TAX CARD HERE ANY MORE. GST and PAN are catalog fields on the
           outlet file below, under "Tax and registration", and they read from
           the SAME `Dealer.gst` / `Dealer.pan` this card used to print. Two
@@ -135,9 +113,10 @@ export function DealerInfoTab({ dealer, setup = null, onOpenPasswordVault }: Pro
 
         {setupInGrid && setup ? <SetupCard setup={setup} /> : null}
 
-        {/* The old payment note, for outlets from before onboarding v2. A new
-            outlet's bill and payment are on its Setup card. */}
-        {setup && !isArchived ? null : <LegacyPaymentCard dealer={dealer} />}
+        {/* The old seven steps and the payment note step 5 stored, read-only, for an
+            outlet from before onboarding v2. A new outlet's bill and payment are on
+            its Setup card and it has no steps. */}
+        <OldOnboardingRecord dealer={dealer} />
 
         {/* Every login — the dealer's own, and the IRAS/SDMS portal ones — moved
             to its own tab. An archived dealer cannot reach that tab (the strip
@@ -275,41 +254,6 @@ function AuditAccordion({ dealerId }: { dealerId: string }) {
           )}
         </div>
       ) : null}
-    </Card>
-  );
-}
-
-/** "Payment — recorded at step 5": the old seven-step flow's note, for outlets from before onboarding v2. */
-function LegacyPaymentCard({ dealer }: { dealer: Dealer }) {
-  return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>Payment</CardTitle>
-          <CardSubtitle>Recorded at step 5.</CardSubtitle>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <KeyValueList
-          items={[
-            {
-              key: 'received',
-              label: 'Received',
-              value: dealer.paymentReceivedAt
-                ? formatDateTime(dealer.paymentReceivedAt)
-                : 'Not yet',
-            },
-            {
-              key: 'note',
-              label: 'Note',
-              value: dealer.paymentNote ?? 'No note',
-              // A free-text note is the one field here that runs to a
-              // sentence; `block` gives it the full width at every size.
-              block: true,
-            },
-          ]}
-        />
-      </CardContent>
     </Card>
   );
 }

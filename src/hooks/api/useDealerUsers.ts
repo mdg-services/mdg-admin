@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import type { MemberWithOutlets } from '@/lib/outlets';
 import type { User, UserRole, UserStatus } from '@dk/shared';
 
 export const dealerUsersKey = (dealerId: string | undefined) =>
@@ -9,7 +10,7 @@ export const dealerUsersKey = (dealerId: string | undefined) =>
 export function useDealerUsers(dealerId: string | undefined) {
   return useQuery({
     queryKey: dealerUsersKey(dealerId),
-    queryFn: () => api.get<User[]>(`/dealers/${dealerId}/users`),
+    queryFn: () => api.get<MemberWithOutlets[]>(`/dealers/${dealerId}/users`),
     enabled: !!dealerId,
     staleTime: 30_000,
   });

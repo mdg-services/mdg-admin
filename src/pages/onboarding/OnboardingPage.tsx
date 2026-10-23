@@ -16,8 +16,12 @@ import {
 import { ContactLinks } from '@/features/intake/ContactLinks';
 import { ApproveDialog } from '@/features/onboarding/ApproveDialog';
 import { CloseDialog } from '@/features/onboarding/CloseDialog';
+import { HeldMessagesSection } from '@/features/onboarding/HeldMessagesSection';
+import { LogCallDialog, type CallTarget } from '@/features/onboarding/LogCallDialog';
+import { MonthlyPriceTool } from '@/features/onboarding/MonthlyPriceTool';
 import { OnboardingFunnel } from '@/features/onboarding/OnboardingFunnel';
 import { PasswordHelpSection } from '@/features/onboarding/PasswordHelpSection';
+import { OutletFollowUpLines } from '@/features/onboarding/SetupFollowUp';
 import { StageActions } from '@/features/onboarding/StageActions';
 import { useCloseRegistration, useOnboardingBoardQuery } from '@/hooks/api/useOnboarding';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -38,6 +42,7 @@ import {
   ymdLabel,
   type RegistrationRow,
 } from '@/lib/onboarding';
+import { lastCallLine } from '@/lib/onboardingCalls';
 import { serviceLabel } from '@/lib/serviceLabel';
 import { ageSince } from '@/pages/overview/format';
 import { dealerCodeLabel, type OnboardingBoardRow, type OnboardingBoardView } from '@dk/shared';
@@ -91,6 +96,8 @@ export function OnboardingPage() {
   const closeRegistration = useCloseRegistration();
   const [approving, setApproving] = React.useState<RegistrationRow | null>(null);
   const [closing, setClosing] = React.useState<RegistrationRow | null>(null);
+  // ── reminders and calls ──
+  const [calling, setCalling] = React.useState<CallTarget | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
 
   // Ages are relative ("3h 5m ago"); keep them honest on a page left open all morning.
@@ -133,6 +140,20 @@ export function OnboardingPage() {
         <Button size="sm" variant="ghost" onClick={() => setClosing(r)}>
           Close…
         </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() =>
+            setCalling({
+              kind: 'registration',
+              registrationId: r.registrationId,
+              name: r.name,
+              sapCode: r.sapCode,
+            })
+          }
+        >
+          Log call…
+        </Button>
       </ActionRow>
     ) : (
       <p className="text-xs text-text-muted">A super-admin approves registrations.</p>
@@ -162,10 +183,14 @@ export function OnboardingPage() {
       />
 
       {q.data ? <OnboardingFunnel funnel={q.data.funnel} /> : null}
+      <MonthlyPriceTool />
 
       {view === 'open' && q.data ? (
         <PasswordHelpSection rows={q.data.passwordHelp} now={now} />
       ) : null}
+
+      {/* ── watch hold ── messages held for a new outlet's first days: send or drop */}
+      {view === 'open' ? <HeldMessagesSection now={now} /> : null}
 
       <SegmentedControl<OnboardingBoardView>
         aria-label="Which outlets"
@@ -237,6 +262,22 @@ export function OnboardingPage() {
         cardActions={(row) => actions(row, false)}
       />
 
+      <LogCallDialog
+        target={calling}
+        onClose={() => setCalling(null)}
+        // "Not interested" offers to close the registration, which only a
+        // super-admin may do (an outlet's own Close sits on its row).
+        {...(isSuperAdmin
+          ? {
+              onNotInterested: (t: CallTarget) => {
+                const row = rows.find(
+                  (x) => x.kind === 'registration' && t.kind === 'registration' && x.registrationId === t.registrationId,
+                );
+                if (row) setClosing(row as RegistrationRow);
+              },
+            }
+          : {})}
+      />
       <ApproveDialog row={approving} onClose={() => setApproving(null)} />
       <CloseDialog
         open={!!closing}
@@ -291,6 +332,9 @@ function RegistrationCell({ r, now }: { r: RegistrationRow; now: number }) {
       <div className="mt-0.5">
         <ContactLinks mobile={r.mobile} />
       </div>
+      {r.lastCall ? (
+        <p className="mt-0.5 text-xs text-text-subtle">{lastCallLine(r.lastCall)}</p>
+      ) : null}
       {/* The table has its own column for this; a phone card has no room for one. */}
       <p className="mt-0.5 text-xs text-text-subtle md:hidden">
         Sent {agoLabel(ageSince(r.submittedAt, now))}
@@ -360,6 +404,7 @@ function StateCell({ row, now }: { row: OnboardingBoardRow; now: number }) {
       {o.stage === 'live' ? (
         <span className="text-xs text-text-subtle">{paymentLine(o.payment)}</span>
       ) : null}
+      <OutletFollowUpLines outlet={o} />
     </span>
   );
 }

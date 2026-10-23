@@ -10,7 +10,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check:intake": "npx tsx --test scripts/intake.check.ts",
     "check:onboarding": "npx tsx --test scripts/onboarding.check.ts",
+    "check:onboarding-calls": "npx tsx --test scripts/onboardingCalls.check.ts",
     "check:payments": "npx tsx --test scripts/payments.check.ts",
+    "check:billing": "npx tsx --test scripts/billing.check.ts",
+    "check:watch-hold": "npx tsx --test scripts/watchHold.check.ts",
+    "check:outlets": "npx tsx --test scripts/outlets.check.ts",
+    "check:guide-videos": "npx tsx --test scripts/guideVideos.check.ts",
+    "check:chat-videos": "npx tsx --test scripts/chatGuideVideos.check.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""

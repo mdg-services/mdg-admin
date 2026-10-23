@@ -9,12 +9,12 @@ import {
   CardTitle,
   KeyValueList,
 } from '@/components/ui';
+import { istTodayYmd } from '@/lib/format';
 import { istStamp } from '@/lib/intake';
 import {
   SOURCE_LABEL,
   billingLine,
   milestoneRows,
-  paymentLine,
   servicesLine,
   stageIntent,
   stageLabel,
@@ -23,6 +23,9 @@ import {
 import { serviceLabel } from '@/lib/serviceLabel';
 import { GST_STATES, type OutletSetupAdmin } from '@dk/shared';
 
+import { billingItems } from './billingItems';
+import { SetupFollowUp } from './SetupFollowUp';
+import { SetupWatch } from './SetupWatch';
 import { StageActions } from './StageActions';
 
 /**
@@ -48,6 +51,10 @@ export function SetupCard({ setup, now = Date.now() }: { setup: OutletSetupAdmin
       </CardHeader>
       <CardContent className="grid gap-4">
         <StageActions outlet={setup} />
+        {/* ── reminders and calls ── */}
+        <SetupFollowUp setup={setup} />
+        {/* ── watch hold ── held messages, the extend-or-end prompt, the checklist */}
+        <SetupWatch setup={setup} now={now} />
 
         <KeyValueList
           className="select-text"
@@ -75,7 +82,7 @@ export function SetupCard({ setup, now = Date.now() }: { setup: OutletSetupAdmin
               ),
               block: true,
             },
-            { key: 'bill', label: 'Bill', value: paymentLine(setup.payment), block: true },
+            ...billingItems(setup, istTodayYmd()),
             {
               key: 'logins',
               label: 'Portal logins',

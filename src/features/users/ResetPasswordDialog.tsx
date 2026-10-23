@@ -14,6 +14,8 @@ export interface ResetPasswordTarget {
   /** Empty for a dealer member who registered with a mobile number only. */
   email: string;
   phone?: string;
+  /** The person's other outlets: they share one password, so the reset reaches them too. */
+  alsoRuns?: string[];
 }
 
 export interface ResetPasswordDialogProps {
@@ -101,7 +103,11 @@ export function ResetPasswordDialog({
       title="Reset password"
       description={
         person
-          ? `Set a new password for ${person.name}${memberLogin(person) ? ` (${memberLogin(person)})` : ''}.`
+          ? `Set a new password for ${person.name}${memberLogin(person) ? ` (${memberLogin(person)})` : ''}.${
+              person.alsoRuns?.length
+                ? ` They also run ${person.alsoRuns.join(', ')} on the same password, so it changes there too.`
+                : ''
+            }`
           : undefined
       }
       footer={

@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Callout,
+  Checkbox,
   Copyable,
   Dialog,
   FieldError,
@@ -16,12 +17,17 @@ import {
 } from '@/components/ui';
 import { useNextDealerCodeQuery } from '@/hooks/api/useDealers';
 import { useApproveRegistration } from '@/hooks/api/useOnboarding';
+import { useRegistrationLinkOptionQuery } from '@/hooks/api/useOutletLink';
 import { copyText } from '@/lib/clipboard';
 import { agoLabel, dialHref, istStamp, phoneLabel } from '@/lib/intake';
 import type { RegistrationRow } from '@/lib/onboarding';
+import { LINK_CHOICE_HINT, canApprove as mayApprove, linkChoiceLabel, linkedResultLine } from '@/lib/outlets';
 import { ageSince } from '@/pages/overview/format';
 import { dealerCodeLabel, type ApproveRegistrationResult } from '@dk/shared';
 import { dealerCodeSchema } from '@dk/shared/schemas';
+
+/** The owner a registration was added to, kept for the result screen. */
+type LinkedTo = { name: string; codes: string[] };
 
 /**
  * Approve one registration: the first of MDG's four taps.
@@ -56,6 +62,10 @@ export function ApproveDialog({
   const [typed, setTyped] = React.useState(false);
   const [result, setResult] = React.useState<ApproveRegistrationResult | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
+  // ── one person, several outlets ── ticked: add this as another outlet of the owner on this number
+  const [link, setLink] = React.useState(false);
+  // The owner the result screen names, kept past the refresh that follows an approval.
+  const [linkedTo, setLinkedTo] = React.useState<LinkedTo | null>(null);
 
   // Fresh for every registration.
   React.useEffect(() => {
@@ -63,6 +73,8 @@ export function ApproveDialog({
     setTyped(false);
     setResult(null);
     setNow(Date.now());
+    setLink(false);
+    setLinkedTo(null);
   }, [row?.registrationId]);
 
   // Prefill with the next free code, unless the person has already typed one.
@@ -76,14 +88,30 @@ export function ApproveDialog({
       ? 'Use the number then the region letter, e.g. 15E.'
       : null;
   const blocked = row?.alreadyClient ?? null;
-  const canApprove = !!row && !blocked && parsed.success && !approve.isPending;
+  // Who it could be added to, asked only for a registration that is already a client.
+  const linkQuery = useRegistrationLinkOptionQuery(row?.registrationId, !!blocked && !result);
+  const linkOwner = linkQuery.data?.owner ?? null;
+  const linking = !!blocked && !!linkOwner && link;
+  const canApprove =
+    !!row &&
+    mayApprove({
+      alreadyClient: !!blocked,
+      linking,
+      codeValid: parsed.success,
+      pending: approve.isPending,
+    });
 
   async function submit() {
     if (!row || !canApprove || !parsed.success) return;
     try {
       // The code on the screen, as the person saw it. If somebody else took it meanwhile the
       // server answers 409 and says so.
-      const done = await approve.mutateAsync({ id: row.registrationId, code: parsed.data });
+      const done = await approve.mutateAsync({
+        id: row.registrationId,
+        code: parsed.data,
+        ...(linking && linkOwner ? { linkToUserId: linkOwner.userId } : {}),
+      });
+      if (linking && linkOwner) setLinkedTo({ name: linkOwner.name, codes: linkOwner.codes });
       setResult(done);
     } catch (err) {
       toast.error(err instanceof Error && err.message ? err.message : 'That did not go through.');
@@ -116,7 +144,7 @@ export function ApproveDialog({
       }
     >
       {row && result ? (
-        <ApprovedResult row={row} result={result} />
+        <ApprovedResult row={row} result={result} linkedTo={linkedTo} />
       ) : row ? (
         <form
           className="grid gap-3"
@@ -149,9 +177,25 @@ export function ApproveDialog({
                 onClick={onClose}
               >
                 Open {dealerCodeLabel(blocked.code)}
-              </Link>{' '}
-              and link a second outlet by hand.
+              </Link>
+              .{' '}
+              {linkQuery.isLoading
+                ? 'Checking whether it can be added to their account…'
+                : linkOwner
+                  ? null
+                  : (linkQuery.data?.reason ?? 'It cannot be added as another outlet from here.')}
             </Callout>
+          ) : null}
+
+          {/* ── one person, several outlets ── offered only when the number is an owner we already serve */}
+          {blocked && linkOwner ? (
+            <Checkbox
+              checked={link}
+              onChange={(e) => setLink(e.target.checked)}
+              label={linkChoiceLabel(linkOwner)}
+              hint={LINK_CHOICE_HINT}
+              align="start"
+            />
           ) : null}
 
           <div>
@@ -168,7 +212,7 @@ export function ApproveDialog({
               placeholder="e.g. 15E"
               autoCapitalize="characters"
               autoComplete="off"
-              disabled={!!blocked}
+              disabled={!!blocked && !linking}
               invalid={!!codeProblem}
             />
             <FieldError message={codeProblem ?? undefined} />
@@ -182,8 +226,9 @@ export function ApproveDialog({
           </div>
 
           <p className="text-xs text-text-muted">
-            This makes the outlet and its owner login from the registration, and sends the WhatsApp
-            welcome. The owner signs in with their mobile number and the password they chose.
+            {linking
+              ? 'This makes the outlet and a login for the same owner, with their existing password. No welcome is sent by itself: you get the words to send.'
+              : 'This makes the outlet and its owner login from the registration, and sends the WhatsApp welcome. The owner signs in with their mobile number and the password they chose.'}
           </p>
         </form>
       ) : null}
@@ -195,9 +240,12 @@ export function ApproveDialog({
 function ApprovedResult({
   row,
   result,
+  linkedTo,
 }: {
   row: RegistrationRow;
   result: ApproveRegistrationResult;
+  /** Set when the outlet was added to an owner we already serve (`lib/outlets.ts`). */
+  linkedTo: LinkedTo | null;
 }) {
   const toast = useToast();
   const [copied, setCopied] = React.useState(false);
@@ -222,6 +270,7 @@ function ApprovedResult({
         </Link>
         . The login for the owner is made.
       </p>
+      {linkedTo ? <p className="text-sm text-text">{linkedResultLine(linkedTo, dealerCodeLabel(result.code))}</p> : null}
 
       {welcome.sent ? (
         <div className="flex items-start gap-2 rounded-md border border-success bg-success-soft p-2.5 text-sm text-success-strong md:text-success">
@@ -287,6 +336,10 @@ function ApprovedResult({
             it at their first sign-in. It is not shown again.
           </p>
         </div>
+      ) : linkedTo ? (
+        <p className="text-xs text-text-muted">
+          Nothing to pass on: the password is the one they already use, and the app shows both outlets.
+        </p>
       ) : (
         <p className="text-xs text-text-muted">
           They sign in with their mobile number and the password they chose when they registered.

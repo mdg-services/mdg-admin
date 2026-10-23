@@ -20,6 +20,7 @@ import {
 import { Input, Menu, MenuItem } from '@/components/ui';
 import { useAlertsLive } from '@/hooks/api/useAdminAlerts';
 import { useTicketsLive } from '@/hooks/api/useTickets';
+import { useHeldMessagesLive } from '@/hooks/useHeldMessagesLive';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useNavBadges } from '@/hooks/useNavBadges';
@@ -101,6 +102,7 @@ export function AppShell() {
   useTicketsLive(); // ...and the Tickets badge, and any open thread's strip
   useWebsiteIntakeLive(); // ...and the Grievances and Registrations badges
   useOutletSetupLive(); // ...and the Onboarding page, and any open outlet's Setup card
+  useHeldMessagesLive(); // ...and the held-message queue, and the held count on each Setup card
   useWhatsAppLive(); // ...and the WhatsApp badge, toasts, sound and tab title
   const admin = useAuthStore((s) => s.admin);
   const logout = useAuthStore((s) => s.logout);

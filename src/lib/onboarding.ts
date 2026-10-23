@@ -26,6 +26,7 @@ import type {
 } from '@dk/shared';
 
 import type { Intent } from './statusIntent';
+import { watchNeedsDecision } from './watchHold';
 
 // ── Defaults the dialogs start from ─────────────────────────────────────────
 
@@ -47,7 +48,10 @@ export const OVERRIDE_REASON_MAX = 500;
 
 // ── Stage words ─────────────────────────────────────────────────────────────
 
-type StageFacts = Pick<OutletSetupAdmin, 'stage' | 'payment'>;
+type StageFacts = Pick<OutletSetupAdmin, 'stage' | 'payment'> & {
+  /** Only the hold matters here: pausing and resuming depend on whether there is one. */
+  subscription?: Pick<OutletSetupAdmin['subscription'], 'billingHold'>;
+};
 
 /**
  * What the outlet is doing now, in a phrase that fits after "Onboarding ·" and
@@ -155,9 +159,12 @@ export function addDays(ymd: string, days: number): string {
   return new Date(Date.UTC(y!, m! - 1, d! + days)).toISOString().slice(0, 10);
 }
 
-/** The due date a bill starts with: ten days after `today` (an IST `YYYY-MM-DD`). */
-export function defaultDueOn(today: string): string {
-  return addDays(today, DEFAULT_DUE_DAYS);
+/**
+ * The due date a bill starts with: `days` after `today` (an IST `YYYY-MM-DD`) —
+ * ten, as the Terms say, unless the server's setting says otherwise.
+ */
+export function defaultDueOn(today: string, days: number = DEFAULT_DUE_DAYS): string {
+  return addDays(today, days);
 }
 
 /** A real calendar day as the API wants it: `YYYY-MM-DD`, and one that exists. */
@@ -185,6 +192,8 @@ export function setupChip(
   const intent = stageIntent(o);
   if (o.stage === 'lost') return { text: 'Onboarding · closed', intent };
   if (o.stage === 'watch') {
+    // ── watch hold ── the days ran out but a message was dropped: a person decides.
+    if (watchNeedsDecision(o, now)) return { text: 'Watch over · end or extend', intent: 'warning' };
     const ends = istDay(o.milestones.watchUntil);
     return { text: ends ? `Watching · ends ${ends}` : 'Watching', intent };
   }
@@ -201,6 +210,8 @@ export type StageActionId =
   | 'start_anyway'
   | 'end_watch'
   | 'extend_watch'
+  | 'pause_billing'
+  | 'resume_billing'
   | 'close';
 
 export interface StageActionSpec {
@@ -216,8 +227,10 @@ export interface StageActionSpec {
 /**
  * The buttons an outlet's row offers, primary first.
  *
- * - bill not sent: "Bill sent…" records that the team sent it (outside the app)
- * - bill sent: "Payment received…", super-admin only, as the plan says
+ * - bill not sent: "Send bill…" raises it as a payment and sends it (outside the app)
+ * - bill sent: "Record payment…", super-admin only, as the plan says; and "Send bill
+ *   again…" to resend it or replace it with another amount
+ * - watching or live: "Pause for non-payment…" / "Resume services", super-admin only
  * - ready to set up: "Start services…"
  * - watching: "End watch" or "Extend…"
  * - any open stage before services start: "Close…"
@@ -233,8 +246,11 @@ export function stageActions(o: StageFacts): StageActionSpec[] {
     out.push({ id, label, primary, superAdminOnly });
   switch (o.stage) {
     case 'payment':
-      if (o.payment.state === 'not_sent') add('send_bill', 'Bill sent…', true);
-      else add('record_payment', 'Payment received…', true, true);
+      if (o.payment.state === 'not_sent') add('send_bill', 'Send bill…', true);
+      else {
+        add('record_payment', 'Record payment…', true, true);
+        add('send_bill', 'Send bill again…', false);
+      }
       // Starting before the money is in skips the one step only a super-admin
       // may confirm, so only a super-admin may do it from here.
       add('start_anyway', 'Start anyway…', false, true);
@@ -252,6 +268,12 @@ export function stageActions(o: StageFacts): StageActionSpec[] {
     default:
       break;
   }
+  // Billing's own lever (phase 9): stopping the services of an outlet that has
+  // started and is not paying, and giving them back. Never the primary button.
+  if (o.stage === 'watch' || o.stage === 'live') {
+    if (o.subscription?.billingHold) add('resume_billing', 'Resume services', false, true);
+    else add('pause_billing', 'Pause for non-payment…', false, true);
+  }
   // Not once services have started: that outlet is a client, and ending it is an
   // archive from the dealer page (the server refuses "lost" there too).
   if (isOpenStage(o.stage) && o.stage !== 'watch') add('close', 'Close…', false);
@@ -268,6 +290,8 @@ export function needsSuperAdminNote(o: StageFacts, isSuperAdmin: boolean): strin
   if (isSuperAdmin) return null;
   if (o.stage === 'payment' && o.payment.state === 'sent')
     return 'A super-admin records the payment.';
+  if ((o.stage === 'watch' || o.stage === 'live') && o.subscription?.billingHold)
+    return 'The services are paused for non-payment. A super-admin resumes them.';
   return null;
 }
 
@@ -560,17 +584,30 @@ export const SOURCE_LABEL: Record<SetupSource, string> = {
   'campaign-auto': 'Approved automatically (a number our campaign messaged)',
 };
 
+/** How a Razorpay payment came in, for the bill line. */
+const PAID_VIA_LABEL = {
+  link: 'Razorpay link',
+  checkout: 'Razorpay on the website',
+  manual: 'hand',
+} as const satisfies Record<NonNullable<OutletSetupAdmin['payment']['paidVia']>, string>;
+
 /** The bill in one line: what stage of its life it is in, with the figures that stage has. */
 export function paymentLine(p: OutletSetupAdmin['payment']): string {
   if (p.state === 'not_sent') return 'Bill not sent yet';
   const amount = formatPaise(p.amountPaise);
-  if (p.state === 'sent') return `${amount} billed${p.dueOn ? `, due ${ymdLabel(p.dueOn)}` : ''}`;
+  // The bill's own number, once it is a payment row (the receipt and the Payments page use it).
+  const number = p.paymentNumber ? `${p.paymentNumber} · ` : '';
+  if (p.state === 'sent')
+    return `${number}${amount} billed${p.dueOn ? `, due ${ymdLabel(p.dueOn)}` : ''}`;
+  // How it came: money recorded by hand names its mode and reference and who
+  // recorded it; a Razorpay payment names the road (the link, or the website).
   const how = [p.mode ? PAYMENT_MODE_LABEL[p.mode] : '', p.reference ?? '']
     .filter(Boolean)
     .join(', ');
+  const road = !how && p.paidVia ? `by ${PAID_VIA_LABEL[p.paidVia]}` : how ? `by ${how}` : '';
   return [
-    `${amount} paid${p.paidOn ? ` on ${ymdLabel(p.paidOn)}` : ''}`,
-    how ? `by ${how}` : '',
+    `${number}${amount} paid${p.paidOn ? ` on ${ymdLabel(p.paidOn)}` : ''}`,
+    road,
     p.recordedByName ? `recorded by ${p.recordedByName}` : '',
   ]
     .filter(Boolean)

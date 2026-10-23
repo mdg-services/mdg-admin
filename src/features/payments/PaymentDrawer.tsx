@@ -23,9 +23,11 @@ import {
   useResendPaymentLink,
 } from '@/hooks/api/usePayments';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { manualDrawerLines } from '@/lib/billing';
 import { copyText } from '@/lib/clipboard';
 import { formatYmd, istTodayYmd } from '@/lib/format';
 import { istStamp } from '@/lib/intake';
+import { PAYMENT_MODE_LABEL } from '@/lib/onboarding';
 import {
   ATTEMPT_LABELS,
   REFUND_LABELS,
@@ -60,6 +62,7 @@ import type { AdminPayment } from '@dk/shared';
 import { BillToDialog } from './BillToDialog';
 import { CancelPaymentDialog } from './CancelPaymentDialog';
 import { BillToCard, CreditNotesBody, InvoiceBody } from './GstSections';
+import { RecordPaymentDialog } from './RecordPaymentDialog';
 import { RefundPaymentDialog } from './RefundPaymentDialog';
 
 /** The same 44px-on-a-phone link as the other pages' contact links. */
@@ -136,6 +139,7 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
   const checked = useMarkPaymentProblemChecked();
   const [cancelling, setCancelling] = React.useState(false);
   const [refunding, setRefunding] = React.useState(false);
+  const [recording, setRecording] = React.useState(false);
   const [editingBillTo, setEditingBillTo] = React.useState(false);
   // The link, shown for copying by hand — only when this device refused to copy it for us.
   const [manualLink, setManualLink] = React.useState<string | null>(null);
@@ -145,6 +149,7 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
     setManualLink(null);
     setCancelling(false);
     setRefunding(false);
+    setRecording(false);
     setEditingBillTo(false);
   }, [p.id]);
 
@@ -221,6 +226,22 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
             key: 'how',
             label: 'How it was paid',
             value: `${methodLabel(p.method)} · ${channelLabel(p.paidVia)}`,
+          },
+        ]
+      : []),
+    // Money recorded by hand: what came, the bank's reference, who recorded it, any shortfall.
+    ...(p.manual
+      ? manualDrawerLines(p.manual, PAYMENT_MODE_LABEL[p.manual.mode]).map((l) => ({
+          ...l,
+          block: true,
+        }))
+      : []),
+    ...(p.subscriptionPeriod
+      ? [
+          {
+            key: 'period',
+            label: 'Pays for',
+            value: `${formatYmd(p.subscriptionPeriod.from)} to ${formatYmd(p.subscriptionPeriod.to)}`,
           },
         ]
       : []),
@@ -340,7 +361,7 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
         </div>
       ) : null}
 
-      {can.copyLink || can.sendSms || can.check || can.cancel || can.refund ? (
+      {can.copyLink || can.sendSms || can.check || can.cancel || can.refund || can.recordPayment ? (
         <div className="grid gap-2">
           <ActionRow below="wrap" align="start">
             {can.copyLink ? (
@@ -373,6 +394,16 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
                 onClick={() => void onCheck()}
               >
                 Check with Razorpay
+              </Button>
+            ) : null}
+            {can.recordPayment ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => setRecording(true)}
+              >
+                Record payment received…
               </Button>
             ) : null}
             {can.cancel ? (
@@ -509,6 +540,10 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
 
       <BillToDialog payment={editingBillTo ? p : null} onClose={() => setEditingBillTo(false)} />
       <CancelPaymentDialog payment={cancelling ? p : null} onClose={() => setCancelling(false)} />
+      <RecordPaymentDialog
+        target={recording ? { kind: 'payment', payment: p } : null}
+        onClose={() => setRecording(false)}
+      />
       <RefundPaymentDialog payment={refunding ? p : null} onClose={() => setRefunding(false)} />
     </div>
   );

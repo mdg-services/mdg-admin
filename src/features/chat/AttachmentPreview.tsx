@@ -129,12 +129,15 @@ function VoiceMessage({ attachment }: { attachment: Attachment }) {
  * A guide video from MDG, played inline: small and portrait (9:16), poster is
  * the first frame (`#t=0.1`), nothing downloads until it is played beyond the
  * metadata. Not draggable into the long-press menu: controls are the native ones.
+ * A video the assistant (or an admin) sent from a chapter opens there, as it does
+ * in the dealer's chat (`startSec`).
  */
 function VideoMessage({ attachment }: { attachment: Attachment }) {
+  const from = attachment.startSec && attachment.startSec > 0 ? attachment.startSec : 0.1;
   return (
     <div className="w-full max-w-[240px] overflow-hidden rounded-lg border border-border bg-black">
       <video
-        src={`${attachment.url}#t=0.1`}
+        src={`${attachment.url}#t=${from}`}
         controls
         playsInline
         preload="metadata"

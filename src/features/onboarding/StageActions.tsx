@@ -1,6 +1,8 @@
 import * as React from 'react';
 
 import { ActionRow, Button, ConfirmDialog, useToast } from '@/components/ui';
+import { RecordPaymentDialog } from '@/features/payments/RecordPaymentDialog';
+import { useResumeBilling } from '@/hooks/api/useBilling';
 import { useChangeWatch, useCloseOutletSetup } from '@/hooks/api/useOnboarding';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import {
@@ -12,13 +14,10 @@ import {
 } from '@/lib/onboarding';
 import { dealerCodeLabel, type OutletSetupAdmin } from '@dk/shared';
 
+import { PauseBillingDialog, SendBillDialog } from './BillingDialogs';
 import { CloseDialog } from './CloseDialog';
-import {
-  BillSentDialog,
-  ExtendWatchDialog,
-  PaymentReceivedDialog,
-  StartServicesDialog,
-} from './SetupDialogs';
+import { LogCallDialog } from './LogCallDialog';
+import { ExtendWatchDialog, StartServicesDialog } from './SetupDialogs';
 
 /**
  * The buttons an outlet's onboarding offers at its current stage, and the forms
@@ -51,8 +50,12 @@ export function StageActions({
   const toast = useToast();
   const isSuperAdmin = useIsSuperAdmin();
   const [open, setOpen] = React.useState<StageActionId | null>(null);
+  // ── reminders and calls ── a call can be logged at every step before live or closed.
+  const [calling, setCalling] = React.useState(false);
+  const canLogCall = outlet.stage !== 'live' && outlet.stage !== 'lost';
   const closeOutlet = useCloseOutletSetup();
   const watch = useChangeWatch();
+  const resumeBilling = useResumeBilling();
 
   const specs = availableActions(outlet, isSuperAdmin);
   const note = needsSuperAdminNote(outlet, isSuperAdmin);
@@ -69,11 +72,22 @@ export function StageActions({
     }
   }
 
-  if (specs.length === 0 && !note) return null;
+  // ── billing ── give back exactly the services a pause for non-payment stopped.
+  async function resume() {
+    try {
+      await resumeBilling.mutateAsync(outlet.dealerId);
+      toast.success(`${label}: services resumed.`);
+      dismiss();
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : 'That did not go through.');
+    }
+  }
+
+  if (specs.length === 0 && !note && !canLogCall) return null;
 
   return (
     <div className={className}>
-      {specs.length > 0 ? (
+      {specs.length > 0 || canLogCall ? (
         <ActionRow
           below="wrap"
           align="start"
@@ -89,12 +103,43 @@ export function StageActions({
               {a.label}
             </Button>
           ))}
+          {canLogCall ? (
+            <Button size="sm" variant="ghost" onClick={() => setCalling(true)}>
+              Log call…
+            </Button>
+          ) : null}
         </ActionRow>
       ) : null}
       {note ? <p className="mt-1.5 text-xs text-text-muted">{note}</p> : null}
 
-      <BillSentDialog outlet={open === 'send_bill' ? outlet : null} onClose={dismiss} />
-      <PaymentReceivedDialog outlet={open === 'record_payment' ? outlet : null} onClose={dismiss} />
+      <LogCallDialog
+        target={
+          calling
+            ? { kind: 'outlet', dealerId: outlet.dealerId, code: outlet.code, ownerName: outlet.ownerName }
+            : null
+        }
+        onClose={() => setCalling(false)}
+        // "Not interested" offers Close next (any admin may close an outlet), but
+        // never once services have started: that outlet is a client, not a lead.
+        {...(outlet.stage === 'watch' ? {} : { onNotInterested: () => setOpen('close') })}
+      />
+      {/* ── billing ── */}
+      <SendBillDialog outlet={open === 'send_bill' ? outlet : null} onClose={dismiss} />
+      <RecordPaymentDialog
+        target={open === 'record_payment' ? { kind: 'setup', outlet } : null}
+        onClose={dismiss}
+      />
+      <PauseBillingDialog outlet={open === 'pause_billing' ? outlet : null} onClose={dismiss} />
+      <ConfirmDialog
+        open={open === 'resume_billing'}
+        onCancel={dismiss}
+        onConfirm={() => void resume()}
+        loading={resumeBilling.isPending}
+        title={`Resume the services for ${label}?`}
+        description="Brings back exactly the services the pause stopped. A service that was paused for another reason stays paused."
+        confirmLabel="Resume services"
+      />
+      {/* ── /billing ── */}
       <StartServicesDialog
         outlet={open === 'start_services' || open === 'start_anyway' ? outlet : null}
         onClose={dismiss}

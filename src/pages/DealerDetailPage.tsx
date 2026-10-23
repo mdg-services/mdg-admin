@@ -5,7 +5,6 @@ import {
   FileClock,
   History,
   KeyRound,
-  ListChecks,
   ListTodo,
   RotateCcw,
   Send,
@@ -127,11 +126,6 @@ const DealerWorkListTab = React.lazy(
     })),
   ),
 );
-const OnboardingTab = React.lazy(
-  retryImport(() =>
-    import('./dealers/OnboardingTab').then((m) => ({ default: m.OnboardingTab })),
-  ),
-);
 const RunsListInline = React.lazy(
   retryImport(() =>
     import('./dealers/RunsListInline').then((m) => ({
@@ -172,8 +166,6 @@ interface TabDef {
   placement: Exclude<TabPlacement, 'hidden'>;
   /** Internal/engineer surface — hidden from plain admins. */
   superAdminOnly?: boolean;
-  /** Strip only while the dealer is still onboarding; the menu once it is live. */
-  onboardingOnly?: boolean;
   /** Service plugin that must be attached before this surface earns a tab. */
   requiresService?: string;
   /** Leading glyph, used when the entry renders in the overflow menu. */
@@ -233,16 +225,6 @@ const INFO_TAB: TabDef = {
  * deep link still renders the body, which guards itself.
  */
 const TABS: TabDef[] = [
-  {
-    id: 'onboarding',
-    label: 'Onboarding',
-    placement: 'strip',
-    // Once the dealer is ACTIVE this is a completed checklist, not a task —
-    // worth keeping for the record, not worth a permanent slot in the strip.
-    onboardingOnly: true,
-    icon: <ListChecks {...ICON} />,
-    body: (dealer) => <OnboardingTab dealer={dealer} />,
-  },
   INFO_TAB,
   {
     id: 'services',
@@ -389,13 +371,10 @@ export function DealerDetailPage() {
   // so on a warm cache this is a read rather than another round trip.
   const servicesQ = useDealerServicesQuery(id);
   // The outlet's onboarding v2 setup, or `null` for one from before it (the API
-  // answers 404 and that is an answer). It decides which onboarding the page
-  // shows: the new Setup card and header chip, or the old seven-step tab. While
-  // it is still in flight `setup` is `null` too, so anything that must not guess
-  // also checks `setupQ.isPending`.
+  // answers 404 and that is an answer): the Setup card and the header chip. An
+  // outlet from before it keeps its old seven steps as a read-only record on Info.
   const setupQ = useOutletSetupQuery(id);
   const setup = setupQ.data ?? null;
-  const isV2 = setup !== null;
   const [tab, setTab] = React.useState<string | null>(null);
   const [dangerAction, setDangerAction] =
     React.useState<DealerArchiveAction | null>(null);
@@ -403,8 +382,7 @@ export function DealerDetailPage() {
    * Switch tabs AND record it in the URL.
    *
    * The tab used to live only in React state, so every reload threw it away and
-   * dropped the reader back on the default — Onboarding, for a dealer that is
-   * still onboarding — however deep into another tab they were. Writing `?tab=`
+   * dropped the reader back on the default — Info — however deep into another tab they were. Writing `?tab=`
    * on each switch means a refresh, a restored browser session and a pasted
    * link all come back to the same surface, using the deep-link path that the
    * mount effect below already reads.
@@ -440,10 +418,6 @@ export function DealerDetailPage() {
 
   React.useEffect(() => {
     if (!dealer || tab) return;
-    // Which onboarding the outlet has decides the first tab, and the answer is a
-    // moment behind the dealer: choosing now would land a new outlet on the old
-    // step list and then pull it away.
-    if (setupQ.isPending) return;
     const requested = searchParams.get('tab');
     // Credit & DOD and the Daily Sales Report moved from their own tabs into the
     // Data Vault rail. Keep old `?tab=credit-dod` / `?tab=dsr` links working by
@@ -461,14 +435,14 @@ export function DealerDetailPage() {
       );
       return;
     }
-    // The old step list means nothing for an outlet that came through onboarding
-    // v2: a saved `?tab=onboarding` link lands on Info, where its Setup card is.
-    if (requested && TAB_IDS.includes(requested) && !(requested === 'onboarding' && isV2)) {
+    // The Onboarding tab is retired: a saved `?tab=onboarding` link lands on Info,
+    // where the Setup card (or the old record) is.
+    if (requested && TAB_IDS.includes(requested)) {
       setTab(requested);
       return;
     }
-    setTab(dealer.status === 'ACTIVE' || isV2 ? 'info' : 'onboarding');
-  }, [dealer, tab, searchParams, setSearchParams, setupQ.isPending, isV2]);
+    setTab('info');
+  }, [dealer, tab, searchParams, setSearchParams]);
 
   if (isLoading) {
     return (
@@ -495,7 +469,6 @@ export function DealerDetailPage() {
   if (dealer.pumpLocation?.address) subtitleParts.push(dealer.pumpLocation.address);
 
   const isArchived = !!dealer.archivedAt;
-  const isOnboarding = dealer.status !== 'ACTIVE';
 
   // `null` until the query has actually *succeeded* — deliberately keyed on
   // `isSuccess` rather than on `data`, because those two differ exactly where it
@@ -511,11 +484,6 @@ export function DealerDetailPage() {
     // Collapse to Info, which is where Restore lives.
     if (isArchived) return t.id === INFO_TAB.id ? 'strip' : 'hidden';
     if (t.superAdminOnly && !isSuperAdmin) return 'hidden';
-    // The seven-step tab belongs to outlets from before onboarding v2. For a new
-    // one it is withheld while the answer is in flight (so it can never appear and
-    // then be pulled from under a finger, as `requiresService` is) and hidden once
-    // the outlet is known to have the new setup.
-    if (t.id === 'onboarding' && (setupQ.isPending || isV2)) return 'hidden';
     // Three states, and all three have to be told apart. Collapsing them to
     // "truthy data or not" is what let a failed GET /dealers/:id/services
     // silently delete the Credit & DOD tab — the only route to that surface in
@@ -541,11 +509,10 @@ export function DealerDetailPage() {
       // generate cards say the service isn't attached yet, and the history and
       // ledger they sit next to exist independently of the attachment anyway.
     }
-    if (t.onboardingOnly && !isOnboarding) return 'menu';
     return t.placement;
   }
 
-  const defaultTabId = isOnboarding && !setupQ.isPending && !isV2 ? 'onboarding' : INFO_TAB.id;
+  const defaultTabId = INFO_TAB.id;
   // Falling back rather than rendering nothing: an unknown id, or an id whose
   // def has gone away, resolves to Info instead of an empty page.
   const activeDef =
