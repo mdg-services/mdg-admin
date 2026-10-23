@@ -1,12 +1,27 @@
-import { Check, CheckCheck, CheckCircle2, ChevronDown, ClipboardList, Clock } from 'lucide-react';
+import {
+  Check,
+  CheckCheck,
+  CheckCircle2,
+  ChevronDown,
+  ClipboardList,
+  Clock,
+  Lock,
+} from 'lucide-react';
 import * as React from 'react';
 
 import { Badge } from '@/components/ui/Badge';
 import { OPEN_REQUEST_STATUS_LABEL, requestLabel } from '@/lib/chatAsk';
 import { cn } from '@/lib/cn';
 import { linkify } from '@/lib/linkify';
+import { portalLoginAskedLabel } from '@/lib/portalLogin';
 import { useLongPress } from '@/lib/useLongPress';
-import type { DealerOpenRequest, Message, MessageAsk, MessageReaction } from '@dk/shared';
+import type {
+  DealerOpenRequest,
+  Message,
+  MessageAsk,
+  MessagePortalLogin,
+  MessageReaction,
+} from '@dk/shared';
 
 import { AttachmentPreview } from './AttachmentPreview';
 import { replyPreviewText, replySenderLabel } from './replyPreview';
@@ -97,7 +112,13 @@ function SystemMessage({
   // Was a plain `if (!message.body) return null`, which threw the images away
   // with the empty body. Only an empty notice — no text, no card and no request
   // — is nothing.
-  if (!message.body && message.attachments.length === 0 && !message.ask) return null;
+  if (
+    !message.body &&
+    message.attachments.length === 0 &&
+    !message.ask &&
+    !message.portalLogin
+  )
+    return null;
   return (
     <div className="flex w-full flex-col items-center gap-1.5">
       {message.attachments.length > 0 ? (
@@ -110,6 +131,7 @@ function SystemMessage({
         </div>
       ) : null}
       {message.ask ? <AskLabel ask={message.ask} status={askStatus} /> : null}
+      {message.portalLogin ? <PortalLoginLabel portalLogin={message.portalLogin} /> : null}
       {/* `rounded-lg`, not `rounded-full`: the pill shape is only right for a
           one-line note. A system message can run to a dozen lines — a
           bilingual service notice does — and a 9999px radius on a 152px-tall
@@ -186,6 +208,28 @@ function AskLabel({
         </Badge>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * What a login-box message asked for, as a small label — the same idea as
+ * AskLabel. The owner's app draws the box itself; the admin only needs to see
+ * which logins were asked for. Nothing typed into the box ever reaches the chat.
+ */
+function PortalLoginLabel({ portalLogin }: { portalLogin: MessagePortalLogin }) {
+  return (
+    <span className="flex max-w-[85%] items-start gap-1.5 text-xs">
+      <Lock
+        width={13}
+        height={13}
+        strokeWidth={1.75}
+        className="mt-px shrink-0 text-text-muted"
+        aria-hidden
+      />
+      <span className="min-w-0 font-medium text-text [overflow-wrap:anywhere]">
+        Asked for: {portalLoginAskedLabel(portalLogin.portals)}
+      </span>
+    </span>
   );
 }
 
@@ -367,6 +411,11 @@ export const MessageBubble = React.memo(function MessageBubble({
           <p className="whitespace-pre-wrap break-words">
             {linkify(message.body)}
           </p>
+        ) : null}
+        {message.portalLogin ? (
+          <div className="mt-1.5">
+            <PortalLoginLabel portalLogin={message.portalLogin} />
+          </div>
         ) : null}
         {message.attachments.length > 0 ? (
           <div

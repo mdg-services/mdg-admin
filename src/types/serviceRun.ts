@@ -64,10 +64,15 @@ export interface ServiceRunWithSteps extends ServiceRun {
   artifactViewUrls?: Record<string, string>;
 }
 
+/** Who typed a stored portal login: an admin here, or the owner in the app. */
+export type PortalSetVia = 'admin' | 'dealer';
+
 export interface IrasCredentialsStatus {
   hasCredentials: boolean;
   username?: string;
   setAt?: string;
+  /** Absent when not known (older records). */
+  setVia?: PortalSetVia;
 }
 
 export type SdmsDealerType = 'retail' | 'lpg' | '1906';
@@ -77,6 +82,7 @@ export interface SdmsCredentialsStatus {
   username?: string;
   dealerType?: SdmsDealerType;
   setAt?: string;
+  setVia?: PortalSetVia;
 }
 
 /**

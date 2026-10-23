@@ -44,6 +44,8 @@ export interface BaseCredentialStatus {
   hasCredentials: boolean;
   username?: string;
   setAt?: string;
+  /** `'dealer'` when the owner typed it into the app's login box. */
+  setVia?: 'admin' | 'dealer';
 }
 
 export interface PortalCredentialsCardProps<TValues extends BaseCredentialValues> {
@@ -166,7 +168,18 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
   const details: CredentialDetail[] = [
     { label: 'Username', value: status?.username ?? '-', mono: true },
     ...(extraDetails ?? []),
-    { label: 'Set', value: formatDateTime(status?.setAt) },
+    {
+      label: 'Set',
+      value:
+        status?.setVia === 'dealer' ? (
+          <>
+            {formatDateTime(status?.setAt)}
+            <span className="block text-text-muted">Entered by the owner in the app</span>
+          </>
+        ) : (
+          formatDateTime(status?.setAt)
+        ),
+    },
   ];
 
   // No stored credentials yet, or an explicit Update: there is nothing to

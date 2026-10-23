@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/cn';
 import { downloadAttachment } from '@/lib/downloadAttachment';
 import { formatDuration } from '@/lib/uploadAttachment';
-import type { Attachment } from '@dk/shared';
+import { isVideoAttachment, type Attachment } from '@dk/shared';
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -125,6 +125,26 @@ function VoiceMessage({ attachment }: { attachment: Attachment }) {
   );
 }
 
+/**
+ * A guide video from MDG, played inline: small and portrait (9:16), poster is
+ * the first frame (`#t=0.1`), nothing downloads until it is played beyond the
+ * metadata. Not draggable into the long-press menu: controls are the native ones.
+ */
+function VideoMessage({ attachment }: { attachment: Attachment }) {
+  return (
+    <div className="w-full max-w-[240px] overflow-hidden rounded-lg border border-border bg-black">
+      <video
+        src={`${attachment.url}#t=0.1`}
+        controls
+        playsInline
+        preload="metadata"
+        aria-label={attachment.filename}
+        className="aspect-[9/16] w-full bg-black object-contain"
+      />
+    </div>
+  );
+}
+
 export function AttachmentPreview({ attachment }: { attachment: Attachment }) {
   const toast = useToast();
   const [open, setOpen] = React.useState(false);
@@ -139,6 +159,10 @@ export function AttachmentPreview({ attachment }: { attachment: Attachment }) {
     } finally {
       setDownloading(false);
     }
+  }
+
+  if (isVideoAttachment(attachment) && attachment.url) {
+    return <VideoMessage attachment={attachment} />;
   }
 
   if (attachment.kind === 'audio' && attachment.url) {

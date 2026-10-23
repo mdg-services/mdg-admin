@@ -10,6 +10,7 @@ import {
   Flag,
   Inbox,
   Info,
+  KeyRound,
   MessageSquare,
   MoreVertical,
   PanelRightClose,
@@ -21,6 +22,7 @@ import {
   Store,
   Ticket,
   UserPlus,
+  Video,
   type LucideIcon,
 } from 'lucide-react';
 import * as React from 'react';
@@ -40,12 +42,14 @@ import { Sheet, SheetItem } from '@/components/ui/Sheet';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { AiFirstLineStrip } from '@/features/chat/AiFirstLineStrip';
+import { AskPortalLoginDialog } from '@/features/chat/AskPortalLoginDialog';
 import { Composer, type ComposerInsert } from '@/features/chat/Composer';
 import { MediaGalleryCard } from '@/features/chat/MediaGalleryCard';
 import { MessageInfoDialog } from '@/features/chat/MessageInfoDialog';
 import { MessageList } from '@/features/chat/MessageList';
 import { NewConversationDialog } from '@/features/chat/NewConversationDialog';
 import { OpenRequestsCard } from '@/features/chat/OpenRequestsCard';
+import { OutletHelpCard } from '@/features/chat/OutletHelpCard';
 import { ReactionsDialog } from '@/features/chat/ReactionsDialog';
 import {
   type AskActionTarget,
@@ -58,6 +62,7 @@ import {
 } from '@/features/chat/replyPreview';
 import { ResolveConversationDialog } from '@/features/chat/ResolveConversationDialog';
 import { SendBackAskDialog } from '@/features/chat/SendBackAskDialog';
+import { SendGuideVideoDialog } from '@/features/chat/SendGuideVideoDialog';
 import { TicketStrip } from '@/features/chat/TicketStrip';
 import { useConversationSocket } from '@/features/chat/useConversationSocket';
 import { useInboxSocket } from '@/features/chat/useInboxSocket';
@@ -840,6 +845,8 @@ export function InboxPage() {
 
   const isAdmin = !!admin;
   const [resolveOpen, setResolveOpen] = React.useState(false);
+  const [askLoginOpen, setAskLoginOpen] = React.useState(false);
+  const [videoPickerOpen, setVideoPickerOpen] = React.useState(false);
   const servicesQ = useServicesQuery();
 
   // One lightweight counts round-trip for the rail badges, instead of four
@@ -1201,6 +1208,12 @@ export function InboxPage() {
           onShowMessage={handleShowMessage}
           onMarkReceived={handleCardMarkReceived}
           onSendBack={handleCardSendBack}
+        />
+      ) : null}
+      {isAdmin && dealerId ? (
+        <OutletHelpCard
+          onAskLogin={() => setAskLoginOpen(true)}
+          onSendVideo={() => setVideoPickerOpen(true)}
         />
       ) : null}
       <Card>
@@ -1960,6 +1973,28 @@ export function InboxPage() {
               >
                 {requestsToCheck > 0 ? `Details · ${requestsToCheck} to check` : 'Details'}
               </SheetItem>
+              {isAdmin && dealerId ? (
+                <>
+                  <SheetItem
+                    icon={<KeyRound width={20} height={20} strokeWidth={1.75} />}
+                    onClick={() => {
+                      setThreadMenuOpen(false);
+                      setAskLoginOpen(true);
+                    }}
+                  >
+                    Ask for portal login
+                  </SheetItem>
+                  <SheetItem
+                    icon={<Video width={20} height={20} strokeWidth={1.75} />}
+                    onClick={() => {
+                      setThreadMenuOpen(false);
+                      setVideoPickerOpen(true);
+                    }}
+                  >
+                    Send a video
+                  </SheetItem>
+                </>
+              ) : null}
               {conversation.status === 'ASSIGNED' &&
               conversation.assignedAdminId !== currentUserId ? (
                 <SheetItem
@@ -1976,6 +2011,17 @@ export function InboxPage() {
           </>
         )}
       </section>
+
+      <AskPortalLoginDialog
+        open={askLoginOpen}
+        onClose={() => setAskLoginOpen(false)}
+        dealerId={dealerId}
+      />
+      <SendGuideVideoDialog
+        open={videoPickerOpen}
+        onClose={() => setVideoPickerOpen(false)}
+        conversationId={conversation?.id}
+      />
 
       <NewConversationDialog
         open={newOpen}
