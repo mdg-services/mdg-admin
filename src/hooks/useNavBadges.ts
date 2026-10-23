@@ -12,7 +12,7 @@ import { useWhatsAppUnreadChats } from './api/useWhatsAppInbox';
  * The count badge each nav destination carries, keyed by its route: unread
  * chats, open tickets, open alerts, AI answers nobody has judged yet,
  * unconfirmed national holidays, website grievances nobody has resolved,
- * registrations nobody has been in touch with and WhatsApp chats with
+ * registrations nobody has dealt with yet (on the Onboarding entry) and WhatsApp chats with
  * something unread.
  *
  * ONE place, because there were two and they had drifted. The desktop sidebar
@@ -50,7 +50,7 @@ export function useNavBadges(): Record<string, number> {
     '/ai-answers': aiCountsQ.data?.unreviewed ?? 0,
     '/bank-holidays': pendingHolidaysQ.data?.totalCount ?? 0,
     '/grievances': openGrievances,
-    '/registrations': newRegistrations,
+    '/onboarding': newRegistrations,
     '/callbacks': newCallbacks,
     '/whatsapp': whatsappUnread,
   };

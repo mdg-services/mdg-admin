@@ -23,6 +23,7 @@ import { useTicketsLive } from '@/hooks/api/useTickets';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useNavBadges } from '@/hooks/useNavBadges';
+import { useOutletSetupLive } from '@/hooks/useOutletSetupLive';
 import { usePushBridge } from '@/hooks/usePushBridge';
 import { useSafeBack } from '@/hooks/useSafeBack';
 import { useSoftKeyboard } from '@/hooks/useSoftKeyboard';
@@ -99,6 +100,7 @@ export function AppShell() {
   useAlertsLive(); // keep the bell's count current on every screen
   useTicketsLive(); // ...and the Tickets badge, and any open thread's strip
   useWebsiteIntakeLive(); // ...and the Grievances and Registrations badges
+  useOutletSetupLive(); // ...and the Onboarding page, and any open outlet's Setup card
   useWhatsAppLive(); // ...and the WhatsApp badge, toasts, sound and tab title
   const admin = useAuthStore((s) => s.admin);
   const logout = useAuthStore((s) => s.logout);

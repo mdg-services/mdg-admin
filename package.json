@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check:intake": "npx tsx --test scripts/intake.check.ts",
+    "check:onboarding": "npx tsx --test scripts/onboarding.check.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""

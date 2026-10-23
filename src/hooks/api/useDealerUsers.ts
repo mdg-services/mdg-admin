@@ -17,7 +17,8 @@ export function useDealerUsers(dealerId: string | undefined) {
 
 export interface CreateDealerUserInput {
   dealerId: string;
-  email: string;
+  /** Optional: a member may sign in by mobile alone (onboarding v2). */
+  email?: string;
   name: string;
   role: Extract<UserRole, 'dealer-owner' | 'dealer-staff'>;
   title?: string;

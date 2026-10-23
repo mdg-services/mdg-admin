@@ -13,10 +13,12 @@ import {
   Skeleton,
   StatusChip,
 } from '@/components/ui';
+import { SetupCard } from '@/features/onboarding/SetupCard';
 import { useDealerAuditQuery } from '@/hooks/api/useDealerAudit';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { formatDate, formatDateTime } from '@/lib/format';
-import type { Dealer } from '@dk/shared';
+import { isOpenStage } from '@/lib/onboarding';
+import type { Dealer, OutletSetupAdmin } from '@dk/shared';
 
 import { DealerAppLoginCard } from './DealerAppLoginCard';
 import { DealerDangerZone } from './DealerDangerZone';
@@ -26,6 +28,13 @@ import { DealerOutletProfileDrawer } from './DealerOutletProfileDrawer';
 interface Props {
   dealer: Dealer;
   /**
+   * The outlet's onboarding v2 setup, or `null`/absent for one from before it.
+   * With one, the Setup card stands in for the old "Onboarding in progress"
+   * note and the "Payment recorded at step 5" card, which describe steps the
+   * outlet does not have.
+   */
+  setup?: OutletSetupAdmin | null;
+  /**
    * Opens the Password vault tab. Optional so the tab still renders standalone
    * (and so a deep link into Info never depends on the parent wiring it up) —
    * without it the pointer below is simply not offered.
@@ -33,13 +42,19 @@ interface Props {
   onOpenPasswordVault?: () => void;
 }
 
-export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
+export function DealerInfoTab({ dealer, setup = null, onOpenPasswordVault }: Props) {
   const isSuperAdmin = useIsSuperAdmin();
   const isArchived = !!dealer.archivedAt;
   const [editingProfile, setEditingProfile] = React.useState(false);
+  // While the outlet is on its way the Setup card is the first thing here: it
+  // is the job. Once live (or closed) it is a record, and sits where the
+  // payment card used to.
+  const setupOnTop = !!setup && !isArchived && isOpenStage(setup.stage);
+  const setupInGrid = !!setup && !isArchived && !setupOnTop;
   return (
     <div className="grid gap-3 md:gap-4">
-      {dealer.status === 'ONBOARDING' && !dealer.archivedAt ? (
+      {setupOnTop && setup ? <SetupCard setup={setup} /> : null}
+      {!setup && dealer.status === 'ONBOARDING' && !dealer.archivedAt ? (
         <Card>
           <CardContent className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -118,35 +133,11 @@ export function DealerInfoTab({ dealer, onOpenPasswordVault }: Props) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Payment</CardTitle>
-              <CardSubtitle>Recorded at step 5.</CardSubtitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <KeyValueList
-              items={[
-                {
-                  key: 'received',
-                  label: 'Received',
-                  value: dealer.paymentReceivedAt
-                    ? formatDateTime(dealer.paymentReceivedAt)
-                    : 'Not yet',
-                },
-                {
-                  key: 'note',
-                  label: 'Note',
-                  value: dealer.paymentNote ?? 'No note',
-                  // A free-text note is the one field here that runs to a
-                  // sentence; `block` gives it the full width at every size.
-                  block: true,
-                },
-              ]}
-            />
-          </CardContent>
-        </Card>
+        {setupInGrid && setup ? <SetupCard setup={setup} /> : null}
+
+        {/* The old payment note, for outlets from before onboarding v2. A new
+            outlet's bill and payment are on its Setup card. */}
+        {setup && !isArchived ? null : <LegacyPaymentCard dealer={dealer} />}
 
         {/* Every login — the dealer's own, and the IRAS/SDMS portal ones — moved
             to its own tab. An archived dealer cannot reach that tab (the strip
@@ -284,6 +275,41 @@ function AuditAccordion({ dealerId }: { dealerId: string }) {
           )}
         </div>
       ) : null}
+    </Card>
+  );
+}
+
+/** "Payment — recorded at step 5": the old seven-step flow's note, for outlets from before onboarding v2. */
+function LegacyPaymentCard({ dealer }: { dealer: Dealer }) {
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>Payment</CardTitle>
+          <CardSubtitle>Recorded at step 5.</CardSubtitle>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <KeyValueList
+          items={[
+            {
+              key: 'received',
+              label: 'Received',
+              value: dealer.paymentReceivedAt
+                ? formatDateTime(dealer.paymentReceivedAt)
+                : 'Not yet',
+            },
+            {
+              key: 'note',
+              label: 'Note',
+              value: dealer.paymentNote ?? 'No note',
+              // A free-text note is the one field here that runs to a
+              // sentence; `block` gives it the full width at every size.
+              block: true,
+            },
+          ]}
+        />
+      </CardContent>
     </Card>
   );
 }

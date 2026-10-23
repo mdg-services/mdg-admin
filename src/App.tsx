@@ -159,10 +159,10 @@ const GrievancesPage = React.lazy(
     })),
   ),
 );
-const RegistrationsPage = React.lazy(
+const OnboardingPage = React.lazy(
   retryImport(() =>
-    import('@/pages/registrations/RegistrationsPage').then((m) => ({
-      default: m.RegistrationsPage,
+    import('@/pages/onboarding/OnboardingPage').then((m) => ({
+      default: m.OnboardingPage,
     })),
   ),
 );
@@ -543,20 +543,24 @@ export default function App() {
               </RequireSuperAdmin>
             }
           />
-          {/* Everyone who has filled in "Register your pump" — the website's
-              form and the app's sign-up screen — behind the `enrolment_new`
-              alert. Super-admin for the same reason as the page above. Keep in
-              step with `superAdminOnly` in navItems.ts. */}
+          {/* From a registration to a live outlet: everyone who has filled in
+              "Register your pump" (the website's form and the app's sign-up
+              screen, behind the `enrolment_new` alert) and every outlet on its
+              way. Every admin, not super-admin: the rows are everyday work, and
+              approving a registration and recording a payment are gated inside
+              the page and on the server. Keep in step with `navItems.ts`. */}
           <Route
-            path="registrations"
+            path="onboarding"
             element={
-              <RequireSuperAdmin>
-                <LazyPage>
-                  <RegistrationsPage />
-                </LazyPage>
-              </RequireSuperAdmin>
+              <LazyPage>
+                <OnboardingPage />
+              </LazyPage>
             }
           />
+          {/* The old Registrations list, folded into Onboarding. Kept as a
+              redirect because alerts, bookmarks and the phone's push links
+              still carry it. */}
+          <Route path="registrations" element={<Navigate to="/onboarding" replace />} />
           {/* Everyone who asked us to call them on the website — the film pages'
               form above all — behind the `callback_new` alert. Super-admin for
               the same reason as the two pages above. Keep in step with

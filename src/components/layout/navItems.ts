@@ -148,10 +148,14 @@ export const NAV_ITEMS: NavItem[] = [
   // in was promised an answer. Super-admin: strangers' words and numbers, and
   // a grievance may be about our own staff.
   { to: '/grievances', label: 'Grievances', icon: MessageSquareWarning, superAdminOnly: true },
-  // Everyone who has filled in "Register your pump", on the site or in the app.
-  // Until this existed the only record was an email to our own inbox. Counts
-  // the ones nobody has been in touch with yet. Super-admin, as above.
-  { to: '/registrations', label: 'Registrations', icon: ClipboardPen, superAdminOnly: true },
+  // From a registration to a live outlet, one row each: everyone who has filled
+  // in "Register your pump" waiting for a yes, and every outlet on its way
+  // (services, bill, payment, logins, setup, watch), with whose move it is. It
+  // replaced the Registrations list and the old seven-step tab. The count is the
+  // registrations nobody has dealt with yet. Every admin: outlets on their way are
+  // everyday work; approving and recording a payment are super-admin buttons
+  // inside the page.
+  { to: '/onboarding', label: 'Onboarding', icon: ClipboardPen },
   // Everyone who asked us to call them on the website: the film pages' form,
   // the home page, the Khata Kavach page, the assistant. Counts the ones nobody
   // has called yet. Super-admin, as above.

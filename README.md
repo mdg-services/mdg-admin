@@ -32,6 +32,7 @@ npm run typecheck
 npm run lint
 npm run build            # tsc, then vite build
 npm run check:intake     # plain-logic checks, run with node's test runner through tsx
+npm run check:onboarding # the Onboarding page's rules and request bodies, the same way
 npx tsx --test scripts/chatAsk.check.ts
 ```
 
@@ -98,7 +99,7 @@ Super-admin pages:
 | Films | `/films` | Views, drop-off and share links for the two films on mdgservices.in. |
 | WhatsApp | `/whatsapp` | The inbox for the WhatsApp numbers we run: a chat for every lead we message and everyone who writes to us, with replies, unread and needs-reply lists, quick replies and live alerts. `?chat=` opens one. |
 | Grievances | `/grievances` | Sent from the website or taken down by the assistant. Each stays open until resolved. |
-| Registrations | `/registrations` | "Register your pump" sign-ups, from the site or the app. |
+| Onboarding | `/onboarding` | From a "Register your pump" sign-up to a live outlet: approve, bill sent, payment received, start services, watch, with whose move it is on each row, a 90-day funnel and the "forgot password" requests. `?view=live` and `?view=lost` are the other tabs. `/registrations` redirects here. |
 | Service Catalog | `/services` | The services (plugins) that can be attached to a dealer. |
 | Run History | `/runs` | Timeline of every service run. |
 | All Users | `/users` | Every dealer's users, and the platform admins. |
@@ -127,7 +128,7 @@ More sheet holds the rest. The rules every screen follows, and the catalogue of 
 src/
 ├── App.tsx            routes, each page loaded only when opened (retries if a piece fails)
 ├── pages/             one screen per route; bigger ones have a folder of their own
-├── features/          assist, chat, films, grievances, intake, registrations, tickets, users
+├── features/          assist, chat, films, grievances, intake, onboarding, tickets, users
 ├── components/ui/     shared primitives; components/layout/ holds the shell, nav and guards
 ├── hooks/api/         TanStack Query hooks, one file per resource
 ├── hooks/             phone layout (overlay stack, safe insets, soft keyboard), live updates

@@ -44,6 +44,7 @@ import { useStartConversation } from '@/hooks/api/useStartConversation';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { copyText } from '@/lib/clipboard';
+import { memberLogin } from '@/lib/onboarding';
 import { generatePassword } from '@/lib/password';
 import type { Dealer, User } from '@dk/shared';
 
@@ -66,22 +67,32 @@ function memberRoleLabel(u: User): string {
 }
 
 /**
- * Every new member starts on the same password, so an admin adding a manager
- * over the phone has nothing to read out or invent. It is prefilled rather
- * than forced: the field stays editable, and `Generate` still replaces it with
- * a random one. Eight characters because that is the minimum the login
- * endpoint itself enforces (`loginSchema` in @dk/shared).
+ * A new member starts on a password made for them, never a shared one. It is
+ * filled in when the form opens (`generatePassword`), shown in the box, and
+ * gone once the member is added, so the admin copies it first: it is read out
+ * or pasted to the member, and the member is asked to choose their own at their
+ * first sign-in (the server marks it temporary). The field stays editable, and
+ * `Generate` makes another.
  */
-const DEFAULT_MEMBER_PASSWORD = 'mdg@1234';
+const GENERATED_PASSWORD_LENGTH = 14;
 
-const addMemberSchema = z.object({
-  memberRole: z.enum(['owner', 'manager']),
-  name: z.string().trim().min(2, 'Name is required').max(200),
-  title: z.string().trim().max(80).optional(),
-  email: z.string().email('Enter a valid email'),
-  password: z.string().min(8, 'At least 8 characters').max(200),
-  phone: z.string().trim().max(40).optional(),
-});
+/**
+ * A mobile number OR an email (onboarding v2): the mobile is the sign-in name,
+ * and most dealers' members have no email. The server applies the same rule.
+ */
+const addMemberSchema = z
+  .object({
+    memberRole: z.enum(['owner', 'manager']),
+    name: z.string().trim().min(2, 'Name is required').max(200),
+    title: z.string().trim().max(80).optional(),
+    email: z.union([z.literal(''), z.string().trim().email('Enter a valid email')]),
+    password: z.string().min(8, 'At least 8 characters').max(200),
+    phone: z.string().trim().max(40).optional(),
+  })
+  .refine((v) => Boolean(v.email) || (v.phone ?? '').replace(/\D/g, '').length >= 10, {
+    message: 'Give a mobile number (or an email) to sign in with',
+    path: ['phone'],
+  });
 type AddMemberForm = z.infer<typeof addMemberSchema>;
 
 export function DealerMembersTab({ dealer }: Props) {
@@ -228,7 +239,7 @@ export function DealerMembersTab({ dealer }: Props) {
                   <TRow>
                     <TH>Name</TH>
                     <TH>Role / title</TH>
-                    <TH>Email</TH>
+                    <TH>Sign-in</TH>
                     <TH>Status</TH>
                     <TH className="text-right">Actions</TH>
                   </TRow>
@@ -238,7 +249,7 @@ export function DealerMembersTab({ dealer }: Props) {
                     <TRow key={u.id}>
                       <TD className="font-medium">{u.name}</TD>
                       <TD>{memberRoleLabel(u)}</TD>
-                      <TD className="font-mono text-xs">{u.email}</TD>
+                      <TD className="font-mono text-xs">{memberLogin(u) || '—'}</TD>
                       <TD>
                         {u.status === 'ACTIVE' ? (
                           <Badge intent="success">Active</Badge>
@@ -336,7 +347,7 @@ export function DealerMembersTab({ dealer }: Props) {
                 // and choose Copy" is advice the shell will not honour.
                 secondary: (
                   <Copyable
-                    value={u.email}
+                    value={memberLogin(u) || '—'}
                     mode="inline"
                     mono
                     className="select-text"
@@ -406,6 +417,7 @@ export function DealerMembersTab({ dealer }: Props) {
       />
 
       <ResetPasswordDialog
+        dealerMember
         person={resetTarget}
         onClose={() => setResetTarget(null)}
         onReset={(id, password) => updateUser.mutateAsync({ id, password })}
@@ -452,8 +464,8 @@ function AddMemberDialog({
       name: '',
       title: 'Manager',
       email: '',
-      password: DEFAULT_MEMBER_PASSWORD,
-      phone: defaultPhone ?? '',
+      password: generatePassword(GENERATED_PASSWORD_LENGTH),
+      phone: '',
     },
   });
 
@@ -467,6 +479,16 @@ function AddMemberDialog({
     }
   }, [role, getValues, setValue]);
 
+  // The outlet's number is the owner's, and a mobile number is a sign-in name
+  // now: two accounts on one number cannot sign in by it. So it is offered for
+  // an owner, and taken back out of a manager's box if it was only the offer.
+  React.useEffect(() => {
+    if (!defaultPhone) return;
+    const phone = (getValues('phone') ?? '').trim();
+    if (role === 'owner' && !phone) setValue('phone', defaultPhone);
+    if (role === 'manager' && phone === defaultPhone) setValue('phone', '');
+  }, [role, defaultPhone, getValues, setValue]);
+
   React.useEffect(() => {
     if (open) {
       reset({
@@ -474,14 +496,15 @@ function AddMemberDialog({
         name: '',
         title: 'Manager',
         email: '',
-        password: DEFAULT_MEMBER_PASSWORD,
-        phone: defaultPhone ?? '',
+        password: generatePassword(GENERATED_PASSWORD_LENGTH),
+        // A manager has a number of their own. The outlet's number is the owner's.
+        phone: '',
       });
     }
-  }, [open, defaultPhone, reset]);
+  }, [open, reset]);
 
   function fillGenerated() {
-    setValue('password', generatePassword(14), {
+    setValue('password', generatePassword(GENERATED_PASSWORD_LENGTH), {
       shouldValidate: true,
       shouldDirty: true,
     });
@@ -524,14 +547,14 @@ function AddMemberDialog({
       const mapped = ROLE_MAP[values.memberRole];
       await createUser.mutateAsync({
         dealerId,
-        email: values.email,
+        ...(values.email ? { email: values.email } : {}),
         name: values.name,
         role: mapped.role,
         title: values.title?.trim() || mapped.title,
         password: values.password,
         phone: values.phone?.trim() || undefined,
       });
-      toast.success('Member added. Share the login email and password.');
+      toast.success('Member added. Give them the sign-in and the password. They choose their own at first sign-in.');
       onClose();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to add member');
@@ -586,9 +609,7 @@ function AddMemberDialog({
           <FieldError message={errors.name?.message} />
         </div>
         <div>
-          <Label htmlFor="member-email" required>
-            Login email
-          </Label>
+          <Label htmlFor="member-email">Email (optional)</Label>
           <Input
             id="member-email"
             type="email"
@@ -645,9 +666,13 @@ function AddMemberDialog({
             </ActionRow>
           </div>
           <FieldError message={errors.password?.message} />
+          <p className="mt-1 text-xs text-text-muted">
+            Copy it before you add the member: it is shown only here. They will be asked to change it
+            at their first sign-in.
+          </p>
         </div>
         <div>
-          <Label htmlFor="member-phone">Phone (optional)</Label>
+          <Label htmlFor="member-phone">Mobile number</Label>
           {/* `tel` for the number pad, and autofill OFF: the browser's own
               suggestion for a phone box is the ADMIN's number, and this one
               belongs to a dealer's member. */}
@@ -657,8 +682,14 @@ function AddMemberDialog({
             inputMode="tel"
             autoComplete="off"
             placeholder="+91…"
+            invalid={!!errors.phone}
             {...register('phone')}
           />
+          <FieldError message={errors.phone?.message} />
+          <p className="mt-1 text-xs text-text-muted">
+            They sign in with this number (or the email, if given) and the password above. Give a
+            manager their own number: two accounts on one number cannot sign in by it.
+          </p>
         </div>
       </form>
     </Dialog>

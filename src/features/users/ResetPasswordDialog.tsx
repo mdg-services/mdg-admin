@@ -4,13 +4,16 @@ import * as React from 'react';
 import { Button, Dialog, Input, Label, useToast } from '@/components/ui';
 import { ApiError } from '@/lib/api';
 import { copyText } from '@/lib/clipboard';
+import { memberLogin } from '@/lib/onboarding';
 import { generatePassword } from '@/lib/password';
 
 /** Who is having their password reset: enough to name them and save it. */
 export interface ResetPasswordTarget {
   id: string;
   name: string;
+  /** Empty for a dealer member who registered with a mobile number only. */
   email: string;
+  phone?: string;
 }
 
 export interface ResetPasswordDialogProps {
@@ -20,6 +23,13 @@ export interface ResetPasswordDialogProps {
   /** Saves `password` for the person with `id`; rejects when the save fails. */
   onReset: (id: string, password: string) => Promise<unknown>;
   pending: boolean;
+  /**
+   * The person is a dealer's member, not an admin. They sign in with their
+   * mobile number or email, and the server marks the new password temporary, so
+   * they are asked to choose their own at their next sign-in. An admin's words
+   * are unchanged.
+   */
+  dealerMember?: boolean;
 }
 
 /**
@@ -36,7 +46,13 @@ export interface ResetPasswordDialogProps {
  * The server records the reset in the audit log (`passwordChanged: true`), never
  * the password itself.
  */
-export function ResetPasswordDialog({ person, onClose, onReset, pending }: ResetPasswordDialogProps) {
+export function ResetPasswordDialog({
+  person,
+  onClose,
+  onReset,
+  pending,
+  dealerMember = false,
+}: ResetPasswordDialogProps) {
   const toast = useToast();
   const [password, setPassword] = React.useState('');
   const [copied, setCopied] = React.useState(false);
@@ -83,7 +99,11 @@ export function ResetPasswordDialog({ person, onClose, onReset, pending }: Reset
       open={!!person}
       onClose={onClose}
       title="Reset password"
-      description={person ? `Set a new password for ${person.name} (${person.email}).` : undefined}
+      description={
+        person
+          ? `Set a new password for ${person.name}${memberLogin(person) ? ` (${memberLogin(person)})` : ''}.`
+          : undefined
+      }
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -131,8 +151,9 @@ export function ResetPasswordDialog({ person, onClose, onReset, pending }: Reset
           </Button>
         </div>
         <p className="mt-2 text-xs text-text-muted">
-          Copy it before you reset — it is not shown again. They sign in with their email and this
-          password.
+          {dealerMember
+            ? 'Copy it before you reset — it is not shown again. They sign in with their mobile number or email and this password, and are asked to choose their own at first sign-in.'
+            : 'Copy it before you reset — it is not shown again. They sign in with their email and this password.'}
         </p>
       </div>
     </Dialog>
