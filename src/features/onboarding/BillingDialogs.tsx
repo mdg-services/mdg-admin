@@ -22,13 +22,22 @@ import {
   amountProblem,
   billBody,
   billProblem,
+  chosenMessageLang,
   defaultDueOn,
   formatPaise,
   isDay,
+  messageLangLabel,
   paiseToRupeesText,
   ymdLabel,
 } from '@/lib/onboarding';
-import { dealerCodeLabel, type OutletSetupAdmin, type SendSetupBillResult } from '@dk/shared';
+import {
+  dealerCodeLabel,
+  type OutletSetupAdmin,
+  type SendSetupBillResult,
+  type SetupMessageLang,
+} from '@dk/shared';
+
+import { MessageLangField } from './MessageLangField';
 
 /**
  * The two forms billing adds to an outlet's Setup card (onboarding v2 phases 3
@@ -90,6 +99,8 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
   );
   const [touched, setTouched] = React.useState(false);
   const [result, setResult] = React.useState<SendSetupBillResult | null>(null);
+  // The WhatsApp's language: what the person picked; until they do, the outlet's default.
+  const [pickedLang, setPickedLang] = React.useState<SetupMessageLang | null>(null);
   const today = istTodayYmd();
 
   // The flat monthly price, until the person types something else. It arrives
@@ -116,7 +127,12 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
     try {
       const r = await send.mutateAsync({
         dealerId: outlet.dealerId,
-        body: billBody({ amountText: amount, dueOn }),
+        // The language that is on screen, as the person saw it.
+        body: billBody({
+          amountText: amount,
+          dueOn,
+          messageLang: chosenMessageLang(pickedLang, outlet.messageLang),
+        }),
       });
       setResult(r);
       toast.success(
@@ -190,6 +206,12 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
           </div>
         </div>
         <FieldError message={touched ? (problem ?? undefined) : undefined} />
+        <MessageLangField
+          picked={pickedLang}
+          fallback={outlet.messageLang}
+          onPick={setPickedLang}
+          disabled={send.isPending}
+        />
         {again ? (
           <Callout intent="info">
             A bill is already out. With the same amount and day it is only sent again; with another
@@ -252,6 +274,7 @@ function BillResultDialog({
           copied={copied}
           onCopy={() => void copy()}
           hasLink={out.link !== null}
+          langLabel={messageLangLabel(result.messageLang)}
         />
         <p className="text-xs text-text-muted">
           The bill is on the{' '}
@@ -293,6 +316,7 @@ function WhatsAppPart({
   copied,
   onCopy,
   hasLink,
+  langLabel,
 }: {
   out: BillOutcome;
   message: string;
@@ -300,13 +324,17 @@ function WhatsAppPart({
   copied: boolean;
   onCopy: () => void;
   hasLink: boolean;
+  /** The language the message is in ("Hinglish" / "English"), as the server wrote it. */
+  langLabel: string;
 }) {
   const textId = React.useId();
   if (out.whatsapp.state === 'sent') {
     return (
       <div className="flex items-start gap-2 rounded-md border border-success bg-success-soft p-2.5 text-sm text-success-strong md:text-success">
         <Check width={16} height={16} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden />
-        <span>{out.whatsapp.text}</span>
+        <span>
+          {out.whatsapp.text} It went in {langLabel}.
+        </span>
       </div>
     );
   }
@@ -320,7 +348,10 @@ function WhatsAppPart({
           : ' There is no payment link in it: add your UPI or bank details before you send.'}
       </Callout>
       <div>
-        <Label htmlFor={textId}>Message to send</Label>
+        <Label htmlFor={textId}>
+          Message to send
+          <span className="ml-2 text-xs font-normal text-text-subtle">in {langLabel}</span>
+        </Label>
         <Textarea
           id={textId}
           rows={6}

@@ -186,7 +186,7 @@ describe('words', () => {
     assert.equal(notMeLine({ notMe: null }), '');
     assert.match(
       notMeLine({ notMe: { at: '2026-10-25T04:50:00.000Z' } }),
-      /replied NO to the welcome on 25 Oct 10:20.*sign-in is switched off.*super-admin/,
+      /replied NO to the welcome on 25 Oct 10:20.*sign-in is switched off until an admin/,
     );
   });
 });

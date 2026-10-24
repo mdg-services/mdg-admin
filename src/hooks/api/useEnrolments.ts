@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { api } from '@/lib/api';
 import type { EnrolmentList } from '@dk/shared';
 
@@ -18,8 +17,8 @@ export const enrolmentCountsKey = ['enrolments', 'counts'] as const;
 /**
  * Just the counts: `/admin/enrolments` with `limit=0`, which returns no rows
  * and the true totals, so the nav badge does not download the list to print one
- * number. `enabled` is for that badge — the endpoint is super-admin only, and a
- * plain admin must never send the request.
+ * number. Any admin may ask: a registration is onboarding work, and any admin
+ * approves one.
  *
  * Kept fresh by `useWebsiteIntakeLive`, which refetches on the server's
  * `alerts:changed` and when a backgrounded phone comes back; the poll covers a
@@ -38,9 +37,8 @@ export function useEnrolmentCountsQuery(enabled = true) {
 /**
  * What the Onboarding entry's badge shows: registrations nobody has dealt with
  * yet. Its own request (`useEnrolmentCountsQuery`), refreshed with the lists on
- * every event. Silent for a plain admin, who cannot read the endpoint.
+ * every event, for every admin.
  */
 export function useNewEnrolmentCount(): number {
-  const isSuperAdmin = useIsSuperAdmin();
-  return useEnrolmentCountsQuery(isSuperAdmin).data?.counts.new ?? 0;
+  return useEnrolmentCountsQuery().data?.counts.new ?? 0;
 }

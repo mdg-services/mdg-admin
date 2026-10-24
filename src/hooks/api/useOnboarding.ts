@@ -9,6 +9,7 @@ import type {
   OnboardingBoardView,
   OnboardingConfig,
   OutletSetupAdmin,
+  SetupMessageLang,
 } from '@dk/shared';
 
 import { enrolmentsRoot } from './useEnrolments';
@@ -94,18 +95,29 @@ export function refreshAfterChange(qc: QueryClient, dealerId?: string) {
   if (dealerId) void qc.invalidateQueries({ queryKey: ['dealer', dealerId] });
 }
 
-/** Approve a registration: makes the outlet and its owner, and sends the WhatsApp welcome. Super-admin. */
+/**
+ * Approve a registration: makes the outlet and its owner, and sends the WhatsApp
+ * welcome in one language, `messageLang` (Hinglish or English). Any admin.
+ */
 export function useApproveRegistration() {
   const qc = useQueryClient();
   return useMutation({
     // `linkToUserId`: add the registration as another outlet of that owner (`lib/outlets.ts`).
-    mutationFn: ({ id, ...body }: { id: string; code?: string; linkToUserId?: string }) =>
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+      code?: string;
+      linkToUserId?: string;
+      messageLang?: SetupMessageLang;
+    }) =>
       api.post<ApproveRegistrationResult>(`/admin/registrations/${id}/approve`, approveBody(body)),
     onSettled: () => refreshAfterChange(qc),
   });
 }
 
-/** Change the flat monthly price new bills are raised at. Super-admin. */
+/** Change the flat monthly price new bills are raised at. Any admin. */
 export function useSetMonthlyPrice() {
   const qc = useQueryClient();
   return useMutation({
@@ -115,7 +127,7 @@ export function useSetMonthlyPrice() {
   });
 }
 
-/** Close a registration: the lead said no. Super-admin. */
+/** Close a registration: the lead said no. Any admin. */
 export function useCloseRegistration() {
   const qc = useQueryClient();
   return useMutation({
@@ -176,7 +188,7 @@ export function useLogRegistrationCall() {
   });
 }
 
-/** "Clear NO": a person has checked and the registration is genuine. Super-admin. */
+/** "Clear NO": a person has checked and the registration is genuine. Any admin. */
 export function useClearNotMe() {
   const qc = useQueryClient();
   return useMutation({

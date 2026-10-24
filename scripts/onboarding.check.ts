@@ -25,7 +25,9 @@ import {
   sendSetupBillSchema,
   startSetupServicesSchema,
 } from '../shared/src/schemas/outletSetup';
+import { sendSetupBillRequestSchema } from '../shared/src/schemas/payment';
 import {
+  SETUP_MESSAGE_LANGS,
   SETUP_PAYMENT_MODES,
   SETUP_STAGES,
   type OnboardingBoardRow,
@@ -33,7 +35,6 @@ import {
 } from '../shared/src/types/outletSetup';
 import {
   amountProblem,
-  availableActions,
   billBody,
   billProblem,
   boardRowKey,
@@ -47,13 +48,16 @@ import {
   funnelTiles,
   isDay,
   istDay,
+  MESSAGE_LANG_LABEL,
+  MESSAGE_LANGS,
+  messageLangLabel,
   mdgTurnCount,
   memberLogin,
   milestoneRows,
-  needsSuperAdminNote,
   PAYMENT_MODES,
   SOURCE_LABEL,
   billingLine,
+  chosenMessageLang,
   paiseToRupeesText,
   parseRupees,
   paymentBody,
@@ -226,8 +230,7 @@ describe('the chip on the dealer header', () => {
 });
 
 describe('what each stage offers', () => {
-  const ids = (o: Partial<OutletSetupAdmin>, superAdmin = true) =>
-    availableActions(outlet(o), superAdmin).map((a) => a.id);
+  const ids = (o: Partial<OutletSetupAdmin>) => stageActions(outlet(o)).map((a) => a.id);
 
   it('offers the right primary button per stage', () => {
     assert.deepEqual(ids({ payment: { ...outlet().payment, state: 'not_sent' } }), [
@@ -255,26 +258,19 @@ describe('what each stage offers', () => {
     }
   });
 
-  it('keeps the payment for a super-admin', () => {
-    assert.deepEqual(ids({}, false), ['send_bill', 'close']);
-    assert.deepEqual(ids({ payment: { ...outlet().payment, state: 'not_sent' } }, false), [
-      'send_bill',
-      'close',
-    ]);
-    assert.equal(
-      stageActions(outlet()).find((a) => a.id === 'record_payment')?.superAdminOnly,
-      true,
-    );
-  });
-
-  it('lets a plain admin start from the logins stage, where the money is already in, but not from the bill stage', () => {
-    assert.deepEqual(ids({ stage: 'logins' }, false), ['start_anyway', 'close']);
-    assert.equal(stageActions(outlet()).find((a) => a.id === 'start_anyway')?.superAdminOnly, true);
-    assert.equal(
-      stageActions(outlet({ stage: 'logins' })).find((a) => a.id === 'start_anyway')
-        ?.superAdminOnly,
-      false,
-    );
+  it('gives every admin the whole list: nothing is held back for a super-admin', () => {
+    // the payment, and starting before it is in, are any admin's (owner's decision of 24 Oct)
+    assert.deepEqual(ids({}), ['record_payment', 'send_bill', 'start_anyway', 'close']);
+    assert.deepEqual(ids({ stage: 'live' }), ['pause_billing']);
+    for (const stage of SETUP_STAGES) {
+      for (const spec of stageActions(outlet({ stage }))) {
+        assert.deepEqual(
+          Object.keys(spec).sort(),
+          ['id', 'label', 'primary'],
+          `${stage}/${spec.id}`,
+        );
+      }
+    }
   });
 });
 
@@ -329,6 +325,44 @@ describe('the bill form', () => {
     const body = billBody({ amountText: '₹3,540', dueOn: '2026-11-02' });
     assert.deepEqual(body, { amountPaise: 354000, dueOn: '2026-11-02' });
     assert.ok(sendSetupBillSchema.safeParse(body).success);
+    assert.ok(sendSetupBillRequestSchema.safeParse(body).success);
+  });
+
+  it('carries the language of the WhatsApp message when there is one, and only then', () => {
+    for (const messageLang of ['hi', 'en'] as const) {
+      const body = billBody({ amountText: '3540', dueOn: '2026-11-02', messageLang });
+      assert.deepEqual(body, { amountPaise: 354000, dueOn: '2026-11-02', messageLang });
+      assert.ok(sendSetupBillRequestSchema.safeParse(body).success);
+    }
+    assert.equal('messageLang' in billBody({ amountText: '3540', dueOn: '2026-11-02' }), false);
+    // the server refuses any other language, so the form can never send one
+    assert.equal(
+      sendSetupBillRequestSchema.safeParse({
+        amountPaise: 354000,
+        dueOn: '2026-11-02',
+        messageLang: 'fr',
+      }).success,
+      false,
+    );
+  });
+});
+
+describe('the language of a WhatsApp message', () => {
+  it('offers exactly the two languages the API knows: Hinglish and English, never both at once', () => {
+    assert.deepEqual([...MESSAGE_LANGS].sort(), [...SETUP_MESSAGE_LANGS].sort());
+    assert.deepEqual(Object.keys(MESSAGE_LANG_LABEL).sort(), ['en', 'hi']);
+    assert.equal(messageLangLabel('hi'), 'Hinglish');
+    assert.equal(messageLangLabel('en'), 'English');
+    assert.equal(messageLangLabel(undefined), 'Hinglish');
+    assert.equal(messageLangLabel(null), 'Hinglish');
+  });
+
+  it('sends what is on screen: the pick, else the default, else Hinglish', () => {
+    assert.equal(chosenMessageLang('en', 'hi'), 'en');
+    assert.equal(chosenMessageLang('hi', 'en'), 'hi');
+    assert.equal(chosenMessageLang(null, 'en'), 'en');
+    assert.equal(chosenMessageLang(null, 'hi'), 'hi');
+    assert.equal(chosenMessageLang(null, undefined), 'hi');
   });
 });
 
@@ -614,8 +648,7 @@ describe('a member’s sign-in name', () => {
 
 describe('billing actions', () => {
   const hold = { at: '2026-10-22T20:00:00.000Z', byName: 'Asha', reason: 'not paying' };
-  const ids = (o: Partial<OutletSetupAdmin>, superAdmin = true) =>
-    availableActions(outlet(o), superAdmin).map((a) => a.id);
+  const ids = (o: Partial<OutletSetupAdmin>) => stageActions(outlet(o)).map((a) => a.id);
 
   it('words the two taps as what they do', () => {
     const unsent = stageActions(outlet({ payment: { ...outlet().payment, state: 'not_sent' } }));
@@ -628,10 +661,9 @@ describe('billing actions', () => {
     assert.equal(sent.find((a) => a.id === 'send_bill')?.primary, false);
   });
 
-  it('offers the pause to a super-admin only, while watching or live', () => {
+  it('offers the pause, to any admin, while watching or live', () => {
     assert.deepEqual(ids({ stage: 'live' }), ['pause_billing']);
-    assert.deepEqual(ids({ stage: 'live' }, false), []);
-    assert.deepEqual(ids({ stage: 'watch' }, false), ['end_watch', 'extend_watch']);
+    assert.deepEqual(ids({ stage: 'watch' }), ['end_watch', 'extend_watch', 'pause_billing']);
     for (const stage of [
       'sign_in',
       'services',
@@ -643,11 +675,10 @@ describe('billing actions', () => {
     ] as const) {
       assert.ok(!ids({ stage }).includes('pause_billing'), stage);
     }
-    assert.equal(stageActions(outlet({ stage: 'live' }))[0]!.superAdminOnly, true);
     assert.equal(stageActions(outlet({ stage: 'live' }))[0]!.primary, false);
   });
 
-  it('offers resume instead of pause while the outlet is paused, and says who may', () => {
+  it('offers resume instead of pause while the outlet is paused', () => {
     const paused = { subscription: { billingHold: hold } };
     assert.deepEqual(ids({ stage: 'live', ...paused }), ['resume_billing']);
     assert.deepEqual(ids({ stage: 'watch', ...paused }), [
@@ -655,13 +686,6 @@ describe('billing actions', () => {
       'extend_watch',
       'resume_billing',
     ]);
-    assert.deepEqual(ids({ stage: 'live', ...paused }, false), []);
-    assert.equal(
-      needsSuperAdminNote(outlet({ stage: 'live', ...paused }), false),
-      'The services are paused for non-payment. A super-admin resumes them.',
-    );
-    assert.equal(needsSuperAdminNote(outlet({ stage: 'live', ...paused }), true), null);
-    assert.equal(needsSuperAdminNote(outlet({ stage: 'live' }), false), null);
   });
 
   it('names the bill by its number, and how a Razorpay payment came', () => {

@@ -174,6 +174,6 @@ export function reminderLine(
 /** The line on a card that says somebody disowned the registration. Empty when nobody did. */
 export function notMeLine(o: Pick<OutletSetupAdmin, 'notMe'>): string {
   return o.notMe
-    ? `Somebody replied NO to the welcome on ${istDayTime(o.notMe.at)}. The owner's sign-in is switched off until a super-admin clears it.`
+    ? `Somebody replied NO to the welcome on ${istDayTime(o.notMe.at)}. The owner's sign-in is switched off until an admin checks it and clears it.`
     : '';
 }

@@ -5,7 +5,7 @@ import type { RegistrationLinkOption } from '@/lib/outlets';
 
 /**
  * Who a registration could be added to as another outlet, or why not
- * (`GET /admin/registrations/:id/link-option`, super-admin). Asked for only while
+ * (`GET /admin/registrations/:id/link-option`, any admin). Asked for only while
  * the Approve dialog shows a registration that is "already a client", and never
  * cached: the answer must be what the server would accept right now.
  *

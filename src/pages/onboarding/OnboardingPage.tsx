@@ -25,7 +25,6 @@ import { PasswordHelpSection } from '@/features/onboarding/PasswordHelpSection';
 import { OutletFollowUpLines } from '@/features/onboarding/SetupFollowUp';
 import { StageActions } from '@/features/onboarding/StageActions';
 import { useCloseRegistration, useOnboardingBoardQuery } from '@/hooks/api/useOnboarding';
-import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { agoLabel, istStamp } from '@/lib/intake';
 import {
   boardRowKey,
@@ -84,13 +83,12 @@ const VIEW_EMPTY: Record<OnboardingBoardView, { title: string; description: stri
  * list because somebody is locked out and waiting for a call.
  *
  * The view lives in the URL (`?view=live`), so Back and a shared link land on the
- * same one. Kept fresh by `useOutletSetupLive` in the shell. Approving a
- * registration and recording a payment are super-admin buttons; a plain admin
- * sees the rest.
+ * same one. Kept fresh by `useOutletSetupLive` in the shell. Every admin sees every
+ * button, approving a registration and recording a payment included (owner's
+ * decision of 24 Oct).
  */
 export function OnboardingPage() {
   const toast = useToast();
-  const isSuperAdmin = useIsSuperAdmin();
   const [search, setSearch] = useSearchParams();
   const view = viewFromParam(search.get('view'));
   const q = useOnboardingBoardQuery(view);
@@ -127,40 +125,37 @@ export function OnboardingPage() {
     );
   }
 
-  /** The buttons on a registration. Super-admin only, and the reason is on screen when they are not there. */
-  const registrationActions = (r: RegistrationRow, stacked: boolean) =>
-    isSuperAdmin ? (
-      <ActionRow
-        below="wrap"
-        align="start"
-        className={stacked ? 'flex-col !items-stretch' : undefined}
+  /** The buttons on a registration. */
+  const registrationActions = (r: RegistrationRow, stacked: boolean) => (
+    <ActionRow
+      below="wrap"
+      align="start"
+      className={stacked ? 'flex-col !items-stretch' : undefined}
+    >
+      {/* Not greyed for an existing client: the dialog then offers only "Add as
+          another outlet of …" (one person, several pumps) and refuses a plain approve. */}
+      <Button size="sm" onClick={() => setApproving(r)}>
+        Approve
+      </Button>
+      <Button size="sm" variant="ghost" onClick={() => setClosing(r)}>
+        Close…
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() =>
+          setCalling({
+            kind: 'registration',
+            registrationId: r.registrationId,
+            name: r.name,
+            sapCode: r.sapCode,
+          })
+        }
       >
-        {/* Not greyed for an existing client: the dialog then offers only "Add as
-            another outlet of …" (one person, several pumps) and refuses a plain approve. */}
-        <Button size="sm" onClick={() => setApproving(r)}>
-          Approve
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => setClosing(r)}>
-          Close…
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() =>
-            setCalling({
-              kind: 'registration',
-              registrationId: r.registrationId,
-              name: r.name,
-              sapCode: r.sapCode,
-            })
-          }
-        >
-          Log call…
-        </Button>
-      </ActionRow>
-    ) : (
-      <p className="text-xs text-text-muted">A super-admin approves registrations.</p>
-    );
+        Log call…
+      </Button>
+    </ActionRow>
+  );
 
   // `stacked` is the table column: one button under another at one width. On a
   // phone card the buttons run in a wrapping row instead.
@@ -271,18 +266,16 @@ export function OnboardingPage() {
       <LogCallDialog
         target={calling}
         onClose={() => setCalling(null)}
-        // "Not interested" offers to close the registration, which only a
-        // super-admin may do (an outlet's own Close sits on its row).
-        {...(isSuperAdmin
-          ? {
-              onNotInterested: (t: CallTarget) => {
-                const row = rows.find(
-                  (x) => x.kind === 'registration' && t.kind === 'registration' && x.registrationId === t.registrationId,
-                );
-                if (row) setClosing(row as RegistrationRow);
-              },
-            }
-          : {})}
+        // "Not interested" offers to close the registration (an outlet's own Close sits on its row).
+        onNotInterested={(t: CallTarget) => {
+          const row = rows.find(
+            (x) =>
+              x.kind === 'registration' &&
+              t.kind === 'registration' &&
+              x.registrationId === t.registrationId,
+          );
+          if (row) setClosing(row as RegistrationRow);
+        }}
       />
       <ApproveDialog row={approving} onClose={() => setApproving(null)} />
       <CloseDialog

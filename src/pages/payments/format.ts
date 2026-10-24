@@ -126,7 +126,7 @@ export interface PaymentActions {
   refund: boolean;
   /** Say a person has looked at what went wrong. */
   markChecked: boolean;
-  /** Money came outside Razorpay: record it by hand (super-admin). */
+  /** Money came outside Razorpay: record it by hand. */
   recordPayment: boolean;
 }
 
@@ -142,9 +142,10 @@ export interface PaymentActions {
  *    a fresh one;
  *  - looking a payment up needs something to look up at Razorpay — a cancelled
  *    one still counts, because it may have been paid after it was withdrawn;
- *  - refunding is a super-admin's alone, and only of what is still unreturned;
- *  - recording money that came outside Razorpay is a super-admin's alone, and only
- *    while the payment is `due` (one Razorpay is confirming is left to settle).
+ *  - refunding is a super-admin's alone (money going back is not onboarding), and
+ *    only of what is still unreturned;
+ *  - recording money that came outside Razorpay is any admin's, and only while the
+ *    payment is `due` (one Razorpay is confirming is left to settle).
  */
 export function allowedActions(p: AdminPayment, isSuperAdmin: boolean): PaymentActions {
   const due = p.status === 'due';
@@ -155,7 +156,7 @@ export function allowedActions(p: AdminPayment, isSuperAdmin: boolean): PaymentA
     cancel: due,
     refund: isSuperAdmin && refundable(p) > 0,
     markChecked: hasOpenProblem(p),
-    recordPayment: isSuperAdmin && due,
+    recordPayment: due,
   };
 }
 

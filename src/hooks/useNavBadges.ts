@@ -35,8 +35,9 @@ export function useNavBadges(): Record<string, number> {
   const pendingHolidaysQ = useBankHolidayPendingQuery();
   const openAlerts = useOpenAlertCount();
   const openTickets = useOpenTicketCount();
-  // Both are super-admin only, and both hooks stay silent for everyone else.
-  // Each asks the server for the counts alone (`limit=0`), not for the list.
+  // Grievances are super-admin only, and that hook stays silent for everyone else;
+  // registrations are every admin's (any admin approves one). Each asks the server
+  // for the counts alone (`limit=0`), not for the list.
   const openGrievances = useOpenGrievanceCount();
   const newRegistrations = useNewEnrolmentCount();
   const newCallbacks = useNewCallbackCount();

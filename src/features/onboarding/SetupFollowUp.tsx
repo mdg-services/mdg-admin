@@ -2,7 +2,6 @@ import * as React from 'react';
 
 import { Button, Callout, ConfirmDialog, useToast } from '@/components/ui';
 import { useClearNotMe } from '@/hooks/api/useOnboarding';
-import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { callLine, lastCallLine, notMeLine, reminderLine } from '@/lib/onboardingCalls';
 import { dealerCodeLabel, type OutletSetupAdmin, type SetupCall } from '@dk/shared';
 
@@ -30,10 +29,9 @@ export function SetupFollowUp({ setup }: { setup: OutletSetupAdmin }) {
   );
 }
 
-/** "Somebody replied NO to the welcome" and the super-admin's way to clear it. */
+/** "Somebody replied NO to the welcome" and every admin's way to clear it, once they have checked. */
 function NotMeNotice({ setup }: { setup: OutletSetupAdmin }) {
   const toast = useToast();
-  const isSuperAdmin = useIsSuperAdmin();
   const clear = useClearNotMe();
   const [asking, setAsking] = React.useState(false);
   const label = dealerCodeLabel(setup.code);
@@ -51,15 +49,11 @@ function NotMeNotice({ setup }: { setup: OutletSetupAdmin }) {
   return (
     <div className="grid gap-2">
       <Callout intent="warning">{notMeLine(setup)}</Callout>
-      {isSuperAdmin ? (
-        <div>
-          <Button size="sm" variant="secondary" onClick={() => setAsking(true)}>
-            Clear NO…
-          </Button>
-        </div>
-      ) : (
-        <p className="text-xs text-text-muted">A super-admin checks this and clears it.</p>
-      )}
+      <div>
+        <Button size="sm" variant="secondary" onClick={() => setAsking(true)}>
+          Clear NO…
+        </Button>
+      </div>
       <ConfirmDialog
         open={asking}
         onCancel={() => setAsking(false)}

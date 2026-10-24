@@ -2,19 +2,17 @@ import * as React from 'react';
 
 import { Button, Dialog, FieldError, Input, Label, useToast } from '@/components/ui';
 import { useOnboardingConfigQuery, useSetMonthlyPrice } from '@/hooks/api/useOnboarding';
-import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { ApiError } from '@/lib/api';
 import { amountProblem, formatPaise, paiseToRupeesText, parseRupees } from '@/lib/onboarding';
 
 /**
  * The one flat monthly price every new bill is raised at (onboarding v2, owner's
- * decision D2), GST included. Shown to every admin; changed by a super-admin.
+ * decision D2), GST included. Shown to every admin, and changed by any admin.
  * A change applies to bills raised after it — a bill already sent keeps its
  * amount — and every change is kept with who made it.
  */
 export function MonthlyPriceTool() {
   const config = useOnboardingConfigQuery();
-  const isSuperAdmin = useIsSuperAdmin();
   const [open, setOpen] = React.useState(false);
   if (!config.data) return null;
   const { monthlyPricePaise, priceHistory } = config.data;
@@ -24,11 +22,9 @@ export function MonthlyPriceTool() {
         Monthly price: <span className="font-semibold text-text">{formatPaise(monthlyPricePaise)}</span> a month,
         GST included
       </span>
-      {isSuperAdmin ? (
-        <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
-          Change…
-        </Button>
-      ) : null}
+      <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
+        Change…
+      </Button>
       {open ? (
         <ChangePriceDialog
           current={monthlyPricePaise}

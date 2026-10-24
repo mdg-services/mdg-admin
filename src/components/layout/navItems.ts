@@ -162,8 +162,8 @@ export const NAV_ITEMS: NavItem[] = [
   // (services, bill, payment, logins, setup, watch), with whose move it is. It
   // replaced the Registrations list and the old seven-step tab. The count is the
   // registrations nobody has dealt with yet. Every admin: outlets on their way are
-  // everyday work; approving and recording a payment are super-admin buttons
-  // inside the page.
+  // everyday work, and so is every button inside the page, approving a registration
+  // and recording a payment included.
   { to: '/onboarding', label: 'Onboarding', icon: ClipboardPen },
   // Everyone who asked us to call them on the website: the film pages' form,
   // the home page, the Khata Kavach page, the assistant. Counts the ones nobody

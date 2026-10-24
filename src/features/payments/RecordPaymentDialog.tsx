@@ -32,7 +32,7 @@ import {
 
 /**
  * "Record payment received": money that came outside Razorpay (UPI to the company
- * account, a bank transfer, cash, a cheque) recorded by a super-admin against a bill
+ * account, a bank transfer, cash, a cheque) recorded by an admin against a bill
  * (ADR 0022 §12). One dialog for both places it is reached from: a payment's drawer
  * on the Payments page, and an outlet's Setup card, where it is the outlet's bill.
  *
@@ -215,8 +215,8 @@ function RecordPaymentForm({ target, onClose }: { target: RecordTarget; onClose:
         {short ? <Callout intent="info">{short}</Callout> : null}
         <FieldError message={touched ? (problem ?? undefined) : undefined} />
         <p className="text-xs text-text-muted">
-          Only a super-admin records a payment, and every one is logged. The dealer gets their
-          receipt and the GST invoice, as for a Razorpay payment.
+          Every payment recorded is logged with who recorded it. The dealer gets their receipt and
+          the GST invoice, as for a Razorpay payment.
         </p>
       </form>
     </Dialog>

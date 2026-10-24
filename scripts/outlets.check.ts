@@ -84,6 +84,15 @@ describe('approveBody', () => {
     assert.deepEqual(approveBody({ code: '', linkToUserId: '' }), {});
   });
 
+  it('carries the language of the welcome when there is one, and only then', () => {
+    assert.deepEqual(approveBody({ code: '16E', messageLang: 'en' }), { code: '16E', messageLang: 'en' });
+    assert.deepEqual(approveBody({ code: '16E', messageLang: 'hi' }), { code: '16E', messageLang: 'hi' });
+    assert.deepEqual(approveBody({ code: '16E', messageLang: undefined }), { code: '16E' });
+    assert.ok(serverBody.safeParse(approveBody({ code: '16E', messageLang: 'en' })).success);
+    // the server refuses any other language, so the dialog can never send one
+    assert.equal(serverBody.safeParse({ code: '16E', messageLang: 'fr' }).success, false);
+  });
+
   it('is a body the server accepts', () => {
     assert.ok(serverBody.safeParse(approveBody({ code: '16E' })).success);
     assert.ok(serverBody.safeParse(approveBody({ code: '16E', linkToUserId: owner.userId })).success);

@@ -1,7 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { AdminPayment, OutletSetupAdmin, SendSetupBillResult } from '@dk/shared';
+import type {
+  AdminPayment,
+  OutletSetupAdmin,
+  SendSetupBillResult,
+  SetupMessageLang,
+} from '@dk/shared';
 import type { RecordManualPaymentInput } from '@dk/shared/schemas';
 
 import { refreshAfterChange } from './useOnboarding';
@@ -10,7 +15,8 @@ import { paymentsRoot } from './usePayments';
 /**
  * "Send bill": raises the outlet's bill as a payment, makes the Razorpay link
  * (Razorpay texts it) and sends the WhatsApp by template — or hands back the words
- * for the team to send by hand. Leave the body empty for the flat monthly price
+ * for the team to send by hand, in the one language `messageLang` names (the
+ * outlet's default when left out). Leave the body empty for the flat monthly price
  * due in the usual days. The answer carries the fresh setup and how the bill
  * went out (`POST /dealers/:id/setup/bill`). Any admin.
  */
@@ -22,7 +28,7 @@ export function useSendBill() {
       body,
     }: {
       dealerId: string;
-      body: { amountPaise?: number; dueOn?: string };
+      body: { amountPaise?: number; dueOn?: string; messageLang?: SetupMessageLang };
     }) => api.post<SendSetupBillResult>(`/dealers/${dealerId}/setup/bill`, body),
     onSettled: (_data, _err, vars) => {
       refreshAfterChange(qc, vars.dealerId);
@@ -33,7 +39,7 @@ export function useSendBill() {
 
 /**
  * Money that came outside Razorpay, recorded against a payment by id
- * (`POST /admin/payments/:id/manual`). Super-admin. The invoice, the dealer's
+ * (`POST /admin/payments/:id/manual`). Any admin. The invoice, the dealer's
  * receipt and an outlet's onboarding follow, as for a Razorpay payment.
  */
 export function useRecordManualPayment() {
@@ -52,7 +58,7 @@ export function useRecordManualPayment() {
 /**
  * The same money, recorded through the outlet's setup (`POST /dealers/:id/setup/
  * payment`): the route to use for a bill that has no payment id yet (one recorded
- * as sent before bills were payments). Super-admin.
+ * as sent before bills were payments). Any admin.
  */
 export function useRecordSetupPayment() {
   const qc = useQueryClient();
@@ -71,7 +77,7 @@ export function useRecordSetupPayment() {
   });
 }
 
-/** Pause the outlet's services for non-payment, with a reason. Super-admin. */
+/** Pause the outlet's services for non-payment, with a reason. Any admin. */
 export function usePauseBilling() {
   const qc = useQueryClient();
   return useMutation({
@@ -85,7 +91,7 @@ export function usePauseBilling() {
   });
 }
 
-/** Resume exactly the services the pause stopped. Super-admin. */
+/** Resume exactly the services the pause stopped. Any admin. */
 export function useResumeBilling() {
   const qc = useQueryClient();
   return useMutation({

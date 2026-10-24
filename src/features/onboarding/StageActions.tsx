@@ -4,14 +4,7 @@ import { ActionRow, Button, ConfirmDialog, useToast } from '@/components/ui';
 import { RecordPaymentDialog } from '@/features/payments/RecordPaymentDialog';
 import { useResumeBilling } from '@/hooks/api/useBilling';
 import { useChangeWatch, useCloseOutletSetup } from '@/hooks/api/useOnboarding';
-import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
-import {
-  availableActions,
-  closeBody,
-  needsSuperAdminNote,
-  watchBody,
-  type StageActionId,
-} from '@/lib/onboarding';
+import { closeBody, stageActions, watchBody, type StageActionId } from '@/lib/onboarding';
 import { dealerCodeLabel, type OutletSetupAdmin } from '@dk/shared';
 
 import { PauseBillingDialog, SendBillDialog } from './BillingDialogs';
@@ -25,10 +18,8 @@ import { ExtendWatchDialog, StartServicesDialog } from './SetupDialogs';
  * Setup card on the dealer's Info tab, so the two can never offer different
  * things for the same outlet.
  *
- * WHICH buttons is `availableActions` (`lib/onboarding.ts`): the stage decides,
- * and a plain admin does not see the super-admin's (recording a payment). When
- * the next move is a super-admin's and the person looking is not one, a line
- * says so instead of leaving them with nothing to press and no reason.
+ * WHICH buttons is `stageActions` (`lib/onboarding.ts`): the stage decides, and
+ * every admin sees every button (owner's decision of 24 Oct).
  *
  * Only one form is open at a time. The forms mount only while open, so a page of
  * fifty rows holds no fifty dialogs.
@@ -48,7 +39,6 @@ export function StageActions({
   className?: string;
 }) {
   const toast = useToast();
-  const isSuperAdmin = useIsSuperAdmin();
   const [open, setOpen] = React.useState<StageActionId | null>(null);
   // ── reminders and calls ── a call can be logged at every step before live or closed.
   const [calling, setCalling] = React.useState(false);
@@ -57,8 +47,7 @@ export function StageActions({
   const watch = useChangeWatch();
   const resumeBilling = useResumeBilling();
 
-  const specs = availableActions(outlet, isSuperAdmin);
-  const note = needsSuperAdminNote(outlet, isSuperAdmin);
+  const specs = stageActions(outlet);
   const dismiss = () => setOpen(null);
   const label = dealerCodeLabel(outlet.code);
 
@@ -83,7 +72,7 @@ export function StageActions({
     }
   }
 
-  if (specs.length === 0 && !note && !canLogCall) return null;
+  if (specs.length === 0 && !canLogCall) return null;
 
   return (
     <div className={className}>
@@ -110,7 +99,6 @@ export function StageActions({
           ) : null}
         </ActionRow>
       ) : null}
-      {note ? <p className="mt-1.5 text-xs text-text-muted">{note}</p> : null}
 
       <LogCallDialog
         target={

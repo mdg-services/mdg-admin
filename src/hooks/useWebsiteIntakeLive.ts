@@ -27,8 +27,9 @@ import { grievancesRoot } from './api/useGrievances';
  * the event: there is no separate one. The socket instance is rebuilt when the
  * signed-in account changes, so the effect follows the token.
  *
- * For a plain admin both invalidations find nothing to refresh and do nothing:
- * the lists and the counts are only ever requested by a super-admin.
+ * The registration count is every admin's (any admin approves one); the grievance
+ * and call-back lists and counts are only ever requested by a super-admin, so for
+ * a plain admin those two invalidations find nothing to refresh and do nothing.
  */
 export function useWebsiteIntakeLive(): void {
   const qc = useQueryClient();

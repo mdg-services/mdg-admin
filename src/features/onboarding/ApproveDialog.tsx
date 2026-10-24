@@ -20,11 +20,13 @@ import { useApproveRegistration } from '@/hooks/api/useOnboarding';
 import { useRegistrationLinkOptionQuery } from '@/hooks/api/useOutletLink';
 import { copyText } from '@/lib/clipboard';
 import { agoLabel, dialHref, istStamp, phoneLabel } from '@/lib/intake';
-import type { RegistrationRow } from '@/lib/onboarding';
+import { chosenMessageLang, messageLangLabel, type RegistrationRow } from '@/lib/onboarding';
 import { LINK_CHOICE_HINT, canApprove as mayApprove, linkChoiceLabel, linkedResultLine } from '@/lib/outlets';
 import { ageSince } from '@/pages/overview/format';
-import { dealerCodeLabel, type ApproveRegistrationResult } from '@dk/shared';
+import { dealerCodeLabel, type ApproveRegistrationResult, type SetupMessageLang } from '@dk/shared';
 import { dealerCodeSchema } from '@dk/shared/schemas';
+
+import { MessageLangField } from './MessageLangField';
 
 /** The owner a registration was added to, kept for the result screen. */
 type LinkedTo = { name: string; codes: string[] };
@@ -43,6 +45,10 @@ type LinkedTo = { name: string; codes: string[] };
  * the person approving sends it from their own phone (Open WhatsApp). A
  * temporary password comes back only for a registration that carried none, shown
  * once.
+ *
+ * The WhatsApp welcome goes in ONE language, Hinglish or English, chosen here:
+ * pre-set to the default for this person (`row.messageLang`) and changeable for
+ * this send. The result screen's words and Open WhatsApp link are in that language.
  *
  * `row` is the registration being approved; `null` is closed. The page owns it,
  * not the list, so the result screen stays after the row has left the list.
@@ -66,6 +72,8 @@ export function ApproveDialog({
   const [link, setLink] = React.useState(false);
   // The owner the result screen names, kept past the refresh that follows an approval.
   const [linkedTo, setLinkedTo] = React.useState<LinkedTo | null>(null);
+  // The welcome's language: what the person picked; until they do, the default on the row.
+  const [pickedLang, setPickedLang] = React.useState<SetupMessageLang | null>(null);
 
   // Fresh for every registration.
   React.useEffect(() => {
@@ -75,6 +83,7 @@ export function ApproveDialog({
     setNow(Date.now());
     setLink(false);
     setLinkedTo(null);
+    setPickedLang(null);
   }, [row?.registrationId]);
 
   // Prefill with the next free code, unless the person has already typed one.
@@ -110,6 +119,8 @@ export function ApproveDialog({
         id: row.registrationId,
         code: parsed.data,
         ...(linking && linkOwner ? { linkToUserId: linkOwner.userId } : {}),
+        // The language that is on screen, as the person saw it.
+        messageLang: chosenMessageLang(pickedLang, row.messageLang),
       });
       if (linking && linkOwner) setLinkedTo({ name: linkOwner.name, codes: linkOwner.codes });
       setResult(done);
@@ -225,6 +236,13 @@ export function ApproveDialog({
             </p>
           </div>
 
+          <MessageLangField
+            picked={pickedLang}
+            fallback={row.messageLang}
+            onPick={setPickedLang}
+            disabled={approve.isPending}
+          />
+
           <p className="text-xs text-text-muted">
             {linking
               ? 'This makes the outlet and a login for the same owner, with their existing password. No welcome is sent by itself: you get the words to send.'
@@ -275,7 +293,9 @@ function ApprovedResult({
       {welcome.sent ? (
         <div className="flex items-start gap-2 rounded-md border border-success bg-success-soft p-2.5 text-sm text-success-strong md:text-success">
           <Check width={16} height={16} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden />
-          <span>WhatsApp welcome sent to {phoneLabel(row.mobile)}.</span>
+          <span>
+            WhatsApp welcome sent to {phoneLabel(row.mobile)}, in {messageLangLabel(result.messageLang)}.
+          </span>
         </div>
       ) : (
         <>
@@ -284,7 +304,12 @@ function ApprovedResult({
             your phone: it tells them the account is ready and how to sign in.
           </Callout>
           <div>
-            <Label htmlFor="welcome-text">Message to send to {phoneLabel(row.mobile)}</Label>
+            <Label htmlFor="welcome-text">
+              Message to send to {phoneLabel(row.mobile)}
+              <span className="ml-2 text-xs font-normal text-text-subtle">
+                in {messageLangLabel(result.messageLang)}
+              </span>
+            </Label>
             <Textarea
               id="welcome-text"
               rows={6}

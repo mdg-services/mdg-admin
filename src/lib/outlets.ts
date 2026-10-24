@@ -12,7 +12,7 @@
  * and the extra `linkToUserId` on Approve's body. They move into shared with the
  * next contract change.
  */
-import type { DealerMemberRow, LinkOwner } from '@dk/shared';
+import type { DealerMemberRow, LinkOwner, SetupMessageLang } from '@dk/shared';
 
 export type { LinkOwner, RegistrationLinkOption } from '@dk/shared';
 /** A dealer member as the Members tab gets it: the person's other outlets ride along for an admin. */
@@ -43,14 +43,24 @@ export function linkedResultLine(owner: Pick<LinkOwner, 'name' | 'codes'>, newCo
   return `${newCode} is now another outlet of ${owner.name} (also ${joinCodes(owner.codes)}). They sign in as before, with the same password.`;
 }
 
-/** The Approve request body: the code the person saw, and the owner to link to when ticked. */
-export function approveBody(input: { code?: string | undefined; linkToUserId?: string | undefined }): {
+/**
+ * The Approve request body: the code the person saw, the owner to link to when
+ * ticked, and the language of the WhatsApp welcome (one language, as chosen on
+ * screen).
+ */
+export function approveBody(input: {
+  code?: string | undefined;
+  linkToUserId?: string | undefined;
+  messageLang?: SetupMessageLang | undefined;
+}): {
   code?: string;
   linkToUserId?: string;
+  messageLang?: SetupMessageLang;
 } {
   return {
     ...(input.code ? { code: input.code } : {}),
     ...(input.linkToUserId ? { linkToUserId: input.linkToUserId } : {}),
+    ...(input.messageLang ? { messageLang: input.messageLang } : {}),
   };
 }
 

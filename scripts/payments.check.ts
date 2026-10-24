@@ -233,13 +233,13 @@ describe('allowedActions', () => {
       cancel: true,
       refund: false,
       markChecked: false,
-      recordPayment: false,
+      recordPayment: true,
     });
   });
 
-  it('lets only a super-admin record money that came outside Razorpay, and only while it is due', () => {
+  it('lets any admin record money that came outside Razorpay, and only while it is due', () => {
     assert.equal(allowedActions(payment(), true).recordPayment, true);
-    assert.equal(allowedActions(payment(), false).recordPayment, false);
+    assert.equal(allowedActions(payment(), false).recordPayment, true);
     assert.equal(allowedActions(payment({ status: 'processing' }), true).recordPayment, false);
     assert.equal(allowedActions(PAID, true).recordPayment, false);
     assert.equal(

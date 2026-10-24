@@ -18,6 +18,7 @@ import type {
   OnboardingBoard,
   OutletSetupAdmin,
   SetupBilling,
+  SetupMessageLang,
   SetupMilestones,
   SetupPaymentMode,
   SetupSource,
@@ -220,40 +221,37 @@ export interface StageActionSpec {
   label: string;
   /** The one button an admin is meant to press at this stage. */
   primary: boolean;
-  /** Only a super-admin sees it: money in, and who is let in. */
-  superAdminOnly: boolean;
 }
 
 /**
  * The buttons an outlet's row offers, primary first.
  *
+ * Every button is any admin's (owner's decision of 24 Oct); only refunds, which are
+ * not onboarding, stay a super-admin's, and they are on the Payments page.
+ *
  * - bill not sent: "Send bill…" raises it as a payment and sends it (outside the app)
- * - bill sent: "Record payment…", super-admin only, as the plan says; and "Send bill
- *   again…" to resend it or replace it with another amount
- * - watching or live: "Pause for non-payment…" / "Resume services", super-admin only
+ * - bill sent: "Record payment…", and "Send bill again…" to resend it or replace it
+ *   with another amount
+ * - watching or live: "Pause for non-payment…" / "Resume services"
  * - ready to set up: "Start services…"
  * - watching: "End watch" or "Extend…"
  * - any open stage before services start: "Close…"
  *
  * "Start anyway…" is the API's override (a reason is required): starting from
  * the bill or logins stage is allowed, and the reason is kept. It is never the
- * primary button, so nobody starts services early by habit. From the bill stage
- * it is a super-admin's, because it steps over the payment only they confirm.
+ * primary button, so nobody starts services early by habit.
  */
 export function stageActions(o: StageFacts): StageActionSpec[] {
   const out: StageActionSpec[] = [];
-  const add = (id: StageActionId, label: string, primary: boolean, superAdminOnly = false) =>
-    out.push({ id, label, primary, superAdminOnly });
+  const add = (id: StageActionId, label: string, primary: boolean) => out.push({ id, label, primary });
   switch (o.stage) {
     case 'payment':
       if (o.payment.state === 'not_sent') add('send_bill', 'Send bill…', true);
       else {
-        add('record_payment', 'Record payment…', true, true);
+        add('record_payment', 'Record payment…', true);
         add('send_bill', 'Send bill again…', false);
       }
-      // Starting before the money is in skips the one step only a super-admin
-      // may confirm, so only a super-admin may do it from here.
-      add('start_anyway', 'Start anyway…', false, true);
+      add('start_anyway', 'Start anyway…', false);
       break;
     case 'logins':
       add('start_anyway', 'Start anyway…', false);
@@ -271,28 +269,13 @@ export function stageActions(o: StageFacts): StageActionSpec[] {
   // Billing's own lever (phase 9): stopping the services of an outlet that has
   // started and is not paying, and giving them back. Never the primary button.
   if (o.stage === 'watch' || o.stage === 'live') {
-    if (o.subscription?.billingHold) add('resume_billing', 'Resume services', false, true);
-    else add('pause_billing', 'Pause for non-payment…', false, true);
+    if (o.subscription?.billingHold) add('resume_billing', 'Resume services', false);
+    else add('pause_billing', 'Pause for non-payment…', false);
   }
   // Not once services have started: that outlet is a client, and ending it is an
   // archive from the dealer page (the server refuses "lost" there too).
   if (isOpenStage(o.stage) && o.stage !== 'watch') add('close', 'Close…', false);
   return out;
-}
-
-/** `stageActions` for the person looking: a plain admin does not see the super-admin ones. */
-export function availableActions(o: StageFacts, isSuperAdmin: boolean): StageActionSpec[] {
-  return stageActions(o).filter((a) => isSuperAdmin || !a.superAdminOnly);
-}
-
-/** When a super-admin's step is the one the outlet waits on and the viewer is not one: the line to show instead. */
-export function needsSuperAdminNote(o: StageFacts, isSuperAdmin: boolean): string | null {
-  if (isSuperAdmin) return null;
-  if (o.stage === 'payment' && o.payment.state === 'sent')
-    return 'A super-admin records the payment.';
-  if ((o.stage === 'watch' || o.stage === 'live') && o.subscription?.billingHold)
-    return 'The services are paused for non-payment. A super-admin resumes them.';
-  return null;
 }
 
 // ── Money ───────────────────────────────────────────────────────────────────
@@ -350,11 +333,49 @@ export function billProblem(
   return null;
 }
 
-export function billBody(v: { amountText: string; dueOn: string }): {
+export function billBody(v: { amountText: string; dueOn: string; messageLang?: SetupMessageLang }): {
   amountPaise: number;
   dueOn: string;
+  messageLang?: SetupMessageLang;
 } {
-  return { amountPaise: parseRupees(v.amountText) ?? 0, dueOn: v.dueOn };
+  return {
+    amountPaise: parseRupees(v.amountText) ?? 0,
+    dueOn: v.dueOn,
+    ...(v.messageLang ? { messageLang: v.messageLang } : {}),
+  };
+}
+
+// ── The language of a WhatsApp message ──────────────────────────────────────
+
+/**
+ * What the "Message language" choice calls each language a WhatsApp message can be
+ * in: Hindi written in English letters, or English. One language per message, never
+ * both. `hi` is the template language code Meta is given for Hinglish. The app's
+ * own screens are not part of this: they stay in Devanagari Hindi and English.
+ */
+export const MESSAGE_LANG_LABEL: Record<SetupMessageLang, string> = {
+  hi: 'Hinglish',
+  en: 'English',
+};
+
+/** Both, in the order the choice shows them. */
+export const MESSAGE_LANGS = Object.keys(MESSAGE_LANG_LABEL) as SetupMessageLang[];
+
+/** The choice's label for a language, or the plain code for one this build does not know. */
+export function messageLangLabel(lang: SetupMessageLang | null | undefined): string {
+  return lang ? (MESSAGE_LANG_LABEL[lang] ?? lang) : MESSAGE_LANG_LABEL.hi;
+}
+
+/**
+ * The language the dialog sends in: what the person picked, else the default the
+ * server worked out for this outlet or registration. Always one of the two, so the
+ * message goes out in the language that was on screen when the button was pressed.
+ */
+export function chosenMessageLang(
+  picked: SetupMessageLang | null,
+  fallback: SetupMessageLang | null | undefined,
+): SetupMessageLang {
+  return picked ?? fallback ?? 'hi';
 }
 
 export const PAYMENT_MODE_LABEL: Record<SetupPaymentMode, string> = {

@@ -569,8 +569,8 @@ export default function App() {
               "Register your pump" (the website's form and the app's sign-up
               screen, behind the `enrolment_new` alert) and every outlet on its
               way. Every admin, not super-admin: the rows are everyday work, and
-              approving a registration and recording a payment are gated inside
-              the page and on the server. Keep in step with `navItems.ts`. */}
+              so is every step on them (approving a registration, recording a
+              payment), here and on the server. Keep in step with `navItems.ts`. */}
           <Route
             path="onboarding"
             element={

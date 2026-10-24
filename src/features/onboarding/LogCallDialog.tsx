@@ -39,8 +39,8 @@ const errorText = (err: unknown) =>
  * "call them" alert (it returns in two days if the dealer is still silent), "Call
  * later" keeps the reminders and alerts quiet until the day picked, and "Not
  * interested" stops the chasing. That last one offers to close the onboarding
- * next, through `onNotInterested`: the parent decides whether this person may
- * (closing a registration is a super-admin's) and opens its own Close form.
+ * next, through `onNotInterested`: the parent decides whether it applies (an outlet
+ * whose services have started is a client, not a lead) and opens its own Close form.
  *
  * Nothing here messages the dealer. `target` null is closed; the form mounts
  * only while one is open, keyed on who it is for, so the board refreshing
