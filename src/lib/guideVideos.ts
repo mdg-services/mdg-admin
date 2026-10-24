@@ -183,9 +183,11 @@ const BY_SURFACE: Record<string, readonly GuideRef[]> = {
   // explainer about that clock is the most useful thing we have for it.
   'admin-bank-holidays': [DOD_CLOCK, ...CREDIT_DOD],
   'admin-onboarding': ONBOARDING,
-  // The Setup card on a dealer page: the walkthrough from "Ready to start?" on.
+  // The Setup card on a dealer page: the walkthrough from "Ready to start?" on,
+  // and the card's own "Do it for the dealer" buttons.
   'admin-dealer-setup': [
-    video('admin_onboarding', 'Starting the services and the watch', { at: 173.84, titleIsPart: true }),
+    video('admin_onboarding', 'Starting the services and the watch', { at: 264.42, titleIsPart: true }),
+    video('admin_onboarding', 'Doing a step for the dealer', { at: 194.37, titleIsPart: true }),
     ...ONBOARDING,
   ],
 };
