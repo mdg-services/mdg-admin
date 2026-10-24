@@ -12,6 +12,7 @@ import {
   RefreshTool,
   SegmentedControl,
   useToast,
+  HowThisWorks,
 } from '@/components/ui';
 import { ContactLinks } from '@/features/intake/ContactLinks';
 import { ApproveDialog } from '@/features/onboarding/ApproveDialog';
@@ -134,7 +135,9 @@ export function OnboardingPage() {
         align="start"
         className={stacked ? 'flex-col !items-stretch' : undefined}
       >
-        <Button size="sm" disabled={!!r.alreadyClient} onClick={() => setApproving(r)}>
+        {/* Not greyed for an existing client: the dialog then offers only "Add as
+            another outlet of …" (one person, several pumps) and refuses a plain approve. */}
+        <Button size="sm" onClick={() => setApproving(r)}>
           Approve
         </Button>
         <Button size="sm" variant="ghost" onClick={() => setClosing(r)}>
@@ -174,11 +177,14 @@ export function OnboardingPage() {
         title="Onboarding"
         subtitle="From a registration to a live outlet. Amber means the next move is MDG's."
         tools={
+          <>
+          <HowThisWorks surface="admin-onboarding" label="Onboarding" />
           <RefreshTool
             label="Refresh the onboarding list"
             loading={q.isRefetching}
             onRefresh={() => void q.refetch()}
           />
+          </>
         }
       />
 
@@ -258,7 +264,7 @@ export function OnboardingPage() {
             cell: (row) => <StateCell row={row} now={now} />,
           },
         ]}
-        rowActions={(row) => <div className="hidden w-40 md:block">{actions(row, true)}</div>}
+        rowActions={(row) => <div className="hidden w-52 md:block">{actions(row, true)}</div>}
         cardActions={(row) => actions(row, false)}
       />
 

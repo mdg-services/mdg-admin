@@ -8,6 +8,7 @@ import {
   CardSubtitle,
   CardTitle,
   KeyValueList,
+  HowThisWorks,
 } from '@/components/ui';
 import { istTodayYmd } from '@/lib/format';
 import { istStamp } from '@/lib/intake';
@@ -43,7 +44,14 @@ export function SetupCard({ setup, now = Date.now() }: { setup: OutletSetupAdmin
   const milestones = milestoneRows(setup.milestones, now);
   return (
     <Card>
-      <CardHeader action={<Badge intent={stageIntent(setup)}>{stageLabel(setup)}</Badge>}>
+      <CardHeader
+        action={
+          <div className="flex items-center gap-2">
+            <HowThisWorks surface="admin-dealer-setup" label="Setup" variant="icon" />
+            <Badge intent={stageIntent(setup)}>{stageLabel(setup)}</Badge>
+          </div>
+        }
+      >
         <div>
           <CardTitle>Setup</CardTitle>
           <CardSubtitle>{waiting || 'From registration to live service.'}</CardSubtitle>

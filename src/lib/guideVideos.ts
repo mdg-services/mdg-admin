@@ -132,6 +132,9 @@ const SHIFT_DATA: readonly GuideRef[] = [
   video('admin_manual_shift_data', 'A day typed in by hand'),
 ];
 
+/** Running an onboarding, from a registration to a live outlet (the team's walkthrough). */
+const ONBOARDING: readonly GuideRef[] = [video('admin_onboarding', 'Running an onboarding')];
+
 /** The three-day clock is a public explainer: it lives on the website now. */
 const DOD_CLOCK: GuideRef = {
   kind: 'web',
@@ -179,6 +182,12 @@ const BY_SURFACE: Record<string, readonly GuideRef[]> = {
   // The calendar an admin edits here is the input to the due-date engine, so the
   // explainer about that clock is the most useful thing we have for it.
   'admin-bank-holidays': [DOD_CLOCK, ...CREDIT_DOD],
+  'admin-onboarding': ONBOARDING,
+  // The Setup card on a dealer page: the walkthrough from "Ready to start?" on.
+  'admin-dealer-setup': [
+    video('admin_onboarding', 'Starting the services and the watch', { at: 169.99, titleIsPart: true }),
+    ...ONBOARDING,
+  ],
 };
 
 /**
@@ -189,6 +198,8 @@ const BY_SURFACE: Record<string, readonly GuideRef[]> = {
  * and `credit`.
  */
 const BY_TOPIC: { match: string; refs: readonly GuideRef[] }[] = [
+  { match: 'onboarding', refs: ONBOARDING },
+  { match: 'registration', refs: ONBOARDING },
   { match: 'credit-dod', refs: CREDIT_DOD },
   { match: 'dsr', refs: DSR },
   { match: 'shift', refs: SHIFT_DATA },
