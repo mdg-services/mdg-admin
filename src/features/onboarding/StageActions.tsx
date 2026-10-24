@@ -4,11 +4,19 @@ import { ActionRow, Button, ConfirmDialog, useToast } from '@/components/ui';
 import { RecordPaymentDialog } from '@/features/payments/RecordPaymentDialog';
 import { useResumeBilling } from '@/hooks/api/useBilling';
 import { useChangeWatch, useCloseOutletSetup } from '@/hooks/api/useOnboarding';
-import { closeBody, stageActions, watchBody, type StageActionId } from '@/lib/onboarding';
+import { cn } from '@/lib/cn';
+import {
+  closeBody,
+  stageActions,
+  watchBody,
+  type DealerTabId,
+  type MainActionId,
+} from '@/lib/onboarding';
 import { dealerCodeLabel, type OutletSetupAdmin } from '@dk/shared';
 
 import { PauseBillingDialog, SendBillDialog } from './BillingDialogs';
 import { CloseDialog } from './CloseDialog';
+import { DoItForDealer } from './DoItForDealer';
 import { LogCallDialog } from './LogCallDialog';
 import { ExtendWatchDialog, StartServicesDialog } from './SetupDialogs';
 
@@ -19,7 +27,9 @@ import { ExtendWatchDialog, StartServicesDialog } from './SetupDialogs';
  * things for the same outlet.
  *
  * WHICH buttons is `stageActions` (`lib/onboarding.ts`): the stage decides, and
- * every admin sees every button (owner's decision of 24 Oct).
+ * every admin sees every button (owner's decision of 24 Oct). Under them,
+ * "Do it for the dealer" (`DoItForDealer`) offers the dealer's own step for the
+ * open stage.
  *
  * Only one form is open at a time. The forms mount only while open, so a page of
  * fifty rows holds no fifty dialogs.
@@ -28,6 +38,7 @@ export function StageActions({
   outlet,
   layout = 'wrap',
   className,
+  onGoToTab,
 }: {
   outlet: OutletSetupAdmin;
   /**
@@ -37,9 +48,14 @@ export function StageActions({
    */
   layout?: 'wrap' | 'stack';
   className?: string;
+  /**
+   * On the dealer's own page (the Setup card): switch its tab, for the links to the
+   * Team and Services tabs. Left out on the Onboarding page, where they are links.
+   */
+  onGoToTab?: (tab: DealerTabId) => void;
 }) {
   const toast = useToast();
-  const [open, setOpen] = React.useState<StageActionId | null>(null);
+  const [open, setOpen] = React.useState<MainActionId | null>(null);
   // ── reminders and calls ── a call can be logged at every step before live or closed.
   const [calling, setCalling] = React.useState(false);
   const canLogCall = outlet.stage !== 'live' && outlet.stage !== 'lost';
@@ -75,7 +91,7 @@ export function StageActions({
   if (specs.length === 0 && !canLogCall) return null;
 
   return (
-    <div className={className}>
+    <div className={cn('grid gap-2.5', className)}>
       {specs.length > 0 || canLogCall ? (
         <ActionRow
           below="wrap"
@@ -99,6 +115,9 @@ export function StageActions({
           ) : null}
         </ActionRow>
       ) : null}
+
+      {/* ── do it for the dealer ── the dealer's own step for the open stage */}
+      <DoItForDealer outlet={outlet} layout={layout} onGoToTab={onGoToTab} />
 
       <LogCallDialog
         target={
@@ -131,6 +150,7 @@ export function StageActions({
       <StartServicesDialog
         outlet={open === 'start_services' || open === 'start_anyway' ? outlet : null}
         onClose={dismiss}
+        onGoToTab={onGoToTab}
       />
       <ExtendWatchDialog outlet={open === 'extend_watch' ? outlet : null} onClose={dismiss} />
       <ConfirmDialog

@@ -185,7 +185,7 @@ const BY_SURFACE: Record<string, readonly GuideRef[]> = {
   'admin-onboarding': ONBOARDING,
   // The Setup card on a dealer page: the walkthrough from "Ready to start?" on.
   'admin-dealer-setup': [
-    video('admin_onboarding', 'Starting the services and the watch', { at: 169.99, titleIsPart: true }),
+    video('admin_onboarding', 'Starting the services and the watch', { at: 173.84, titleIsPart: true }),
     ...ONBOARDING,
   ],
 };

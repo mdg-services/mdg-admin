@@ -8,9 +8,9 @@ import { onboardingRoot, outletSetupRoot } from './api/useOnboarding';
 
 /**
  * Refetch the Onboarding board and every open outlet setup whenever the server
- * says an outlet's setup moved (`outletSetup:changed`: services chosen, billing
- * saved, a bill sent or paid, a login saved, services started), and whenever the
- * app comes back to the foreground.
+ * says an outlet's setup moved (`outletSetup:changed`: a sign-in, billing saved, a bill
+ * sent or paid, a login saved, services started, or any of those done by an admin for the
+ * dealer), and whenever the app comes back to the foreground.
  *
  * The event carries only the outlet's id and every admin socket gets it, so
  * this does not try to patch one row: both roots are invalidated and each mounted

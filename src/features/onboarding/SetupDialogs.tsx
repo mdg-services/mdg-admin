@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { Link } from 'react-router-dom';
 
 import {
   Badge,
@@ -12,12 +11,15 @@ import {
   Textarea,
   useToast,
 } from '@/components/ui';
+import { useDealerServicesQuery } from '@/hooks/api/useDealerServices';
 import { useChangeWatch, useOutletSetupQuery, useStartServices } from '@/hooks/api/useOnboarding';
 import { usePortalLogins } from '@/hooks/api/usePortalLogins';
 import {
   DEFAULT_WATCH_DAYS,
   MAX_WATCH_DAYS,
   OVERRIDE_REASON_MAX,
+  PORTAL_LABEL,
+  type DealerTabId,
   extendProblem,
   startBody,
   startProblem,
@@ -27,6 +29,7 @@ import { serviceLabel } from '@/lib/serviceLabel';
 import { CHECKLIST_LABEL, checklistOpenKeys, missingChecklist, startNeedsReason } from '@/lib/watchHold';
 import { dealerCodeLabel, type OutletSetupAdmin } from '@dk/shared';
 
+import { DealerTabLink } from './DealerTabLink';
 import { SetupChecklist } from './SetupChecklist';
 
 /**
@@ -48,14 +51,23 @@ import { SetupChecklist } from './SetupChecklist';
  * the amount and the due date and nothing else.
  */
 
-type Props = { outlet: OutletSetupAdmin | null; onClose: () => void };
-type FormProps = { outlet: OutletSetupAdmin; onClose: () => void };
+type Props = {
+  outlet: OutletSetupAdmin | null;
+  onClose: () => void;
+  /** On the dealer's own page: switch its tab instead of following a link (see `DealerTabLink`). */
+  onGoToTab?: (tab: DealerTabId) => void;
+};
+type FormProps = {
+  outlet: OutletSetupAdmin;
+  onClose: () => void;
+  onGoToTab?: ((tab: DealerTabId) => void) | undefined;
+};
 
-const errorText = (err: unknown) =>
+export const errorText = (err: unknown) =>
   err instanceof Error && err.message ? err.message : 'That did not go through.';
 
-/** The line that says which outlet a form is for, the same on all four. */
-function ForOutlet({ outlet }: { outlet: OutletSetupAdmin }) {
+/** The line that says which outlet a form is for, the same on every form. */
+export function ForOutlet({ outlet }: { outlet: OutletSetupAdmin }) {
   return (
     <div className="min-w-0 rounded-md border border-border bg-surface-2 p-2.5 [overflow-wrap:anywhere]">
       <p className="text-sm font-medium text-text">
@@ -74,16 +86,24 @@ function ForOutlet({ outlet }: { outlet: OutletSetupAdmin }) {
  * Start the outlet's services. From "ready to set up" it is one tap; from the
  * bill or logins stage it is the API's override, and a reason is required.
  */
-export function StartServicesDialog({ outlet, onClose }: Props) {
+export function StartServicesDialog({ outlet, onClose, onGoToTab }: Props) {
   return outlet ? (
-    <StartServicesForm key={outlet.dealerId} outlet={outlet} onClose={onClose} />
+    <StartServicesForm
+      key={outlet.dealerId}
+      outlet={outlet}
+      onClose={onClose}
+      onGoToTab={onGoToTab}
+    />
   ) : null;
 }
 
-function StartServicesForm({ outlet, onClose }: FormProps) {
+function StartServicesForm({ outlet, onClose, onGoToTab }: FormProps) {
   const toast = useToast();
   const start = useStartServices();
   const logins = usePortalLogins(outlet.dealerId, true);
+  // What the team has attached, read fresh: there is no choice to show, the outlet gets whatever
+  // is attached in the Services tab (the checklist's "Services attached" reads the same).
+  const attached = useDealerServicesQuery(outlet.dealerId);
   const daysId = React.useId();
   const reasonId = React.useId();
   const [days, setDays] = React.useState(String(DEFAULT_WATCH_DAYS));
@@ -170,27 +190,35 @@ function StartServicesForm({ outlet, onClose }: FormProps) {
         ) : null}
 
         <div>
-          <p className="text-sm font-medium text-text">Services chosen</p>
-          {outlet.servicesChosen.length === 0 ? (
-            <p className="text-sm text-text-muted">None chosen yet.</p>
+          <p className="text-sm font-medium text-text">Services attached</p>
+          {attached.isPending ? (
+            <p className="text-sm text-text-subtle">checking…</p>
+          ) : attached.isError ? (
+            <p className="text-sm text-text-muted">Could not read them. See the Services tab.</p>
+          ) : attached.data.length === 0 ? (
+            <p className="text-sm text-text-muted">None attached yet.</p>
           ) : (
             <ul className="mt-1 flex flex-wrap gap-1.5">
-              {outlet.servicesChosen.map((id) => (
-                <li key={id}>
-                  <Badge>{serviceLabel(id)}</Badge>
+              {attached.data.map((s) => (
+                <li key={s.id}>
+                  <Badge intent={s.status === 'ACTIVE' ? 'success' : 'warning'}>
+                    {serviceLabel(s.serviceId)}
+                    {s.status === 'ACTIVE' ? '' : ' (paused)'}
+                  </Badge>
                 </li>
               ))}
             </ul>
           )}
           <p className="mt-1.5 text-xs text-text-muted">
             Starting does not attach them: set each one up in the{' '}
-            <Link
-              className="font-semibold text-brand underline"
-              to={`/dealers/${outlet.dealerId}?tab=services`}
+            <DealerTabLink
+              dealerId={outlet.dealerId}
+              tab="services"
+              onGoToTab={onGoToTab}
               onClick={onClose}
             >
               Services tab
-            </Link>
+            </DealerTabLink>
             .
           </p>
         </div>
@@ -198,7 +226,7 @@ function StartServicesForm({ outlet, onClose }: FormProps) {
         <div>
           <p className="text-sm font-medium text-text">Portal logins</p>
           {outlet.loginsNeeded.length === 0 ? (
-            <p className="text-sm text-text-muted">None needed for these services.</p>
+            <p className="text-sm text-text-muted">None asked for.</p>
           ) : (
             <ul className="mt-1 grid gap-1 text-sm">
               {outlet.loginsNeeded.map((portal) => {
@@ -220,6 +248,18 @@ function StartServicesForm({ outlet, onClose }: FormProps) {
               })}
             </ul>
           )}
+          {/* A login an admin said this outlet has no use for: not missing, just not asked. */}
+          {outlet.portalsNotNeeded.length > 0 ? (
+            <ul className="mt-1 grid gap-1 text-sm">
+              {outlet.portalsNotNeeded.map((n) => (
+                <li key={n.portal} className="flex flex-wrap items-center gap-2">
+                  <span className="w-12 font-medium text-text">{PORTAL_LABEL[n.portal]}</span>
+                  <Badge>Not needed</Badge>
+                  <span className="text-xs text-text-muted">{n.reason}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
 
         <div className="max-w-[12rem]">

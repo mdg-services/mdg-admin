@@ -21,8 +21,12 @@ import {
   approveRegistrationSchema,
   changeSetupWatchSchema,
   closeSetupSchema,
+  markSignedInSchema,
+  portalNotNeededSchema,
   recordSetupPaymentSchema,
+  saveSetupBillingSchema,
   sendSetupBillSchema,
+  sendSetupWelcomeSchema,
   startSetupServicesSchema,
 } from '../shared/src/schemas/outletSetup';
 import { sendSetupBillRequestSchema } from '../shared/src/schemas/payment';
@@ -30,16 +34,24 @@ import {
   SETUP_MESSAGE_LANGS,
   SETUP_PAYMENT_MODES,
   SETUP_STAGES,
+  SETUP_WELCOME_STATES,
+  STANDARD_PORTALS,
   type OnboardingBoardRow,
   type OutletSetupAdmin,
 } from '../shared/src/types/outletSetup';
 import {
+  REASON_MAX,
+  REASON_MIN,
+  STANDARD_PORTAL_IDS,
   amountProblem,
   billBody,
   billProblem,
+  billingSaveBody,
   boardRowKey,
   closeBody,
   closeProblem,
+  dealerActions,
+  doneByLine,
   daysInStage,
   daysLabel,
   defaultDueOn,
@@ -63,7 +75,15 @@ import {
   paymentBody,
   paymentLine,
   paymentProblem,
-  servicesLine,
+  portalNeedRows,
+  portalNotNeededBody,
+  portalsLine,
+  markSignedInBody,
+  readBoard,
+  readSetup,
+  type RawOutletSetup,
+  reasonProblem,
+  sendWelcomeBody,
   setupChip,
   sortBoardRows,
   stageActions,
@@ -73,6 +93,9 @@ import {
   startProblem,
   watchBody,
   waitingLabel,
+  welcomeAlreadyWent,
+  welcomeLine,
+  welcomeNotSentLine,
   ymdLabel,
 } from '../src/lib/onboarding';
 
@@ -82,7 +105,6 @@ const TODAY = '2026-10-23';
 const milestones = {
   approvedAt: '2026-10-20T04:00:00.000Z',
   firstSignInAt: '2026-10-20T05:00:00.000Z',
-  servicesChosenAt: null,
   billingSavedAt: null,
   billSentAt: null,
   paidAt: null,
@@ -104,7 +126,7 @@ function outlet(over: Partial<OutletSetupAdmin> = {}): OutletSetupAdmin {
     waitingOn: 'dealer',
     stageSince: '2026-10-21T12:00:00.000Z',
     milestones,
-    servicesChosen: ['dsr-report'],
+    doneBy: { signIn: null, billing: null, logins: null },
     billing: null,
     payment: {
       state: 'sent',
@@ -115,7 +137,9 @@ function outlet(over: Partial<OutletSetupAdmin> = {}): OutletSetupAdmin {
       reference: null,
       recordedByName: null,
     },
-    loginsNeeded: [],
+    loginsNeeded: ['sdms', 'iras'],
+    portalsNotNeeded: [],
+    welcome: { state: 'delivered', at: '2026-10-20T04:05:00.000Z' },
     approvedByName: 'Asha',
     lost: null,
     ...over,
@@ -243,7 +267,6 @@ describe('what each stage offers', () => {
     assert.deepEqual(ids({ stage: 'setup' }), ['start_services', 'close']);
     assert.deepEqual(ids({ stage: 'watch' }), ['end_watch', 'extend_watch', 'pause_billing']);
     assert.deepEqual(ids({ stage: 'sign_in' }), ['close']);
-    assert.deepEqual(ids({ stage: 'services' }), ['close']);
     assert.deepEqual(ids({ stage: 'billing' }), ['close']);
     assert.deepEqual(ids({ stage: 'live' }), ['pause_billing']);
     assert.deepEqual(ids({ stage: 'lost' }), []);
@@ -547,7 +570,6 @@ describe('the Setup card', () => {
       [
         'Approved',
         'First sign-in',
-        'Services chosen',
         'Billing details saved',
         'Bill sent',
         'Payment received',
@@ -561,6 +583,11 @@ describe('the Setup card', () => {
     assert.equal(rows[2]!.at, null);
     assert.equal(rows[0]!.done, true);
     assert.equal(rows[2]!.done, false);
+    // the service choice is gone: nothing on the list is called by it
+    assert.equal(
+      rows.some((r) => /services chosen/i.test(r.label)),
+      false,
+    );
   });
 
   it('does not call the end of a watch done until it has passed', () => {
@@ -570,14 +597,12 @@ describe('the Setup card', () => {
     assert.equal(milestoneRows(behind, NOW).find((r) => r.key === 'watchUntil')!.done, true);
   });
 
-  it('names the chosen services, or says none', () => {
+  it('names the portal logins asked for, and any the team said this outlet does not need', () => {
+    assert.equal(portalsLine(['sdms', 'iras'], []), 'SDMS, IRAS');
+    assert.equal(portalsLine([], []), 'None asked for');
     assert.equal(
-      servicesLine([], (s) => s),
-      'None chosen yet',
-    );
-    assert.equal(
-      servicesLine(['a', 'b'], (s) => s.toUpperCase()),
-      'A, B',
+      portalsLine(['sdms'], [{ portal: 'iras', reason: 'no IRAS automation' }]),
+      'SDMS · IRAS not needed (no IRAS automation)',
     );
   });
 });
@@ -664,15 +689,7 @@ describe('billing actions', () => {
   it('offers the pause, to any admin, while watching or live', () => {
     assert.deepEqual(ids({ stage: 'live' }), ['pause_billing']);
     assert.deepEqual(ids({ stage: 'watch' }), ['end_watch', 'extend_watch', 'pause_billing']);
-    for (const stage of [
-      'sign_in',
-      'services',
-      'billing',
-      'payment',
-      'logins',
-      'setup',
-      'lost',
-    ] as const) {
+    for (const stage of ['sign_in', 'billing', 'payment', 'logins', 'setup', 'lost'] as const) {
       assert.ok(!ids({ stage }).includes('pause_billing'), stage);
     }
     assert.equal(stageActions(outlet({ stage: 'live' }))[0]!.primary, false);
@@ -722,5 +739,405 @@ describe('billing actions', () => {
       }),
       'MDG-2026-00012 · ₹3,540 paid on 30 Oct 2026 · by Bank transfer, UTR 1 · recorded by Asha',
     );
+  });
+});
+
+// ── Round 3: no choice of services, and what an admin does FOR the dealer ──────
+
+describe('no choice of services', () => {
+  it('has no "services" stage, and every stage has words', () => {
+    assert.equal((SETUP_STAGES as readonly string[]).includes('services'), false);
+    for (const stage of SETUP_STAGES) assert.ok(stageLabel(outlet({ stage })).length > 0, stage);
+    assert.equal(stageLabel(outlet({ stage: 'billing' })), 'Waiting for billing details');
+  });
+
+  it('asks for the same two portals the shared contract does', () => {
+    assert.deepEqual([...STANDARD_PORTAL_IDS], [...STANDARD_PORTALS]);
+  });
+});
+
+describe('what an admin can do for the dealer', () => {
+  const ids = (o: Partial<OutletSetupAdmin>) => dealerActions(outlet(o)).map((a) => a.id);
+  const labels = (o: Partial<OutletSetupAdmin>) => dealerActions(outlet(o)).map((a) => a.label);
+  const billing = {
+    name: 'Sai Petroleums',
+    address: 'NH 19, Aligarh',
+    stateCode: '09',
+    gstin: null,
+  };
+
+  it('offers, at the first sign-in, the stamp, the welcome, the hand-sent mark and the password link', () => {
+    assert.deepEqual(ids({ stage: 'sign_in', welcome: { state: 'not_sent', at: null } }), [
+      'mark_signed_in',
+      'send_welcome',
+      'welcome_hand_sent',
+      'reset_password',
+      'portal_not_needed',
+    ]);
+    // Reset password is a link to the Team tab, and only that one is
+    const reset = dealerActions(outlet({ stage: 'sign_in' })).find(
+      (a) => a.id === 'reset_password',
+    );
+    assert.equal(reset?.tab, 'members');
+    assert.equal(dealerActions(outlet({ stage: 'sign_in' })).filter((a) => a.tab).length, 1);
+  });
+
+  it('does not offer the hand-sent mark once the welcome went, and words the send as "again"', () => {
+    for (const state of ['sent', 'delivered', 'handSent'] as const) {
+      const o = { stage: 'sign_in' as const, welcome: { state, at: '2026-10-20T04:05:00.000Z' } };
+      assert.equal(welcomeAlreadyWent(state), true, state);
+      assert.ok(!ids(o).includes('welcome_hand_sent'), state);
+      assert.ok(labels(o).includes('Send welcome again…'), state);
+    }
+    for (const state of ['not_sent', 'failed', null] as const) {
+      const o = { stage: 'sign_in' as const, welcome: { state, at: null } };
+      assert.equal(welcomeAlreadyWent(state), false, String(state));
+      assert.ok(ids(o).includes('welcome_hand_sent'), String(state));
+      assert.ok(labels(o).includes('Send welcome on WhatsApp…'), String(state));
+    }
+  });
+
+  it('offers no welcome for an outlet that did not come from a registration', () => {
+    const o = { stage: 'sign_in' as const, enrolmentId: null };
+    assert.ok(!ids(o).includes('send_welcome'));
+    assert.ok(ids(o).includes('mark_signed_in'));
+  });
+
+  it('offers the billing form at billing, and at payment until it is paid', () => {
+    assert.deepEqual(ids({ stage: 'billing' }), ['fill_billing', 'portal_not_needed']);
+    assert.deepEqual(labels({ stage: 'billing' }).slice(0, 1), ['Fill billing details…']);
+    assert.deepEqual(labels({ stage: 'billing', billing }).slice(0, 1), [
+      'Change billing details…',
+    ]);
+    assert.ok(ids({ stage: 'payment', billing }).includes('fill_billing'));
+    assert.ok(
+      !ids({ stage: 'payment', billing, payment: { ...outlet().payment, state: 'paid' } }).includes(
+        'fill_billing',
+      ),
+    );
+  });
+
+  it('offers the logins at the logins stage, and nothing of the dealer’s once the services are ready', () => {
+    assert.deepEqual(ids({ stage: 'logins' }), ['fill_logins', 'portal_not_needed']);
+    assert.deepEqual(ids({ stage: 'setup' }), []);
+    for (const stage of ['watch', 'live', 'lost'] as const)
+      assert.deepEqual(ids({ stage }), [], stage);
+  });
+
+  it('offers "login not needed" while a login is asked for, and the way back until the services start', () => {
+    // nothing asked for and nothing marked: nothing to do
+    assert.ok(!ids({ stage: 'logins', loginsNeeded: [] }).includes('portal_not_needed'));
+    const marked = [
+      {
+        portal: 'iras' as const,
+        reason: 'no IRAS',
+        byName: 'Ravi',
+        at: '2026-10-22T05:00:00.000Z',
+      },
+    ];
+    // both marked: still on offer, to undo
+    assert.ok(
+      ids({ stage: 'logins', loginsNeeded: [], portalsNotNeeded: marked }).includes(
+        'portal_not_needed',
+      ),
+    );
+    // at "ready to set up" the mark can be taken back, but a new one is not offered
+    assert.deepEqual(ids({ stage: 'setup', loginsNeeded: ['sdms'], portalsNotNeeded: marked }), [
+      'portal_not_needed',
+    ]);
+    assert.deepEqual(ids({ stage: 'setup', loginsNeeded: ['sdms'] }), []);
+  });
+
+  it('never makes one of them the primary button: they have no such field', () => {
+    for (const stage of SETUP_STAGES) {
+      for (const spec of dealerActions(outlet({ stage }))) {
+        assert.ok(!('primary' in spec), `${stage}/${spec.id}`);
+      }
+    }
+  });
+});
+
+describe('the portals a dealer is asked for', () => {
+  const marked = {
+    portal: 'iras' as const,
+    reason: 'no IRAS automation',
+    byName: 'Ravi',
+    at: '2026-10-22T05:00:00.000Z',
+  };
+
+  it('lists SDMS then IRAS, each asked for or not needed', () => {
+    const rows = portalNeedRows({
+      stage: 'logins',
+      loginsNeeded: ['sdms', 'iras'],
+      portalsNotNeeded: [],
+    });
+    assert.deepEqual(
+      rows.map((r) => [r.portal, r.label, r.state, r.canMark, r.canUndo]),
+      [
+        ['sdms', 'SDMS', 'asked', true, false],
+        ['iras', 'IRAS', 'asked', true, false],
+      ],
+    );
+  });
+
+  it('shows who marked a portal and why, and lets it be undone, not marked again', () => {
+    const rows = portalNeedRows({
+      stage: 'logins',
+      loginsNeeded: ['sdms'],
+      portalsNotNeeded: [marked],
+    });
+    const iras = rows.find((r) => r.portal === 'iras')!;
+    assert.equal(iras.state, 'not_needed');
+    assert.equal(iras.reason, 'no IRAS automation');
+    assert.equal(iras.by, 'Ravi, 22 Oct');
+    assert.equal(iras.canMark, false);
+    assert.equal(iras.canUndo, true);
+  });
+
+  it('allows a mark only before the setup is ready, and the undo until the services start', () => {
+    const at = (stage: OutletSetupAdmin['stage']) =>
+      portalNeedRows({ stage, loginsNeeded: ['sdms'], portalsNotNeeded: [marked] });
+    assert.equal(at('setup').find((r) => r.portal === 'sdms')!.canMark, false);
+    assert.equal(at('setup').find((r) => r.portal === 'iras')!.canUndo, true);
+    assert.equal(at('watch').find((r) => r.portal === 'iras')!.canUndo, false);
+    assert.equal(at('sign_in').find((r) => r.portal === 'sdms')!.canMark, true);
+  });
+});
+
+describe('reasons and the bodies the API takes', () => {
+  it('wants 3 to 300 characters, judged on the trimmed text, as the server does', () => {
+    assert.equal(REASON_MIN, 3);
+    assert.equal(REASON_MAX, 300);
+    assert.ok(reasonProblem(''));
+    assert.ok(reasonProblem('  ab '));
+    assert.equal(reasonProblem('helped by phone'), null);
+    assert.equal(reasonProblem('x'.repeat(300)), null);
+    assert.match(reasonProblem('x'.repeat(301)) ?? '', /under 300/);
+  });
+
+  it('builds a sign-in mark the schema takes, trimmed', () => {
+    const body = markSignedInBody('  helped by phone ');
+    assert.deepEqual(body, { reason: 'helped by phone' });
+    assert.ok(markSignedInSchema.safeParse(body).success);
+    assert.equal(markSignedInSchema.safeParse({ reason: 'no' }).success, false);
+  });
+
+  it('builds a "not needed" body the schema takes, for each portal', () => {
+    for (const portal of ['sdms', 'iras'] as const) {
+      const body = portalNotNeededBody(portal, ' no IRAS automation ');
+      assert.deepEqual(body, { portal, reason: 'no IRAS automation' });
+      assert.ok(portalNotNeededSchema.safeParse(body).success, portal);
+    }
+    assert.equal(
+      portalNotNeededSchema.safeParse({ portal: 'gst', reason: 'no IRAS' }).success,
+      false,
+    );
+  });
+
+  it('sends the welcome in the language on screen, and forces only when it already went', () => {
+    for (const messageLang of ['hi', 'en'] as const) {
+      const plain = sendWelcomeBody({ messageLang, force: false });
+      assert.deepEqual(plain, { messageLang });
+      assert.ok(sendSetupWelcomeSchema.safeParse(plain).success);
+      const forced = sendWelcomeBody({ messageLang, force: true });
+      assert.deepEqual(forced, { messageLang, force: true });
+      assert.ok(sendSetupWelcomeSchema.safeParse(forced).success);
+    }
+    assert.equal(sendSetupWelcomeSchema.safeParse({ messageLang: 'fr' }).success, false);
+  });
+
+  it('builds a billing body the owner’s own schema takes: four fields, nothing else', () => {
+    const body = billingSaveBody({
+      name: 'Sai Petroleums',
+      address: 'NH 19, Aligarh',
+      stateCode: '09',
+      gstin: null,
+    });
+    assert.deepEqual(Object.keys(body).sort(), ['address', 'gstin', 'name', 'stateCode']);
+    const parsed = saveSetupBillingSchema.safeParse(body);
+    assert.ok(parsed.success);
+    // a GSTIN reads its state off its first two digits, as the server does
+    const withGst = saveSetupBillingSchema.safeParse({
+      ...body,
+      gstin: '09AAACH7409R1ZZ',
+      stateCode: '06',
+    });
+    assert.ok(withGst.success);
+    if (withGst.success) assert.equal(withGst.data.stateCode, '09');
+  });
+});
+
+describe('the welcome WhatsApp in words', () => {
+  it('names every state the server can record', () => {
+    for (const state of SETUP_WELCOME_STATES) {
+      assert.ok(welcomeLine({ state, at: '2026-10-24T08:30:00.000Z' }).length > 0, state);
+    }
+    assert.equal(welcomeLine({ state: null, at: null }), 'Not tried yet');
+    assert.equal(
+      welcomeLine({ state: 'delivered', at: '2026-10-24T08:30:00.000Z' }),
+      'Delivered 24 Oct',
+    );
+    assert.equal(
+      welcomeLine({ state: 'handSent', at: '2026-10-24T08:30:00.000Z' }),
+      'Sent by hand 24 Oct',
+    );
+    assert.equal(welcomeLine({ state: 'handSent', at: null }), 'Sent by hand');
+  });
+});
+
+describe('a welcome that could not be sent', () => {
+  it('turns the server’s unfinished reason into a sentence of its own', () => {
+    assert.match(
+      welcomeNotSentLine('template not approved yet'),
+      /^The WhatsApp welcome was not sent\. Template not approved yet\. Send it from your phone/,
+    );
+    // a full stop or spaces on the end do not double up
+    assert.match(welcomeNotSentLine(' Meta refused it. '), /sent\. Meta refused it\. Send it/);
+    // no reason: no empty sentence
+    assert.match(welcomeNotSentLine(''), /sent\. Send it from your phone/);
+  });
+});
+
+describe('who did a step', () => {
+  it('says nothing for the dealer’s own step, or a step from before round 3', () => {
+    assert.equal(doneByLine(null, 'billing'), null);
+    assert.equal(doneByLine(undefined, 'signIn'), null);
+    assert.equal(doneByLine({ by: 'dealer', name: null, reason: null }, 'billing'), null);
+  });
+
+  it('names the admin who filled the billing details for the dealer', () => {
+    assert.equal(
+      doneByLine({ by: 'mdg', name: 'Ravi', reason: null }, 'billing'),
+      'by Ravi, for the dealer',
+    );
+  });
+
+  it('says a marked sign-in is not a real one, with the reason the admin gave', () => {
+    assert.equal(
+      doneByLine({ by: 'mdg', name: 'Ravi', reason: 'helped by phone' }, 'signIn'),
+      'marked by Ravi, for the dealer. Not a real sign-in: helped by phone',
+    );
+    assert.equal(
+      doneByLine({ by: 'mdg', name: 'Ravi', reason: null }, 'signIn'),
+      'marked by Ravi, for the dealer. Not a real sign-in',
+    );
+  });
+
+  it('credits "the MDG team" for logins, which carry no name', () => {
+    assert.equal(
+      doneByLine({ by: 'mdg', name: null, reason: null }, 'logins'),
+      'typed by the MDG team, for the dealer',
+    );
+  });
+
+  it('puts it on the right milestone rows, and only on a step that is done', () => {
+    const done = {
+      ...milestones,
+      billingSavedAt: '2026-10-21T08:00:00.000Z',
+      loginsDoneAt: '2026-10-22T08:00:00.000Z',
+    };
+    const doneBy = {
+      signIn: { by: 'mdg' as const, name: 'Asha', reason: 'helped by phone' },
+      billing: { by: 'mdg' as const, name: 'Ravi', reason: null },
+      logins: { by: 'dealer' as const, name: null, reason: null },
+    };
+    const rows = milestoneRows(done, NOW, doneBy);
+    const by = (key: string) => rows.find((r) => r.key === key)!.by;
+    assert.equal(
+      by('firstSignInAt'),
+      'marked by Asha, for the dealer. Not a real sign-in: helped by phone',
+    );
+    assert.equal(by('billingSavedAt'), 'by Ravi, for the dealer');
+    assert.equal(by('loginsDoneAt'), null);
+    assert.equal(by('approvedAt'), null);
+    // a step not done shows nobody, even if the facts carry a name
+    assert.equal(
+      milestoneRows(milestones, NOW, doneBy).find((r) => r.key === 'billingSavedAt')!.by,
+      null,
+    );
+    // without the facts (an older server) every row reads as the dealer's
+    assert.ok(milestoneRows(done, NOW).every((r) => r.by === null));
+  });
+});
+
+describe('a setup from a server one release behind', () => {
+  // Before round 3 the server sent no `doneBy`, `portalsNotNeeded` or `welcome`.
+  const old = (): RawOutletSetup => {
+    const { doneBy: _d, portalsNotNeeded: _p, welcome: _w, ...rest } = outlet({ stage: 'sign_in' });
+    return rest;
+  };
+
+  it('fills the three fields as "nothing happened"', () => {
+    const o = readSetup(old());
+    assert.deepEqual(o.doneBy, { signIn: null, billing: null, logins: null });
+    assert.deepEqual(o.portalsNotNeeded, []);
+    assert.deepEqual(o.welcome, { state: null, at: null });
+  });
+
+  it('lets every screen rule read it without throwing', () => {
+    const o = readSetup(old());
+    assert.ok(dealerActions(o).length > 0);
+    assert.equal(portalNeedRows(o).length, 2);
+    assert.equal(portalsLine(o.loginsNeeded, o.portalsNotNeeded), 'SDMS, IRAS');
+    assert.equal(welcomeLine(o.welcome), 'Not tried yet');
+    assert.ok(milestoneRows(o.milestones, NOW, o.doneBy).every((r) => r.by === null));
+  });
+
+  it('keeps what a current server sends, and fills only a part that is missing', () => {
+    const current = outlet({
+      doneBy: {
+        signIn: { by: 'mdg', name: 'Asha', reason: 'helped by phone' },
+        billing: null,
+        logins: null,
+      },
+      portalsNotNeeded: [
+        {
+          portal: 'iras',
+          reason: 'no IRAS automation',
+          byName: 'Asha',
+          at: '2026-10-22T04:00:00.000Z',
+        },
+      ],
+    });
+    assert.deepEqual(readSetup(current), current);
+    // a partial `doneBy` gets its other steps as null
+    const partial = readSetup({ ...old(), doneBy: { signIn: null } as never });
+    assert.deepEqual(partial.doneBy, { signIn: null, billing: null, logins: null });
+  });
+
+  it('does not change the body it is given', () => {
+    const raw = old();
+    readSetup(raw);
+    assert.equal('welcome' in raw, false);
+  });
+
+  it('reads every outlet row on the board and leaves a registration row alone', () => {
+    const registration: OnboardingBoardRow = {
+      kind: 'registration',
+      registrationId: 'r1',
+      name: 'Registration',
+      mobile: '9876543210',
+      sapCode: '4100',
+      siteType: 'RO',
+      pumpName: null,
+      submittedAt: '2026-10-22T00:00:00.000Z',
+      state: 'NEW',
+      lostReason: null,
+      fromCampaign: false,
+      alreadyClient: null,
+      waitingOn: 'mdg',
+      lastCall: null,
+      messageLang: 'hi',
+    };
+    const board = readBoard({
+      rows: [registration, { kind: 'outlet', outlet: old() }],
+      passwordHelp: [],
+      funnel: { registered: 1, approved: 1, signedIn: 0, paid: 0, live: 0 },
+    });
+    assert.equal(board.rows[0], registration);
+    const row = board.rows[1]!;
+    assert.equal(row.kind, 'outlet');
+    if (row.kind === 'outlet') assert.equal(row.outlet.welcome.state, null);
+    assert.equal(board.funnel.registered, 1);
   });
 });

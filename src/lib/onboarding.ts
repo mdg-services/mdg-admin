@@ -17,13 +17,19 @@ import type {
   OnboardingBoardRow,
   OnboardingBoard,
   OutletSetupAdmin,
+  PortalId,
   SetupBilling,
+  SetupDoneBy,
+  SetupDoneByMap,
   SetupMessageLang,
   SetupMilestones,
   SetupPaymentMode,
+  SetupPortalNotNeeded,
   SetupSource,
   SetupStage,
   SetupWaitingOn,
+  SetupWelcomeAdminView,
+  SetupWelcomeState,
 } from '@dk/shared';
 
 import type { Intent } from './statusIntent';
@@ -46,6 +52,9 @@ export const CLOSE_REASON_MAX = 500;
 export const PAYMENT_REFERENCE_MAX = 120;
 /** Mirrors `startSetupServicesSchema`. */
 export const OVERRIDE_REASON_MAX = 500;
+/** Mirrors `markSignedInSchema` and `portalNotNeededSchema`: a reason is 3 to 300 characters. */
+export const REASON_MIN = 3;
+export const REASON_MAX = 300;
 
 // ── Stage words ─────────────────────────────────────────────────────────────
 
@@ -66,8 +75,6 @@ export function stageLabel(o: StageFacts): string {
   switch (o.stage) {
     case 'sign_in':
       return 'Waiting for first sign-in';
-    case 'services':
-      return 'Waiting for services';
     case 'billing':
       return 'Waiting for billing details';
     case 'payment':
@@ -204,7 +211,8 @@ export function setupChip(
 
 // ── What an admin can do at each stage ──────────────────────────────────────
 
-export type StageActionId =
+/** The taps on MDG's own work at an outlet: the bill, the payment, starting, the watch, closing. */
+export type MainActionId =
   | 'send_bill'
   | 'record_payment'
   | 'start_services'
@@ -215,8 +223,25 @@ export type StageActionId =
   | 'resume_billing'
   | 'close';
 
+/**
+ * The steps that are the DEALER's, which an admin can take over (round 3, 24 Oct):
+ * the same service the dealer's own tap runs, with the admin as the actor, so the
+ * facts come out the same and the record says who did it.
+ */
+export type DealerActionId =
+  | 'mark_signed_in'
+  | 'send_welcome'
+  | 'welcome_hand_sent'
+  | 'reset_password'
+  | 'fill_billing'
+  | 'fill_logins'
+  | 'portal_not_needed';
+
+/** Any button an outlet's onboarding offers: MDG's own, or one that does the dealer's step for them. */
+export type StageActionId = MainActionId | DealerActionId;
+
 export interface StageActionSpec {
-  id: StageActionId;
+  id: MainActionId;
   /** Ends in an ellipsis when it opens a form, as the plan words it. */
   label: string;
   /** The one button an admin is meant to press at this stage. */
@@ -243,7 +268,7 @@ export interface StageActionSpec {
  */
 export function stageActions(o: StageFacts): StageActionSpec[] {
   const out: StageActionSpec[] = [];
-  const add = (id: StageActionId, label: string, primary: boolean) => out.push({ id, label, primary });
+  const add = (id: MainActionId, label: string, primary: boolean) => out.push({ id, label, primary });
   switch (o.stage) {
     case 'payment':
       if (o.payment.state === 'not_sent') add('send_bill', 'Send bill…', true);
@@ -276,6 +301,215 @@ export function stageActions(o: StageFacts): StageActionSpec[] {
   // archive from the dealer page (the server refuses "lost" there too).
   if (isOpenStage(o.stage) && o.stage !== 'watch') add('close', 'Close…', false);
   return out;
+}
+
+// ── What an admin can do FOR the dealer ─────────────────────────────────────
+
+/**
+ * The two portals every outlet is asked for, SDMS first. Mirrors `STANDARD_PORTALS`
+ * in `@dk/shared` (a value import is kept out of this file; the check script holds
+ * the two equal).
+ */
+export const STANDARD_PORTAL_IDS: readonly PortalId[] = ['sdms', 'iras'];
+
+/** The portal's name as the team and the dealer know it. */
+export const PORTAL_LABEL: Record<PortalId, string> = { sdms: 'SDMS', iras: 'IRAS' };
+
+/** The dealer tab a link opens: Team holds Reset password, Services the attached list, the vault every login. */
+export type DealerTabId = 'members' | 'services' | 'passwords';
+
+export interface DealerActionSpec {
+  id: DealerActionId;
+  /** Ends in an ellipsis when it opens a form. */
+  label: string;
+  /** Set when the action only opens another tab of the dealer (no form here). */
+  tab?: DealerTabId;
+}
+
+type DealerActionFacts = Pick<
+  OutletSetupAdmin,
+  'stage' | 'payment' | 'billing' | 'loginsNeeded' | 'portalsNotNeeded' | 'welcome' | 'enrolmentId'
+>;
+
+/** The welcome has already gone: Meta took it, it arrived, or a person says they sent it. */
+export function welcomeAlreadyWent(state: SetupWelcomeState | null | undefined): boolean {
+  return state === 'sent' || state === 'delivered' || state === 'handSent';
+}
+
+/** A portal can be marked "not needed" until its login would be asked for: before the setup is ready. */
+function canMarkNotNeeded(stage: SetupStage): boolean {
+  return stage === 'sign_in' || stage === 'billing' || stage === 'payment' || stage === 'logins';
+}
+
+/** …and the mark can be taken back until the services start. */
+function canUndoNotNeeded(stage: SetupStage): boolean {
+  return canMarkNotNeeded(stage) || stage === 'setup';
+}
+
+/**
+ * What an admin can do for the dealer at the open step, in the order they are
+ * shown. Every one is any admin's. The server refuses the same cases with a 409
+ * (already done, or the outlet is live or closed), so a button is only offered
+ * where the call can go through:
+ *
+ * - sign-in: "Mark signed in…" (a reason is required, and it is a stamp, not a
+ *   real sign-in), the welcome again (words and a link if WhatsApp cannot send;
+ *   only for an outlet made from a registration) or "sent by hand" (not once it
+ *   already went), and a link to the Team tab for Reset password
+ * - billing: "Fill billing details…"; at payment too, while the bill is not paid
+ * - logins: "Enter logins…"
+ * - a login the outlet does not need: before the setup is ready, and the way back
+ *   until the services start
+ *
+ * None is the primary button: the main row's is MDG's own move.
+ */
+export function dealerActions(o: DealerActionFacts): DealerActionSpec[] {
+  const out: DealerActionSpec[] = [];
+  const add = (id: DealerActionId, label: string, tab?: DealerTabId) =>
+    out.push(tab ? { id, label, tab } : { id, label });
+  switch (o.stage) {
+    case 'sign_in': {
+      add('mark_signed_in', 'Mark signed in…');
+      const went = welcomeAlreadyWent(o.welcome.state);
+      // No registration, no welcome to send: the server answers 409 NO_REGISTRATION.
+      if (o.enrolmentId) {
+        add('send_welcome', went ? 'Send welcome again…' : 'Send welcome on WhatsApp…');
+      }
+      if (!went) add('welcome_hand_sent', 'Mark welcome sent by hand');
+      add('reset_password', 'Reset password…', 'members');
+      break;
+    }
+    case 'billing':
+      add('fill_billing', o.billing ? 'Change billing details…' : 'Fill billing details…');
+      break;
+    case 'payment':
+      // The details are locked once the money is in.
+      if (o.payment.state !== 'paid') {
+        add('fill_billing', o.billing ? 'Change billing details…' : 'Fill billing details…');
+      }
+      break;
+    case 'logins':
+      add('fill_logins', 'Enter logins…');
+      break;
+    default:
+      break;
+  }
+  const canMark = canMarkNotNeeded(o.stage) && o.loginsNeeded.length > 0;
+  const canUndo = canUndoNotNeeded(o.stage) && o.portalsNotNeeded.length > 0;
+  if (canMark || canUndo) add('portal_not_needed', 'Login not needed…');
+  return out;
+}
+
+export interface PortalNeedRow {
+  portal: PortalId;
+  label: string;
+  /** `asked`: the logins step asks for it. `not_needed`: an admin said this outlet has no use for it. */
+  state: 'asked' | 'not_needed';
+  /** The admin's reason, for a `not_needed` row. */
+  reason: string | null;
+  /** Who marked it, and the day (India time), for a `not_needed` row. */
+  by: string | null;
+  canMark: boolean;
+  canUndo: boolean;
+}
+
+/**
+ * Both portals in the order the dealer is asked, each with whether it is asked
+ * for, and whether this stage lets an admin change that.
+ */
+export function portalNeedRows(
+  o: Pick<OutletSetupAdmin, 'stage' | 'loginsNeeded' | 'portalsNotNeeded'>,
+): PortalNeedRow[] {
+  return STANDARD_PORTAL_IDS.map((portal) => {
+    const marked = o.portalsNotNeeded.find((p) => p.portal === portal);
+    const asked = o.loginsNeeded.includes(portal);
+    const day = marked ? istDay(marked.at) : '';
+    return {
+      portal,
+      label: PORTAL_LABEL[portal],
+      state: marked || !asked ? 'not_needed' : 'asked',
+      reason: marked?.reason ?? null,
+      by: marked ? [marked.byName ?? 'MDG', day].filter(Boolean).join(', ') : null,
+      canMark: !marked && asked && canMarkNotNeeded(o.stage),
+      canUndo: !!marked && canUndoNotNeeded(o.stage),
+    };
+  });
+}
+
+/** Why a reason cannot be sent, or `null`. Judged on the trimmed text, as the server does. */
+export function reasonProblem(reason: string): string | null {
+  const n = reason.trim().length;
+  if (n < REASON_MIN) return `Say why, in at least ${REASON_MIN} characters.`;
+  if (n > REASON_MAX) return `Keep it under ${REASON_MAX} characters. It is ${n} now.`;
+  return null;
+}
+
+/** The body of `POST sign-in/mark`. */
+export function markSignedInBody(reason: string): { reason: string } {
+  return { reason: reason.trim() };
+}
+
+/** The body of `POST portal-not-needed`. */
+export function portalNotNeededBody(
+  portal: PortalId,
+  reason: string,
+): { portal: PortalId; reason: string } {
+  return { portal, reason: reason.trim() };
+}
+
+/**
+ * The body of `POST welcome/send`: the language on screen, and `force` only when
+ * the welcome already went (the server refuses a second send without it).
+ */
+export function sendWelcomeBody(v: { messageLang: SetupMessageLang; force: boolean }): {
+  messageLang: SetupMessageLang;
+  force?: true;
+} {
+  return v.force ? { messageLang: v.messageLang, force: true } : { messageLang: v.messageLang };
+}
+
+/** The body of `PUT billing`: the same four fields the owner's card saves, and nothing else. */
+export function billingSaveBody(b: {
+  name: string;
+  address: string;
+  stateCode: string;
+  gstin: string | null;
+}): { name: string; address: string; stateCode: string; gstin: string | null } {
+  return { name: b.name, address: b.address, stateCode: b.stateCode, gstin: b.gstin };
+}
+
+/**
+ * What a welcome that could not be sent says, above the words to send by hand: the
+ * server's reason is lower case and unfinished ("template not approved yet"), so it
+ * is tidied into a sentence of its own.
+ */
+export function welcomeNotSentLine(reason: string): string {
+  const why = reason.trim().replace(/[.\s]+$/, '');
+  const sentence = why ? `${why[0]!.toUpperCase()}${why.slice(1)}. ` : '';
+  return `The WhatsApp welcome was not sent. ${sentence}Send it from your phone: it tells them the account is ready and how to sign in.`;
+}
+
+/**
+ * Where the welcome WhatsApp stands, for the Setup card and the welcome form:
+ * "Delivered 24 Oct", "Sent by hand 24 Oct", "Not sent yet", "Not tried yet".
+ */
+export function welcomeLine(w: SetupWelcomeAdminView): string {
+  const day = istDay(w.at);
+  const on = day ? ` ${day}` : '';
+  switch (w.state) {
+    case 'delivered':
+      return `Delivered${on}`;
+    case 'sent':
+      return `Sent${on}, not yet reported delivered`;
+    case 'handSent':
+      return `Sent by hand${on}`;
+    case 'failed':
+      return `Did not arrive${on}: WhatsApp could not deliver it`;
+    case 'not_sent':
+      return 'Not sent yet: the words are for you to send';
+    default:
+      return 'Not tried yet';
+  }
 }
 
 // ── Money ───────────────────────────────────────────────────────────────────
@@ -530,6 +764,49 @@ export function mdgTurnCount(rows: readonly OnboardingBoardRow[]): number {
   return rows.filter(isMdgTurn).length;
 }
 
+// ── A setup from a server one release behind ────────────────────────────────
+
+/**
+ * An outlet's setup as an OLDER server sends it: before round 3 there was no
+ * `doneBy`, `portalsNotNeeded` or `welcome`. The release order is backend first,
+ * then this app, and a tab can be on either side of that gap for a few minutes, so
+ * the screens never read those three fields off a raw body.
+ */
+export type RawOutletSetup = Omit<OutletSetupAdmin, 'doneBy' | 'portalsNotNeeded' | 'welcome'> &
+  Partial<Pick<OutletSetupAdmin, 'doneBy' | 'portalsNotNeeded' | 'welcome'>>;
+
+/**
+ * The setup with the three round-3 fields filled in as "nothing happened":
+ * nobody did a step for the dealer, no portal is marked, no welcome was tried.
+ * That is also exactly what an outlet from before round 3 has. A current server's
+ * body comes back unchanged in content.
+ */
+export function readSetup(raw: RawOutletSetup): OutletSetupAdmin {
+  return {
+    ...raw,
+    doneBy: { signIn: null, billing: null, logins: null, ...raw.doneBy },
+    portalsNotNeeded: raw.portalsNotNeeded ?? [],
+    welcome: raw.welcome ?? { state: null, at: null },
+  };
+}
+
+type RawBoardRow =
+  | Exclude<OnboardingBoardRow, { kind: 'outlet' }>
+  | { kind: 'outlet'; outlet: RawOutletSetup };
+
+export type RawOnboardingBoard = Omit<OnboardingBoard, 'rows'> & { rows: RawBoardRow[] };
+
+/** The board with every outlet row read through `readSetup`; registration rows are not touched. */
+export function readBoard(raw: RawOnboardingBoard): OnboardingBoard {
+  return {
+    ...raw,
+    rows: raw.rows.map(
+      (row): OnboardingBoardRow =>
+        row.kind === 'outlet' ? { kind: 'outlet', outlet: readSetup(row.outlet) } : row,
+    ),
+  };
+}
+
 // ── The funnel ──────────────────────────────────────────────────────────────
 
 export const FUNNEL_STEPS = [
@@ -566,7 +843,6 @@ export function funnelTiles(f: OnboardingBoard['funnel']): FunnelTile[] {
 const MILESTONE_LABEL: Record<keyof SetupMilestones, string> = {
   approvedAt: 'Approved',
   firstSignInAt: 'First sign-in',
-  servicesChosenAt: 'Services chosen',
   billingSavedAt: 'Billing details saved',
   billSentAt: 'Bill sent',
   paidAt: 'Payment received',
@@ -576,23 +852,71 @@ const MILESTONE_LABEL: Record<keyof SetupMilestones, string> = {
   liveAt: 'Live',
 };
 
+/** Which step's "done by" a milestone shows. A step with no entry here has no one to credit. */
+const MILESTONE_DONE_BY: Partial<Record<keyof SetupMilestones, keyof SetupDoneByMap>> = {
+  firstSignInAt: 'signIn',
+  billingSavedAt: 'billing',
+  loginsDoneAt: 'logins',
+};
+
+/**
+ * "by Ravi, for the dealer": who did a step when it was an admin FOR the dealer.
+ * Nothing for the dealer's own tap, and nothing for a step from before round 3
+ * (it has no trace, and reads as the dealer's).
+ *
+ * A marked sign-in says so and that it is not a real sign-in, with the reason the
+ * admin gave ("helped by phone"): the owner may never have opened the app. Logins
+ * carry no name (the audit log has who typed them), so they say "the MDG team".
+ */
+export function doneByLine(
+  d: SetupDoneBy | null | undefined,
+  step: keyof SetupDoneByMap,
+): string | null {
+  if (!d || d.by !== 'mdg') return null;
+  const who = d.name?.trim() || 'the MDG team';
+  switch (step) {
+    case 'signIn': {
+      const why = d.reason?.trim();
+      return `marked by ${who}, for the dealer. Not a real sign-in${why ? `: ${why}` : ''}`;
+    }
+    case 'billing':
+      return `by ${who}, for the dealer`;
+    case 'logins':
+      return `typed by ${who}, for the dealer`;
+  }
+}
+
+export interface MilestoneRow {
+  key: keyof SetupMilestones;
+  label: string;
+  at: string | null;
+  done: boolean;
+  /** Who did it, when an admin did it for the dealer; `null` otherwise. */
+  by: string | null;
+}
+
 /**
  * The milestones in the order they happen, each with its time or `null` when it
  * has not. `done` is false for one that has a time still ahead: the end of a
  * watch is on the list from the day it starts, and is not done until it passes.
+ * `by` names the admin when sign-in, billing or the logins were done for the dealer.
  */
 export function milestoneRows(
   m: SetupMilestones,
   now: number,
-): Array<{ key: keyof SetupMilestones; label: string; at: string | null; done: boolean }> {
+  doneBy?: SetupDoneByMap | null,
+): MilestoneRow[] {
   return (Object.keys(MILESTONE_LABEL) as Array<keyof SetupMilestones>).map((key) => {
     const at = m[key] ?? null;
     const t = at ? Date.parse(at) : NaN;
+    const done = at !== null && !(Number.isFinite(t) && t > now);
+    const step = MILESTONE_DONE_BY[key];
     return {
       key,
       label: MILESTONE_LABEL[key],
       at,
-      done: at !== null && !(Number.isFinite(t) && t > now),
+      done,
+      by: done && step && doneBy ? doneByLine(doneBy[step], step) : null,
     };
   });
 }
@@ -646,9 +970,17 @@ export function billingLine(b: SetupBilling | null, stateName: string | undefine
   ].join(' · ');
 }
 
-/** "DSR, Credit & DOD" for the services an outlet chose; `labelOf` gives each one's name. */
-export function servicesLine(ids: readonly string[], labelOf: (id: string) => string): string {
-  return ids.length === 0 ? 'None chosen yet' : ids.map(labelOf).join(', ');
+/**
+ * The portal logins the outlet is asked for, and any an admin said it does not
+ * need: "SDMS, IRAS", or "SDMS · IRAS not needed (no IRAS automation)".
+ */
+export function portalsLine(
+  needed: readonly PortalId[],
+  notNeeded: readonly Pick<SetupPortalNotNeeded, 'portal' | 'reason'>[],
+): string {
+  const asked = needed.length ? needed.map((p) => PORTAL_LABEL[p]).join(', ') : 'None asked for';
+  const left = notNeeded.map((n) => `${PORTAL_LABEL[n.portal]} not needed (${n.reason})`);
+  return [asked, ...left].join(' · ');
 }
 
 // ── Members' sign-in name ───────────────────────────────────────────────────

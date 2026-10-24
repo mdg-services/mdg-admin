@@ -188,6 +188,7 @@ const INFO_TAB: TabDef = {
       dealer={dealer}
       setup={ctx.setup}
       onOpenPasswordVault={() => ctx.goToTab(PASSWORDS_TAB_ID)}
+      onOpenTab={ctx.goToTab}
     />
   ),
 };

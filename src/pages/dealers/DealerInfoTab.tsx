@@ -41,9 +41,15 @@ interface Props {
    * without it the pointer below is simply not offered.
    */
   onOpenPasswordVault?: () => void;
+  /**
+   * Switches the dealer page to another tab. The Setup card uses it for its links to
+   * Team (Reset password), Services and the Password vault, because a link to `?tab=`
+   * on this same page would change the address and leave the tab where it is.
+   */
+  onOpenTab?: (tab: string) => void;
 }
 
-export function DealerInfoTab({ dealer, setup = null, onOpenPasswordVault }: Props) {
+export function DealerInfoTab({ dealer, setup = null, onOpenPasswordVault, onOpenTab }: Props) {
   const isSuperAdmin = useIsSuperAdmin();
   const isArchived = !!dealer.archivedAt;
   const [editingProfile, setEditingProfile] = React.useState(false);
@@ -52,9 +58,10 @@ export function DealerInfoTab({ dealer, setup = null, onOpenPasswordVault }: Pro
   // payment card used to.
   const setupOnTop = !!setup && !isArchived && isOpenStage(setup.stage);
   const setupInGrid = !!setup && !isArchived && !setupOnTop;
+  const cardTabs = onOpenTab ? { onGoToTab: onOpenTab } : {};
   return (
     <div className="grid gap-3 md:gap-4">
-      {setupOnTop && setup ? <SetupCard setup={setup} /> : null}
+      {setupOnTop && setup ? <SetupCard setup={setup} {...cardTabs} /> : null}
       {/* NO TAX CARD HERE ANY MORE. GST and PAN are catalog fields on the
           outlet file below, under "Tax and registration", and they read from
           the SAME `Dealer.gst` / `Dealer.pan` this card used to print. Two
@@ -111,7 +118,7 @@ export function DealerInfoTab({ dealer, setup = null, onOpenPasswordVault }: Pro
           </CardContent>
         </Card>
 
-        {setupInGrid && setup ? <SetupCard setup={setup} /> : null}
+        {setupInGrid && setup ? <SetupCard setup={setup} {...cardTabs} /> : null}
 
         {/* The old seven steps and the payment note step 5 stored, read-only, for an
             outlet from before onboarding v2. A new outlet's bill and payment are on

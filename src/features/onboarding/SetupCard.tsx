@@ -16,12 +16,13 @@ import {
   SOURCE_LABEL,
   billingLine,
   milestoneRows,
-  servicesLine,
+  portalsLine,
   stageIntent,
   stageLabel,
   waitingLabel,
+  welcomeLine,
+  type DealerTabId,
 } from '@/lib/onboarding';
-import { serviceLabel } from '@/lib/serviceLabel';
 import { GST_STATES, type OutletSetupAdmin } from '@dk/shared';
 
 import { billingItems } from './billingItems';
@@ -31,17 +32,27 @@ import { StageActions } from './StageActions';
 
 /**
  * An outlet's onboarding on its Info tab: where it stands, what the dealer has
- * given so far, every milestone with its time, and the same stage buttons the
- * Onboarding page's row has (`StageActions`, one component for both).
+ * given so far, every milestone with its time (and who did it, when an admin did
+ * it for the dealer), and the same stage buttons the Onboarding page's row has
+ * (`StageActions`, one component for both), with "Do it for the dealer" under them.
  *
  * It replaces the old step-counter and the "Payment recorded at step 5" card for
  * outlets that came through onboarding v2; outlets from before it keep those.
  * Reads the setup the page already fetched for the header chip, so it adds no
  * request.
  */
-export function SetupCard({ setup, now = Date.now() }: { setup: OutletSetupAdmin; now?: number }) {
+export function SetupCard({
+  setup,
+  now = Date.now(),
+  onGoToTab,
+}: {
+  setup: OutletSetupAdmin;
+  now?: number;
+  /** Switches the dealer page's tab (Team, Services, Password vault) instead of following a link. */
+  onGoToTab?: (tab: DealerTabId) => void;
+}) {
   const waiting = waitingLabel(setup.waitingOn);
-  const milestones = milestoneRows(setup.milestones, now);
+  const milestones = milestoneRows(setup.milestones, now, setup.doneBy);
   return (
     <Card>
       <CardHeader
@@ -58,7 +69,7 @@ export function SetupCard({ setup, now = Date.now() }: { setup: OutletSetupAdmin
         </div>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <StageActions outlet={setup} />
+        <StageActions outlet={setup} {...(onGoToTab ? { onGoToTab } : {})} />
         {/* ── reminders and calls ── */}
         <SetupFollowUp setup={setup} />
         {/* ── watch hold ── held messages, the extend-or-end prompt, the checklist */}
@@ -76,12 +87,6 @@ export function SetupCard({ setup, now = Date.now() }: { setup: OutletSetupAdmin
               block: true,
             },
             {
-              key: 'services',
-              label: 'Services chosen',
-              value: servicesLine(setup.servicesChosen, serviceLabel),
-              block: true,
-            },
-            {
               key: 'billing',
               label: 'Bill to',
               value: billingLine(
@@ -94,10 +99,20 @@ export function SetupCard({ setup, now = Date.now() }: { setup: OutletSetupAdmin
             {
               key: 'logins',
               label: 'Portal logins',
-              value: setup.loginsNeeded.length
-                ? setup.loginsNeeded.map((p) => p.toUpperCase()).join(', ')
-                : 'None needed',
+              value: portalsLine(setup.loginsNeeded, setup.portalsNotNeeded),
+              block: true,
             },
+            // The WhatsApp welcome: whether it went, so "Send welcome again" is a choice made knowing.
+            ...(setup.welcome.state !== null || setup.stage === 'sign_in'
+              ? [
+                  {
+                    key: 'welcome',
+                    label: 'Welcome on WhatsApp',
+                    value: welcomeLine(setup.welcome),
+                    block: true,
+                  },
+                ]
+              : []),
             ...(setup.lost
               ? [
                   {
@@ -113,13 +128,13 @@ export function SetupCard({ setup, now = Date.now() }: { setup: OutletSetupAdmin
 
         <ol aria-label="Milestones" className="grid gap-1.5 border-t border-border pt-3">
           {milestones.map((m) => (
-            <li key={m.key} className="flex items-center gap-2 text-sm">
+            <li key={m.key} className="flex items-start gap-2 text-sm">
               {m.done ? (
                 <Check
                   width={14}
                   height={14}
                   strokeWidth={2}
-                  className="shrink-0 text-success"
+                  className="mt-0.5 shrink-0 text-success"
                   aria-hidden
                 />
               ) : (
@@ -127,12 +142,17 @@ export function SetupCard({ setup, now = Date.now() }: { setup: OutletSetupAdmin
                   width={14}
                   height={14}
                   strokeWidth={1.5}
-                  className="shrink-0 text-text-subtle"
+                  className="mt-0.5 shrink-0 text-text-subtle"
                   aria-hidden
                 />
               )}
-              <span className={m.done ? 'text-text' : 'text-text-subtle'}>{m.label}</span>
-              <span className="ml-auto text-xs tabular-nums text-text-subtle">
+              <span className="min-w-0 [overflow-wrap:anywhere]">
+                <span className={m.done ? 'text-text' : 'text-text-subtle'}>{m.label}</span>
+                {m.by ? (
+                  <span className="block select-text text-xs text-text-muted">{m.by}</span>
+                ) : null}
+              </span>
+              <span className="ml-auto shrink-0 text-xs tabular-nums text-text-subtle">
                 {m.at ? istStamp(m.at, now) : '—'}
               </span>
             </li>

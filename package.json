@@ -17,6 +17,7 @@
     "check:outlets": "npx tsx --test scripts/outlets.check.ts",
     "check:guide-videos": "npx tsx --test scripts/guideVideos.check.ts",
     "check:chat-videos": "npx tsx --test scripts/chatGuideVideos.check.ts",
+    "check:chat-transcript": "npx tsx --test scripts/chatTranscript.check.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""

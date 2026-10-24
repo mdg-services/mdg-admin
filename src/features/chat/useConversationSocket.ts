@@ -6,6 +6,7 @@ import * as React from 'react';
 
 import { conversationKey } from '@/hooks/api/useConversation';
 import { messagesKey } from '@/hooks/api/useMessages';
+import { applyTranscript, type TranscriptEvent } from '@/lib/chatTranscript';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
 import type { Conversation, Message, MessageReaction } from '@dk/shared';
@@ -121,6 +122,22 @@ export function useConversationSocket(conversationId: string | null) {
       );
     };
 
+    // The server listened to a voice note and saved what was said on it. The open thread
+    // drops a repeated `message:new` as a duplicate, so this event is the only way the
+    // words reach a thread that is already showing the note. Idempotent: a repeat, or a
+    // note this thread does not hold, changes nothing.
+    const onTranscript = (payload: TranscriptEvent) => {
+      if (payload.conversationId !== conversationId) return;
+      qc.setQueryData<InfiniteData<Message[]>>(
+        messagesKey(conversationId),
+        (curr) => {
+          if (!curr) return curr;
+          const pages = applyTranscript(curr.pages, payload);
+          return pages === curr.pages ? curr : { ...curr, pages };
+        },
+      );
+    };
+
     const onTyping = (payload: {
       conversationId: string;
       userId: string;
@@ -155,6 +172,7 @@ export function useConversationSocket(conversationId: string | null) {
 
     socket.on('message:new', onMessage);
     socket.on('message:reaction', onReaction);
+    socket.on('message:transcript', onTranscript);
     socket.on('typing', onTyping);
     socket.on('delivered', onDelivered);
     socket.on('read', onRead);
@@ -162,6 +180,7 @@ export function useConversationSocket(conversationId: string | null) {
     return () => {
       socket.off('message:new', onMessage);
       socket.off('message:reaction', onReaction);
+      socket.off('message:transcript', onTranscript);
       socket.off('typing', onTyping);
       socket.off('delivered', onDelivered);
       socket.off('read', onRead);

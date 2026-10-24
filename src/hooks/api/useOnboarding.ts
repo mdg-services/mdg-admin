@@ -1,14 +1,22 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { ApiError, api } from '@/lib/api';
+import {
+  readBoard,
+  readSetup,
+  type RawOnboardingBoard,
+  type RawOutletSetup,
+} from '@/lib/onboarding';
 import type { CallBody } from '@/lib/onboardingCalls';
 import { approveBody } from '@/lib/outlets';
 import type {
   ApproveRegistrationResult,
-  OnboardingBoard,
   OnboardingBoardView,
   OnboardingConfig,
   OutletSetupAdmin,
+  PortalId,
+  SendSetupWelcomeResult,
+  SetupBilling,
   SetupMessageLang,
 } from '@dk/shared';
 
@@ -34,7 +42,10 @@ export const outletSetupKey = (dealerId: string | undefined) => ['outletSetup', 
 export function useOnboardingBoardQuery(view: OnboardingBoardView) {
   return useQuery({
     queryKey: onboardingBoardKey(view),
-    queryFn: () => api.get<OnboardingBoard>('/admin/onboarding', { view }),
+    queryFn: async () =>
+      // Read through `readBoard`: a server one release behind sends no `doneBy`,
+      // `portalsNotNeeded` or `welcome`, and the page reads them unguarded.
+      readBoard(await api.get<RawOnboardingBoard>('/admin/onboarding', { view })),
     staleTime: 15_000,
     refetchInterval: 120_000,
   });
@@ -67,9 +78,10 @@ export function useOutletSetupQuery(dealerId: string | undefined) {
     queryKey: outletSetupKey(dealerId),
     queryFn: async (): Promise<OutletSetupAdmin | null> => {
       try {
-        const setup = await api.get<OutletSetupAdmin>(`/dealers/${dealerId}/setup`);
-        // Defensive: a body without a stage is not a setup.
-        return setup && typeof setup.stage === 'string' ? setup : null;
+        const setup = await api.get<RawOutletSetup>(`/dealers/${dealerId}/setup`);
+        // Defensive: a body without a stage is not a setup. `readSetup` fills what a
+        // server one release behind leaves out.
+        return setup && typeof setup.stage === 'string' ? readSetup(setup) : null;
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) return null;
         throw err;
@@ -195,5 +207,91 @@ export function useClearNotMe() {
     mutationFn: (dealerId: string) =>
       api.post<OutletSetupAdmin>(`/dealers/${dealerId}/setup/not-me/clear`, {}),
     onSettled: (_data, _err, dealerId) => refreshAfterChange(qc, dealerId),
+  });
+}
+
+// ── what an admin does FOR the dealer (round 3) ──────────────────────────────
+
+/**
+ * Mark the owner as signed in, for a dealer who cannot use the app yet. A reason
+ * is required. It is a stamp, not a real sign-in: the server posts the dealer's
+ * next card and says in the chat that the team helped. Any admin. Answers the
+ * fresh setup.
+ */
+export function useMarkSignedIn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dealerId, body }: { dealerId: string; body: { reason: string } }) =>
+      api.post<OutletSetupAdmin>(`/dealers/${dealerId}/setup/sign-in/mark`, body),
+    onSettled: (_data, _err, vars) => refreshAfterChange(qc, vars.dealerId),
+  });
+}
+
+/**
+ * Send the "your account is ready" WhatsApp again, in one language. The server
+ * keeps the consent rule: when it cannot send, the answer is the words and a
+ * `wa.me` link for a person to send by hand (`welcome.sent` is false). A second
+ * send after one went needs `force`, or the server answers 409 `WELCOME_ALREADY_SENT`.
+ */
+export function useSendSetupWelcome() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      dealerId,
+      body,
+    }: {
+      dealerId: string;
+      body: { messageLang?: SetupMessageLang; force?: true };
+    }) => api.post<SendSetupWelcomeResult>(`/dealers/${dealerId}/setup/welcome/send`, body),
+    onSettled: (_data, _err, vars) => refreshAfterChange(qc, vars.dealerId),
+  });
+}
+
+/** Record that a person sent the welcome from their own phone, so nobody sends it twice. */
+export function useWelcomeHandSent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dealerId: string) =>
+      api.post<OutletSetupAdmin>(`/dealers/${dealerId}/setup/welcome/hand-sent`, {}),
+    onSettled: (_data, _err, dealerId) => refreshAfterChange(qc, dealerId),
+  });
+}
+
+/**
+ * Fill, or change, the bill-to details for the dealer: the same save the owner's
+ * billing card makes, so an open bill is refreshed too. The server refuses before
+ * the first sign-in (409 `SIGN_IN_FIRST`) and once the bill is paid (409 `SETUP_LOCKED`).
+ */
+export function useSaveBillingForDealer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dealerId, body }: { dealerId: string; body: SetupBilling }) =>
+      api.put<OutletSetupAdmin>(`/dealers/${dealerId}/setup/billing`, body),
+    onSettled: (_data, _err, vars) => refreshAfterChange(qc, vars.dealerId),
+  });
+}
+
+/** Say one portal login is not needed for this outlet, so the logins step stops asking for it. */
+export function useMarkPortalNotNeeded() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      dealerId,
+      body,
+    }: {
+      dealerId: string;
+      body: { portal: PortalId; reason: string };
+    }) => api.post<OutletSetupAdmin>(`/dealers/${dealerId}/setup/portal-not-needed`, body),
+    onSettled: (_data, _err, vars) => refreshAfterChange(qc, vars.dealerId),
+  });
+}
+
+/** Take the mark back: the logins step asks for that portal again. */
+export function useUndoPortalNotNeeded() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dealerId, portal }: { dealerId: string; portal: PortalId }) =>
+      api.del<OutletSetupAdmin>(`/dealers/${dealerId}/setup/portal-not-needed/${portal}`),
+    onSettled: (_data, _err, vars) => refreshAfterChange(qc, vars.dealerId),
   });
 }

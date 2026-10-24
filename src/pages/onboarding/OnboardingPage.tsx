@@ -34,7 +34,7 @@ import {
   formatPaise,
   mdgTurnCount,
   paymentLine,
-  servicesLine,
+  portalsLine,
   sortBoardRows,
   stageIntent,
   stageLabel,
@@ -43,7 +43,6 @@ import {
   type RegistrationRow,
 } from '@/lib/onboarding';
 import { lastCallLine } from '@/lib/onboardingCalls';
-import { serviceLabel } from '@/lib/serviceLabel';
 import { ageSince } from '@/pages/overview/format';
 import { dealerCodeLabel, type OnboardingBoardRow, type OnboardingBoardView } from '@dk/shared';
 
@@ -74,7 +73,7 @@ const VIEW_EMPTY: Record<OnboardingBoardView, { title: string; description: stri
  *
  * It replaces the Registrations list and the old seven-step tab. A registration
  * waits here for a yes; once approved it becomes an outlet row that moves through
- * the stages the server works out from facts (signed in, services chosen, bill
+ * the stages the server works out from facts (signed in, billing details saved, bill
  * sent, paid, logins saved, services started), and the row says whose move it is.
  * Amber is MDG's, blue is the dealer's, and the page lists MDG's first, so the top
  * of the list is always what an admin can do something about.
@@ -361,9 +360,12 @@ function OutletCell({ row }: { row: Extract<OnboardingBoardRow, { kind: 'outlet'
           <ContactLinks mobile={o.mobile} />
         </div>
       ) : null}
-      <p className="mt-0.5 text-xs text-text-subtle">
-        {servicesLine(o.servicesChosen, serviceLabel)}
-      </p>
+      {/* A login the team said this outlet does not need, so a missing one is not a gap. */}
+      {o.portalsNotNeeded.length > 0 ? (
+        <p className="mt-0.5 text-xs text-text-subtle">
+          {portalsLine(o.loginsNeeded, o.portalsNotNeeded)}
+        </p>
+      ) : null}
     </div>
   );
 }

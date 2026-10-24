@@ -1,4 +1,4 @@
-import { Check, Copy, MessageCircle } from 'lucide-react';
+import { Check } from 'lucide-react';
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -12,21 +12,25 @@ import {
   FieldError,
   Input,
   Label,
-  Textarea,
   useToast,
 } from '@/components/ui';
 import { useNextDealerCodeQuery } from '@/hooks/api/useDealers';
 import { useApproveRegistration } from '@/hooks/api/useOnboarding';
 import { useRegistrationLinkOptionQuery } from '@/hooks/api/useOutletLink';
-import { copyText } from '@/lib/clipboard';
-import { agoLabel, dialHref, istStamp, phoneLabel } from '@/lib/intake';
-import { chosenMessageLang, messageLangLabel, type RegistrationRow } from '@/lib/onboarding';
+import { agoLabel, istStamp, phoneLabel } from '@/lib/intake';
+import {
+  chosenMessageLang,
+  messageLangLabel,
+  welcomeNotSentLine,
+  type RegistrationRow,
+} from '@/lib/onboarding';
 import { LINK_CHOICE_HINT, canApprove as mayApprove, linkChoiceLabel, linkedResultLine } from '@/lib/outlets';
 import { ageSince } from '@/pages/overview/format';
 import { dealerCodeLabel, type ApproveRegistrationResult, type SetupMessageLang } from '@dk/shared';
 import { dealerCodeSchema } from '@dk/shared/schemas';
 
 import { MessageLangField } from './MessageLangField';
+import { WelcomeWords } from './WelcomeWords';
 
 /** The owner a registration was added to, kept for the result screen. */
 type LinkedTo = { name: string; codes: string[] };
@@ -265,19 +269,7 @@ function ApprovedResult({
   /** Set when the outlet was added to an owner we already serve (`lib/outlets.ts`). */
   linkedTo: LinkedTo | null;
 }) {
-  const toast = useToast();
-  const [copied, setCopied] = React.useState(false);
   const welcome = result.welcome;
-
-  async function copyWelcome(text: string) {
-    if (await copyText(text)) {
-      setCopied(true);
-      toast.success('Message copied');
-      window.setTimeout(() => setCopied(false), 1500);
-    } else {
-      toast.error('Could not copy. Select the message and copy it by hand.');
-    }
-  }
 
   return (
     <div className="grid gap-3">
@@ -299,52 +291,13 @@ function ApprovedResult({
         </div>
       ) : (
         <>
-          <Callout intent="warning">
-            The WhatsApp welcome was not sent. {welcome.reason.replace(/[.\s]+$/, '')}. Send it from
-            your phone: it tells them the account is ready and how to sign in.
-          </Callout>
-          <div>
-            <Label htmlFor="welcome-text">
-              Message to send to {phoneLabel(row.mobile)}
-              <span className="ml-2 text-xs font-normal text-text-subtle">
-                in {messageLangLabel(result.messageLang)}
-              </span>
-            </Label>
-            <Textarea
-              id="welcome-text"
-              rows={6}
-              readOnly
-              value={welcome.text}
-              className="select-text"
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* WhatsApp's own link, as the Films page uses: opens the chat with the words ready. */}
-            <a
-              href={welcome.waLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-9 min-h-11 items-center gap-2 rounded-md bg-success px-4 text-sm font-semibold text-white hover:bg-success/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:min-h-0"
-            >
-              <MessageCircle width={16} height={16} strokeWidth={1.75} aria-hidden />
-              Open WhatsApp
-            </a>
-            <Button
-              variant="secondary"
-              onClick={() => void copyWelcome(welcome.text)}
-              leftIcon={copied ? <Check width={14} height={14} /> : <Copy width={14} height={14} />}
-            >
-              {copied ? 'Copied' : 'Copy message'}
-            </Button>
-            {dialHref(row.mobile) ? (
-              <a
-                href={dialHref(row.mobile) ?? undefined}
-                className="inline-flex min-h-11 items-center text-sm text-brand underline md:min-h-0"
-              >
-                Or call them
-              </a>
-            ) : null}
-          </div>
+          <Callout intent="warning">{welcomeNotSentLine(welcome.reason)}</Callout>
+          <WelcomeWords
+            mobile={row.mobile}
+            text={welcome.text}
+            waLink={welcome.waLink}
+            lang={result.messageLang}
+          />
         </>
       )}
 

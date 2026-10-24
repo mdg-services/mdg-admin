@@ -1,10 +1,22 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type {
   IrasCredentialsStatus,
   RevealedPortalCredentials,
 } from '@/types/serviceRun';
+
+import { onboardingRoot, outletSetupRoot } from './useOnboarding';
+
+/**
+ * A login saved or cleared moves the outlet's onboarding (the logins step, the
+ * checklist, the Setup card), so those are read again too. Matters most from the
+ * "Enter logins" form on the Setup card, which has no other way to know.
+ */
+function refreshSetup(qc: QueryClient) {
+  void qc.invalidateQueries({ queryKey: outletSetupRoot });
+  void qc.invalidateQueries({ queryKey: onboardingRoot });
+}
 
 export interface SetIrasCredentialsInput {
   username: string;
@@ -32,6 +44,7 @@ export function useSetIrasCredentials(dealerId: string) {
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['irasCredentials', dealerId] });
+      refreshSetup(qc);
     },
   });
 }
@@ -43,6 +56,7 @@ export function useClearIrasCredentials(dealerId: string) {
       api.del<{ id?: string }>(`/dealers/${dealerId}/iras-credentials`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['irasCredentials', dealerId] });
+      refreshSetup(qc);
     },
   });
 }

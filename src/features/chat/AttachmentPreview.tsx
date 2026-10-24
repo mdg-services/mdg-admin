@@ -5,6 +5,7 @@ import * as React from 'react';
 import { ImageLightbox } from '@/components/ui/ImageLightbox';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
+import { transcriptOf } from '@/lib/chatTranscript';
 import { cn } from '@/lib/cn';
 import { downloadAttachment } from '@/lib/downloadAttachment';
 import { formatDuration } from '@/lib/uploadAttachment';
@@ -61,66 +62,78 @@ function VoiceMessage({ attachment }: { attachment: Attachment }) {
     setCurrentMs(next * 1000);
   }
 
+  // What was said, once the server has listened to the note. Small and muted, inside the
+  // same card, so a wrong transcript is as easy to see as the audio is to play.
+  const words = transcriptOf(attachment);
+
   return (
-    <div className="flex min-w-[180px] items-center gap-2.5 rounded-lg border border-border bg-surface px-2.5 py-2">
-      <button
-        type="button"
-        onClick={toggle}
-        aria-label={playing ? 'Pause voice message' : 'Play voice message'}
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand md:h-8 md:w-8"
-      >
-        {playing ? (
-          <Pause width={15} strokeWidth={2} />
-        ) : (
-          <Play width={15} strokeWidth={2} className="translate-x-[1px]" />
-        )}
-      </button>
-      {/* Play/pause used to be the entire interaction surface of a voice note —
-          the bar was a painted div. It is now the seek control, and the whole
-          column is the target so no 6px bar has to be hit. */}
-      <button
-        ref={trackRef}
-        type="button"
-        aria-label="Seek voice message"
-        onClick={seekFromPointer}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowLeft') {
-            e.preventDefault();
-            nudge(-5);
-          } else if (e.key === 'ArrowRight') {
-            e.preventDefault();
-            nudge(5);
-          }
-        }}
-        className="flex min-h-11 flex-1 flex-col justify-center gap-1 text-left md:min-h-0"
-      >
-        <span className="block h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
-          <span
-            className="block h-full rounded-full bg-brand"
-            style={{ width: `${progress}%` }}
-          />
-        </span>
-        <span className="text-[11px] tabular-nums text-text-subtle">
-          {formatDuration(playing || currentMs > 0 ? currentMs : totalMs)}
-        </span>
-      </button>
-      <audio
-        ref={audioRef}
-        src={attachment.url}
-        preload="metadata"
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => {
-          setPlaying(false);
-          setCurrentMs(0);
-        }}
-        onTimeUpdate={(e) => setCurrentMs(e.currentTarget.currentTime * 1000)}
-        onLoadedMetadata={(e) => {
-          const d = e.currentTarget.duration;
-          if (Number.isFinite(d) && d > 0) setLoadedMs(d * 1000);
-        }}
-        className={cn('hidden')}
-      />
+    <div className="min-w-[180px] max-w-full rounded-lg border border-border bg-surface px-2.5 py-2">
+      <div className="flex items-center gap-2.5">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={playing ? 'Pause voice message' : 'Play voice message'}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand md:h-8 md:w-8"
+        >
+          {playing ? (
+            <Pause width={15} strokeWidth={2} />
+          ) : (
+            <Play width={15} strokeWidth={2} className="translate-x-[1px]" />
+          )}
+        </button>
+        {/* Play/pause used to be the entire interaction surface of a voice note —
+            the bar was a painted div. It is now the seek control, and the whole
+            column is the target so no 6px bar has to be hit. */}
+        <button
+          ref={trackRef}
+          type="button"
+          aria-label="Seek voice message"
+          onClick={seekFromPointer}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') {
+              e.preventDefault();
+              nudge(-5);
+            } else if (e.key === 'ArrowRight') {
+              e.preventDefault();
+              nudge(5);
+            }
+          }}
+          className="flex min-h-11 flex-1 flex-col justify-center gap-1 text-left md:min-h-0"
+        >
+          <span className="block h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+            <span
+              className="block h-full rounded-full bg-brand"
+              style={{ width: `${progress}%` }}
+            />
+          </span>
+          <span className="text-[11px] tabular-nums text-text-subtle">
+            {formatDuration(playing || currentMs > 0 ? currentMs : totalMs)}
+          </span>
+        </button>
+        <audio
+          ref={audioRef}
+          src={attachment.url}
+          preload="metadata"
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onEnded={() => {
+            setPlaying(false);
+            setCurrentMs(0);
+          }}
+          onTimeUpdate={(e) => setCurrentMs(e.currentTarget.currentTime * 1000)}
+          onLoadedMetadata={(e) => {
+            const d = e.currentTarget.duration;
+            if (Number.isFinite(d) && d > 0) setLoadedMs(d * 1000);
+          }}
+          className={cn('hidden')}
+        />
+      </div>
+      {words ? (
+        <p className="mt-1.5 select-text whitespace-pre-wrap break-words border-t border-border pt-1.5 text-xs text-text-muted">
+          <span className="font-medium text-text-subtle">Transcript: </span>
+          {words}
+        </p>
+      ) : null}
     </div>
   );
 }
