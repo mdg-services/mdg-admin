@@ -47,6 +47,7 @@ import {
   type DsrVariationSummary,
 } from '@dk/shared';
 
+import { DsrGuessedDeliveries } from './DsrGuessedDeliveries';
 import { DsrShareDialog } from './DsrShareDialog';
 import {
   holdersSummary,
@@ -149,6 +150,8 @@ export function DsrReportPanel({
       <AssuranceSummaryStrip report={report} />
 
       <DsrWarningsBanner warnings={report.warnings} />
+
+      <DsrGuessedDeliveries dealerId={report.dealerId} />
 
       {/* The deliverable itself — the hero. */}
       <Card className="order-2 overflow-hidden md:order-none">

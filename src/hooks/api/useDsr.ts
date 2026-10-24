@@ -207,6 +207,24 @@ export interface DsrStaleResponse {
   reports: DsrStaleReport[];
 }
 
+/** A delivery the tank dip inferred — `GET /dsr/dealers/:id/inferred-receipts`. */
+export interface DsrInferredReceipt {
+  businessDate: string;
+  productKey: string;
+  litres: number;
+  /** The gain the guess was rounded up from. */
+  unexplainedLitres: number | null;
+}
+
+/** `POST /dsr/dealers/:id/inferred-receipts/remove`. */
+export interface DsrInferredRemoved {
+  businessDate: string;
+  productKey: string;
+  litres: number;
+  /** The reports now flagged out of date. */
+  staleDates: string[];
+}
+
 /** `POST /dsr/dealers/:dealerId/regenerate-stale` — 202 with the queued run. */
 export interface DsrRegenerateStaleAccepted {
   runId: string;
@@ -246,6 +264,8 @@ export const dsrKeys = {
     ['dsr', 'reports', dealerId] as const,
   report: (id: string | undefined) => ['dsr', 'report', id] as const,
   stale: (dealerId: string | undefined) => ['dsr', 'stale', dealerId] as const,
+  inferred: (dealerId: string | undefined) =>
+    ['dsr', 'inferred', dealerId] as const,
   shareStatus: (reportId: string | undefined) =>
     ['dsr', 'share-status', reportId] as const,
   setupDraft: (dealerId: string | undefined) =>
@@ -427,6 +447,39 @@ export function useDsrStaleReports(dealerId: string | undefined, enabled = true)
     queryFn: () => api.get<DsrStaleResponse>(`/dsr/dealers/${dealerId}/stale`),
     enabled: !!dealerId && enabled,
     staleTime: 30_000,
+  });
+}
+
+/** Deliveries the tank dip inferred for a dealer, over the last 60 days. */
+export function useDsrInferredReceipts(dealerId: string | undefined) {
+  return useQuery({
+    queryKey: dsrKeys.inferred(dealerId),
+    queryFn: () =>
+      api.get<{ receipts: DsrInferredReceipt[] }>(
+        `/dsr/dealers/${dealerId}/inferred-receipts`,
+      ),
+    enabled: !!dealerId,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * "No tanker came": remove an inferred delivery. The server keeps it removed
+ * across regenerations and flags the reports that counted it, so everything
+ * under the `dsr` prefix is refetched — the stale notice appears with them.
+ */
+export function useRemoveInferredReceipt(dealerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { businessDate: string; productKey: string }) =>
+      api.post<DsrInferredRemoved>(
+        `/dsr/dealers/${dealerId}/inferred-receipts/remove`,
+        vars,
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: dsrKeys.all });
+      void qc.invalidateQueries({ queryKey: ['assurance'] });
+    },
   });
 }
 
