@@ -178,6 +178,11 @@ const FilmsPage = React.lazy(
     import('@/pages/FilmsPage').then((m) => ({ default: m.FilmsPage })),
   ),
 );
+const LeadsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/leads/LeadsPage').then((m) => ({ default: m.LeadsPage })),
+  ),
+);
 const FestivalPage = React.lazy(
   retryImport(() =>
     import('@/pages/FestivalPage').then((m) => ({ default: m.FestivalPage })),
@@ -511,6 +516,19 @@ export default function App() {
                   <AssistPage />
                 </LazyPage>
               </RequireSuperAdmin>
+            }
+          />
+          {/* Everyone who started the full film, and what to do about each one
+              (docs/specs/leads.md). Behind the `lead_new`, `lead_due` and
+              `lead_cold` alerts, whose links open one lead (`/leads?lead=`).
+              Every admin, as the API is (`requireRole('admin')`). Keep in step
+              with navItems.ts. */}
+          <Route
+            path="leads"
+            element={
+              <LazyPage>
+                <LeadsPage />
+              </LazyPage>
             }
           />
           {/* The two films on mdgservices.in and how they are watched (ADR

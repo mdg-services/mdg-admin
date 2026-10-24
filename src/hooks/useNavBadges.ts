@@ -5,6 +5,7 @@ import { useNewCallbackCount } from './api/useCallbacks';
 import { useConversations } from './api/useConversations';
 import { useNewEnrolmentCount } from './api/useEnrolments';
 import { useOpenGrievanceCount } from './api/useGrievances';
+import { useLeadsTodoCount } from './api/useLeads';
 import { useOpenTicketCount } from './api/useTickets';
 import { useWhatsAppUnreadChats } from './api/useWhatsAppInbox';
 
@@ -12,8 +13,8 @@ import { useWhatsAppUnreadChats } from './api/useWhatsAppInbox';
  * The count badge each nav destination carries, keyed by its route: unread
  * chats, open tickets, open alerts, AI answers nobody has judged yet,
  * unconfirmed national holidays, website grievances nobody has resolved,
- * registrations nobody has dealt with yet (on the Onboarding entry) and WhatsApp chats with
- * something unread.
+ * registrations nobody has dealt with yet (on the Onboarding entry), leads due now or never
+ * called, and WhatsApp chats with something unread.
  *
  * ONE place, because there were two and they had drifted. The desktop sidebar
  * (`AppShell`) and the phone's tab bar (`MobileTabBar`) each computed their
@@ -41,6 +42,8 @@ export function useNavBadges(): Record<string, number> {
   const openGrievances = useOpenGrievanceCount();
   const newRegistrations = useNewEnrolmentCount();
   const newCallbacks = useNewCallbackCount();
+  // Leads due now or nobody has called. Every admin: they all chase them.
+  const leadsToDo = useLeadsTodoCount();
   // Chats with something unread, from the same small request the page title
   // reads. Super-admin only, and silent — no request at all — for everyone else.
   const whatsappUnread = useWhatsAppUnreadChats();
@@ -53,6 +56,7 @@ export function useNavBadges(): Record<string, number> {
     '/grievances': openGrievances,
     '/onboarding': newRegistrations,
     '/callbacks': newCallbacks,
+    '/leads': leadsToDo,
     '/whatsapp': whatsappUnread,
   };
 }

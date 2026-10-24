@@ -22,6 +22,7 @@ import { useAlertsLive } from '@/hooks/api/useAdminAlerts';
 import { useTicketsLive } from '@/hooks/api/useTickets';
 import { useHeldMessagesLive } from '@/hooks/useHeldMessagesLive';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { useLeadsLive } from '@/hooks/useLeadsLive';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useNavBadges } from '@/hooks/useNavBadges';
 import { useOutletSetupLive } from '@/hooks/useOutletSetupLive';
@@ -104,6 +105,7 @@ export function AppShell() {
   useOutletSetupLive(); // ...and the Onboarding page, and any open outlet's Setup card
   useHeldMessagesLive(); // ...and the held-message queue, and the held count on each Setup card
   useWhatsAppLive(); // ...and the WhatsApp badge, toasts, sound and tab title
+  useLeadsLive(); // ...and the Leads badge, list and open lead
   const admin = useAuthStore((s) => s.admin);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();

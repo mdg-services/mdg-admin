@@ -26,6 +26,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   ShieldPlus,
+  Target,
   Ticket,
   UserCog,
   Users,
@@ -54,7 +55,16 @@ export interface NavItem {
  * can import it without a circular dependency.
  */
 export const NAV_ITEMS: NavItem[] = [
-  // Films and the WhatsApp pair sit first, by request (23 Oct 2026).
+  // Leads sits above everything, by the owner's request (24 Oct 2026): everyone
+  // who started the full film, kept on one list until they say no, ask us to
+  // stop or become a client, and chased by the system until one of those
+  // happens. Every admin, because the follow-up is the whole team's work and a
+  // lead nobody opens a page for goes cold. Carries the "to do" count
+  // (`useNavBadges`). Not in `BOTTOM_TAB_ROUTES` (the bar holds four), so on a
+  // phone it is the first row of the More sheet and its count rides on the More
+  // button.
+  { to: '/leads', label: 'Leads', icon: Target },
+  // Films and the WhatsApp pair sit next, by request (23 Oct 2026).
   // The two Dealer Kavach films on mdgservices.in: views, how far people get,
   // where they stop, and the share links that send people there (ADR 0015).
   // Every admin since 22 Oct 2026.

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
+import { LeadLookupLine } from '@/features/leads/LeadLookupLine';
 import { usePatchWhatsAppChat } from '@/hooks/api/useWhatsAppInbox';
 import { copyText } from '@/lib/clipboard';
 import { cn } from '@/lib/cn';
@@ -187,6 +188,9 @@ export function DetailsContent({ person, detail, now }: DetailsContentProps) {
         ) : null}
         {chat.source ? <p className="mt-0.5 text-xs text-text-subtle">{chat.source}</p> : null}
       </div>
+
+      {/* A line only when this chat is on the Leads page; nothing otherwise. */}
+      <LeadLookupLine person={person} />
 
       <Section title="Stage">
         <Select

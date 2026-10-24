@@ -1,0 +1,853 @@
+/**
+ * The Leads page's rules (docs/specs/leads.md §8), kept out of the components so
+ * they read as plain decisions. This app has no test runner, so everything here
+ * is pure and `scripts/leads.check.ts` runs it (`npm run check:leads`).
+ *
+ * What lives here: the words (labels, the due line, the watch line, who last
+ * did what), the follow-up suggestion a contact form pre-fills, the working
+ * window that suggestion lives in, what each form may send, and why a form is
+ * not ready yet.
+ *
+ * What does NOT live here: whether a lead is due, cold or closed. The server's
+ * clock decides that and says so in `LeadRow`; this file only turns the answer
+ * into words and colours. The one exception is the suggestion, which repeats the
+ * server's table (§3 rule 5) so the form can show "next follow-up" before the
+ * contact is saved, and the check script pins it edge by edge.
+ *
+ * Values come from `shared/src/types/lead` by relative path, as `watchHold.ts`
+ * does for the same reason: the check scripts run outside Vite, where
+ * `@dk/shared` resolves to a compiled `dist/` that a pending shared change can
+ * leave behind the source.
+ */
+import {
+  LEAD_ADMIN_CLOSE_REASONS,
+  LEAD_CLOSED_STATUSES,
+  LEAD_CLOSING_OUTCOMES,
+  LEAD_CONTACT_CHANNELS,
+  LEAD_CONTACT_OUTCOMES,
+  LEAD_CONTACT_OUTCOME_LABELS,
+  LEAD_ORIGIN_LABELS,
+  LEAD_SIGN_LABELS,
+  LEAD_STATUS_LABELS,
+  LEAD_VIEWS,
+  type LeadActivity,
+  type LeadAdminCloseReason,
+  type LeadContactChannel,
+  type LeadContactOutcome,
+  type LeadContactSummary,
+  type LeadCounts,
+  type LeadDueReason,
+  type LeadFunnel,
+  type LeadLookup,
+  type LeadRow,
+  type LeadSign,
+  type LeadStatus,
+  type LeadView,
+  type LeadWatch,
+} from '../../shared/src/types/lead';
+
+import { istStamp, phoneLabel } from './intake';
+import type { Intent } from './statusIntent';
+
+// ── Limits the forms mirror ─────────────────────────────────────────────────
+
+/** Mirrors `LEAD_NOTE_MAX` in the shared schemas; `scripts/leads.check.ts` fails if they disagree. */
+export const NOTE_MAX = 500;
+/** Mirrors `LEAD_FOLLOW_UP_MAX_DAYS`. */
+export const FOLLOW_UP_MAX_DAYS = 90;
+
+// ── Words ───────────────────────────────────────────────────────────────────
+
+/** The tabs. "Unknown viewers" are not leads: nobody there has a name or a number. */
+export const LEAD_VIEW_LABELS: Record<LeadView, string> = {
+  todo: 'To do',
+  open: 'All open',
+  mine: 'Mine',
+  closed: 'Closed',
+  viewers: 'Unknown viewers',
+};
+
+/** The tab's words, with the number the server counted where the tab has one. */
+export function viewLabel(view: LeadView, counts: LeadCounts | undefined): string {
+  const base = LEAD_VIEW_LABELS[view];
+  if (!counts || view === 'closed') return base;
+  return `${base} (${counts[view].toLocaleString('en-IN')})`;
+}
+
+/** Past the end of the list the page is not showing a tab it knows. */
+export function viewFromParam(v: string | null): LeadView {
+  return (LEAD_VIEWS as readonly string[]).includes(v ?? '') ? (v as LeadView) : 'todo';
+}
+
+/** A lead id out of the address, or `null` when it is not one. An id is a Mongo ObjectId. */
+export function idFromParam(v: string | null): string | null {
+  return v && /^[0-9a-f]{24}$/i.test(v) ? v : null;
+}
+
+/** Where an alert or a link opens one lead. */
+export function leadHref(id: string): string {
+  return `/leads?lead=${id}`;
+}
+
+/** The WhatsApp inbox's address for their chat, or `null` when they have none to open. */
+export function chatHref(waId: string | null | undefined): string | null {
+  return waId ? `/whatsapp?chat=${encodeURIComponent(waId)}` : null;
+}
+
+/** The badge's colour for each status: amber is "nobody has been in touch", green is "going ahead". */
+export const STATUS_TONE: Record<LeadStatus, Intent> = {
+  new: 'warning',
+  trying: 'neutral',
+  talking: 'info',
+  interested: 'success',
+  registered: 'info',
+  client: 'success',
+  not_interested: 'neutral',
+  asked_to_stop: 'danger',
+  wrong_number: 'neutral',
+  not_a_lead: 'neutral',
+};
+
+export function statusLabel(status: LeadStatus): string {
+  return LEAD_STATUS_LABELS[status];
+}
+
+export function isClosed(status: LeadStatus): boolean {
+  return (LEAD_CLOSED_STATUSES as readonly string[]).includes(status);
+}
+
+/** Why the next follow-up is due, as the end of a line: "Next: Tue 11:00 · check in". */
+export const DUE_REASON_LABELS: Record<LeadDueReason, string> = {
+  first_contact: 'first call',
+  they_came_back: 'they came back',
+  no_answer_retry: 'no answer last time',
+  after_message: 'no reply to the message',
+  check_in: 'check in',
+  scheduled: 'a time the team chose',
+};
+
+/** One line under the outcome picker: what choosing it does. */
+export const OUTCOME_HINTS: Record<LeadContactOutcome, string> = {
+  interested: 'You spoke and they want to go ahead. The next follow-up comes the next day.',
+  thinking: 'You spoke and they are thinking it over. The next follow-up comes in two days.',
+  no_answer: 'Nobody picked up, or the phone was busy or off. The system tries again soon.',
+  message_sent: 'You sent a message and there is no conversation yet. The system asks again the next day.',
+  not_interested: 'They said no. This closes the lead. It opens again by itself if they write, tap "Call me", ask for a call-back or register.',
+  asked_to_stop: 'They asked us not to contact them again. This closes the lead and also puts them on the WhatsApp stop list, so no promotion reaches them.',
+  wrong_number: 'The number is not theirs. This closes the lead.',
+};
+
+/** One line under the close picker. */
+export const CLOSE_HINTS: Record<LeadAdminCloseReason, string> = {
+  not_interested: 'They said no. It opens again by itself if they write, tap "Call me", ask for a call-back or register.',
+  asked_to_stop: 'They asked us to stop. They also go on the WhatsApp stop list, so no promotion reaches them.',
+  wrong_number: 'The number is not theirs.',
+  not_a_lead: 'Our own team, a test, or the same person twice.',
+};
+
+/** The seven outcomes in the order a person scans them, split by whether they end the chase. */
+export const OPEN_OUTCOMES = LEAD_CONTACT_OUTCOMES.filter((o) => !closesLead(o));
+export const CLOSING_OUTCOMES = LEAD_CONTACT_OUTCOMES.filter((o) => closesLead(o));
+
+export function closesLead(outcome: string): boolean {
+  return (LEAD_CLOSING_OUTCOMES as readonly string[]).includes(outcome);
+}
+
+export function outcomeLabel(outcome: LeadContactOutcome): string {
+  return LEAD_CONTACT_OUTCOME_LABELS[outcome];
+}
+
+/** The best name for a lead: theirs, else the number, else the reference. Never empty. */
+export function leadName(row: Pick<LeadRow, 'name' | 'phone' | 'ref'>): string {
+  const name = row.name?.trim();
+  if (name) return name;
+  return row.phone ? phoneLabel(row.phone) : row.ref;
+}
+
+/** "Share link “Ramesh ji”" and the like: where they came from, in a few words. */
+export function originText(row: Pick<LeadRow, 'origin' | 'linkLabel'>): string {
+  const base = LEAD_ORIGIN_LABELS[row.origin];
+  return row.origin === 'share_link' && row.linkLabel ? `${base} “${row.linkLabel}”` : base;
+}
+
+// ── Time, in India ──────────────────────────────────────────────────────────
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+/** India has no daylight saving: always UTC+05:30. */
+const IST_OFFSET = 330 * MINUTE;
+const WINDOW_OPENS = 9 * HOUR;
+const WINDOW_CLOSES = 20 * HOUR;
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+
+/** Milliseconds since India midnight of the day `ms` falls on. */
+function istMsOfDay(ms: number): number {
+  return (((ms + IST_OFFSET) % DAY) + DAY) % DAY;
+}
+
+function istMidnight(ms: number): number {
+  return ms - istMsOfDay(ms);
+}
+
+/** 0 is Sunday, as `Date#getUTCDay`. */
+function istWeekday(ms: number): number {
+  return new Date(ms + IST_OFFSET).getUTCDay();
+}
+
+function istDayNumber(ms: number): number {
+  return Math.floor((ms + IST_OFFSET) / DAY);
+}
+
+const two = (n: number) => String(n).padStart(2, '0');
+
+/** "14:05" in India time. */
+function istClock(ms: number): string {
+  const day = istMsOfDay(ms);
+  return `${two(Math.floor(day / HOUR))}:${two(Math.floor((day % HOUR) / MINUTE))}`;
+}
+
+/** A moment as the two boxes a form shows: a day (`2026-10-25`) and a time (`11:00`), both India. */
+export interface WhenInput {
+  date: string;
+  time: string;
+}
+
+export function whenInput(ms: number): WhenInput {
+  const d = new Date(ms + IST_OFFSET);
+  return {
+    date: `${d.getUTCFullYear()}-${two(d.getUTCMonth() + 1)}-${two(d.getUTCDate())}`,
+    time: istClock(ms),
+  };
+}
+
+/** What two form boxes mean as a moment in India, or `null` when either is missing or not real. */
+export function parseWhen(w: WhenInput): number | null {
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(w.date);
+  const t = /^(\d{2}):(\d{2})$/.exec(w.time);
+  if (!d || !t) return null;
+  const [y, mo, da, h, mi] = [d[1], d[2], d[3], t[1], t[2]].map(Number) as [number, number, number, number, number];
+  const ms = Date.UTC(y, mo - 1, da, h, mi) - IST_OFFSET;
+  const back = whenInput(ms);
+  // Date.UTC rolls 31 Feb to 3 Mar and 25:00 to 01:00 next day; a form box must not.
+  return back.date === w.date && back.time === w.time ? ms : null;
+}
+
+// ── The working window ──────────────────────────────────────────────────────
+// 09:00 to 20:00, Monday to Saturday, India time: the team's working day, and
+// the only hours the system raises a follow-up alert (§3). A follow-up chosen
+// outside it is shown at the next morning, because that is when it will come.
+
+/** Inside the working window. 20:00 itself is outside; 09:00 is inside. */
+export function inWindow(ms: number): boolean {
+  const day = istMsOfDay(ms);
+  return istWeekday(ms) !== 0 && day >= WINDOW_OPENS && day < WINDOW_CLOSES;
+}
+
+/** The next time the window opens, strictly after `ms`. */
+export function nextWindowStart(ms: number): number {
+  let open = istMidnight(ms) + WINDOW_OPENS;
+  while (open <= ms || istWeekday(open) === 0) open += DAY;
+  return open;
+}
+
+/** `ms` itself when it is inside the window, else the next time it opens. */
+export function moveIntoWindow(ms: number): number {
+  return inWindow(ms) ? ms : nextWindowStart(ms);
+}
+
+/**
+ * `hours` of window time after `ms`: counting starts when the window is open and
+ * skips the nights and Sundays. May land on 20:00 sharp, the end of a window;
+ * `moveIntoWindow` then carries it to the next morning.
+ */
+export function addWorkingHours(ms: number, hours: number): number {
+  let at = moveIntoWindow(ms);
+  let left = hours * HOUR;
+  for (;;) {
+    const room = istMidnight(at) + WINDOW_CLOSES - at;
+    if (left <= room) return at + left;
+    left -= room;
+    at = nextWindowStart(at);
+  }
+}
+
+// ── The suggested next follow-up ────────────────────────────────────────────
+
+interface Step {
+  /** This step covers every count of unanswered tries up to and including this one. */
+  upTo: number;
+  hours: number;
+  /** Count only window time. */
+  working?: boolean;
+  /** For the "How follow-ups work" sentence. */
+  words: string;
+}
+
+/** After a call that got no answer, by how many tries in a row have gone unanswered. */
+const AFTER_NO_ANSWER: readonly Step[] = [
+  { upTo: 1, hours: 4, working: true, words: '4 working hours later' },
+  { upTo: 2, hours: 24, words: 'the next day' },
+  { upTo: 3, hours: 48, words: '2 days later' },
+  { upTo: 6, hours: 72, words: '3 days later' },
+  { upTo: Infinity, hours: 7 * 24, words: 'a week later' },
+];
+
+/** After a message with no reply. A message gets a full day before the first nudge. */
+const AFTER_MESSAGE: readonly Step[] = [
+  { upTo: 2, hours: 24, words: 'the next day' },
+  { upTo: 3, hours: 48, words: '2 days later' },
+  { upTo: 6, hours: 72, words: '3 days later' },
+  { upTo: Infinity, hours: 7 * 24, words: 'a week later' },
+];
+
+const AFTER_SPOKE: Partial<Record<LeadContactOutcome, Step>> = {
+  interested: { upTo: Infinity, hours: 24, words: 'the next day' },
+  thinking: { upTo: Infinity, hours: 48, words: '2 days later' },
+};
+
+function stepFor(steps: readonly Step[], unanswered: number): Step {
+  return steps.find((s) => unanswered <= s.upTo) ?? (steps[steps.length - 1] as Step);
+}
+
+function isAttempt(outcome: LeadContactOutcome): boolean {
+  return outcome === 'no_answer' || outcome === 'message_sent';
+}
+
+/** Touches closer together than this count as one attempt (§3). */
+const COLLAPSE_MS = 30 * MINUTE;
+
+/**
+ * How many tries in a row have got no answer once this one is logged: the ones
+ * since they last engaged (`row.unanswered`) plus this one. A second try within
+ * half an hour of the last one is the same attempt to the clock, so it adds
+ * nothing.
+ */
+export function unansweredAfter(
+  row: Pick<LeadRow, 'unanswered' | 'lastContact'>,
+  outcome: LeadContactOutcome,
+  now: number,
+): number {
+  if (!isAttempt(outcome)) return 0;
+  const last = row.lastContact;
+  const at = last ? Date.parse(last.at) : NaN;
+  const sameAttempt = !!last && isAttempt(last.outcome) && now >= at && now - at < COLLAPSE_MS;
+  return Math.max(1, row.unanswered + (sameAttempt ? 0 : 1));
+}
+
+/**
+ * When the system would next chase them after this outcome: the table in
+ * docs/specs/leads.md §3 rule 5, put through the working window (rule 6).
+ * `null` for an outcome that closes the lead: nothing follows a close.
+ * `unanswered` is the count after this contact (`unansweredAfter`).
+ */
+export function suggestNextAt(
+  outcome: LeadContactOutcome,
+  unanswered: number,
+  now: number,
+): number | null {
+  if (closesLead(outcome)) return null;
+  const step =
+    AFTER_SPOKE[outcome] ??
+    (outcome === 'no_answer' ? stepFor(AFTER_NO_ANSWER, unanswered) : stepFor(AFTER_MESSAGE, unanswered));
+  const at = step.working ? addWorkingHours(now, step.hours) : now + step.hours * HOUR;
+  return moveIntoWindow(at);
+}
+
+/** The rows of "How follow-ups work": what happened, and when the system chases next. Built from the same steps. */
+export function followUpGuide(): { when: string; then: string }[] {
+  const chain = (steps: readonly Step[]) => steps.map((s) => s.words).join(', then ');
+  return [
+    { when: 'A new lead, and nobody has called', then: '2 working hours after we could first reach them' },
+    { when: 'You spoke and they are interested', then: (AFTER_SPOKE.interested as Step).words },
+    { when: 'You spoke and they are thinking it over', then: (AFTER_SPOKE.thinking as Step).words },
+    { when: 'Nobody answered your call', then: chain(AFTER_NO_ANSWER) },
+    { when: 'You sent a message and heard nothing', then: chain(AFTER_MESSAGE) },
+    { when: 'They did something: replied, tapped "Call me", asked for a call-back, watched again', then: 'Right away' },
+    { when: 'You chose a time yourself', then: 'That time' },
+  ];
+}
+
+/** The working window in words, for the dialogs that explain it. */
+export const WINDOW_WORDS = 'between 09:00 and 20:00, Monday to Saturday';
+
+// ── Due, last contact, signs ────────────────────────────────────────────────
+
+/** "40 min", "5 h", "2 days". Never less than a minute: "0 min" reads as a bug. */
+export function durationWords(ms: number): string {
+  const min = Math.max(1, Math.floor(ms / MINUTE));
+  if (min < 60) return `${min} min`;
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return `${hours} h`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? '1 day' : `${days} days`;
+}
+
+/** "just now", "20 min ago", "2 h ago", "3 days ago". Empty for a time that cannot be read. */
+export function agoWords(iso: string | null | undefined, now: number): string {
+  if (!iso) return '';
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return '';
+  const diff = now - at;
+  return diff < MINUTE ? 'just now' : `${durationWords(diff)} ago`;
+}
+
+/**
+ * When a future moment is, the way a person says it in India: "Today 17:30",
+ * "Tomorrow 11:00", "Tue 11:00" inside the week, "3 Nov 11:00" beyond it.
+ * `lowerDay` for the middle of a sentence ("Due tomorrow 11:00") — but a weekday
+ * keeps its capital.
+ */
+export function whenWords(ms: number, now: number, lowerDay = false): string {
+  const diff = istDayNumber(ms) - istDayNumber(now);
+  const d = new Date(ms + IST_OFFSET);
+  let day: string;
+  if (diff === 0) day = 'Today';
+  else if (diff === 1) day = 'Tomorrow';
+  else if (diff > 1 && diff < 7) day = WEEKDAYS[istWeekday(ms)] as string;
+  else day = `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+  if (lowerDay && (diff === 0 || diff === 1)) day = day.toLowerCase();
+  return `${day} ${istClock(ms)}`;
+}
+
+/** A due time this close is worth an amber word. */
+const SOON_MS = 2 * HOUR;
+
+export type DueTone = 'danger' | 'warning' | 'neutral';
+
+export interface DueLine {
+  text: string;
+  tone: DueTone;
+}
+
+/**
+ * The next follow-up in one line, coloured by how close it is: red once it has
+ * passed ("Overdue 5 h"), amber within two hours ("Due in 40 min"), plain after
+ * that ("Tue 11:00"). The word is always there, so colour is never the only cue.
+ * `null` for a lead that is not chased: closed ones, and registered ones still
+ * waiting for Onboarding's first contact (no due time).
+ */
+export function dueLine(
+  row: Pick<LeadRow, 'status' | 'nextDueAt'>,
+  now: number,
+): DueLine | null {
+  if (isClosed(row.status)) return null;
+  const due = row.nextDueAt ? Date.parse(row.nextDueAt) : NaN;
+  if (row.status === 'registered' && Number.isNaN(due)) return null;
+  if (Number.isNaN(due)) return { text: 'No follow-up set', tone: 'neutral' };
+  if (now >= due) {
+    return now - due < MINUTE
+      ? { text: 'Due now', tone: 'danger' }
+      : { text: `Overdue ${durationWords(now - due)}`, tone: 'danger' };
+  }
+  if (due - now <= SOON_MS) return { text: `Due in ${durationWords(due - now)}`, tone: 'warning' };
+  return { text: whenWords(due, now), tone: 'neutral' };
+}
+
+/** The same, for the WhatsApp inbox's one-line lead note: "Due tomorrow 11:00". */
+export function lookupLine(l: LeadLookup, now: number): string {
+  const parts = [`Lead ${l.ref}`, LEAD_STATUS_LABELS[l.status]];
+  const due = l.nextDueAt ? Date.parse(l.nextDueAt) : NaN;
+  if (!isClosed(l.status) && !Number.isNaN(due)) {
+    if (now >= due) {
+      parts.push(now - due < MINUTE ? 'Due now' : `Overdue ${durationWords(now - due)}`);
+    } else if (due - now <= SOON_MS) {
+      parts.push(`Due in ${durationWords(due - now)}`);
+    } else {
+      parts.push(`Due ${whenWords(due, now, true)}`);
+    }
+  }
+  return parts.join(' · ');
+}
+
+const CHANNEL_VERB: Record<LeadContactChannel, string> = {
+  call: 'Called',
+  whatsapp: 'Messaged',
+  visit: 'Met',
+};
+
+/** What an outcome adds to the "last contact" line. A message needs no second "sent". */
+const OUTCOME_SHORT: Record<LeadContactOutcome, string> = {
+  interested: 'spoke, interested',
+  thinking: 'spoke, thinking it over',
+  no_answer: 'no answer',
+  message_sent: '',
+  not_interested: 'not interested',
+  asked_to_stop: 'asked us to stop',
+  wrong_number: 'wrong number',
+};
+
+/** "Called by Aryan · 2 h ago · no answer". `null` when nobody has been in touch. */
+export function lastContactLine(c: LeadContactSummary | null, now: number): string | null {
+  if (!c) return null;
+  return [
+    `${CHANNEL_VERB[c.channel]}${c.byName ? ` by ${c.byName}` : ''}`,
+    agoWords(c.at, now),
+    OUTCOME_SHORT[c.outcome],
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/**
+ * "Tapped “Call me” · 20 min ago", but only while it is news: a sign from before
+ * our last contact has been dealt with, and printing it again would say "they are
+ * waiting" about somebody we already rang.
+ */
+export function signLine(
+  sign: LeadSign | null,
+  lastContact: LeadContactSummary | null,
+  now: number,
+): string | null {
+  if (!sign) return null;
+  const at = Date.parse(sign.at);
+  if (Number.isNaN(at)) return null;
+  if (lastContact && Date.parse(lastContact.at) >= at) return null;
+  return `${LEAD_SIGN_LABELS[sign.kind]} · ${agoWords(sign.at, now)}`;
+}
+
+export function ownerLine(owner: LeadRow['owner']): string {
+  return owner ? `Owner: ${owner.name}` : 'Nobody owns it yet';
+}
+
+/** "Closed by Aryan · 24 Oct, 14:05", or "Closed automatically" for the system's own closes. */
+export function closedLine(row: Pick<LeadRow, 'closedAt' | 'closedByName'>, now: number): string {
+  const by =
+    row.closedByName && row.closedByName !== 'Automatic'
+      ? `Closed by ${row.closedByName}`
+      : 'Closed automatically';
+  const when = istStamp(row.closedAt, now);
+  return when ? `${by} · ${when}` : by;
+}
+
+/** Whether a closed lead may be opened again by hand. A client never is: they are one of ours. */
+export function canReopen(status: LeadStatus): boolean {
+  return isClosed(status) && status !== 'client';
+}
+
+/** "Filled in the registration form" and so on, for a lead with one. */
+export function registrationWords(state: NonNullable<LeadRow['registration']>['state']): string {
+  switch (state) {
+    case 'NEW':
+      return 'Filled in "Register your pump". Nobody has been in touch about it yet';
+    case 'CONTACTED':
+      return 'Filled in "Register your pump". Onboarding is in touch and waiting for a yes';
+    case 'APPROVED':
+      return 'Registered and approved';
+    case 'LOST':
+      return 'Registered, then dropped out';
+  }
+}
+
+// ── Watching ────────────────────────────────────────────────────────────────
+
+/** `754` → `12:34`; an hour or more → `1:02:03`. */
+export function clockWords(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = two(s % 60);
+  return h > 0 ? `${h}:${two(m)}:${sec}` : `${m}:${sec}`;
+}
+
+/** "Watched 12:30 of 26:29 · 2 visits · sound on": how far they got, and whether they could hear it. */
+export function watchLine(w: LeadWatch): string {
+  // A call-back from the film page with no link code: they were on the page, but
+  // no visit can be tied to them, so there is nothing to measure.
+  if (w.visits === 0) return 'Was on the film page; no visit we can tie to them';
+  const length = w.durationSeconds > 0 ? ` of ${clockWords(w.durationSeconds)}` : '';
+  const parts = [
+    w.completed ? 'Watched to the end' : `Watched ${clockWords(w.bestSeconds)}${length}`,
+    w.visits > 1 ? `${w.visits} visits` : '',
+    w.soundOn ? 'sound on' : 'sound off',
+  ];
+  return parts.filter(Boolean).join(' · ');
+}
+
+/** How much of the film the best visit covered, as a whole 0 to 100 for the bar. */
+export function watchPercent(w: Pick<LeadWatch, 'bestSeconds' | 'durationSeconds' | 'completed'>): number {
+  if (w.completed) return 100;
+  if (w.durationSeconds <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((w.bestSeconds / w.durationSeconds) * 100)));
+}
+
+/** More than one browser usually means the link was forwarded or opened twice. */
+export function devicesNote(devices: number): string | null {
+  return devices > 1
+    ? `Opened on ${devices} devices. The link was probably forwarded or opened twice.`
+    : null;
+}
+
+// ── The page's numbers ──────────────────────────────────────────────────────
+
+/** Leads we have spoken to and that have not decided: "In talks". */
+export function inTalksCount(items: readonly Pick<LeadRow, 'status'>[]): number {
+  return items.filter((r) => r.status === 'talking' || r.status === 'interested').length;
+}
+
+export interface FunnelStep {
+  key: keyof Omit<LeadFunnel, 'days'>;
+  label: string;
+  count: number;
+}
+
+/** Watched, contacted, spoke, registered, became clients: each counts leads that got at least that far. */
+export function funnelSteps(f: LeadFunnel): FunnelStep[] {
+  return [
+    { key: 'watched', label: 'Watched', count: f.watched },
+    { key: 'contacted', label: 'Contacted', count: f.contacted },
+    { key: 'spoke', label: 'Spoke', count: f.spoke },
+    { key: 'registered', label: 'Registered', count: f.registered },
+    { key: 'clients', label: 'Became clients', count: f.clients },
+  ];
+}
+
+/** How many the tab holds in all, to say when the list is cut short. */
+export function viewTotal(view: LeadView, counts: LeadCounts): number {
+  return counts[view];
+}
+
+// ── The team's own log ──────────────────────────────────────────────────────
+
+/** One entry of the log in a line: "Called · No answer". The note and the name are shown apart. */
+export function activityLine(a: LeadActivity, now: number): string {
+  switch (a.kind) {
+    case 'contact':
+      return [
+        a.channel ? CHANNEL_VERB[a.channel] : 'Contact',
+        a.outcome ? LEAD_CONTACT_OUTCOME_LABELS[a.outcome] : '',
+        a.nextAt ? `follow-up ${istStamp(a.nextAt, now)}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+    case 'note':
+      return 'Note';
+    case 'follow_up':
+      return a.nextAt ? `Follow-up set for ${istStamp(a.nextAt, now)}` : 'Follow-up set';
+    case 'assigned':
+      return a.ownerName ? `Given to ${a.ownerName}` : 'Taken off its owner';
+    case 'closed':
+      return a.reason ? `Closed: ${LEAD_STATUS_LABELS[a.reason]}` : 'Closed';
+    case 'reopened':
+      return 'Opened again';
+    case 'phone_added':
+      return 'Number added';
+  }
+}
+
+/** One film visit in a line: "Watched 12:30 (47%) · sound on". */
+export function visitLine(v: { seconds: number; percent: number; completed: boolean; soundOn: boolean }): string {
+  return [
+    v.completed ? 'Watched to the end' : `Watched ${clockWords(v.seconds)} (${Math.round(v.percent)}%)`,
+    v.soundOn ? 'sound on' : 'sound off',
+  ].join(' · ');
+}
+
+// ── Forms: the follow-up boxes ──────────────────────────────────────────────
+
+/** A time in the past is not a follow-up, and the server refuses it too. */
+function whenProblem(ms: number | null, now: number): string | null {
+  if (ms === null) return 'Pick a real day and time.';
+  if (ms <= now) return 'Pick a time that has not passed yet.';
+  if (ms > now + FOLLOW_UP_MAX_DAYS * DAY) {
+    return `Pick a day within the next ${FOLLOW_UP_MAX_DAYS} days.`;
+  }
+  return null;
+}
+
+function noteTooLong(note: string): string | null {
+  const length = note.trim().length;
+  return length > NOTE_MAX ? `Keep the note under ${NOTE_MAX} characters. It is ${length} now.` : null;
+}
+
+/** "Reminder: Tue 11:00." and, when it is outside working hours, why it will come later. */
+export function reminderLine(ms: number, now: number): string {
+  const at = moveIntoWindow(ms);
+  const when = whenWords(at, now);
+  return at === ms
+    ? `Reminder: ${when}.`
+    : `Reminder: ${when}. We only remind ${WINDOW_WORDS}.`;
+}
+
+export interface QuickPick {
+  id: 'soon' | 'tomorrow' | 'monday';
+  label: string;
+  at: number;
+}
+
+/**
+ * The three one-tap choices on the follow-up form: in two hours, tomorrow at
+ * 11:00, the next Monday at 11:00. Tomorrow is left out when it is a Sunday (we
+ * do not remind on a Sunday), and Monday when tomorrow already is Monday.
+ */
+export function quickPicks(now: number): QuickPick[] {
+  const today = istMidnight(now);
+  const picks: QuickPick[] = [
+    { id: 'soon', label: 'In 2 hours', at: Math.ceil((now + 2 * HOUR) / MINUTE) * MINUTE },
+  ];
+  const tomorrow = today + DAY + 11 * HOUR;
+  if (istWeekday(tomorrow) !== 0) picks.push({ id: 'tomorrow', label: 'Tomorrow 11:00', at: tomorrow });
+  const toMonday = ((1 - istWeekday(today) + 7) % 7) || 7;
+  const monday = today + toMonday * DAY + 11 * HOUR;
+  if (monday !== tomorrow) picks.push({ id: 'monday', label: 'Monday 11:00', at: monday });
+  return picks;
+}
+
+// ── Forms: log a contact ────────────────────────────────────────────────────
+
+export interface ContactForm {
+  channel: string;
+  outcome: string;
+  note: string;
+  /**
+   * The follow-up the person typed, or `null` while they have left the
+   * suggestion alone. Left alone, nothing is sent and the server's own clock
+   * picks the time and says why ("no answer last time"); sending the suggestion
+   * would turn every reminder into "a time the team chose".
+   */
+  next: WhenInput | null;
+}
+
+/** Why the contact cannot be saved yet, or `null`. */
+export function contactProblem(f: ContactForm, now: number): string | null {
+  if (!(LEAD_CONTACT_OUTCOMES as readonly string[]).includes(f.outcome)) {
+    return 'Pick what came of it.';
+  }
+  if (!(LEAD_CONTACT_CHANNELS as readonly string[]).includes(f.channel)) return 'Pick how you were in touch.';
+  const long = noteTooLong(f.note);
+  if (long) return long;
+  if (f.next && !closesLead(f.outcome)) {
+    const empty = !f.next.date && !f.next.time;
+    if (empty) return null;
+    if (!f.next.date || !f.next.time) return 'Pick both the day and the time, or clear both.';
+    return whenProblem(parseWhen(f.next), now);
+  }
+  return null;
+}
+
+export interface ContactBody {
+  channel: LeadContactChannel;
+  outcome: LeadContactOutcome;
+  note?: string;
+  nextAt?: string;
+}
+
+/** What `POST …/contacts` takes: the note and the follow-up only when they mean something. */
+export function contactBody(f: ContactForm): ContactBody {
+  const note = f.note.trim();
+  const at = f.next && !closesLead(f.outcome) ? parseWhen(f.next) : null;
+  return {
+    channel: f.channel as LeadContactChannel,
+    outcome: f.outcome as LeadContactOutcome,
+    ...(note ? { note } : {}),
+    ...(at !== null ? { nextAt: new Date(at).toISOString() } : {}),
+  };
+}
+
+// ── Forms: set a follow-up ──────────────────────────────────────────────────
+
+export interface FollowUpForm {
+  date: string;
+  time: string;
+  note: string;
+}
+
+export function followUpProblem(f: FollowUpForm, now: number): string | null {
+  if (!f.date || !f.time) return 'Pick the day and the time.';
+  const bad = whenProblem(parseWhen(f), now);
+  if (bad) return bad;
+  return noteTooLong(f.note);
+}
+
+export interface FollowUpBody {
+  at: string;
+  note?: string;
+}
+
+export function followUpBody(f: FollowUpForm): FollowUpBody {
+  const at = parseWhen(f);
+  const note = f.note.trim();
+  return { at: new Date(at ?? 0).toISOString(), ...(note ? { note } : {}) };
+}
+
+// ── Forms: assign, note, close, reopen, number ──────────────────────────────
+
+export interface AssignBody {
+  ownerId: string | null;
+}
+
+/** "" is Nobody. */
+export function assignBody(ownerId: string): AssignBody {
+  return { ownerId: ownerId || null };
+}
+
+export function noteProblem(text: string): string | null {
+  if (!text.trim()) return 'Write the note first.';
+  return noteTooLong(text);
+}
+
+export function noteBody(text: string): { text: string } {
+  return { text: text.trim() };
+}
+
+export interface CloseForm {
+  reason: string;
+  note: string;
+}
+
+export function closeProblem(f: CloseForm): string | null {
+  if (!(LEAD_ADMIN_CLOSE_REASONS as readonly string[]).includes(f.reason)) {
+    return 'Pick why you are closing it.';
+  }
+  return noteTooLong(f.note);
+}
+
+export interface CloseBody {
+  reason: LeadAdminCloseReason;
+  note?: string;
+}
+
+export function closeBody(f: CloseForm): CloseBody {
+  const note = f.note.trim();
+  return { reason: f.reason as LeadAdminCloseReason, ...(note ? { note } : {}) };
+}
+
+export function reopenProblem(note: string): string | null {
+  return noteTooLong(note);
+}
+
+export function reopenBody(note: string): { note?: string } {
+  const n = note.trim();
+  return n ? { note: n } : {};
+}
+
+/**
+ * Ten digits starting 6 to 9, from how a person types a number: spaces and
+ * dashes, a "+91", "91" or "0" in front. Mirrors `addLeadPhoneSchema`'s
+ * pattern, then checks it is an Indian mobile as `@/lib/intake` does.
+ */
+export function mobileTen(raw: string): string | null {
+  const typed = raw.trim();
+  if (!/^[0-9+\s-]{10,15}$/.test(typed)) return null;
+  const digits = typed.replace(/\D/g, '');
+  const ten =
+    digits.length === 10
+      ? digits
+      : digits.length === 12 && digits.startsWith('91')
+        ? digits.slice(2)
+        : digits.length === 11 && digits.startsWith('0')
+          ? digits.slice(1)
+          : null;
+  return ten && /^[6-9]/.test(ten) ? ten : null;
+}
+
+export function phoneProblem(raw: string): string | null {
+  return mobileTen(raw) ? null : 'Type a 10-digit mobile number, for example 98765 43210.';
+}
+
+/** The ten digits on their own: nothing for the server to misread. */
+export function phoneBody(raw: string): { mobile: string } {
+  return { mobile: mobileTen(raw) ?? raw.trim() };
+}
