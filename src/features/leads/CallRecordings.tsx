@@ -175,9 +175,7 @@ export function CallRecordings({
       ) : null}
 
       {recordings.length === 0 ? (
-        <p className="mt-3 text-sm text-text-muted">
-          No recordings yet. Add one after a call, and the next person to ring sees the gist here.
-        </p>
+        <p className="mt-3 text-sm text-text-muted">No call recorded yet.</p>
       ) : (
         <ul className="mt-3 grid gap-3">
           {shown.map((r) => (

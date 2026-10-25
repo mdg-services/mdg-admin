@@ -1,4 +1,4 @@
-import { Headphones, MessageCircle } from 'lucide-react';
+import { Headphones, MessageCircle, type LucideIcon } from 'lucide-react';
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -24,6 +24,7 @@ import {
   statusLabel,
   triesLine,
   visitsLine,
+  watchFill,
   watchLine,
   watchPercent,
 } from '@/lib/leads';
@@ -45,65 +46,168 @@ const stop = (e: React.MouseEvent) => e.stopPropagation();
 const WARN_TEXT = 'text-warning-strong md:text-warning';
 
 /**
+ * The chip colours. `table` is the shipped pairing: dark text below md, the plain
+ * colour from md up. That pairing measures only 3.1 to 4.2:1 on its soft
+ * background, so the drawer asks for `strong`, the dark text at every width.
+ * `success` has the dark text in both: nothing in the table uses it.
+ */
+const CHIP_TONES = {
+  info: {
+    table: 'bg-info-soft text-info-strong md:text-info',
+    strong: 'bg-info-soft text-info-strong',
+  },
+  warning: {
+    table: 'bg-warning-soft text-warning-strong md:text-warning',
+    strong: 'bg-warning-soft text-warning-strong',
+  },
+  danger: {
+    table: 'bg-danger-soft text-danger-strong md:text-danger',
+    strong: 'bg-danger-soft text-danger-strong',
+  },
+  success: {
+    table: 'bg-success-soft text-success-strong',
+    strong: 'bg-success-soft text-success-strong',
+  },
+} as const;
+
+/**
  * A chip that wraps. `Badge` is one nowrap line of fixed height, which is right
  * for a status word and wrong for "Talked to the website assistant · 3 days ago"
  * in a 304px card: it would run out of the card and be clipped.
+ *
+ * `strong` is the drawer's: dark text at every width (see `CHIP_TONES`). `icon`
+ * puts a small glyph before the words, for a chip that must not rest on colour
+ * alone.
  */
 export function WrapChip({
   tone = 'info',
+  strong = false,
+  icon: Icon,
   children,
 }: {
-  tone?: 'info' | 'warning' | 'danger';
+  tone?: 'info' | 'warning' | 'danger' | 'success';
+  strong?: boolean;
+  icon?: LucideIcon;
   children: React.ReactNode;
 }) {
   return (
     <span
       className={cn(
-        'inline-block max-w-full rounded-md px-2 py-0.5 text-xs font-medium [overflow-wrap:anywhere]',
-        tone === 'info' && 'bg-info-soft text-info-strong md:text-info',
-        tone === 'warning' && 'bg-warning-soft text-warning-strong md:text-warning',
-        tone === 'danger' && 'bg-danger-soft text-danger-strong md:text-danger',
+        'max-w-full rounded-md px-2 py-0.5 text-xs font-medium [overflow-wrap:anywhere]',
+        Icon ? 'inline-flex items-start gap-1' : 'inline-block',
+        CHIP_TONES[tone][strong ? 'strong' : 'table'],
       )}
     >
-      {children}
+      {Icon ? (
+        <Icon width={13} height={13} strokeWidth={1.75} aria-hidden className="mt-0.5 shrink-0" />
+      ) : null}
+      {Icon ? <span className="min-w-0">{children}</span> : children}
     </span>
   );
 }
 
+/** How tall and how long a film bar is, for the three places one is drawn. */
+const BAR_SIZES = {
+  /** A visit's own row on the timeline. */
+  mini: 'h-1.5 max-w-[12rem]',
+  /** The table: thin, and no wider than a column holds. */
+  sm: 'h-1.5 max-w-[16rem]',
+  /** The drawer's card: the whole width there is. */
+  lg: 'h-2',
+} as const;
+
 /**
- * How much of the film they watched, as the line and a thin bar under it.
- * `withVisits` false leaves the visit count out of the line, for the table,
- * which prints it on the next line with when they last watched.
+ * The bar itself: a track and a fill, green once most of the film was watched
+ * and blue before that, with the figure beside it when asked. Hand-drawn, as the
+ * slip upload's is: there is no progress-bar primitive yet. The figure is always
+ * plain text, so the fill's colour is never the only thing that says how far.
  */
-export function WatchBar({
-  watch,
-  withVisits = true,
+export function FilmBar({
+  percent,
+  fill,
+  size,
+  showPercent = false,
+  valueText,
   className,
 }: {
-  watch: LeadWatch;
-  withVisits?: boolean;
+  percent: number;
+  fill: 'success' | 'brand';
+  size: keyof typeof BAR_SIZES;
+  showPercent?: boolean;
+  valueText: string;
   className?: string;
 }) {
-  const percent = watchPercent(watch);
-  const text = watchLine(watch, withVisits);
-  // No visit tied to them (a call-back from the film page): an empty bar would
-  // read as "watched nothing", which nobody knows.
-  if (watch.visits === 0) return <p className={cn('text-xs text-text-muted', className)}>{text}</p>;
   return (
-    <div className={className}>
-      <p className="text-xs text-text-muted">{text}</p>
-      {/* Hand-drawn, as the slip upload's is: there is no progress-bar primitive yet. */}
+    <div className={cn('flex items-center gap-2.5', className)}>
       <div
         role="progressbar"
         aria-label="How much of the film they watched"
         aria-valuenow={percent}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuetext={text}
-        className="mt-1 h-1.5 w-full max-w-[16rem] overflow-hidden rounded-full bg-surface-2"
+        aria-valuetext={valueText}
+        className={cn(
+          'w-full min-w-0 flex-1 overflow-hidden rounded-full bg-surface-2',
+          BAR_SIZES[size],
+        )}
       >
-        <div className="h-full rounded-full bg-brand" style={{ width: `${percent}%` }} />
+        <div
+          className={cn('h-full rounded-full', fill === 'success' ? 'bg-success' : 'bg-brand')}
+          style={{ width: `${percent}%` }}
+        />
       </div>
+      {showPercent ? (
+        <span
+          aria-hidden
+          className={cn(
+            'shrink-0 tabular-nums text-text',
+            size === 'lg' ? 'text-sm font-semibold' : 'text-xs font-medium',
+          )}
+        >
+          {percent}%
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * How much of the film they watched, as the line and a thin bar under it.
+ * `withVisits` false leaves the visit count out of the line, for the table,
+ * which prints it on the next line with when they last watched. `size` `lg` is
+ * the drawer's: the line in body text, a thicker bar across the whole width and
+ * (with `showPercent`) the figure beside it; `sm`, the default, is the table's.
+ */
+export function WatchBar({
+  watch,
+  withVisits = true,
+  size = 'sm',
+  showPercent = false,
+  className,
+}: {
+  watch: LeadWatch;
+  withVisits?: boolean;
+  size?: 'sm' | 'lg';
+  showPercent?: boolean;
+  className?: string;
+}) {
+  const percent = watchPercent(watch);
+  const text = watchLine(watch, withVisits);
+  const textClass = size === 'lg' ? 'text-sm text-text' : 'text-xs text-text-muted';
+  // No visit tied to them (a call-back from the film page): an empty bar would
+  // read as "watched nothing", which nobody knows.
+  if (watch.visits === 0) return <p className={cn(textClass, className)}>{text}</p>;
+  return (
+    <div className={className}>
+      <p className={textClass}>{text}</p>
+      <FilmBar
+        percent={percent}
+        fill={watchFill(watch)}
+        size={size}
+        showPercent={showPercent}
+        valueText={text}
+        className="mt-1"
+      />
     </div>
   );
 }

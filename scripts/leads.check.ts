@@ -2,7 +2,9 @@
  * Checks for the Leads page's rules (`src/lib/leads.ts`): the words, the
  * working window (the whole day, since 25 Oct 2026), the follow-up the contact form suggests, the call-recording
  * rules (which file may be picked, what a failure says, how a summary is cut
- * down), and that every body a form builds is one the shared schema accepts.
+ * down), the drawer's own rules (the "do this now" colour, who did each thing on
+ * the timeline, the days it is cut into), and that every body a form builds is
+ * one the shared schema accepts.
  *
  * This app has no test runner, so these are plain `node:test` checks over the
  * pure module, run through the `tsx` the repo root already carries:
@@ -33,7 +35,6 @@ import {
   setLeadFollowUpSchema,
 } from '../shared/src/schemas/lead';
 import {
-  LEAD_ACTIVITY_KINDS,
   LEAD_ADMIN_CLOSE_REASONS,
   LEAD_CALL_INTEREST,
   LEAD_CALL_INTEREST_LABELS,
@@ -54,15 +55,18 @@ import {
   LEAD_SIGN_LABELS,
   LEAD_STATUSES,
   LEAD_STATUS_LABELS,
+  LEAD_TIMELINE_ACTORS,
   LEAD_TIMELINE_KINDS,
   LEAD_VIEWS,
-  type LeadActivity,
   type LeadCallInterest,
   type LeadContactOutcome,
   type LeadInvite,
   type LeadNote,
   type LeadRecordingFailure,
+  type LeadRow,
   type LeadSigns,
+  type LeadTimelineItem,
+  type LeadVisit,
   type LeadWatch,
 } from '../shared/src/types/lead';
 import {
@@ -81,13 +85,14 @@ import {
   STATUS_TONE,
   SUMMARY_BULLETS_MAX,
   WINDOW_WORDS,
-  activityLine,
+  actorPrefix,
   addWorkingHours,
   agoWords,
   assignBody,
   canReopen,
   chatHref,
   callLength,
+  clockOf,
   clockWords,
   closeBody,
   closeProblem,
@@ -95,10 +100,17 @@ import {
   closesLead,
   contactBody,
   contactProblem,
+  dayHeading,
   dayWords,
   devicesNote,
+  doNowDetail,
+  doNowTone,
+  drawerSubtitle,
   dueLine,
   durationWords,
+  fillOf,
+  firstRows,
+  foldLine,
   followUpBody,
   followUpGuide,
   followUpProblem,
@@ -112,8 +124,10 @@ import {
   interestTone,
   inviteLine,
   isClosed,
+  isWaitingForUs,
   lastCallLine,
   lastContactLine,
+  lastWatchedLine,
   leadHref,
   leadName,
   logCallPrefill,
@@ -121,8 +135,10 @@ import {
   mobileTen,
   moveIntoWindow,
   newestReachOut,
+  nextFollowUpLine,
   nextWindowStart,
   noteBody,
+  noteByLine,
   noteLine,
   noteProblem,
   originText,
@@ -150,13 +166,21 @@ import {
   signLine,
   sinceLine,
   statusLabel,
+  storyRows,
   suggestNextAt,
+  teamName,
+  theyDid,
+  timelineActor,
   triesLine,
   unansweredAfter,
   uploadLine,
   viewFromParam,
   viewLabel,
+  visitMeta,
+  visitOf,
+  visitPercent,
   visitsLine,
+  watchFill,
   watchLine,
   watchPercent,
   whenInput,
@@ -182,6 +206,10 @@ const TUE = (h: number, m = 0) => ist(2026, 10, 27, h, m);
 const WED = (h: number, m = 0) => ist(2026, 10, 28, h, m);
 
 const OBJECT_ID = '507f1f77bcf86cd799439011';
+
+/** How many rows the days hold in all. */
+const rowCount = (days: readonly { rows: readonly unknown[] }[]): number =>
+  days.reduce((n, d) => n + d.rows.length, 0);
 
 describe('the words cover every value the server can send', () => {
   it('every status has a label and a colour', () => {
@@ -214,23 +242,8 @@ describe('the words cover every value the server can send', () => {
     for (const k of LEAD_SIGN_KINDS) assert.ok(LEAD_SIGN_LABELS[k].length > 0, k);
   });
 
-  it('every origin and every kind of log entry reads as a line', () => {
+  it('every origin reads as a line', () => {
     for (const origin of LEAD_ORIGINS) assert.ok(originText({ origin, linkLabel: null }).length > 0, origin);
-    for (const kind of LEAD_ACTIVITY_KINDS) {
-      const a: LeadActivity = {
-        id: 'a',
-        at: '2026-10-24T05:00:00.000Z',
-        kind,
-        byName: 'Aryan',
-        channel: kind === 'contact' ? 'call' : null,
-        outcome: kind === 'contact' ? 'no_answer' : null,
-        note: null,
-        nextAt: kind === 'follow_up' ? '2026-10-25T05:00:00.000Z' : null,
-        reason: kind === 'closed' ? 'not_interested' : null,
-        ownerName: kind === 'assigned' ? 'Anjali' : null,
-      };
-      assert.ok(activityLine(a, SAT(12)).length > 0, kind);
-    }
   });
 
   it('the outcomes split into those that keep the chase going and those that end it', () => {
@@ -1467,5 +1480,594 @@ describe('call recordings: the lines in the drawer and the list', () => {
     assert.equal(lastCallLine(null), null);
     assert.equal(lastCallLine(undefined), null);
     assert.equal(lastCallLine({ at: iso(FRI(14, 20)), gist: '  \n ', interest: 'warm' }), null);
+  });
+});
+
+describe('the drawer: which colour says what to do now', () => {
+  const now = FRI(15, 0);
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const signs = (over: Partial<LeadSigns> = {}): LeadSigns => ({
+    replied: null,
+    callMe: null,
+    callback: null,
+    assistant: null,
+    registered: null,
+    ...over,
+  });
+  const contact = (at: number) => ({
+    at: iso(at),
+    byName: 'Aryan',
+    channel: 'call' as const,
+    outcome: 'no_answer' as const,
+  });
+  /** An open lead that is fine: spoken to this morning, next follow-up this evening. */
+  const lead = (over: Partial<Pick<LeadRow, 'status' | 'cold' | 'nextDueAt' | 'lastContact' | 'signs'>> = {}) => ({
+    status: 'trying' as LeadRow['status'],
+    cold: false,
+    nextDueAt: iso(FRI(18, 0)) as string | null,
+    lastContact: contact(FRI(9, 0)) as LeadRow['lastContact'],
+    signs: signs(),
+    ...over,
+  });
+
+  it('is blue for a lead that is on track', () => {
+    assert.equal(doNowTone(lead(), now), 'brand');
+    // A follow-up nobody has set is not a reason to shout.
+    assert.equal(doNowTone(lead({ nextDueAt: null }), now), 'brand');
+  });
+
+  it('is red once it is overdue or has gone cold, even if the next time looks fine', () => {
+    assert.equal(doNowTone(lead({ nextDueAt: iso(FRI(10, 0)) }), now), 'danger');
+    assert.equal(doNowTone(lead({ nextDueAt: iso(FRI(15, 0)) }), now), 'danger');
+    assert.equal(doNowTone(lead({ cold: true }), now), 'danger');
+    // Red wins over amber: late and never contacted is late first.
+    assert.equal(doNowTone(lead({ nextDueAt: iso(FRI(10, 0)), lastContact: null }), now), 'danger');
+  });
+
+  it('is amber when somebody is waiting on us', () => {
+    // Due within two hours.
+    assert.equal(doNowTone(lead({ nextDueAt: iso(FRI(16, 59)) }), now), 'warning');
+    assert.equal(doNowTone(lead({ nextDueAt: iso(FRI(17, 1)) }), now), 'brand');
+    // Nobody has been in touch.
+    assert.equal(doNowTone(lead({ lastContact: null }), now), 'warning');
+    // They reached out after our last contact; before it, they are dealt with.
+    assert.equal(doNowTone(lead({ signs: signs({ callMe: iso(FRI(14, 0)) }) }), now), 'warning');
+    assert.equal(doNowTone(lead({ signs: signs({ callMe: iso(FRI(8, 0)) }) }), now), 'brand');
+    // Watching again is not asking: it does not turn the panel amber.
+    assert.equal(doNowTone(lead({ signs: signs() }), now), 'brand');
+  });
+
+  it('is grey when there is nothing to do: closed, or Onboarding has it', () => {
+    for (const status of ['client', 'not_interested', 'asked_to_stop', 'wrong_number', 'not_a_lead'] as const) {
+      // Never red, however late its old due time was, and never amber for being uncontacted.
+      assert.equal(doNowTone(lead({ status, cold: true, nextDueAt: iso(FRI(1, 0)), lastContact: null }), now), 'quiet', status);
+    }
+    assert.equal(doNowTone(lead({ status: 'registered', nextDueAt: null, lastContact: null }), now), 'quiet');
+    // Once Onboarding has been in touch the lead's own clock chases it again.
+    assert.equal(doNowTone(lead({ status: 'registered', nextDueAt: iso(FRI(10, 0)) }), now), 'danger');
+    assert.equal(doNowTone(lead({ status: 'registered', nextDueAt: iso(SAT(11, 0)) }), now), 'brand');
+  });
+
+  it('says what the next follow-up is, who closed it, or that Onboarding has it', () => {
+    const row = (over: Partial<Pick<LeadRow, 'status' | 'nextDueAt' | 'dueReason' | 'closedAt' | 'closedByName'>>) => ({
+      status: 'trying' as LeadRow['status'],
+      nextDueAt: null as string | null,
+      dueReason: null as LeadRow['dueReason'],
+      closedAt: null as string | null,
+      closedByName: null as string | null,
+      ...over,
+    });
+    // A plain day carries the label; a time the team chose leaves its reason to the sentence above.
+    assert.equal(
+      nextFollowUpLine(row({ nextDueAt: iso(SAT(11, 0)), dueReason: 'scheduled' }), now),
+      'Next follow-up: Tomorrow 11:00',
+    );
+    // Late and soon say what they are about without a label in front.
+    assert.equal(
+      nextFollowUpLine(row({ nextDueAt: iso(FRI(10, 0)), dueReason: 'no_answer_retry' }), now),
+      'Overdue 5 h · no answer last time',
+    );
+    assert.equal(
+      nextFollowUpLine(row({ nextDueAt: iso(FRI(15, 40)), dueReason: 'check_in' }), now),
+      'Due in 40 min · check in',
+    );
+    assert.equal(nextFollowUpLine(row({ nextDueAt: iso(FRI(15, 0)), dueReason: 'first_contact' }), now), 'Due now · first call');
+    assert.equal(nextFollowUpLine(row({ nextDueAt: iso(SAT(11, 0)) }), now), 'Next follow-up: Tomorrow 11:00');
+    assert.equal(nextFollowUpLine(row({ status: 'new' }), now), 'No follow-up set');
+    assert.equal(nextFollowUpLine(row({ status: 'registered' }), now), 'Onboarding has them');
+    assert.equal(
+      nextFollowUpLine(row({ status: 'registered', nextDueAt: iso(SAT(11, 0)), dueReason: 'check_in' }), now),
+      'Next follow-up: Tomorrow 11:00 · check in',
+    );
+    assert.equal(
+      nextFollowUpLine(
+        row({ status: 'not_interested', nextDueAt: iso(FRI(10, 0)), closedAt: iso(FRI(14, 5)), closedByName: 'Pawan' }),
+        now,
+      ),
+      'Closed by Pawan · 23 Oct, 14:05',
+    );
+    assert.equal(
+      nextFollowUpLine(row({ status: 'client', closedAt: iso(FRI(14, 5)), closedByName: 'Automatic' }), now),
+      'Closed automatically · 23 Oct, 14:05',
+    );
+  });
+
+  it('leaves the second line out when the sentence above already says it', () => {
+    const row = (over: Partial<Pick<LeadRow, 'status' | 'nextDueAt' | 'dueReason' | 'closedAt' | 'closedByName'>>) => ({
+      status: 'trying' as LeadRow['status'],
+      nextDueAt: null as string | null,
+      dueReason: null as LeadRow['dueReason'],
+      closedAt: null as string | null,
+      closedByName: null as string | null,
+      ...over,
+    });
+    // The server's own sentence for a registered lead says what the line would.
+    assert.equal(doNowDetail(row({ status: 'registered' }), 'Registered: Onboarding has them.', now), null);
+    // A follow-up a person set: the sentence names who, the line gives the time, once.
+    assert.equal(
+      doNowDetail(
+        row({ nextDueAt: iso(SAT(11, 0)), dueReason: 'scheduled' }),
+        'Follow up as planned — Pawan Kumar Singh set the time.',
+        now,
+      ),
+      'Next follow-up: Tomorrow 11:00',
+    );
+    // A late lead: the time and why, with nothing repeated.
+    assert.equal(
+      doNowDetail(
+        row({ nextDueAt: iso(FRI(10, 0)), dueReason: 'no_answer_retry' }),
+        'Try calling again — they did not answer 3 h ago.',
+        now,
+      ),
+      'Overdue 5 h · no answer last time',
+    );
+    // A closed lead keeps who closed it: the sentence says why, not by whom.
+    assert.equal(
+      doNowDetail(
+        row({ status: 'not_interested', closedAt: iso(FRI(14, 5)), closedByName: 'Pawan' }),
+        'Closed: they said they are not interested.',
+        now,
+      ),
+      'Closed by Pawan · 23 Oct, 14:05',
+    );
+    // Nothing to add when there is no line at all.
+    assert.equal(doNowDetail(row({ status: 'registered', nextDueAt: null }), 'Registered: Onboarding has them.', now), null);
+  });
+});
+
+describe('the drawer: the header, "They" and the film bar', () => {
+  const now = FRI(15, 0);
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const watch = (over: Partial<LeadWatch> = {}): LeadWatch => ({
+    visits: 1,
+    bestSeconds: 750,
+    durationSeconds: 1000,
+    completed: false,
+    soundOn: true,
+    devices: 1,
+    firstAt: null,
+    lastAt: null,
+    city: null,
+    ...over,
+  });
+
+  it('writes the header line as ref, place and since, leaving out what is not known', () => {
+    const row = { ref: 'L-0012', place: 'Dhanbad' as string | null, firstSeenAt: iso(THU(19, 48)) };
+    assert.equal(drawerSubtitle(row, now), 'L-0012 · Dhanbad · Lead since 22 Oct');
+    assert.equal(drawerSubtitle({ ...row, place: null }, now), 'L-0012 · Lead since 22 Oct');
+    assert.equal(drawerSubtitle({ ...row, place: '  ' }, now), 'L-0012 · Lead since 22 Oct');
+    assert.equal(drawerSubtitle({ ...row, firstSeenAt: 'not a date' }, now), 'L-0012 · Dhanbad');
+    // The status is not in it: the badge beside the name says that.
+    assert.doesNotMatch(drawerSubtitle(row, now), /talks|Interested|New/);
+  });
+
+  it('turns the bar green at 75% or when they watched to the end', () => {
+    assert.equal(watchPercent(watch({ bestSeconds: 744 })), 74);
+    assert.equal(watchPercent(watch({ bestSeconds: 745 })), 75);
+    assert.equal(watchFill(watch({ bestSeconds: 744 })), 'brand');
+    assert.equal(watchFill(watch({ bestSeconds: 745 })), 'success');
+    assert.equal(watchFill(watch({ bestSeconds: 1000 })), 'success');
+    assert.equal(watchFill(watch({ bestSeconds: 100, completed: true })), 'success');
+    assert.equal(watchFill(watch({ bestSeconds: 0 })), 'brand');
+    assert.equal(watchFill(watch({ durationSeconds: 0 })), 'brand');
+    assert.equal(fillOf(74, false), 'brand');
+    assert.equal(fillOf(75, false), 'success');
+    assert.equal(fillOf(10, true), 'success');
+  });
+
+  it('says when they last watched and from where, and nothing when no visit is tied to them', () => {
+    assert.equal(
+      lastWatchedLine(watch({ lastAt: iso(FRI(14, 40)), city: 'Dhanbad' }), now),
+      'Last watched 23 Oct, 14:40 · Dhanbad',
+    );
+    assert.equal(lastWatchedLine(watch({ lastAt: iso(FRI(14, 40)) }), now), 'Last watched 23 Oct, 14:40');
+    assert.equal(lastWatchedLine(watch({ lastAt: iso(FRI(14, 40)), city: '  ' }), now), 'Last watched 23 Oct, 14:40');
+    assert.equal(lastWatchedLine(watch({ lastAt: null, city: 'Dhanbad' }), now), null);
+  });
+
+  it('says who wrote the newest note and when, with a dot between them', () => {
+    assert.equal(noteByLine({ byName: 'Pawan', at: iso(FRI(13, 0)) }, now), 'Pawan · 2 h ago');
+    assert.equal(noteByLine({ byName: ' Pawan Kumar Singh ', at: iso(FRI(14, 40)) }, now), 'Pawan Kumar Singh · 20 min ago');
+    assert.equal(noteByLine({ byName: null, at: iso(FRI(13, 0)) }, now), '2 h ago');
+    assert.equal(noteByLine({ byName: 'Pawan', at: 'not a date' }, now), 'Pawan');
+    assert.equal(noteByLine({ byName: '  ', at: 'not a date' }, now), '');
+  });
+
+  it('says what they did to reach us, with the sign that goes with it, while it is still news', () => {
+    const signs = (over: Partial<LeadSigns> = {}): LeadSigns => ({
+      replied: null,
+      callMe: null,
+      callback: null,
+      assistant: null,
+      registered: null,
+      ...over,
+    });
+    const contact = (at: number) => ({ at: iso(at), byName: null, channel: 'call' as const, outcome: 'no_answer' as const });
+    const tap = { at: iso(FRI(14, 0)), kind: 'call_me' as const };
+    assert.deepEqual(
+      theyDid({ signs: signs({ callMe: tap.at }), lastSign: tap, lastContact: null }, now),
+      { text: 'Tapped "Call me" · 1 h ago', kind: 'call_me', tone: 'warning' },
+    );
+    // We rang after: it has been dealt with.
+    assert.equal(theyDid({ signs: signs({ callMe: tap.at }), lastSign: tap, lastContact: contact(FRI(14, 30)) }, now), null);
+    // A reply at ten and watching again at eleven: the reply is the one that needs an answer.
+    const watched = { at: iso(FRI(11, 0)), kind: 'watched' as const };
+    assert.deepEqual(
+      theyDid({ signs: signs({ replied: iso(FRI(10, 0)) }), lastSign: watched, lastContact: null }, now),
+      { text: 'Replied on WhatsApp · 5 h ago', kind: 'replied', tone: 'warning' },
+    );
+    // Watching is not a way of asking, but it is still the newest thing they did, as the old row said.
+    assert.deepEqual(
+      theyDid({ signs: signs(), lastSign: watched, lastContact: contact(FRI(9, 0)) }, now),
+      { text: 'Watched the film again · 4 h ago', kind: 'watched', tone: 'info' },
+    );
+    // Registering is something they did, but nobody is waiting on it: not amber either.
+    const registered = { at: iso(FRI(13, 0)), kind: 'registered' as const };
+    assert.deepEqual(
+      theyDid({ signs: signs({ registered: registered.at }), lastSign: registered, lastContact: null }, now),
+      { text: 'Registered their pump · 2 h ago', kind: 'registered', tone: 'info' },
+    );
+    assert.equal(theyDid({ signs: signs(), lastSign: null, lastContact: null }, now), null);
+  });
+});
+
+describe('the drawer: who did it', () => {
+  const now = SUN(21, 0);
+  const item = (at: number, kind: LeadTimelineItem['kind'], over: Partial<LeadTimelineItem> = {}): LeadTimelineItem => ({
+    at: new Date(at).toISOString(),
+    kind,
+    title: kind,
+    detail: null,
+    by: null,
+    href: null,
+    ...over,
+  });
+
+  it('takes the actor the server sent, and without one goes by kind, never by title', () => {
+    for (const actor of LEAD_TIMELINE_ACTORS) {
+      assert.equal(timelineActor(item(SUN(20, 0), 'activity', { actor })), actor);
+    }
+    const byKind: Record<LeadTimelineItem['kind'], 'lead' | 'team' | 'system'> = {
+      film_visit: 'lead',
+      whatsapp_in: 'lead',
+      call_me: 'lead',
+      callback: 'lead',
+      assistant: 'lead',
+      registration: 'lead',
+      opted_out: 'lead',
+      activity: 'team',
+      call_recording: 'team',
+      registration_call: 'team',
+      campaign_sent: 'system',
+      whatsapp_out: 'system',
+      client: 'system',
+    };
+    for (const kind of LEAD_TIMELINE_KINDS) {
+      assert.equal(timelineActor(item(SUN(20, 0), kind)), byKind[kind], kind);
+      // A title that says "Sent" or "Tapped" changes nothing.
+      assert.equal(timelineActor(item(SUN(20, 0), kind, { title: 'Tapped "Call me"' })), byKind[kind], kind);
+    }
+    // The server's word beats the kind: a call-back the team marked called is theirs.
+    assert.equal(timelineActor(item(SUN(20, 0), 'callback', { actor: 'team' })), 'team');
+    assert.equal(timelineActor(item(SUN(20, 0), 'whatsapp_out', { actor: 'team' })), 'team');
+    // A word from a newer server that this screen does not know is not trusted.
+    assert.equal(
+      timelineActor({ kind: 'activity', actor: 'robot' as unknown as LeadTimelineItem['actor'] }),
+      'team',
+    );
+    assert.equal(timelineActor({ kind: 'telepathy' as LeadTimelineItem['kind'] }), 'system');
+  });
+
+  it('is waiting for us when they asked or wrote and nobody has answered since', () => {
+    const none = null;
+    const spoke = { at: new Date(SUN(20, 0)).toISOString() };
+    for (const kind of ['call_me', 'callback', 'whatsapp_in', 'assistant'] as const) {
+      assert.equal(isWaitingForUs(item(SUN(20, 4), kind, { actor: 'lead' }), none), true, kind);
+      assert.equal(isWaitingForUs(item(SUN(20, 4), kind, { actor: 'lead' }), spoke), true, kind);
+      // Before our last contact, or at the same minute, it has been dealt with.
+      assert.equal(isWaitingForUs(item(SUN(19, 59), kind, { actor: 'lead' }), spoke), false, kind);
+      assert.equal(isWaitingForUs(item(SUN(20, 0), kind, { actor: 'lead' }), spoke), false, kind);
+    }
+    // Watching and registering are things they did, not asks.
+    for (const kind of ['film_visit', 'registration', 'opted_out'] as const) {
+      assert.equal(isWaitingForUs(item(SUN(20, 4), kind, { actor: 'lead' }), none), false, kind);
+    }
+    // Something we did is never waiting for us: the call-back marked called, a message a person sent.
+    assert.equal(isWaitingForUs(item(SUN(20, 4), 'callback', { actor: 'team' }), none), false);
+    assert.equal(isWaitingForUs(item(SUN(20, 4), 'whatsapp_out', { actor: 'team' }), none), false);
+    assert.equal(isWaitingForUs(item(SUN(20, 4), 'activity', { actor: 'team' }), none), false);
+    // A server that sends no actor: the kind decides.
+    assert.equal(isWaitingForUs(item(SUN(20, 4), 'call_me'), none), true);
+    assert.equal(isWaitingForUs(item(SUN(20, 4), 'activity'), none), false);
+    // A time that cannot be read is not news.
+    assert.equal(isWaitingForUs({ ...item(SUN(20, 4), 'call_me', { actor: 'lead' }), at: 'soon' }, none), false);
+  });
+
+  it('gives a screen reader the actor first, and "did not go through" over all of them', () => {
+    assert.equal(actorPrefix(item(SUN(20, 4), 'call_me', { actor: 'lead' })), 'They: ');
+    assert.equal(actorPrefix(item(SUN(20, 4), 'activity', { actor: 'team' })), 'Team: ');
+    assert.equal(actorPrefix(item(SUN(20, 4), 'campaign_sent', { actor: 'system' })), 'Automatic: ');
+    assert.equal(actorPrefix(item(SUN(20, 4), 'whatsapp_out', { actor: 'system', failed: true })), 'Did not go through: ');
+    // No actor sent: by kind.
+    assert.equal(actorPrefix(item(SUN(20, 4), 'film_visit')), 'They: ');
+  });
+
+  it('names who on the team did it, and says so when the name was never kept', () => {
+    assert.equal(teamName('Pawan Kumar Singh'), 'Pawan Kumar Singh');
+    assert.equal(teamName('  Anil '), 'Anil');
+    for (const none of [null, undefined, '', '   ']) assert.equal(teamName(none), 'Someone at MDG');
+  });
+
+  it('finds the visit a row stands for by its identical start time, and only for a film visit', () => {
+    const visit = (at: number): LeadVisit => ({
+      at: new Date(at).toISOString(),
+      lastAt: new Date(at + 5 * MIN).toISOString(),
+      seconds: 1053,
+      percent: 66.2,
+      completed: false,
+      soundOn: true,
+      city: 'Dhanbad',
+      device: 'iPhone · safari',
+      viaLink: true,
+    });
+    const visits = [visit(SUN(20, 2)), visit(SUN(19, 48))];
+    assert.equal(visitOf(item(SUN(19, 48), 'film_visit'), visits), visits[1]);
+    assert.equal(visitOf(item(SUN(20, 2), 'film_visit'), visits), visits[0]);
+    // A different minute, or another kind of row at the same minute, is not a match.
+    assert.equal(visitOf(item(SUN(19, 49), 'film_visit'), visits), null);
+    assert.equal(visitOf(item(SUN(19, 48), 'call_me'), visits), null);
+    assert.equal(visitOf(item(SUN(19, 48), 'film_visit'), []), null);
+  });
+
+  it('draws one visit: a whole percent, and what sound, city, device and link it came with', () => {
+    assert.equal(visitPercent({ percent: 66.2, completed: false }), 66);
+    assert.equal(visitPercent({ percent: 66.5, completed: false }), 67);
+    assert.equal(visitPercent({ percent: 40, completed: true }), 100);
+    assert.equal(visitPercent({ percent: 140, completed: false }), 100);
+    assert.equal(visitPercent({ percent: -4, completed: false }), 0);
+    assert.equal(visitPercent({ percent: Number.NaN, completed: false }), 0);
+
+    const v = { soundOn: true, city: 'Dhanbad', device: 'iPhone · safari', viaLink: true };
+    assert.equal(visitMeta(v), 'sound on · Dhanbad · iPhone · safari');
+    assert.equal(visitMeta({ ...v, soundOn: false }), 'sound off · Dhanbad · iPhone · safari');
+    assert.equal(
+      visitMeta({ ...v, viaLink: false }),
+      'sound on · Dhanbad · iPhone · safari · opened later, without the link',
+    );
+    assert.equal(visitMeta({ soundOn: true, city: null, device: null, viaLink: true }), 'sound on');
+    assert.equal(visitMeta({ soundOn: false, city: ' ', device: null, viaLink: false }), 'sound off · opened later, without the link');
+  });
+});
+
+describe('the drawer: the timeline as days', () => {
+  const now = SUN(21, 0);
+  const item = (at: number, kind: LeadTimelineItem['kind'], over: Partial<LeadTimelineItem> = {}): LeadTimelineItem => ({
+    at: new Date(at).toISOString(),
+    kind,
+    title: kind,
+    detail: null,
+    by: null,
+    href: null,
+    ...over,
+  });
+  const iso = (ms: number) => new Date(ms).toISOString();
+
+  it('clocks a time in India, and not in the browser’s zone', () => {
+    assert.equal(clockOf(iso(SUN(20, 4))), '20:04');
+    assert.equal(clockOf(iso(SUN(0, 0))), '00:00');
+    assert.equal(clockOf('2026-10-24T18:30:00.000Z'), '00:00');
+    assert.equal(clockOf('2026-10-24T18:29:59.000Z'), '23:59');
+    assert.equal(clockOf('2026-10-25T13:31:00Z'), '19:01');
+    assert.equal(clockOf('not a date'), '');
+    assert.equal(clockOf(''), '');
+  });
+
+  it('heads a day by the India calendar: today, yesterday, then the weekday', () => {
+    assert.equal(dayHeading(iso(SUN(20, 4)), now), 'Today · 25 Oct');
+    // The day turns at India midnight, which is 18:30 UTC.
+    assert.equal(dayHeading('2026-10-24T18:30:00.000Z', now), 'Today · 25 Oct');
+    assert.equal(dayHeading('2026-10-24T18:29:59.000Z', now), 'Yesterday · 24 Oct');
+    assert.equal(dayHeading(iso(SAT(0, 0)), now), 'Yesterday · 24 Oct');
+    assert.equal(dayHeading(iso(FRI(23, 59)), now), 'Fri 23 Oct');
+    assert.equal(dayHeading(iso(ist(2026, 10, 21, 12)), now), 'Wed 21 Oct');
+    // Just past midnight, it is a new day for the one asking too.
+    assert.equal(dayHeading(iso(SUN(23, 59)), MON(0, 1)), 'Yesterday · 25 Oct');
+    assert.equal(dayHeading(iso(SUN(23, 59)), SUN(23, 59)), 'Today · 25 Oct');
+  });
+
+  it('adds the year once it is not this year', () => {
+    assert.equal(dayHeading(iso(ist(2025, 11, 3, 10)), now), 'Mon 3 Nov 2025');
+    assert.equal(dayHeading(iso(ist(2025, 12, 31, 23, 59)), ist(2026, 1, 2, 10)), 'Wed 31 Dec 2025');
+    // "Yesterday" across New Year still says which year it was.
+    assert.equal(dayHeading(iso(ist(2025, 12, 31, 23, 59)), ist(2026, 1, 1, 10)), 'Yesterday · 31 Dec 2025');
+    assert.equal(dayHeading('soon', now), '');
+  });
+
+  /** The owner's own lead, as the drawer showed it on 25 Oct, newest first. */
+  const sample = (): LeadTimelineItem[] => [
+    item(SUN(20, 39), 'activity', { title: 'Set a follow-up for tomorrow at 11:00', by: 'Pawan Kumar Singh', actor: 'team' }),
+    item(SUN(20, 4), 'whatsapp_out', { title: 'Sent a WhatsApp message', by: 'Automatic', actor: 'system' }),
+    item(SUN(20, 4), 'call_me', { title: 'Tapped "Call me" under the film invite', actor: 'lead' }),
+    item(SUN(20, 2), 'film_visit', { actor: 'lead' }),
+    item(SUN(19, 48), 'film_visit', { actor: 'lead' }),
+    item(SUN(19, 39), 'campaign_sent', { title: 'Film invite read', by: 'Automatic', actor: 'system' }),
+    item(SUN(19, 39), 'campaign_sent', { title: 'Film invite delivered', by: 'Automatic', actor: 'system' }),
+    item(SUN(19, 39), 'campaign_sent', { title: 'Film invite sent', by: 'Automatic', actor: 'system' }),
+    item(SUN(19, 25), 'whatsapp_out', {
+      title: 'A WhatsApp message could not be delivered',
+      by: 'Automatic',
+      actor: 'system',
+      failed: true,
+    }),
+  ];
+
+  it('folds sent, delivered and read into one row, newest first, and leaves the rest as they are', () => {
+    const days = storyRows(sample(), now);
+    assert.equal(days.length, 1);
+    assert.equal(days[0]!.heading, 'Today · 25 Oct');
+    assert.deepEqual(
+      days[0]!.rows.map((r) => r.type),
+      ['item', 'item', 'item', 'item', 'item', 'fold', 'item'],
+    );
+    const fold = days[0]!.rows[5]!;
+    assert.equal(fold.type, 'fold');
+    if (fold.type === 'fold') {
+      assert.deepEqual(
+        fold.items.map((i) => i.title),
+        ['Film invite read', 'Film invite delivered', 'Film invite sent'],
+      );
+      assert.equal(foldLine(fold.items), 'Film invite read · 2 earlier steps');
+    }
+    // Nine things happened and seven lines say so.
+    assert.equal(rowCount(days), 7);
+  });
+
+  it('never folds a step that did not go through, and does not fold one on its own', () => {
+    const items = [
+      item(SUN(19, 40), 'campaign_sent', { title: 'Film invite read', actor: 'system' }),
+      item(SUN(19, 39), 'campaign_sent', { title: 'The film invite did not reach them', actor: 'system', failed: true }),
+      item(SUN(19, 38), 'campaign_sent', { title: 'Film invite delivered', actor: 'system' }),
+      item(SUN(19, 37), 'campaign_sent', { title: 'Film invite sent', actor: 'system' }),
+      item(SUN(19, 30), 'campaign_sent', { title: 'The film invite could not be sent', actor: 'system', failed: true }),
+    ];
+    const rows = storyRows(items, now)[0]!.rows;
+    assert.deepEqual(
+      rows.map((r) => (r.type === 'fold' ? `fold ${r.items.length}` : `item ${r.item.title}`)),
+      [
+        'item Film invite read',
+        'item The film invite did not reach them',
+        'fold 2',
+        'item The film invite could not be sent',
+      ],
+    );
+    // Two steps that went through and a failure between them are not one run.
+    const split = storyRows(
+      [
+        item(SUN(19, 40), 'campaign_sent', { actor: 'system' }),
+        item(SUN(19, 39), 'campaign_sent', { actor: 'system', failed: true }),
+        item(SUN(19, 38), 'campaign_sent', { actor: 'system' }),
+      ],
+      now,
+    )[0]!.rows;
+    assert.deepEqual(split.map((r) => r.type), ['item', 'item', 'item']);
+    // Something else between two steps breaks the run too.
+    const apart = storyRows(
+      [
+        item(SUN(19, 40), 'campaign_sent', { actor: 'system' }),
+        item(SUN(19, 39), 'call_me', { actor: 'lead' }),
+        item(SUN(19, 38), 'campaign_sent', { actor: 'system' }),
+      ],
+      now,
+    )[0]!.rows;
+    assert.deepEqual(apart.map((r) => r.type), ['item', 'item', 'item']);
+  });
+
+  it('cuts the story into India days and never folds across midnight', () => {
+    const items = [
+      item(MON(0, 10), 'call_me', { actor: 'lead' }),
+      item(SUN(23, 58), 'campaign_sent', { title: 'Film invite read', actor: 'system' }),
+      item(SUN(23, 57), 'campaign_sent', { title: 'Film invite delivered', actor: 'system' }),
+      item(SUN(0, 3), 'campaign_sent', { title: 'Film invite sent', actor: 'system' }),
+      item(SAT(23, 59), 'campaign_sent', { title: 'Film invite sent earlier', actor: 'system' }),
+      item(FRI(12, 0), 'film_visit', { actor: 'lead' }),
+    ];
+    const days = storyRows(items, MON(9, 0));
+    assert.deepEqual(
+      days.map((d) => [d.heading, d.rows.map((r) => (r.type === 'fold' ? `fold ${r.items.length}` : 'item'))]),
+      [
+        ['Today · 26 Oct', ['item']],
+        ['Yesterday · 25 Oct', ['fold 3']],
+        ['Sat 24 Oct', ['item']],
+        ['Fri 23 Oct', ['item']],
+      ],
+    );
+    assert.deepEqual(storyRows([], now), []);
+  });
+
+  it('counts a day cut part way by its rows, keeps its heading, and says how many rows were left out', () => {
+    const days = storyRows(
+      [
+        item(SUN(20, 39), 'activity', { actor: 'team' }),
+        item(SUN(20, 4), 'call_me', { actor: 'lead' }),
+        item(SUN(19, 40), 'campaign_sent', { title: 'read', actor: 'system' }),
+        item(SUN(19, 39), 'campaign_sent', { title: 'sent', actor: 'system' }),
+        item(SAT(12, 0), 'activity', { actor: 'team' }),
+        item(SAT(11, 0), 'film_visit', { actor: 'lead' }),
+        item(FRI(10, 0), 'film_visit', { actor: 'lead' }),
+      ],
+      now,
+    );
+    // Today: activity, call me, one fold. Yesterday: two rows. Fri: one row.
+    assert.equal(rowCount(days), 6);
+    const rowsOf = (cut: { days: { heading: string; rows: unknown[] }[]; hidden: number }) => ({
+      shape: cut.days.map((d) => [d.heading, d.rows.length]),
+      hidden: cut.hidden,
+    });
+    assert.deepEqual(rowsOf(firstRows(days, 10)), {
+      shape: [['Today · 25 Oct', 3], ['Yesterday · 24 Oct', 2], ['Fri 23 Oct', 1]],
+      hidden: 0,
+    });
+    assert.deepEqual(rowsOf(firstRows(days, 6)), {
+      shape: [['Today · 25 Oct', 3], ['Yesterday · 24 Oct', 2], ['Fri 23 Oct', 1]],
+      hidden: 0,
+    });
+    assert.deepEqual(rowsOf(firstRows(days, 5)), {
+      shape: [['Today · 25 Oct', 3], ['Yesterday · 24 Oct', 2]],
+      hidden: 1,
+    });
+    // Cut in the middle of a day: the heading stays with the rows that are left.
+    assert.deepEqual(rowsOf(firstRows(days, 4)), {
+      shape: [['Today · 25 Oct', 3], ['Yesterday · 24 Oct', 1]],
+      hidden: 2,
+    });
+    assert.deepEqual(rowsOf(firstRows(days, 2)), { shape: [['Today · 25 Oct', 2]], hidden: 4 });
+    // A day cut away whole takes its heading with it.
+    assert.deepEqual(rowsOf(firstRows(days, 0)), { shape: [], hidden: 6 });
+    assert.deepEqual(rowsOf(firstRows(days, -3)), { shape: [], hidden: 6 });
+    assert.deepEqual(rowsOf(firstRows([], 10)), { shape: [], hidden: 0 });
+    // What is kept is the same rows, not copies of other ones.
+    assert.equal(firstRows(days, 4).days[0]!.rows[2], days[0]!.rows[2]);
+  });
+
+  it('counts a fold as one row however many steps it holds', () => {
+    const items: LeadTimelineItem[] = [];
+    for (let i = 0; i < 8; i += 1) {
+      items.push(item(SUN(20, 50 - i * 5), 'campaign_sent', { actor: 'system' }));
+    }
+    items.push(item(SUN(10, 0), 'call_me', { actor: 'lead' }));
+    items.push(item(SUN(9, 0), 'activity', { actor: 'team' }));
+    const days = storyRows(items, now);
+    assert.equal(rowCount(days), 3);
+    assert.equal(firstRows(days, 10).hidden, 0);
+  });
+
+  it('words a fold of two as "1 earlier step"', () => {
+    assert.equal(
+      foldLine([
+        item(SUN(19, 40), 'campaign_sent', { title: 'Film invite delivered' }),
+        item(SUN(19, 39), 'campaign_sent', { title: 'Film invite sent' }),
+      ]),
+      'Film invite delivered · 1 earlier step',
+    );
   });
 });

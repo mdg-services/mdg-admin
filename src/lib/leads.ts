@@ -6,9 +6,11 @@
  * What lives here: the words (labels, the due line, the watch line, who last
  * did what), the follow-up suggestion a contact form pre-fills, the working
  * window that suggestion lives in, what each form may send, and why a form is
- * not ready yet. The call-recording rules sit at the end: which file may be
- * picked, what a failed recording says, and how a summary is cut down to what
- * a glance can take in.
+ * not ready yet. The drawer's own rules have a section: who did each thing on
+ * the timeline, the days it is grouped into, and which colour the "do this now"
+ * panel and the film bar take. The call-recording rules sit at the end: which
+ * file may be picked, what a failed recording says, and how a summary is cut
+ * down to what a glance can take in.
  *
  * What does NOT live here: whether a lead is due, cold or closed. The server's
  * clock decides that and says so in `LeadRow`; this file only turns the answer
@@ -34,8 +36,8 @@ import {
   LEAD_RECORDING_TYPES,
   LEAD_SIGN_LABELS,
   LEAD_STATUS_LABELS,
+  LEAD_TIMELINE_ACTORS,
   LEAD_VIEWS,
-  type LeadActivity,
   type LeadAdminCloseReason,
   type LeadCallInterest,
   type LeadCallSummary,
@@ -54,9 +56,14 @@ import {
   type LeadRecordingStatus,
   type LeadRow,
   type LeadSign,
+  type LeadSignKind,
   type LeadSigns,
   type LeadStatus,
+  type LeadTimelineActor,
+  type LeadTimelineItem,
+  type LeadTimelineKind,
   type LeadView,
+  type LeadVisit,
   type LeadWatch,
 } from '../../shared/src/types/lead';
 
@@ -226,6 +233,12 @@ const two = (n: number) => String(n).padStart(2, '0');
 function istClock(ms: number): string {
   const day = istMsOfDay(ms);
   return `${two(Math.floor(day / HOUR))}:${two(Math.floor((day % HOUR) / MINUTE))}`;
+}
+
+/** "20:04" in India time, from a time as the server sends it. Empty for one that cannot be read. */
+export function clockOf(iso: string): string {
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? '' : istClock(ms);
 }
 
 /** A moment as the two boxes a form shows: a day (`2026-10-25`) and a time (`11:00`), both India. */
@@ -574,6 +587,11 @@ export function noteLine(note: LeadNote | null, now: number): NoteLine | null {
   return { quote: `“${text}”`, by };
 }
 
+/** "Pawan · 2 h ago": who wrote the newest note and when, for under the note in the drawer. */
+export function noteByLine(note: Pick<LeadNote, 'byName' | 'at'>, now: number): string {
+  return [note.byName?.trim(), agoWords(note.at, now)].filter(Boolean).join(' · ');
+}
+
 export function ownerLine(owner: LeadRow['owner']): string {
   return owner ? `Owner: ${owner.name}` : 'Nobody owns it yet';
 }
@@ -787,33 +805,7 @@ export function viewTotal(view: LeadView, counts: LeadCounts): number {
   return counts[view];
 }
 
-// ── The team's own log ──────────────────────────────────────────────────────
-
-/** One entry of the log in a line: "Called · No answer". The note and the name are shown apart. */
-export function activityLine(a: LeadActivity, now: number): string {
-  switch (a.kind) {
-    case 'contact':
-      return [
-        a.channel ? CHANNEL_VERB[a.channel] : 'Contact',
-        a.outcome ? LEAD_CONTACT_OUTCOME_LABELS[a.outcome] : '',
-        a.nextAt ? `follow-up ${istStamp(a.nextAt, now)}` : '',
-      ]
-        .filter(Boolean)
-        .join(' · ');
-    case 'note':
-      return 'Note';
-    case 'follow_up':
-      return a.nextAt ? `Follow-up set for ${istStamp(a.nextAt, now)}` : 'Follow-up set';
-    case 'assigned':
-      return a.ownerName ? `Given to ${a.ownerName}` : 'Taken off its owner';
-    case 'closed':
-      return a.reason ? `Closed: ${LEAD_STATUS_LABELS[a.reason]}` : 'Closed';
-    case 'reopened':
-      return 'Opened again';
-    case 'phone_added':
-      return 'Number added';
-  }
-}
+// ── One film visit ─────────────────────────────────────────────────────────
 
 /** One film visit in a line: "Watched 12:30 (47%) · sound on". */
 export function visitLine(v: { seconds: number; percent: number; completed: boolean; soundOn: boolean }): string {
@@ -821,6 +813,333 @@ export function visitLine(v: { seconds: number; percent: number; completed: bool
     v.completed ? 'Watched to the end' : `Watched ${clockWords(v.seconds)} (${Math.round(v.percent)}%)`,
     v.soundOn ? 'sound on' : 'sound off',
   ].join(' · ');
+}
+
+// ── The drawer: where it stands, and the story in days ──────────────────────
+// What the drawer decides on its own, so the component only draws it: which
+// colour the "do this now" panel takes, how full the film bar looks, who did
+// each thing on the timeline, which asks are still waiting for us, and how the
+// timeline is cut into days with the delivery ticks folded into one line.
+
+/** The header's second line: "L-0012 · Dhanbad · Lead since 25 Oct". What is not known is left out. */
+export function drawerSubtitle(
+  row: Pick<LeadRow, 'ref' | 'place' | 'firstSeenAt'>,
+  now: number,
+): string {
+  return [row.ref, row.place?.trim(), sinceLine(row.firstSeenAt, now)].filter(Boolean).join(' · ');
+}
+
+export type DoNowTone = 'danger' | 'warning' | 'brand' | 'quiet';
+
+/**
+ * The colour of the panel that says what to do now. Red when it has gone cold or
+ * is overdue; amber when somebody is waiting on us (nobody has been in touch,
+ * the follow-up is within two hours, or they reached out after our last
+ * contact); blue otherwise. Grey when there is nothing to do: the lead is
+ * closed, or Onboarding has it and no follow-up is set. The order matters: a
+ * closed lead is never red, however late its old due time was.
+ */
+export function doNowTone(
+  row: Pick<LeadRow, 'status' | 'cold' | 'nextDueAt' | 'lastContact' | 'signs'>,
+  now: number,
+): DoNowTone {
+  if (isClosed(row.status)) return 'quiet';
+  if (row.status === 'registered' && !row.nextDueAt) return 'quiet';
+  const due = dueLine(row, now);
+  if (row.cold || due?.tone === 'danger') return 'danger';
+  if (due?.tone === 'warning' || row.lastContact === null || reachOutLine(row, now) !== null) {
+    return 'warning';
+  }
+  return 'brand';
+}
+
+/**
+ * The second line of that panel: when the next follow-up is, who closed it and
+ * when, or "Onboarding has them". `null` when there is nothing to add.
+ *
+ * The follow-up's time is labelled "Next follow-up:" only when it is a plain day
+ * and time. "Overdue 5 h" and "Due in 40 min" already say what they are about,
+ * and a label in front of them reads as a stutter. The reason is the server's
+ * sentence above the line already: "a time the team chose" would only repeat its
+ * "follow up as planned", so a scheduled follow-up leaves the reason out.
+ */
+export function nextFollowUpLine(
+  row: Pick<LeadRow, 'status' | 'nextDueAt' | 'dueReason' | 'closedAt' | 'closedByName'>,
+  now: number,
+): string | null {
+  if (isClosed(row.status)) return closedLine(row, now);
+  if (row.status === 'registered' && !row.nextDueAt) return 'Onboarding has them';
+  const due = dueLine(row, now);
+  if (!due) return null;
+  if (!row.nextDueAt) return due.text;
+  const when = due.tone === 'neutral' ? `Next follow-up: ${due.text}` : due.text;
+  const why =
+    row.dueReason && row.dueReason !== 'scheduled' ? ` · ${DUE_REASON_LABELS[row.dueReason]}` : '';
+  return `${when}${why}`;
+}
+
+/**
+ * What goes under the do-now sentence: `nextFollowUpLine`, unless the sentence
+ * already says it. The server words the sentence ("Registered: Onboarding has
+ * them."), and a second line that is a part of it would only say it twice.
+ */
+export function doNowDetail(
+  row: Pick<LeadRow, 'status' | 'nextDueAt' | 'dueReason' | 'closedAt' | 'closedByName'>,
+  nextStep: string,
+  now: number,
+): string | null {
+  const line = nextFollowUpLine(row, now);
+  if (!line) return null;
+  return nextStep.toLowerCase().includes(line.toLowerCase()) ? null : line;
+}
+
+/** What they did to reach us that is still news, and which sign it was (for its icon). */
+export interface TheyDid {
+  text: string;
+  kind: LeadSignKind;
+  /**
+   * `warning` when they reached out and nobody has answered: that is a lead
+   * waiting on us, the same amber as the panel above it. `info` for the rest
+   * (watching again, registering): something they did, nobody waiting.
+   */
+  tone: 'warning' | 'info';
+}
+
+/**
+ * "Tapped “Call me” · 1 h ago": the newest way they reached out, or failing
+ * that the newest sign of any kind (watching again, registering), as the old
+ * "They did" row said. `null` once we have been in touch since: that is dealt
+ * with, and the line would say "they are waiting" about somebody we already rang.
+ */
+export function theyDid(
+  row: Pick<LeadRow, 'signs' | 'lastSign' | 'lastContact'>,
+  now: number,
+): TheyDid | null {
+  const reach = newestReachOut(row.signs);
+  const reachText = signLine(reach, row.lastContact, now);
+  if (reach && reachText) return { text: reachText, kind: reach.kind, tone: 'warning' };
+  const last = row.lastSign;
+  const lastText = signLine(last, row.lastContact, now);
+  if (!last || !lastText) return null;
+  const asked = REACHED_OUT.some(([, kind]) => kind === last.kind);
+  return { text: lastText, kind: last.kind, tone: asked ? 'warning' : 'info' };
+}
+
+/** "Last watched 25 Oct, 20:02 · Dhanbad". `null` when no visit is tied to them. */
+export function lastWatchedLine(w: Pick<LeadWatch, 'lastAt' | 'city'>, now: number): string | null {
+  const when = istStamp(w.lastAt, now);
+  if (!when) return null;
+  return [`Last watched ${when}`, w.city?.trim()].filter(Boolean).join(' · ');
+}
+
+/** From this far the bar is green: they watched most of it. */
+const WATCHED_WELL = 75;
+
+/** A bar's colour from how much was watched: green once it is three quarters or to the end, else blue. */
+export function fillOf(percent: number, completed: boolean): 'success' | 'brand' {
+  return completed || percent >= WATCHED_WELL ? 'success' : 'brand';
+}
+
+/** The film bar's colour for a lead: green at 75% or more, or watched to the end. */
+export function watchFill(
+  w: Pick<LeadWatch, 'bestSeconds' | 'durationSeconds' | 'completed'>,
+): 'success' | 'brand' {
+  return fillOf(watchPercent(w), w.completed);
+}
+
+// ── The timeline: who did it ────────────────────────────────────────────────
+
+/**
+ * Who did each kind of thing, for a server that does not say (before 26 Oct 2026).
+ * It is a guess by kind and no more: a call-back and a WhatsApp message each
+ * come from more than one of them, which is why the server sends `actor`. A
+ * title is never read.
+ */
+const ACTOR_OF_KIND: Record<LeadTimelineKind, LeadTimelineActor> = {
+  film_visit: 'lead',
+  whatsapp_in: 'lead',
+  call_me: 'lead',
+  callback: 'lead',
+  assistant: 'lead',
+  registration: 'lead',
+  opted_out: 'lead',
+  activity: 'team',
+  call_recording: 'team',
+  registration_call: 'team',
+  campaign_sent: 'system',
+  whatsapp_out: 'system',
+  client: 'system',
+};
+
+/** Who acted: what the server said, else the kind's usual one, else the system. */
+export function timelineActor(item: Pick<LeadTimelineItem, 'kind' | 'actor'>): LeadTimelineActor {
+  const said = item.actor;
+  if (said && (LEAD_TIMELINE_ACTORS as readonly string[]).includes(said)) return said;
+  return ACTOR_OF_KIND[item.kind] ?? 'system';
+}
+
+/** The kinds of thing a person does that wait for an answer from us. */
+const ASKS: readonly LeadTimelineKind[] = ['call_me', 'callback', 'whatsapp_in', 'assistant'];
+
+/**
+ * Whether this is something they asked or wrote that nobody has answered: their
+ * doing, one of the ways of asking, and later than our last contact (or we have
+ * never been in touch). The same rule as `signLine`, so the timeline and the
+ * "They" line cannot disagree.
+ */
+export function isWaitingForUs(
+  item: Pick<LeadTimelineItem, 'kind' | 'actor' | 'at'>,
+  lastContact: Pick<LeadContactSummary, 'at'> | null,
+): boolean {
+  if (timelineActor(item) !== 'lead' || !ASKS.includes(item.kind)) return false;
+  const at = Date.parse(item.at);
+  if (Number.isNaN(at)) return false;
+  return !lastContact || !(Date.parse(lastContact.at) >= at);
+}
+
+/** The word a screen reader hears first on a row, because the colour says it only to those who can see it. */
+export function actorPrefix(item: Pick<LeadTimelineItem, 'kind' | 'actor' | 'failed'>): string {
+  if (item.failed) return 'Did not go through: ';
+  switch (timelineActor(item)) {
+    case 'lead':
+      return 'They: ';
+    case 'team':
+      return 'Team: ';
+    case 'system':
+      return 'Automatic: ';
+  }
+}
+
+/** Who on the team did it, for the line under a team row. A name that was never kept reads as "Someone at MDG". */
+export function teamName(by: string | null | undefined): string {
+  return by?.trim() || 'Someone at MDG';
+}
+
+/** The film visit this timeline row stands for, matched by its identical start time. `null` when none matches. */
+export function visitOf(
+  item: Pick<LeadTimelineItem, 'kind' | 'at'>,
+  visits: readonly LeadVisit[],
+): LeadVisit | null {
+  if (item.kind !== 'film_visit') return null;
+  return visits.find((v) => v.at === item.at) ?? null;
+}
+
+/** How much of the film one visit covered, as a whole 0 to 100 for its bar. */
+export function visitPercent(v: Pick<LeadVisit, 'percent' | 'completed'>): number {
+  if (v.completed) return 100;
+  return Number.isFinite(v.percent) ? Math.max(0, Math.min(100, Math.round(v.percent))) : 0;
+}
+
+/** "sound on · Dhanbad · iPhone · opened later, without the link": the rest of what a visit says. */
+export function visitMeta(v: Pick<LeadVisit, 'soundOn' | 'city' | 'device' | 'viaLink'>): string {
+  return [
+    v.soundOn ? 'sound on' : 'sound off',
+    v.city?.trim(),
+    v.device?.trim(),
+    v.viaLink ? null : 'opened later, without the link',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+// ── The timeline: days, and the ticks folded ────────────────────────────────
+
+/** One line of the story: a thing that happened, or the invite's steps folded into one. */
+export type StoryRow =
+  | { type: 'item'; item: LeadTimelineItem }
+  | { type: 'fold'; items: LeadTimelineItem[] };
+
+/** One day of the story: "Today · 25 Oct" and its rows, newest first. */
+export interface StoryDay {
+  heading: string;
+  rows: StoryRow[];
+}
+
+/**
+ * The day as a heading, by the India calendar: "Today · 25 Oct", "Yesterday ·
+ * 24 Oct", "Wed 21 Oct", and the year once it is not this year ("Mon 3 Nov
+ * 2025"). Empty for a time that cannot be read.
+ */
+export function dayHeading(iso: string, now: number): string {
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return '';
+  const day = dayWords(iso, now);
+  const diff = istDayNumber(at) - istDayNumber(now);
+  if (diff === 0) return `Today · ${day}`;
+  if (diff === -1) return `Yesterday · ${day}`;
+  return `${WEEKDAYS[istWeekday(at)]} ${day}`;
+}
+
+/** An invite step that went through: sent, delivered, read. Folded when two or more sit together. */
+function isTick(item: LeadTimelineItem): boolean {
+  return item.kind === 'campaign_sent' && !item.failed;
+}
+
+/**
+ * The timeline as days, newest first as the server sends it. Within a day, two
+ * or more invite steps side by side (sent, delivered, read) become one fold, so
+ * three lines that say one thing take one. A step that did not go through is
+ * never folded, and a fold never crosses midnight: the day heading is the date.
+ */
+export function storyRows(items: readonly LeadTimelineItem[], now: number): StoryDay[] {
+  const days = new Map<number, { heading: string; items: LeadTimelineItem[] }>();
+  for (const item of items) {
+    const ms = Date.parse(item.at);
+    const key = Number.isNaN(ms) ? Number.NaN : istDayNumber(ms);
+    const day = days.get(key) ?? { heading: dayHeading(item.at, now), items: [] };
+    day.items.push(item);
+    days.set(key, day);
+  }
+  return [...days.values()].map((day) => {
+    const rows: StoryRow[] = [];
+    let run: LeadTimelineItem[] = [];
+    const endRun = () => {
+      if (run.length >= 2) rows.push({ type: 'fold', items: run });
+      else for (const item of run) rows.push({ type: 'item', item });
+      run = [];
+    };
+    for (const item of day.items) {
+      if (isTick(item)) {
+        run.push(item);
+      } else {
+        endRun();
+        rows.push({ type: 'item', item });
+      }
+    }
+    endRun();
+    return { heading: day.heading, rows };
+  });
+}
+
+/**
+ * The first `max` ROWS of the story, and how many were left out. Rows, not
+ * items: a fold is one row however many steps it holds. A day cut part way
+ * keeps its heading, and a day cut away whole takes its heading with it.
+ */
+export function firstRows(
+  days: readonly StoryDay[],
+  max: number,
+): { days: StoryDay[]; hidden: number } {
+  let room = Math.max(0, Math.floor(max));
+  let hidden = 0;
+  const out: StoryDay[] = [];
+  for (const day of days) {
+    if (day.rows.length <= room) {
+      out.push(day);
+      room -= day.rows.length;
+    } else {
+      if (room > 0) out.push({ heading: day.heading, rows: day.rows.slice(0, room) });
+      hidden += day.rows.length - room;
+      room = 0;
+    }
+  }
+  return { days: out, hidden };
+}
+
+/** The fold's one line: the newest step, and how many came before it. "Film invite read · 2 earlier steps". */
+export function foldLine(items: readonly LeadTimelineItem[]): string {
+  const earlier = Math.max(0, items.length - 1);
+  return `${items[0]?.title ?? ''} · ${earlier} earlier ${earlier === 1 ? 'step' : 'steps'}`;
 }
 
 // ── Forms: the follow-up boxes ──────────────────────────────────────────────
