@@ -55,7 +55,12 @@ function Anchor({
   className,
   children,
   ...rest
-}: LinkTarget & { className: string; children: React.ReactNode; 'aria-label'?: string }) {
+}: LinkTarget & {
+  className: string;
+  children: React.ReactNode;
+  'aria-label'?: string;
+  onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+}) {
   return to ? (
     <Link to={to} className={className} {...rest}>
       {children}
@@ -98,18 +103,28 @@ export function ActionLink({
   );
 }
 
-/** The same, icon only, for a desktop row where three labelled buttons would not fit. `label` is its only name. */
+/**
+ * The same, icon only, for a desktop row where a labelled button would not fit.
+ * `label` is its only name. `onClick` is for a link inside a clickable row, to
+ * keep its click from reaching the row.
+ */
 export function IconLink({
   to,
   href,
   label,
+  onClick,
   children,
-}: LinkTarget & { label: string; children: React.ReactNode }) {
+}: LinkTarget & {
+  label: string;
+  onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+  children: React.ReactNode;
+}) {
   return (
     <Anchor
       to={to}
       href={href}
       aria-label={label}
+      onClick={onClick}
       className={cn(LINK_BASE, BUTTON_VARIANTS.ghost, 'h-11 w-11 md:h-8 md:w-8')}
     >
       {children}

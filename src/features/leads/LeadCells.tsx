@@ -1,27 +1,47 @@
+import { MessageCircle } from 'lucide-react';
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui';
 import { ContactLinks } from '@/features/intake/ContactLinks';
 import { cn } from '@/lib/cn';
+import { phoneLabel } from '@/lib/intake';
 import {
   DUE_REASON_LABELS,
   STATUS_TONE,
+  chatHref,
   closedLine,
   dueLine,
+  inviteLine,
   isClosed,
   lastContactLine,
   leadName,
+  noteLine,
   ownerLine,
-  signLine,
+  reachOutLine,
+  sinceLine,
   statusLabel,
+  triesLine,
+  visitsLine,
   watchLine,
   watchPercent,
 } from '@/lib/leads';
 import { LEAD_ORIGIN_LABELS, type LeadRow, type LeadWatch } from '@dk/shared';
 
+import { IconLink } from './shared';
+
 const LINK =
   'inline-flex min-h-11 items-center rounded-sm underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:min-h-0';
+
+/**
+ * A click on a link or button inside a row belongs to that control. The whole
+ * row opens the lead's drawer, so without this the name, the number and the
+ * WhatsApp icon would each open it as well as doing their own job.
+ */
+const stop = (e: React.MouseEvent) => e.stopPropagation();
+
+/** Amber text for a thing the team should notice: the same pair `WrapChip` and `Badge` use. */
+const WARN_TEXT = 'text-warning-strong md:text-warning';
 
 /**
  * A chip that wraps. `Badge` is one nowrap line of fixed height, which is right
@@ -49,15 +69,27 @@ export function WrapChip({
   );
 }
 
-/** How much of the film they watched, as the line and a thin bar under it. */
-export function WatchBar({ watch }: { watch: LeadWatch }) {
+/**
+ * How much of the film they watched, as the line and a thin bar under it.
+ * `withVisits` false leaves the visit count out of the line, for the table,
+ * which prints it on the next line with when they last watched.
+ */
+export function WatchBar({
+  watch,
+  withVisits = true,
+  className,
+}: {
+  watch: LeadWatch;
+  withVisits?: boolean;
+  className?: string;
+}) {
   const percent = watchPercent(watch);
-  const text = watchLine(watch);
+  const text = watchLine(watch, withVisits);
   // No visit tied to them (a call-back from the film page): an empty bar would
   // read as "watched nothing", which nobody knows.
-  if (watch.visits === 0) return <p className="mt-1.5 text-xs text-text-muted">{text}</p>;
+  if (watch.visits === 0) return <p className={cn('text-xs text-text-muted', className)}>{text}</p>;
   return (
-    <div className="mt-1.5">
+    <div className={className}>
       <p className="text-xs text-text-muted">{text}</p>
       {/* Hand-drawn, as the slip upload's is: there is no progress-bar primitive yet. */}
       <div
@@ -76,49 +108,134 @@ export function WatchBar({ watch }: { watch: LeadWatch }) {
 }
 
 /**
- * The left half of a lead's row: who they are, how to reach them, where they
- * came from and how much of the film they watched. The name opens the drawer;
- * the number is a link that opens the dialler.
+ * The first column of a lead's row: who they are, how to reach them, where they
+ * are and when they became a lead, and how they came to us.
+ *
+ * On a desktop row the name is a link into the drawer (what a keyboard reaches;
+ * the rest of the row is a mouse's), the number dials, and a small WhatsApp icon
+ * opens their chat when there is one. A phone card is one big button that opens
+ * the drawer, and a link or button cannot sit inside a button: there the name
+ * and the number are plain text, and the drawer has every way to reach them.
  */
-export function LeadWhoCell({ lead, openHref }: { lead: LeadRow; openHref: string }) {
+export function LeadWhoCell({
+  lead,
+  openHref,
+  now,
+  onPhone,
+}: {
+  lead: LeadRow;
+  openHref: string;
+  now: number;
+  onPhone: boolean;
+}) {
+  const name = leadName(lead);
+  const since = sinceLine(lead.firstSeenAt, now);
+  const chat = lead.hasChat ? chatHref(lead.waId) : null;
   return (
     <div className="min-w-0 [overflow-wrap:anywhere]">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <Link
-          replace
-          to={openHref}
-          className={cn(LINK, 'text-sm font-semibold text-text no-underline hover:underline')}
-        >
-          {leadName(lead)}
-        </Link>
+        {onPhone ? (
+          <span className="text-sm font-semibold text-text">{name}</span>
+        ) : (
+          <Link
+            replace
+            to={openHref}
+            onClick={stop}
+            className={cn(LINK, 'text-sm font-semibold text-text no-underline hover:underline')}
+          >
+            {name}
+          </Link>
+        )}
         <span className="select-text text-xs tabular-nums text-text-subtle">{lead.ref}</span>
       </div>
       {lead.phone ? (
-        <ContactLinks mobile={lead.phone} />
+        onPhone ? (
+          <p className="select-text text-sm tabular-nums text-text-subtle">
+            {phoneLabel(lead.phone)}
+          </p>
+        ) : (
+          // Shrink-wrapped, so a click beside the number still opens the row.
+          <div className="flex w-fit max-w-full items-center gap-1" onClick={stop}>
+            <ContactLinks mobile={lead.phone} />
+            {chat ? (
+              <IconLink to={chat} label={`WhatsApp ${name}`} onClick={stop}>
+                <MessageCircle width={16} height={16} strokeWidth={1.75} aria-hidden />
+              </IconLink>
+            ) : null}
+          </div>
+        )
       ) : (
         <p className="text-sm text-text-subtle">No number yet</p>
       )}
       {lead.place ? <p className="mt-0.5 select-text text-sm text-text-muted">{lead.place}</p> : null}
+      {since ? <p className="mt-0.5 text-xs text-text-subtle">{since}</p> : null}
       <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-text-muted">
         <Badge>{LEAD_ORIGIN_LABELS[lead.origin]}</Badge>
         {lead.origin === 'share_link' && lead.linkLabel ? <span>“{lead.linkLabel}”</span> : null}
       </p>
-      <WatchBar watch={lead.watch} />
     </div>
   );
 }
 
 /**
- * The right half: where it stands. The status, how soon the next follow-up is
- * (red once late, amber inside two hours, plain after that, always in words
- * too), the last contact, anything they did since, and who owns it. A closed
- * lead says who closed it and when; a registered one says Onboarding has it.
+ * The second column: how interested they are. How much of the film they
+ * watched, how often and when last, what became of the WhatsApp invite, and the
+ * newest thing they did to reach us. A lead that was never sent an invite (a
+ * call-back from the film page) shows only what it did.
  */
-export function LeadStandsCell({ lead, now }: { lead: LeadRow; now: number }) {
+export function LeadInterestCell({ lead, now }: { lead: LeadRow; now: number }) {
+  const visits = visitsLine(lead.watch, now);
+  const invite = inviteLine(lead, now);
+  // A closed lead has been dealt with: a chip saying "they are waiting" is wrong.
+  const sign = isClosed(lead.status) ? null : reachOutLine(lead, now);
+  return (
+    <div className="min-w-0 [overflow-wrap:anywhere]">
+      <WatchBar watch={lead.watch} withVisits={false} />
+      {visits ? <p className="mt-1 text-xs text-text-muted">{visits}</p> : null}
+      {invite ? (
+        <p
+          className={cn(
+            'mt-1 text-xs',
+            lead.invite?.delivery === 'failed' ? WARN_TEXT : 'text-text-muted',
+          )}
+        >
+          {invite}
+        </p>
+      ) : null}
+      {sign ? (
+        <p className="mt-1.5">
+          <WrapChip>{sign}</WrapChip>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The third column: where it stands. The status, how soon the next follow-up is
+ * (red once late, amber inside two hours, plain after that, always in words
+ * too), the last contact and the tries that got no answer, the newest note the
+ * team wrote, and who owns it. A lead nobody has been in touch with says so in
+ * amber. A closed lead says who closed it and when; a registered one says
+ * Onboarding has it.
+ *
+ * On a phone card there is no link to Onboarding (a button cannot hold one);
+ * the drawer has it.
+ */
+export function LeadStandsCell({
+  lead,
+  now,
+  onPhone,
+}: {
+  lead: LeadRow;
+  now: number;
+  onPhone: boolean;
+}) {
   const closed = isClosed(lead.status);
   const due = dueLine(lead, now);
   const last = lastContactLine(lead.lastContact, now);
-  const sign = closed ? null : signLine(lead.lastSign, lead.lastContact, now);
+  const tries = triesLine(lead.unanswered);
+  const note = noteLine(lead.lastNote, now);
   return (
     <div className="min-w-0 [overflow-wrap:anywhere]">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -133,10 +250,15 @@ export function LeadStandsCell({ lead, now }: { lead: LeadRow; now: number }) {
         <p className="mt-1 text-xs text-text-muted">{closedLine(lead, now)}</p>
       ) : lead.status === 'registered' && !lead.nextDueAt ? (
         <p className="mt-1 text-sm text-text-muted">
-          Onboarding has them.{' '}
-          <Link to="/onboarding" className={cn(LINK, 'text-brand')}>
-            Open Onboarding
-          </Link>
+          Onboarding has them.
+          {onPhone ? null : (
+            <>
+              {' '}
+              <Link to="/onboarding" onClick={stop} className={cn(LINK, 'text-brand')}>
+                Open Onboarding
+              </Link>
+            </>
+          )}
         </p>
       ) : due ? (
         <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
@@ -152,11 +274,23 @@ export function LeadStandsCell({ lead, now }: { lead: LeadRow; now: number }) {
         </p>
       ) : null}
 
-      {last ? <p className="mt-1 text-xs text-text-muted">{last}</p> : null}
-      {sign ? (
-        <p className="mt-1">
-          <WrapChip>{sign}</WrapChip>
-        </p>
+      {last ? (
+        <p className="mt-1 text-xs text-text-muted">{last}</p>
+      ) : closed || lead.status === 'registered' ? (
+        // Grey, not the warning colour: a closed lead is over, and a registered one
+        // is Onboarding's to call — the line above already says so.
+        <p className="mt-1 text-xs text-text-subtle">Never contacted</p>
+      ) : (
+        <p className={cn('mt-1 text-xs font-medium', WARN_TEXT)}>Not contacted yet</p>
+      )}
+      {tries ? <p className="mt-1 text-xs text-text-muted">{tries}</p> : null}
+      {note ? (
+        <div className="mt-1.5 text-xs">
+          {/* Two lines of the words, and the name and the time always whole under
+              them: a long note is read in the drawer, but who wrote it is not. */}
+          <p className="line-clamp-2 select-text text-text">{note.quote}</p>
+          {note.by ? <p className="mt-0.5 text-text-subtle">— {note.by}</p> : null}
+        </div>
       ) : null}
       {closed ? null : <p className="mt-1 text-xs text-text-subtle">{ownerLine(lead.owner)}</p>}
     </div>

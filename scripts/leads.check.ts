@@ -38,6 +38,8 @@ import {
   LEAD_CONTACT_OUTCOMES,
   LEAD_CONTACT_OUTCOME_LABELS,
   LEAD_DUE_REASONS,
+  LEAD_INVITE_DELIVERIES,
+  LEAD_INVITE_FAILURES,
   LEAD_ORIGINS,
   LEAD_SIGN_KINDS,
   LEAD_SIGN_LABELS,
@@ -46,6 +48,9 @@ import {
   LEAD_VIEWS,
   type LeadActivity,
   type LeadContactOutcome,
+  type LeadInvite,
+  type LeadNote,
+  type LeadSigns,
   type LeadWatch,
 } from '../shared/src/types/lead';
 import {
@@ -72,6 +77,7 @@ import {
   closesLead,
   contactBody,
   contactProblem,
+  dayWords,
   devicesNote,
   dueLine,
   durationWords,
@@ -82,6 +88,7 @@ import {
   idFromParam,
   inTalksCount,
   inWindow,
+  inviteLine,
   isClosed,
   lastContactLine,
   leadHref,
@@ -89,8 +96,10 @@ import {
   lookupLine,
   mobileTen,
   moveIntoWindow,
+  newestReachOut,
   nextWindowStart,
   noteBody,
+  noteLine,
   noteProblem,
   originText,
   ownerLine,
@@ -98,16 +107,20 @@ import {
   phoneBody,
   phoneProblem,
   quickPicks,
+  reachOutLine,
   registrationWords,
   reminderLine,
   reopenBody,
   reopenProblem,
   signLine,
+  sinceLine,
   statusLabel,
   suggestNextAt,
+  triesLine,
   unansweredAfter,
   viewFromParam,
   viewLabel,
+  visitsLine,
   watchLine,
   watchPercent,
   whenInput,
@@ -603,6 +616,9 @@ describe('what they watched', () => {
     assert.equal(watchLine(watch({ soundOn: false })), 'Watched 12:30 of 26:29 · sound off');
     assert.equal(watchLine(watch({ completed: true, bestSeconds: 1585 })), 'Watched to the end · sound on');
     assert.equal(watchLine(watch({ durationSeconds: 0 })), 'Watched 12:30 · sound on');
+    // The table prints the visit count on the next line, so its watch line leaves it out.
+    assert.equal(watchLine(watch({ visits: 4 }), false), 'Watched 12:30 of 26:29 · sound on');
+    assert.equal(watchLine(watch({ visits: 1 }), false), 'Watched 12:30 of 26:29 · sound on');
     // A call-back from the film page with no visit tied to them is not "watched 0:00".
     assert.equal(
       watchLine(watch({ visits: 0, bestSeconds: 0 })),
@@ -629,6 +645,196 @@ describe('what they watched', () => {
   it('notes more than one device, and only then', () => {
     assert.equal(devicesNote(1), null);
     assert.match(devicesNote(2) ?? '', /2 devices/);
+  });
+});
+
+describe('what the table says about a lead', () => {
+  const now = FRI(15, 0);
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const watch = (over: Partial<LeadWatch> = {}): LeadWatch => ({
+    visits: 4,
+    bestSeconds: 750,
+    durationSeconds: 1589,
+    completed: false,
+    soundOn: true,
+    devices: 1,
+    firstAt: iso(THU(10, 0)),
+    lastAt: iso(FRI(13, 0)),
+    city: null,
+    ...over,
+  });
+  const noSigns = (): LeadSigns => ({
+    replied: null,
+    callMe: null,
+    callback: null,
+    assistant: null,
+    registered: null,
+  });
+  const invite = (over: Partial<LeadInvite> = {}): LeadInvite => ({
+    at: iso(THU(11, 0)),
+    delivery: 'read',
+    failure: null,
+    ...over,
+  });
+  const row = (over: { invite?: LeadInvite | null; signs?: Partial<LeadSigns>; watch?: Partial<LeadWatch> } = {}) => ({
+    invite: over.invite === undefined ? invite() : over.invite,
+    signs: { ...noSigns(), ...over.signs },
+    watch: watch(over.watch),
+  });
+
+  it('says the day in India time, and the year only when it is not this year', () => {
+    assert.equal(dayWords(iso(THU(11, 0)), now), '22 Oct');
+    // 00:30 in India on the 22nd is still the 21st in UTC: the day is the India one.
+    assert.equal(dayWords(iso(THU(0, 30)), now), '22 Oct');
+    assert.equal(dayWords(iso(THU(0, 0) - 1), now), '21 Oct');
+    // 23:59 in India on 31 Dec, and the first minute of the year.
+    assert.equal(dayWords(iso(ist(2025, 12, 31, 23, 59)), now), '31 Dec 2025');
+    assert.equal(dayWords(iso(ist(2026, 1, 1, 0, 1)), now), '1 Jan');
+    // The year is compared with India's year at `now` too.
+    assert.equal(dayWords(iso(ist(2026, 12, 31, 12, 0)), ist(2027, 1, 1, 0, 30)), '31 Dec 2026');
+    assert.equal(dayWords(null, now), '');
+    assert.equal(dayWords('not a date', now), '');
+  });
+
+  it('says since when they have been a lead', () => {
+    assert.equal(sinceLine(iso(THU(11, 0)), now), 'Lead since 22 Oct');
+    assert.equal(sinceLine(iso(ist(2025, 3, 3, 9, 0)), now), 'Lead since 3 Mar 2025');
+    assert.equal(sinceLine('not a date', now), null);
+    assert.equal(sinceLine(null, now), null);
+  });
+
+  it('counts the tries that got no answer, and says nothing for none', () => {
+    assert.equal(triesLine(0), null);
+    assert.equal(triesLine(-1), null);
+    assert.equal(triesLine(Number.NaN), null);
+    assert.equal(triesLine(1), '1 try without an answer');
+    assert.equal(triesLine(2), '2 tries without an answer');
+    assert.equal(triesLine(11), '11 tries without an answer');
+  });
+
+  it('says how often and how lately they watched, and on how many devices', () => {
+    assert.equal(visitsLine(watch(), now), '4 visits · last watched 2 h ago');
+    assert.equal(visitsLine(watch({ devices: 2 }), now), '4 visits · last watched 2 h ago · 2 devices');
+    // One visit leaves the count out; the line then starts with a capital.
+    assert.equal(visitsLine(watch({ visits: 1 }), now), 'Last watched 2 h ago');
+    assert.equal(visitsLine(watch({ visits: 1, devices: 2 }), now), 'Last watched 2 h ago · 2 devices');
+    assert.equal(visitsLine(watch({ lastAt: iso(FRI(14, 59) + 30_000) }), now), '4 visits · last watched just now');
+    assert.equal(visitsLine(watch({ lastAt: iso(FRI(15, 0) - 3 * DAY) }), now), '4 visits · last watched 3 days ago');
+    // No time to print: the count still says something, one visit does not.
+    assert.equal(visitsLine(watch({ lastAt: null }), now), '4 visits');
+    assert.equal(visitsLine(watch({ visits: 1, lastAt: null }), now), null);
+    // A call-back from the film page has no visit: not "0 visits".
+    assert.equal(visitsLine(watch({ visits: 0, lastAt: null, devices: 0 }), now), null);
+  });
+
+  it('says how the invite fared, for every way it can', () => {
+    // read: the day it went, and whether they have answered since.
+    assert.equal(inviteLine(row(), now), 'Invite read 22 Oct · no reply yet');
+    assert.equal(inviteLine(row({ signs: { replied: iso(FRI(13, 0)) } }), now), 'Invite read 22 Oct');
+    assert.equal(inviteLine(row({ signs: { callMe: iso(FRI(13, 0)) } }), now), 'Invite read 22 Oct');
+    // A call-back or the assistant is not a reply to the invite.
+    assert.equal(inviteLine(row({ signs: { callback: iso(FRI(13, 0)) } }), now), 'Invite read 22 Oct · no reply yet');
+    // delivered: not opened yet, unless something says it was.
+    const delivered = { delivery: 'delivered' as const };
+    assert.equal(inviteLine(row({ invite: invite(delivered), watch: { visits: 0 } }), now), 'Invite delivered, not opened yet');
+    assert.equal(inviteLine(row({ invite: invite(delivered) }), now), 'Invite delivered 22 Oct');
+    assert.equal(
+      inviteLine(row({ invite: invite(delivered), watch: { visits: 0 }, signs: { replied: iso(FRI(13, 0)) } }), now),
+      'Invite delivered 22 Oct',
+    );
+    // sent
+    assert.equal(inviteLine(row({ invite: invite({ delivery: 'sent' }) }), now), 'Invite sent 22 Oct');
+    // failed, for each reason, and for none given
+    const failed = (failure: LeadInvite['failure']) => row({ invite: invite({ delivery: 'failed', failure }) });
+    assert.equal(inviteLine(failed('held_back'), now), 'Invite not delivered — held back by WhatsApp');
+    assert.equal(inviteLine(failed('not_on_whatsapp'), now), 'Invite not delivered — not on WhatsApp');
+    assert.equal(inviteLine(failed('other'), now), 'Invite not delivered');
+    assert.equal(inviteLine(failed(null), now), 'Invite not delivered');
+    // never sent one
+    assert.equal(inviteLine(row({ invite: null }), now), null);
+  });
+
+  it('has a line for every delivery and every failure, whoever has replied', () => {
+    for (const delivery of LEAD_INVITE_DELIVERIES) {
+      for (const failure of [null, ...LEAD_INVITE_FAILURES] as const) {
+        for (const signs of [{}, { replied: iso(FRI(13, 0)) }]) {
+          for (const visits of [0, 3]) {
+            const line = inviteLine(
+              row({ invite: invite({ delivery, failure: delivery === 'failed' ? failure : null }), signs, watch: { visits } }),
+              now,
+            );
+            assert.ok(line && line.startsWith('Invite '), `${delivery} ${failure} ${visits}`);
+          }
+        }
+      }
+    }
+  });
+
+  it('prints the day of an invite from another year with the year, and nothing odd for an unreadable one', () => {
+    assert.equal(inviteLine(row({ invite: invite({ at: iso(ist(2025, 12, 30, 9, 0)) }) }), now), 'Invite read 30 Dec 2025 · no reply yet');
+    assert.equal(inviteLine(row({ invite: invite({ at: 'not a date' }) }), now), 'Invite read · no reply yet');
+  });
+
+  it('quotes the newest note with who wrote it and when', () => {
+    const note = (over: Partial<LeadNote> = {}): LeadNote => ({
+      text: 'Wants a demo on Monday',
+      byName: 'Aryan',
+      at: iso(FRI(13, 0)),
+      ...over,
+    });
+    assert.deepEqual(noteLine(note(), now), { quote: '“Wants a demo on Monday”', by: 'Aryan, 2 h ago' });
+    // Breaks and runs of spaces become one space: the list clamps it to two lines.
+    assert.deepEqual(noteLine(note({ text: '  Call back\n\n after   lunch \n' }), now), {
+      quote: '“Call back after lunch”',
+      by: 'Aryan, 2 h ago',
+    });
+    assert.deepEqual(noteLine(note({ byName: null }), now), { quote: '“Wants a demo on Monday”', by: '2 h ago' });
+    assert.deepEqual(noteLine(note({ byName: '  ' }), now), { quote: '“Wants a demo on Monday”', by: '2 h ago' });
+    assert.deepEqual(noteLine(note({ at: 'not a date' }), now), { quote: '“Wants a demo on Monday”', by: 'Aryan' });
+    assert.deepEqual(noteLine(note({ byName: null, at: 'not a date' }), now), { quote: '“Wants a demo on Monday”', by: '' });
+    // The whole note is kept: the clamp is the page's, so the drawer and the words agree.
+    const long = 'x'.repeat(500);
+    assert.equal(noteLine(note({ text: long }), now)?.quote, `“${long}”`);
+    assert.equal(noteLine(null, now), null);
+    assert.equal(noteLine(note({ text: ' \n ' }), now), null);
+  });
+
+  it('shows the newest way they reached out, and not the ones other lines already say', () => {
+    // Each key on its own: every way that is a reach-out shows, watching and registering do not.
+    const only = (key: keyof LeadSigns) => ({ ...noSigns(), [key]: iso(FRI(14, 40)) });
+    assert.deepEqual(newestReachOut(only('replied')), { at: iso(FRI(14, 40)), kind: 'replied' });
+    assert.deepEqual(newestReachOut(only('callMe')), { at: iso(FRI(14, 40)), kind: 'call_me' });
+    assert.deepEqual(newestReachOut(only('callback')), { at: iso(FRI(14, 40)), kind: 'callback' });
+    assert.deepEqual(newestReachOut(only('assistant')), { at: iso(FRI(14, 40)), kind: 'assistant' });
+    assert.equal(newestReachOut(only('registered')), null);
+    assert.equal(newestReachOut(noSigns()), null);
+    // Every kind of sign is either shown here or left to the line that says it.
+    const shown = LEAD_SIGN_KINDS.filter((k) => k !== 'watched' && k !== 'registered');
+    assert.deepEqual([...shown].sort(), ['assistant', 'call_me', 'callback', 'replied']);
+
+    // A "Call me" tap is also an incoming message, so it lands as a reply at the same
+    // moment: the tap is what the chip names.
+    const tap = { ...noSigns(), replied: iso(FRI(14, 40)), callMe: iso(FRI(14, 40)) };
+    assert.deepEqual(newestReachOut(tap), { at: iso(FRI(14, 40)), kind: 'call_me' });
+
+    // The newest wins, however the keys are ordered.
+    const both = { ...noSigns(), replied: iso(FRI(10, 0)), callback: iso(FRI(14, 0)) };
+    assert.deepEqual(newestReachOut(both), { at: iso(FRI(14, 0)), kind: 'callback' });
+    // An unreadable time is not a sign.
+    assert.equal(newestReachOut({ ...noSigns(), replied: 'not a date' }), null);
+  });
+
+  it('prints that chip only while it is news, as the sign line does', () => {
+    const signs = { ...noSigns(), callMe: iso(FRI(14, 40)), registered: iso(FRI(14, 50)) };
+    assert.equal(reachOutLine({ signs, lastContact: null }, now), 'Tapped "Call me" · 20 min ago');
+    const calledBefore = { at: iso(FRI(14, 0)), byName: null, channel: 'call' as const, outcome: 'no_answer' as const };
+    assert.equal(reachOutLine({ signs, lastContact: calledBefore }, now), 'Tapped "Call me" · 20 min ago');
+    // We rang after they tapped: dealt with.
+    assert.equal(reachOutLine({ signs, lastContact: { ...calledBefore, at: iso(FRI(14, 45)) } }, now), null);
+    assert.equal(reachOutLine({ signs: noSigns(), lastContact: null }, now), null);
+    // They replied, then watched again: the reply still shows (it is not hidden under the newest sign).
+    const replied = { ...noSigns(), replied: iso(FRI(10, 0)) };
+    assert.equal(reachOutLine({ signs: replied, lastContact: null }, now), 'Replied on WhatsApp · 5 h ago');
   });
 });
 
@@ -667,7 +873,8 @@ describe('the address', () => {
 
   it('links to one lead and to their chat', () => {
     assert.equal(leadHref(OBJECT_ID), `/leads?lead=${OBJECT_ID}`);
-    assert.equal(chatHref('919876543210'), '/whatsapp?chat=919876543210');
+    // A lead is a marketing chat, so it opens in the MDG Services inbox (one inbox per number).
+    assert.equal(chatHref('919876543210'), '/whatsapp?line=marketing&chat=919876543210');
     assert.equal(chatHref(null), null);
   });
 });
