@@ -217,7 +217,7 @@ describe('the limits the forms mirror', () => {
   });
 });
 
-describe('the working window: 09:00 to 20:00 India time, Monday to Saturday', () => {
+describe('the working window: 09:00 to 20:00 India time, every day', () => {
   it('is open from 09:00 up to but not including 20:00', () => {
     assert.equal(inWindow(MON(8, 59)), false);
     assert.equal(inWindow(MON(9, 0)), true);
@@ -227,11 +227,12 @@ describe('the working window: 09:00 to 20:00 India time, Monday to Saturday', ()
     assert.equal(inWindow(MON(0, 0)), false);
   });
 
-  it('is open on a Saturday and closed all of Sunday', () => {
+  it('is open on a Saturday and on a Sunday, the owner works every day', () => {
     assert.equal(inWindow(SAT(9, 0)), true);
     assert.equal(inWindow(SAT(19, 59)), true);
-    assert.equal(inWindow(SUN(9, 0)), false);
-    assert.equal(inWindow(SUN(12, 0)), false);
+    assert.equal(inWindow(SUN(9, 0)), true);
+    assert.equal(inWindow(SUN(12, 0)), true);
+    assert.equal(inWindow(SUN(20, 0)), false);
   });
 
   it('reads the day in India, not in UTC', () => {
@@ -245,8 +246,8 @@ describe('the working window: 09:00 to 20:00 India time, Monday to Saturday', ()
     assert.equal(nextWindowStart(MON(9, 0)), TUE(9, 0));
     assert.equal(nextWindowStart(MON(12, 0)), TUE(9, 0));
     assert.equal(nextWindowStart(MON(20, 0)), TUE(9, 0));
-    assert.equal(nextWindowStart(SAT(12, 0)), MON(9, 0));
-    assert.equal(nextWindowStart(SUN(3, 0)), MON(9, 0));
+    assert.equal(nextWindowStart(SAT(12, 0)), SUN(9, 0));
+    assert.equal(nextWindowStart(SUN(3, 0)), SUN(9, 0));
     assert.equal(nextWindowStart(SUN(23, 0)), MON(9, 0));
   });
 
@@ -254,19 +255,19 @@ describe('the working window: 09:00 to 20:00 India time, Monday to Saturday', ()
     assert.equal(moveIntoWindow(MON(12, 30)), MON(12, 30));
     assert.equal(moveIntoWindow(MON(20, 0)), TUE(9, 0));
     assert.equal(moveIntoWindow(MON(5, 0)), MON(9, 0));
-    assert.equal(moveIntoWindow(SAT(21, 0)), MON(9, 0));
-    assert.equal(moveIntoWindow(SUN(10, 0)), MON(9, 0));
+    assert.equal(moveIntoWindow(SAT(21, 0)), SUN(9, 0));
+    assert.equal(moveIntoWindow(SUN(10, 0)), SUN(10, 0));
   });
 
-  it('counts working hours only, across a night and a Sunday', () => {
+  it('counts working hours only, across a night, Sunday included', () => {
     assert.equal(addWorkingHours(FRI(10, 15), 4), FRI(14, 15));
     // 1 h 30 left on Friday, the other 2 h 30 after the window opens on Saturday.
     assert.equal(addWorkingHours(FRI(18, 30), 4), SAT(11, 30));
-    // Saturday 19:00: 1 h left, then Sunday is skipped, 3 h on Monday.
-    assert.equal(addWorkingHours(SAT(19, 0), 4), MON(12, 0));
+    // Saturday 19:00: 1 h left, then 3 h on Sunday.
+    assert.equal(addWorkingHours(SAT(19, 0), 4), SUN(12, 0));
     // Counting starts when the window opens, not at midnight.
     assert.equal(addWorkingHours(THU(20, 41), 2), FRI(11, 0));
-    assert.equal(addWorkingHours(SUN(3, 0), 2), MON(11, 0));
+    assert.equal(addWorkingHours(SUN(3, 0), 2), SUN(11, 0));
   });
 
   it('can end exactly when the window closes, which then moves to the next morning', () => {
@@ -320,8 +321,8 @@ describe('the follow-up the contact form suggests (docs/specs/leads.md §3, rule
     }
   });
 
-  it('moves a 24 h follow-up that lands on a Sunday to Monday morning', () => {
-    assert.equal(suggestNextAt('interested', 0, SAT(15, 0)), MON(9, 0));
+  it('keeps a 24 h follow-up that lands on a Sunday, and moves one at night to the morning', () => {
+    assert.equal(suggestNextAt('interested', 0, SAT(15, 0)), SUN(15, 0));
     assert.equal(suggestNextAt('message_sent', 1, SAT(21, 0)), MON(9, 0));
   });
 
@@ -709,7 +710,7 @@ describe('the "Set a follow-up" form', () => {
     assert.deepEqual(whenInput(Date.UTC(2026, 9, 25, 18, 30)), { date: '2026-10-26', time: '00:00' });
   });
 
-  it('offers in two hours, tomorrow 11:00 and Monday 11:00, and leaves out what we would not remind on', () => {
+  it('offers in two hours, tomorrow 11:00 and Monday 11:00, never the same time twice', () => {
     const labels = (now: number) => quickPicks(now).map((p) => p.label);
     // Monday: tomorrow is Tuesday; "Monday" is a week away.
     assert.deepEqual(labels(MON(10, 0)), ['In 2 hours', 'Tomorrow 11:00', 'Monday 11:00']);
@@ -718,8 +719,9 @@ describe('the "Set a follow-up" form', () => {
     // Friday: Saturday is a working day; Monday follows.
     assert.deepEqual(labels(FRI(10, 0)), ['In 2 hours', 'Tomorrow 11:00', 'Monday 11:00']);
     assert.equal(quickPicks(FRI(10, 0))[2]?.at, MON(11, 0));
-    // Saturday: tomorrow is Sunday, so only the Monday one is offered.
-    assert.deepEqual(labels(SAT(10, 0)), ['In 2 hours', 'Monday 11:00']);
+    // Saturday: tomorrow is Sunday, a working day like any other.
+    assert.deepEqual(labels(SAT(10, 0)), ['In 2 hours', 'Tomorrow 11:00', 'Monday 11:00']);
+    assert.equal(quickPicks(SAT(10, 0))[1]?.at, SUN(11, 0));
     // Sunday: tomorrow IS Monday, so it is not offered twice.
     assert.deepEqual(labels(SUN(10, 0)), ['In 2 hours', 'Tomorrow 11:00']);
     assert.equal(quickPicks(SUN(10, 0))[1]?.at, MON(11, 0));
@@ -738,9 +740,9 @@ describe('the "Set a follow-up" form', () => {
   it('says when the reminder will really come', () => {
     const now = MON(10, 0);
     assert.equal(reminderLine(TUE(11, 0), now), 'Reminder: Tomorrow 11:00.');
-    assert.match(reminderLine(MON(21, 0), now), /^Reminder: Tomorrow 09:00\. We only remind between 09:00 and 20:00, Monday to Saturday\.$/);
-    // A Sunday time is shown at Monday's opening, named by its weekday from Friday.
-    assert.match(reminderLine(SUN(12, 0), FRI(10, 0)), /^Reminder: Mon 09:00\. We only remind/);
+    assert.match(reminderLine(MON(21, 0), now), /^Reminder: Tomorrow 09:00\. We only remind between 09:00 and 20:00, every day\.$/);
+    // A Sunday noon is kept as it is, named by its weekday from Friday.
+    assert.equal(reminderLine(SUN(12, 0), FRI(10, 0)), 'Reminder: Sun 12:00.');
   });
 });
 

@@ -236,20 +236,21 @@ export function parseWhen(w: WhenInput): number | null {
 }
 
 // ── The working window ──────────────────────────────────────────────────────
-// 09:00 to 20:00, Monday to Saturday, India time: the team's working day, and
-// the only hours the system raises a follow-up alert (§3). A follow-up chosen
-// outside it is shown at the next morning, because that is when it will come.
+// 09:00 to 20:00 India time, every day — Sundays too, the owner works them: the
+// team's working day, and the only hours the system raises a follow-up alert
+// (§3). A follow-up chosen at night is shown at the next morning, because that
+// is when it will come.
 
 /** Inside the working window. 20:00 itself is outside; 09:00 is inside. */
 export function inWindow(ms: number): boolean {
   const day = istMsOfDay(ms);
-  return istWeekday(ms) !== 0 && day >= WINDOW_OPENS && day < WINDOW_CLOSES;
+  return day >= WINDOW_OPENS && day < WINDOW_CLOSES;
 }
 
 /** The next time the window opens, strictly after `ms`. */
 export function nextWindowStart(ms: number): number {
   let open = istMidnight(ms) + WINDOW_OPENS;
-  while (open <= ms || istWeekday(open) === 0) open += DAY;
+  while (open <= ms) open += DAY;
   return open;
 }
 
@@ -260,7 +261,7 @@ export function moveIntoWindow(ms: number): number {
 
 /**
  * `hours` of window time after `ms`: counting starts when the window is open and
- * skips the nights and Sundays. May land on 20:00 sharp, the end of a window;
+ * skips the nights. May land on 20:00 sharp, the end of a window;
  * `moveIntoWindow` then carries it to the next morning.
  */
 export function addWorkingHours(ms: number, hours: number): number {
@@ -371,7 +372,7 @@ export function followUpGuide(): { when: string; then: string }[] {
 }
 
 /** The working window in words, for the dialogs that explain it. */
-export const WINDOW_WORDS = 'between 09:00 and 20:00, Monday to Saturday';
+export const WINDOW_WORDS = 'between 09:00 and 20:00, every day';
 
 // ── Due, last contact, signs ────────────────────────────────────────────────
 
@@ -679,8 +680,7 @@ export interface QuickPick {
 
 /**
  * The three one-tap choices on the follow-up form: in two hours, tomorrow at
- * 11:00, the next Monday at 11:00. Tomorrow is left out when it is a Sunday (we
- * do not remind on a Sunday), and Monday when tomorrow already is Monday.
+ * 11:00, the next Monday at 11:00 (left out when tomorrow already is Monday).
  */
 export function quickPicks(now: number): QuickPick[] {
   const today = istMidnight(now);
@@ -688,7 +688,7 @@ export function quickPicks(now: number): QuickPick[] {
     { id: 'soon', label: 'In 2 hours', at: Math.ceil((now + 2 * HOUR) / MINUTE) * MINUTE },
   ];
   const tomorrow = today + DAY + 11 * HOUR;
-  if (istWeekday(tomorrow) !== 0) picks.push({ id: 'tomorrow', label: 'Tomorrow 11:00', at: tomorrow });
+  picks.push({ id: 'tomorrow', label: 'Tomorrow 11:00', at: tomorrow });
   const toMonday = ((1 - istWeekday(today) + 7) % 7) || 7;
   const monday = today + toMonday * DAY + 11 * HOUR;
   if (monday !== tomorrow) picks.push({ id: 'monday', label: 'Monday 11:00', at: monday });
