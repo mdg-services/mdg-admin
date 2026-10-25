@@ -17,6 +17,7 @@ import type {
   OnboardingBoardRow,
   OnboardingBoard,
   OutletSetupAdmin,
+  PaymentChannel,
   PortalId,
   SetupBilling,
   SetupDoneBy,
@@ -934,7 +935,8 @@ const PAID_VIA_LABEL = {
   link: 'Razorpay link',
   checkout: 'Razorpay on the website',
   manual: 'hand',
-} as const satisfies Record<NonNullable<OutletSetupAdmin['payment']['paidVia']>, string>;
+  autopay: 'Autopay',
+} as const satisfies Record<PaymentChannel, string>;
 
 /** The bill in one line: what stage of its life it is in, with the figures that stage has. */
 export function paymentLine(p: OutletSetupAdmin['payment']): string {

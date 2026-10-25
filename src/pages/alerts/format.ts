@@ -71,6 +71,9 @@ const STILL_STANDING: Partial<Record<AdminAlertKind, string>> = {
   // ── watch hold ── hiding the alert decides nothing about the messages behind it.
   held_message:
     'Hidden from this list. The messages stay held until someone sends or drops them on the Onboarding page, or they expire.',
+  // ── autopay ── hiding the alert does not ring the owner; only a logged call clears it.
+  autopay_stopped:
+    "Hidden from this list. It clears once somebody rings the owner and marks the call done on the outlet's Autopay section.",
   // ── leads ── hiding the alert does not get anybody in touch; only a logged contact or a close does.
   lead_new: 'Hidden from this list. This lead stays on the Leads page until somebody gets in touch.',
   lead_due: 'Hidden from this list. This lead stays on the Leads page until somebody gets in touch.',

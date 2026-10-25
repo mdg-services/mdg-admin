@@ -25,6 +25,7 @@ import {
 } from '@/lib/onboarding';
 import { GST_STATES, type OutletSetupAdmin } from '@dk/shared';
 
+import { AutopayPanel } from './AutopayPanel';
 import { billingItems } from './billingItems';
 import { SetupFollowUp } from './SetupFollowUp';
 import { SetupWatch } from './SetupWatch';
@@ -125,6 +126,9 @@ export function SetupCard({
               : []),
           ]}
         />
+
+        {/* ── autopay ── beside the bill it pays: on or off, what it takes and when, and the call after a stop */}
+        <AutopayPanel dealerId={setup.dealerId} code={setup.code} />
 
         <ol aria-label="Milestones" className="grid gap-1.5 border-t border-border pt-3">
           {milestones.map((m) => (

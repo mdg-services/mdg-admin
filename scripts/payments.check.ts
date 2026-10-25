@@ -415,6 +415,10 @@ describe('dashboardUrl', () => {
       dashboardUrl('link', 'plink_Abc123xyz') ?? '',
       /\/app\/paymentlinks\/plink_Abc123xyz$/,
     );
+    assert.match(
+      dashboardUrl('subscription', 'sub_Abc123xyz') ?? '',
+      /\/app\/subscriptions\/sub_Abc123xyz$/,
+    );
   });
 
   it('makes no link from anything that is not that kind of id', () => {
@@ -423,6 +427,8 @@ describe('dashboardUrl', () => {
     assert.equal(dashboardUrl('payment', 'pay_x/../../evil'), null);
     assert.equal(dashboardUrl('payment', 'pay_x?next=1'), null);
     assert.equal(dashboardUrl('link', 'pay_Abc123xyz'), null);
+    assert.equal(dashboardUrl('subscription', 'plink_Abc123xyz'), null);
+    assert.equal(dashboardUrl('subscription', 'sub_x/../../evil'), null);
   });
 });
 

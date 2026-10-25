@@ -217,6 +217,9 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
     { key: 'purpose', label: 'Kind', value: PAYMENT_PURPOSE_LABELS[p.purpose] },
     ...(p.note ? [{ key: 'note', label: 'Note', value: p.note, block: true }] : []),
     { key: 'due', label: 'Due date', value: p.dueDate ? formatYmd(p.dueDate) : '—' },
+    ...(p.autopayOn
+      ? [{ key: 'autopayOn', label: 'Autopay takes it', value: formatYmd(p.autopayOn) }]
+      : []),
     { key: 'raised', label: 'Raised', value: byAt(p.createdByName, p.createdAt) },
     { key: 'number', label: 'Receipt number', value: p.number, mono: true, copyable: true },
     ...(p.paidAt
@@ -312,6 +315,16 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
       label: 'Link id',
       value: <RazorpayId kind="link" id={p.razorpayLinkId} />,
     },
+    // Only a bill an autopay was meant to take (or took) has one.
+    ...(p.razorpaySubscriptionId
+      ? [
+          {
+            key: 'subscription',
+            label: 'Subscription id',
+            value: <RazorpayId kind="subscription" id={p.razorpaySubscriptionId} />,
+          },
+        ]
+      : []),
   ];
 
   const attempts = newestFirst(p.attempts, (a) => a.at);

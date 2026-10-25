@@ -184,6 +184,8 @@ export function checkOutcome(before: PaymentStatus | undefined, after: PaymentSt
 export function statusHint(p: AdminPayment, today: string): string {
   switch (p.status) {
     case 'due':
+      // Autopay is lined up to take it: nobody needs to chase the owner for it.
+      if (p.autopayOn) return `Autopay will take this on ${formatYmd(p.autopayOn)}.`;
       return isPastDue(p, today)
         ? `Not paid yet. It was due on ${formatYmd(p.dueDate)}.`
         : 'Waiting for the outlet to pay.';
@@ -226,6 +228,7 @@ const CHANNEL_LABELS: Record<PaymentChannel, string> = {
   link: 'Payment link',
   checkout: 'On the website',
   manual: 'Recorded by hand',
+  autopay: 'Autopay',
 };
 
 export function channelLabel(channel: PaymentChannel | null): string {
@@ -302,18 +305,20 @@ export function newestFirst<T>(items: readonly T[], at: (item: T) => string): T[
 // ------------------------------------------------------ razorpay links ----
 
 /** The pieces of Razorpay's dashboard an id can open. */
-export type RazorpayThing = 'payment' | 'order' | 'link';
+export type RazorpayThing = 'payment' | 'order' | 'link' | 'subscription';
 
 const DASHBOARD_PATH: Record<RazorpayThing, string> = {
   payment: 'payments',
   order: 'orders',
   link: 'paymentlinks',
+  subscription: 'subscriptions',
 };
 
 const ID_SHAPE: Record<RazorpayThing, RegExp> = {
   payment: /^pay_[A-Za-z0-9]+$/,
   order: /^order_[A-Za-z0-9]+$/,
   link: /^plink_[A-Za-z0-9]+$/,
+  subscription: /^sub_[A-Za-z0-9]+$/,
 };
 
 /**
