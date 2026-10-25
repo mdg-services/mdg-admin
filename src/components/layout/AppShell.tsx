@@ -40,10 +40,12 @@ import { MobileTabBar } from './MobileTabBar';
 import { NAV_ITEMS, type NavItem } from './navItems';
 import { moveItem } from './navOrder';
 import { useNavOrder } from './useNavOrder';
+import { useSortableRows } from './useSortableRows';
 
 /**
- * The sidebar's links, each one draggable to a new place (25 Oct 2026). Alt+↑
- * and Alt+↓ move the focused one, for whoever is on the keyboard.
+ * The sidebar's links, each one draggable to a new place (25 Oct 2026; how the
+ * drag works is in `useSortableRows`). Alt+↑ and Alt+↓ move the focused one,
+ * for whoever is on the keyboard.
  */
 function NavList({
   items,
@@ -58,53 +60,13 @@ function NavList({
   /** The new order of routes, once a row has been dropped in a new place. */
   onReorder: (routes: string[]) => void;
 }) {
-  const listRef = React.useRef<HTMLUListElement>(null);
-  // The row being dragged. A ref as well as state: the state only lands a tick
-  // after the drag starts (see `onDragStart`), and the first `dragover` must
-  // not miss it. Null means any drag over the list is not ours — a file, a
-  // link from another tab — and is left alone.
-  const draggingRef = React.useRef<string | null>(null);
-  const [dragging, setDragging] = React.useState<string | null>(null);
-  // While a row is held, the list is drawn from this so the others make way
-  // for it as it passes. Saved on drop; thrown away if the drag is cancelled
-  // (Escape, or let go outside the list), which puts every row back.
-  const [draft, setDraft] = React.useState<string[] | null>(null);
-
-  const byRoute = new Map(items.map((i) => [i.to, i]));
-  const shown = draft
-    ? draft.map((r) => byRoute.get(r)).filter((i): i is NavItem => Boolean(i))
-    : items;
-
-  // Rows slide to their new place rather than jump: each row's old position
-  // is remembered, and one that moved is played from there to here.
-  const tops = React.useRef(new Map<string, number>());
-  React.useLayoutEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const next = new Map<string, number>();
-    list.querySelectorAll<HTMLElement>('[data-nav-route]').forEach((row) => {
-      const route = row.dataset.navRoute as string;
-      next.set(route, row.offsetTop);
-      const before = tops.current.get(route);
-      if (!still && before !== undefined && before !== row.offsetTop && row.animate) {
-        row.animate(
-          [{ transform: `translateY(${before - row.offsetTop}px)` }, { transform: 'none' }],
-          { duration: 160, easing: 'cubic-bezier(0.2, 0, 0, 1)' },
-        );
-      }
-    });
-    tops.current = next;
-  });
-
-  function endDrag() {
-    draggingRef.current = null;
-    setDragging(null);
-    setDraft(null);
-  }
+  const routes = React.useMemo(() => items.map((i) => i.to), [items]);
+  const { listRef, drag, onPointerDown, styleFor } = useSortableRows<HTMLUListElement>(
+    routes,
+    onReorder,
+  );
 
   function moveBy(route: string, step: -1 | 1) {
-    const routes = items.map((i) => i.to);
     const from = routes.indexOf(route);
     const to = from + step;
     if (to < 0 || to >= routes.length) return;
@@ -119,65 +81,30 @@ function NavList({
   }
 
   return (
-    <ul
-      ref={listRef}
-      className="flex flex-col gap-0.5"
-      // The 2px gaps between rows count as the list too, or letting go in one
-      // reads as a cancelled drag and the row springs back.
-      onDragOver={(e) => {
-        if (draggingRef.current) e.preventDefault();
-      }}
-      onDrop={(e) => {
-        if (!draggingRef.current) return;
-        e.preventDefault();
-        if (draft && !draft.every((r, i) => r === items[i]?.to)) onReorder(draft);
-        endDrag();
-      }}
-    >
-      {shown.map((item) => {
+    <ul ref={listRef} className="flex flex-col gap-0.5">
+      {items.map((item, index) => {
         const badge = badges[item.to] ?? 0;
+        const held = drag?.from === index;
         return (
           <li
             key={item.to}
             data-nav-route={item.to}
-            draggable
-            onDragStart={(e) => {
-              draggingRef.current = item.to;
-              e.dataTransfer.effectAllowed = 'move';
-              // Firefox will not start a drag that carries nothing. Our own
-              // type, so dropping it on a page or the address bar does nothing.
-              e.dataTransfer.setData('application/x-dk-nav', item.to);
-              // A tick later: the browser photographs the row for the drag
-              // image after this handler, and it should look like the row,
-              // not the faded gap it leaves behind.
-              const route = item.to;
-              window.setTimeout(() => {
-                if (draggingRef.current !== route) return;
-                setDragging(route);
-                setDraft(items.map((i) => i.to));
-              }, 0);
-            }}
-            onDragOver={(e) => {
-              const held = draggingRef.current;
-              if (!held) return;
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
-              if (held === item.to) return;
-              // Every row is the same height, so swapping the held row into
-              // this one's place leaves the pointer over the held row and
-              // nothing flickers back and forth.
-              setDraft((d) => {
-                const base = d ?? items.map((i) => i.to);
-                return moveItem(base, base.indexOf(held), base.indexOf(item.to));
-              });
-            }}
-            onDragEnd={endDrag}
+            data-sort-row
+            onPointerDown={(e) => onPointerDown(e, index)}
             onKeyDown={(e) => {
               if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
               e.preventDefault();
               moveBy(item.to, e.key === 'ArrowUp' ? -1 : 1);
             }}
-            className={cn('group relative', dragging === item.to && 'opacity-40')}
+            style={styleFor(index)}
+            // `select-none`: a press-and-move would otherwise start selecting
+            // the labels. The held row floats above the rest on a solid card,
+            // and loses its shadow as it settles.
+            className={cn(
+              'group relative select-none rounded-md',
+              held && 'z-10 bg-surface',
+              held && !drag?.settling && 'shadow-lg ring-1 ring-border',
+            )}
           >
             {/* Shown on hover only: the sign that a row can be picked up. It
                 sits in the row's left padding, so nothing else moves. */}
@@ -188,7 +115,7 @@ function NavList({
               strokeWidth={2}
               className={cn(
                 'pointer-events-none absolute left-0.5 top-1/2 -translate-y-1/2 text-text-subtle opacity-0 transition-opacity',
-                dragging ? '' : 'group-hover:opacity-100',
+                held ? 'opacity-100' : drag ? '' : 'group-hover:opacity-100',
               )}
             />
             <NavLink
@@ -198,8 +125,8 @@ function NavList({
               // at once unless it opts out.
               end={item.end ?? item.to === '/'}
               onClick={onNavigate}
-              // The row is what gets dragged, not the link: a dragged link
-              // carries its address, and dropped on the tab strip it opens.
+              // The browser's own link drag would take over the pointer the
+              // moment a row is pulled, and carry the address off with it.
               draggable={false}
               className={({ isActive }) =>
                 cn(
