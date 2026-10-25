@@ -56,13 +56,10 @@ export function HowFollowUpsWork() {
               Good to know
             </h3>
             <ul className="grid list-disc gap-1.5 pl-5">
+              <li>Reminders go out {WINDOW_WORDS}, every day.</li>
               <li>
-                Reminders only go out {WINDOW_WORDS}. A time outside that waits for the next
-                morning.
-              </li>
-              <li>
-                When a follow-up is a full working day late, the lead is going cold and every admin
-                is told.
+                When a follow-up is eight hours late, the lead is going cold and every admin is
+                told.
               </li>
               <li>
                 The owner of a lead, and the super-admins, are told first. When nobody owns it,

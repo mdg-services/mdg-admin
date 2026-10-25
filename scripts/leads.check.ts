@@ -1,6 +1,6 @@
 /**
  * Checks for the Leads page's rules (`src/lib/leads.ts`): the words, the
- * working window, the follow-up the contact form suggests, and that every body
+ * working window (the whole day, since 25 Oct 2026), the follow-up the contact form suggests, and that every body
  * a form builds is one the shared schema accepts.
  *
  * This app has no test runner, so these are plain `node:test` checks over the
@@ -58,6 +58,7 @@ import {
   OPEN_OUTCOMES,
   OUTCOME_HINTS,
   STATUS_TONE,
+  WINDOW_WORDS,
   activityLine,
   addWorkingHours,
   agoWords,
@@ -217,62 +218,113 @@ describe('the limits the forms mirror', () => {
   });
 });
 
-describe('the working window: 09:00 to 20:00 India time, every day', () => {
-  it('is open from 09:00 up to but not including 20:00', () => {
-    assert.equal(inWindow(MON(8, 59)), false);
+describe('the working window: the whole day, India time, every day and night', () => {
+  // Until 25 Oct 2026 the window ran 09:00 to 20:00. The owner wants follow-ups and
+  // alerts "at any hour, day or night", so it now never closes. These checks pin that
+  // down edge by edge, so that a narrower window cannot come back unnoticed.
+  it('is open at every hour, 00:00 and 03:00 included', () => {
+    assert.equal(inWindow(MON(0, 0)), true);
+    assert.equal(inWindow(MON(3, 0)), true);
+    assert.equal(inWindow(MON(8, 59)), true);
     assert.equal(inWindow(MON(9, 0)), true);
     assert.equal(inWindow(MON(19, 59)), true);
-    assert.equal(inWindow(MON(20, 0)), false);
-    assert.equal(inWindow(MON(23, 59)), false);
-    assert.equal(inWindow(MON(0, 0)), false);
+    // 20:00 used to be the first closed minute.
+    assert.equal(inWindow(MON(20, 0)), true);
+    assert.equal(inWindow(MON(23, 59)), true);
+    // The last millisecond of the day, and the first one of the next.
+    assert.equal(inWindow(TUE(0, 0) - 1), true);
+    assert.equal(inWindow(TUE(0, 0)), true);
   });
 
-  it('is open on a Saturday and on a Sunday, the owner works every day', () => {
+  it('is open on a Saturday and on a Sunday, night included', () => {
+    assert.equal(inWindow(SAT(3, 0)), true);
     assert.equal(inWindow(SAT(9, 0)), true);
     assert.equal(inWindow(SAT(19, 59)), true);
     assert.equal(inWindow(SUN(9, 0)), true);
     assert.equal(inWindow(SUN(12, 0)), true);
-    assert.equal(inWindow(SUN(20, 0)), false);
+    assert.equal(inWindow(SUN(20, 0)), true);
+    assert.equal(inWindow(SUN(23, 59)), true);
   });
 
-  it('reads the day in India, not in UTC', () => {
-    // 04:00 UTC is 09:30 in India: open. 15:00 UTC is 20:30 in India: closed.
+  it('is open at every minute of a fortnight', () => {
+    // Every 37 minutes, so every hour of the day and every weekday is tried.
+    for (let t = THU(0, 0); t < THU(0, 0) + 14 * DAY; t += 37 * MIN) {
+      assert.equal(inWindow(t), true, new Date(t).toISOString());
+    }
+  });
+
+  it('turns the day at India midnight, not at UTC midnight', () => {
+    // 04:00 UTC is 09:30 in India and 15:00 UTC is 20:30: both used to differ, both are open now.
     assert.equal(inWindow(Date.UTC(2026, 9, 26, 4, 0)), true);
-    assert.equal(inWindow(Date.UTC(2026, 9, 26, 15, 0)), false);
+    assert.equal(inWindow(Date.UTC(2026, 9, 26, 15, 0)), true);
+    // 17:00 UTC on Monday is 22:30 that night in India: the next day starts at 18:30 UTC.
+    assert.equal(nextWindowStart(Date.UTC(2026, 9, 26, 17, 0)), Date.UTC(2026, 9, 26, 18, 30));
+    assert.equal(nextWindowStart(Date.UTC(2026, 9, 26, 18, 30)), Date.UTC(2026, 9, 27, 18, 30));
   });
 
-  it('the next opening is strictly after the moment asked about', () => {
-    assert.equal(nextWindowStart(MON(8, 0)), MON(9, 0));
-    assert.equal(nextWindowStart(MON(9, 0)), TUE(9, 0));
-    assert.equal(nextWindowStart(MON(12, 0)), TUE(9, 0));
-    assert.equal(nextWindowStart(MON(20, 0)), TUE(9, 0));
-    assert.equal(nextWindowStart(SAT(12, 0)), SUN(9, 0));
-    assert.equal(nextWindowStart(SUN(3, 0)), SUN(9, 0));
-    assert.equal(nextWindowStart(SUN(23, 0)), MON(9, 0));
+  it('the next start is the next India midnight, strictly after the moment asked about', () => {
+    // With no closed hours the window "opens" once a day, at midnight. Nothing moves a time
+    // to it any more; it only marks where one day ends and the next begins.
+    assert.equal(nextWindowStart(MON(0, 0)), TUE(0, 0));
+    assert.equal(nextWindowStart(MON(0, 1)), TUE(0, 0));
+    assert.equal(nextWindowStart(MON(8, 0)), TUE(0, 0));
+    assert.equal(nextWindowStart(MON(9, 0)), TUE(0, 0));
+    assert.equal(nextWindowStart(MON(20, 0)), TUE(0, 0));
+    assert.equal(nextWindowStart(MON(23, 59)), TUE(0, 0));
+    assert.equal(nextWindowStart(SAT(12, 0)), SUN(0, 0));
+    assert.equal(nextWindowStart(SUN(3, 0)), MON(0, 0));
+    assert.equal(nextWindowStart(SUN(23, 0)), MON(0, 0));
   });
 
-  it('a time inside the window stays put; any other moves to the next morning', () => {
+  it('never moves a time: not at night, not at the old closing time, not on a Sunday', () => {
     assert.equal(moveIntoWindow(MON(12, 30)), MON(12, 30));
-    assert.equal(moveIntoWindow(MON(20, 0)), TUE(9, 0));
-    assert.equal(moveIntoWindow(MON(5, 0)), MON(9, 0));
-    assert.equal(moveIntoWindow(SAT(21, 0)), SUN(9, 0));
+    assert.equal(moveIntoWindow(MON(0, 0)), MON(0, 0));
+    // These used to move to 09:00 the next morning (or the same morning).
+    assert.equal(moveIntoWindow(MON(20, 0)), MON(20, 0));
+    assert.equal(moveIntoWindow(MON(5, 0)), MON(5, 0));
+    assert.equal(moveIntoWindow(SAT(21, 0)), SAT(21, 0));
+    assert.equal(moveIntoWindow(MON(23, 59)), MON(23, 59));
     assert.equal(moveIntoWindow(SUN(10, 0)), SUN(10, 0));
+    for (let t = THU(0, 0); t < THU(0, 0) + 14 * DAY; t += 37 * MIN) {
+      assert.equal(moveIntoWindow(t), t, new Date(t).toISOString());
+    }
   });
 
-  it('counts working hours only, across a night, Sunday included', () => {
+  it('counts hours straight through the night, Sunday included', () => {
     assert.equal(addWorkingHours(FRI(10, 15), 4), FRI(14, 15));
-    // 1 h 30 left on Friday, the other 2 h 30 after the window opens on Saturday.
-    assert.equal(addWorkingHours(FRI(18, 30), 4), SAT(11, 30));
-    // Saturday 19:00: 1 h left, then 3 h on Sunday.
-    assert.equal(addWorkingHours(SAT(19, 0), 4), SUN(12, 0));
-    // Counting starts when the window opens, not at midnight.
-    assert.equal(addWorkingHours(THU(20, 41), 2), FRI(11, 0));
-    assert.equal(addWorkingHours(SUN(3, 0), 2), SUN(11, 0));
+    // Friday 18:30 used to run out of window at 20:00 and finish on Saturday 11:30.
+    assert.equal(addWorkingHours(FRI(18, 30), 4), FRI(22, 30));
+    // Saturday 19:00 used to finish on Sunday 12:00.
+    assert.equal(addWorkingHours(SAT(19, 0), 4), SAT(23, 0));
+    // 22:00 plus 4 h crosses midnight, and nothing waits for the morning.
+    assert.equal(addWorkingHours(SAT(22, 0), 4), SUN(2, 0));
+    // Thursday 20:41 used to wait for Friday 09:00 and finish at 11:00.
+    assert.equal(addWorkingHours(THU(20, 41), 2), THU(22, 41));
+    assert.equal(addWorkingHours(THU(23, 0), 2), FRI(1, 0));
+    // Counting starts at once, also at 03:00.
+    assert.equal(addWorkingHours(SUN(3, 0), 2), SUN(5, 0));
+    assert.equal(addWorkingHours(SAT(0, 0), 4), SAT(4, 0));
+    assert.equal(addWorkingHours(SUN(10, 0), 0), SUN(10, 0));
   });
 
-  it('can end exactly when the window closes, which then moves to the next morning', () => {
+  it('is exactly the moment plus the hours, whatever the hour it starts', () => {
+    for (let t = THU(0, 0); t < THU(0, 0) + 14 * DAY; t += 37 * MIN) {
+      for (const h of [0, 0.5, 2, 4, 24, 49]) {
+        assert.equal(addWorkingHours(t, h), t + h * HOUR, `${h} h from ${new Date(t).toISOString()}`);
+      }
+    }
+  });
+
+  it('ending exactly at midnight stays at that midnight', () => {
+    // Friday 20:00 used to be the end of the window and moved to Saturday 09:00.
     assert.equal(addWorkingHours(FRI(18, 0), 2), FRI(20, 0));
-    assert.equal(moveIntoWindow(addWorkingHours(FRI(18, 0), 2)), SAT(9, 0));
+    assert.equal(moveIntoWindow(addWorkingHours(FRI(18, 0), 2)), FRI(20, 0));
+    assert.equal(addWorkingHours(FRI(22, 0), 2), SAT(0, 0));
+    assert.equal(moveIntoWindow(addWorkingHours(FRI(22, 0), 2)), SAT(0, 0));
+  });
+
+  it('says it in words as "at any hour, day or night"', () => {
+    assert.equal(WINDOW_WORDS, 'at any hour, day or night');
   });
 });
 
@@ -287,8 +339,12 @@ describe('the follow-up the contact form suggests (docs/specs/leads.md §3, rule
     assert.equal(suggestNextAt('thinking', 0, now), WED(10, 0));
   });
 
-  it('after no answer: 4 working hours, then 24 h, 48 h, 72 h, a week', () => {
+  it('after no answer: 4 hours, then 24 h, 48 h, 72 h, a week', () => {
     assert.equal(suggestNextAt('no_answer', 1, now), MON(14, 0));
+    // The 4 hours run through the evening and the night: they used to stop at 20:00 and wait for 09:00.
+    assert.equal(suggestNextAt('no_answer', 1, MON(18, 30)), MON(22, 30));
+    assert.equal(suggestNextAt('no_answer', 1, MON(22, 0)), TUE(2, 0));
+    assert.equal(suggestNextAt('no_answer', 1, MON(3, 0)), MON(7, 0));
     assert.equal(suggestNextAt('no_answer', 2, now), TUE(10, 0));
     assert.equal(suggestNextAt('no_answer', 3, now), WED(10, 0));
     for (const n of [4, 5, 6]) assert.equal(suggestNextAt('no_answer', n, now), ist(2026, 10, 29, 10, 0), `unanswered ${n}`);
@@ -307,7 +363,15 @@ describe('the follow-up the contact form suggests (docs/specs/leads.md §3, rule
     for (const o of LEAD_CLOSING_OUTCOMES) assert.equal(suggestNextAt(o, 1, now), null, o);
   });
 
-  it('is always inside the working window and always later than now', () => {
+  it('is always later than now and exactly the table\'s hours after it, at any hour', () => {
+    // How long after the moment each outcome waits, in hours, by tries in a row. Plain clock
+    // time: there is no window left to move a follow-up into.
+    const hoursAfter = (o: LeadContactOutcome, n: number): number => {
+      if (o === 'interested') return 24;
+      if (o === 'thinking') return 48;
+      const steps = o === 'no_answer' ? [4, 24, 48, 72, 72, 72] : [24, 24, 48, 72, 72, 72];
+      return steps[n - 1] ?? 7 * 24;
+    };
     // Every 37 minutes for two weeks, so every hour of the day and every weekday is tried.
     for (let t = THU(0, 0); t < THU(0, 0) + 14 * DAY; t += 37 * MIN) {
       for (const o of LEAD_CONTACT_OUTCOMES) {
@@ -316,14 +380,18 @@ describe('the follow-up the contact form suggests (docs/specs/leads.md §3, rule
           if (at === null) continue;
           assert.ok(inWindow(at), `${o} ${n} from ${new Date(t).toISOString()}`);
           assert.ok(at > t, `${o} ${n} from ${new Date(t).toISOString()}`);
+          assert.equal(at, t + hoursAfter(o as LeadContactOutcome, n) * HOUR, `${o} ${n} from ${new Date(t).toISOString()}`);
         }
       }
     }
   });
 
-  it('keeps a 24 h follow-up that lands on a Sunday, and moves one at night to the morning', () => {
+  it('keeps a 24 h follow-up as it falls, on a Sunday and at night', () => {
     assert.equal(suggestNextAt('interested', 0, SAT(15, 0)), SUN(15, 0));
-    assert.equal(suggestNextAt('message_sent', 1, SAT(21, 0)), MON(9, 0));
+    // Saturday 21:00 used to be moved to Monday 09:00; it now stays at Sunday 21:00.
+    assert.equal(suggestNextAt('message_sent', 1, SAT(21, 0)), SUN(21, 0));
+    assert.equal(suggestNextAt('interested', 0, SAT(3, 0)), SUN(3, 0));
+    assert.equal(suggestNextAt('thinking', 0, FRI(23, 30)), SUN(23, 30));
   });
 
   it('follows the worked example from the spec', () => {
@@ -333,6 +401,11 @@ describe('the follow-up the contact form suggests (docs/specs/leads.md §3, rule
     assert.equal(suggestNextAt('no_answer', 2, FRI(14, 30)), SAT(14, 30));
     // Monday 09:20: spoke, thinking: due Wednesday 09:20.
     assert.equal(suggestNextAt('thinking', 0, MON(9, 20)), WED(9, 20));
+    // Round the clock, the first 4 hours no longer wait for the morning. Friday 18:30, no
+    // answer: due Friday 22:30 (it used to be Saturday 11:30). Friday 22:00: due Saturday
+    // 02:00 (it used to be Saturday 13:00).
+    assert.equal(suggestNextAt('no_answer', 1, FRI(18, 30)), FRI(22, 30));
+    assert.equal(suggestNextAt('no_answer', 1, FRI(22, 0)), SAT(2, 0));
   });
 });
 
@@ -726,6 +799,9 @@ describe('the "Set a follow-up" form', () => {
     assert.deepEqual(labels(SUN(10, 0)), ['In 2 hours', 'Tomorrow 11:00']);
     assert.equal(quickPicks(SUN(10, 0))[1]?.at, MON(11, 0));
     assert.equal(quickPicks(MON(10, 0))[0]?.at, MON(12, 0));
+    // At night "in 2 hours" is still two hours, not the morning.
+    assert.equal(quickPicks(THU(23, 30))[0]?.at, FRI(1, 30));
+    assert.equal(quickPicks(THU(23, 30))[1]?.at, FRI(11, 0));
   });
 
   it('every pick is a follow-up the server would take', () => {
@@ -737,10 +813,16 @@ describe('the "Set a follow-up" form', () => {
     }
   });
 
-  it('says when the reminder will really come', () => {
+  it('says when the reminder will come, and never a quiet-hours excuse', () => {
     const now = MON(10, 0);
     assert.equal(reminderLine(TUE(11, 0), now), 'Reminder: Tomorrow 11:00.');
-    assert.match(reminderLine(MON(21, 0), now), /^Reminder: Tomorrow 09:00\. We only remind between 09:00 and 20:00, every day\.$/);
+    // 21:00 used to read "Tomorrow 09:00. We only remind between 09:00 and 20:00, every day."
+    assert.equal(reminderLine(MON(21, 0), now), 'Reminder: Today 21:00.');
+    assert.equal(reminderLine(TUE(3, 0), now), 'Reminder: Tomorrow 03:00.');
+    assert.equal(reminderLine(TUE(0, 0), now), 'Reminder: Tomorrow 00:00.');
+    for (let t = MON(10, 1); t < MON(10, 0) + 3 * DAY; t += 53 * MIN) {
+      assert.doesNotMatch(reminderLine(t, now), /only remind/, new Date(t).toISOString());
+    }
     // A Sunday noon is kept as it is, named by its weekday from Friday.
     assert.equal(reminderLine(SUN(12, 0), FRI(10, 0)), 'Reminder: Sun 12:00.');
   });
@@ -809,7 +891,16 @@ describe('"How follow-ups work"', () => {
     for (const r of rows) {
       assert.ok(r.when.length > 0 && r.then.length > 0);
     }
-    assert.match(text, /4 working hours later, then the next day, then 2 days later, then 3 days later, then a week later/);
-    assert.match(text, /the next day, then 2 days later, then 3 days later, then a week later/);
+    // The 4 hours are plain hours now, not "working hours": there is nothing to wait out.
+    assert.doesNotMatch(text, /working hours/);
+    assert.equal(rows[0]?.then, '2 hours after we could first reach them');
+    assert.equal(
+      rows.find((r) => r.when.startsWith('Nobody answered'))?.then,
+      '4 hours later, then the next day, then 2 days later, then 3 days later, then a week later',
+    );
+    assert.equal(
+      rows.find((r) => r.when.startsWith('You sent a message'))?.then,
+      'the next day, then 2 days later, then 3 days later, then a week later',
+    );
   });
 });

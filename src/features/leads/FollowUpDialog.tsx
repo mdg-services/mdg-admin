@@ -23,9 +23,8 @@ import { LeadBox, errorText } from './shared';
  * one-tap choices for the usual ones.
  *
  * It does not log a contact and does not stop the system: the lead stays on the
- * list and is raised again at this time. A time outside working hours is allowed
- * and the form says when the reminder will really come, because that is when the
- * team is told.
+ * list and is raised again at this time, at any hour: reminders go out day and
+ * night. The form says when the reminder will come.
  */
 export function FollowUpDialog({ lead, onClose }: { lead: LeadRow | null; onClose: () => void }) {
   return lead ? <FollowUpForm key={lead.id} lead={lead} onClose={onClose} /> : null;

@@ -177,8 +177,10 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 /** India has no daylight saving: always UTC+05:30. */
 const IST_OFFSET = 330 * MINUTE;
-const WINDOW_OPENS = 9 * HOUR;
-const WINDOW_CLOSES = 20 * HOUR;
+// Round the clock (owner, 25 Oct 2026): the window is the whole day, as on the
+// server (clock.ts). Two numbers bring quiet nights back, say 9 and 20.
+const WINDOW_OPENS = 0;
+const WINDOW_CLOSES = 24 * HOUR;
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
@@ -236,10 +238,9 @@ export function parseWhen(w: WhenInput): number | null {
 }
 
 // ── The working window ──────────────────────────────────────────────────────
-// 09:00 to 20:00 India time, every day — Sundays too, the owner works them: the
-// team's working day, and the only hours the system raises a follow-up alert
-// (§3). A follow-up chosen at night is shown at the next morning, because that
-// is when it will come.
+// The hours the system raises a follow-up alert (§3): every hour, day and night,
+// every day, by the owner's choice. With a narrower window, a follow-up chosen
+// outside it is shown at the next opening, because that is when it would come.
 
 /** Inside the working window. 20:00 itself is outside; 09:00 is inside. */
 export function inWindow(ms: number): boolean {
@@ -289,7 +290,7 @@ interface Step {
 
 /** After a call that got no answer, by how many tries in a row have gone unanswered. */
 const AFTER_NO_ANSWER: readonly Step[] = [
-  { upTo: 1, hours: 4, working: true, words: '4 working hours later' },
+  { upTo: 1, hours: 4, working: true, words: '4 hours later' },
   { upTo: 2, hours: 24, words: 'the next day' },
   { upTo: 3, hours: 48, words: '2 days later' },
   { upTo: 6, hours: 72, words: '3 days later' },
@@ -361,7 +362,7 @@ export function suggestNextAt(
 export function followUpGuide(): { when: string; then: string }[] {
   const chain = (steps: readonly Step[]) => steps.map((s) => s.words).join(', then ');
   return [
-    { when: 'A new lead, and nobody has called', then: '2 working hours after we could first reach them' },
+    { when: 'A new lead, and nobody has called', then: '2 hours after we could first reach them' },
     { when: 'You spoke and they are interested', then: (AFTER_SPOKE.interested as Step).words },
     { when: 'You spoke and they are thinking it over', then: (AFTER_SPOKE.thinking as Step).words },
     { when: 'Nobody answered your call', then: chain(AFTER_NO_ANSWER) },
@@ -372,7 +373,7 @@ export function followUpGuide(): { when: string; then: string }[] {
 }
 
 /** The working window in words, for the dialogs that explain it. */
-export const WINDOW_WORDS = 'between 09:00 and 20:00, every day';
+export const WINDOW_WORDS = 'at any hour, day or night';
 
 // ── Due, last contact, signs ────────────────────────────────────────────────
 
@@ -663,7 +664,7 @@ function noteTooLong(note: string): string | null {
   return length > NOTE_MAX ? `Keep the note under ${NOTE_MAX} characters. It is ${length} now.` : null;
 }
 
-/** "Reminder: Tue 11:00." and, when it is outside working hours, why it will come later. */
+/** "Reminder: Tue 11:00." and, should a narrower window ever move it, why it will come later. */
 export function reminderLine(ms: number, now: number): string {
   const at = moveIntoWindow(ms);
   const when = whenWords(at, now);
