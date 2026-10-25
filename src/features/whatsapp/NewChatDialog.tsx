@@ -1,4 +1,4 @@
-import { Link2 } from 'lucide-react';
+import { Link2, SendHorizontal } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/Button';
@@ -6,14 +6,29 @@ import { Callout } from '@/components/ui/Callout';
 import { Dialog } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { FieldError, Label } from '@/components/ui/Label';
+import { Spinner } from '@/components/ui/Spinner';
 import { Textarea } from '@/components/ui/Textarea';
 import { newClientId, useNewWhatsAppChat } from '@/hooks/api/useWhatsAppInbox';
 import { cn } from '@/lib/cn';
-import { renderSimpleTemplate, type WhatsAppInboxConfig } from '@dk/shared';
+import { renderSimpleTemplate, type WhatsAppInboxConfig, type WhatsAppLine } from '@dk/shared';
 
-import { describeSendError, indianMobile, linkLabel, planSend, readLink } from './format';
+import {
+  describeSendError,
+  indianMobile,
+  linkLabel,
+  NEW_CHAT_WRONG_NUMBER,
+  newChatTitle,
+  OUT_OF_DATE_WORDS,
+  planSend,
+  readLink,
+  sendButtonLabel,
+  serverSendsFrom,
+} from './format';
+import { FromStrip } from './LineMark';
 
 export interface NewChatDialogProps {
+  /** The inbox the admin is in: the chat is started from this number, and there is no choice in here. */
+  line: WhatsAppLine;
   open: boolean;
   onClose: () => void;
   config: WhatsAppInboxConfig | undefined;
@@ -22,7 +37,10 @@ export interface NewChatDialogProps {
 }
 
 /**
- * Message somebody who is not in the inbox yet.
+ * Message somebody who is not in the inbox yet — from the number of the inbox
+ * the admin is in. There is deliberately no number picker in here: the inbox
+ * decides, the strip at the top says which, and a line of help says how to
+ * change it (close this and switch at the top of the list).
  *
  * A number nobody has written to us from is outside the 24-hour window by
  * definition, so the message can only go in the greeting template — and the
@@ -47,7 +65,7 @@ export interface NewChatDialogProps {
  * and a button that opens the link through our own address, so each tap is
  * counted on the Message results page.
  */
-export function NewChatDialog({ open, onClose, config, onStarted }: NewChatDialogProps) {
+export function NewChatDialog({ line, open, onClose, config, onStarted }: NewChatDialogProps) {
   const start = useNewWhatsAppChat();
   const [phone, setPhone] = React.useState('');
   const [name, setName] = React.useState('');
@@ -79,12 +97,15 @@ export function NewChatDialog({ open, onClose, config, onStarted }: NewChatDialo
   const linked = link.state === 'ok';
   const plan = config ? planSend(text, 'template', config, linked) : null;
   const sendingOff = config ? !config.sendingEnabled : false;
+  // A server older than this page would start the chat from a number it picks itself.
+  const outOfDate = config ? !serverSendsFrom(config, line) : false;
   const ready =
     number !== null &&
     text.trim().length > 0 &&
     plan !== null &&
     !plan.tooLong &&
     !sendingOff &&
+    !outOfDate &&
     link.state !== 'bad';
 
   async function submit(e: React.FormEvent) {
@@ -97,6 +118,7 @@ export function NewChatDialog({ open, onClose, config, onStarted }: NewChatDialo
     const person = number;
     try {
       const result = await start.mutateAsync({
+        line,
         phone: number,
         name: name.trim() === '' ? null : name.trim(),
         text: text.trim(),
@@ -124,22 +146,42 @@ export function NewChatDialog({ open, onClose, config, onStarted }: NewChatDialo
     <Dialog
       open={open}
       onClose={start.isPending ? () => undefined : onClose}
-      title="New chat"
+      title={newChatTitle(line)}
       description="Start a conversation with somebody who has not written to us."
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={start.isPending}>
             Cancel
           </Button>
-          <Button type="submit" form={`${id}-form`} disabled={!ready} loading={start.isPending}>
-            Send
-          </Button>
+          <button
+            type="submit"
+            form={`${id}-form`}
+            data-line={line}
+            disabled={!ready || start.isPending}
+            aria-label={sendButtonLabel(line)}
+            // The number's colour, not the app's: the button says whose number this leaves from.
+            className="wa-line inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[var(--line)] px-4 text-sm font-semibold text-white transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 disabled:opacity-45 md:min-h-9"
+          >
+            {start.isPending ? (
+              <Spinner size={16} />
+            ) : (
+              <SendHorizontal width={16} height={16} strokeWidth={2} aria-hidden />
+            )}
+            {sendButtonLabel(line)}
+          </button>
         </>
       }
     >
       <form id={`${id}-form`} onSubmit={(e) => void submit(e)} className="space-y-4">
+        <div>
+          <FromStrip line={line} />
+          <p className="mt-1 px-1 text-xs text-text-muted">{NEW_CHAT_WRONG_NUMBER}</p>
+        </div>
+
         {sendingOff ? (
           <Callout intent="warning">Sending is switched off on the server, so nothing can be sent from here yet.</Callout>
+        ) : outOfDate ? (
+          <Callout intent="warning">{OUT_OF_DATE_WORDS}</Callout>
         ) : null}
 
         <div>

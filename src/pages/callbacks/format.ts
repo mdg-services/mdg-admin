@@ -49,10 +49,13 @@ export function refLine(
 
 /**
  * The admin WhatsApp inbox's address for this person's chat: only when the film
- * message went to the very number that is asking, never the forwarder's.
+ * message went to the very number that is asking, never the forwarder's. The film
+ * message is a promotion, so the chat is in the MDG Services (marketing) inbox.
  */
 export function chatHref(c: Pick<CallbackRequest, 'refSend'>): string | null {
-  return c.refSend?.sameNumber ? `/whatsapp?chat=${encodeURIComponent(c.refSend.phone)}` : null;
+  return c.refSend?.sameNumber
+    ? `/whatsapp?line=marketing&chat=${encodeURIComponent(c.refSend.phone)}`
+    : null;
 }
 
 /** "3h 5m ago" since they asked. */

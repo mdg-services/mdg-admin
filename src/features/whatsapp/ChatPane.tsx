@@ -12,28 +12,41 @@ import {
   usePatchWhatsAppChat,
   useSendWhatsApp,
   useWhatsAppChat,
+  useWhatsAppChatLines,
   useWhatsAppMessages,
 } from '@/hooks/api/useWhatsAppInbox';
 import { usePublishBottomBar } from '@/hooks/usePublishBottomBar';
 import { ApiError } from '@/lib/api';
 import { copyText } from '@/lib/clipboard';
 import { useAuthStore } from '@/store/auth';
-import type { WhatsAppChatMessage, WhatsAppInboxConfig, WhatsAppStage } from '@dk/shared';
+import type {
+  WhatsAppChatMessage,
+  WhatsAppInboxConfig,
+  WhatsAppLine,
+  WhatsAppStage,
+} from '@dk/shared';
 
 import { RenameDialog, StageDialog } from './ChatDialogs';
 import { ChatHeader } from './ChatHeader';
 import {
   chatTitle,
+  detailIsOnLine,
   effectiveMode,
+  elsewhereNotice,
   errorWords,
   flattenMessages,
+  lineName,
+  lineNameAndJob,
   mergeThread,
   msUntilWindowCloses,
   openDataSettled,
+  OUT_OF_DATE_WORDS,
   type PendingMessage,
   savedNameOf,
+  serverSendsFrom,
   typedTextOf,
 } from './format';
+import { LineIcon } from './LineMark';
 import { MessageThread } from './MessageThread';
 import { isRetried, markRetried, removePending, usePending, useRetried } from './pendingStore';
 import { ReplyComposer } from './ReplyComposer';
@@ -42,12 +55,16 @@ import { ReplyComposer } from './ReplyComposer';
 const TICK_MS = 60_000;
 
 export interface ChatPaneProps {
+  /** The inbox this chat is in: the number a message typed here leaves from. */
+  line: WhatsAppLine;
   person: string;
   config: WhatsAppInboxConfig | undefined;
   configFailed: boolean;
   onRetryConfig: () => void;
   /** Leave the chat: back to the list below lg, an empty pane at lg. */
   onClose: () => void;
+  /** Open this same person's chat on the other number. */
+  onOpenOnLine: (line: WhatsAppLine) => void;
   detailsOpen: boolean;
   onToggleDetails: () => void;
   panelIsColumn: boolean;
@@ -75,6 +92,82 @@ function ComposerNotice({
 }
 
 /**
+ * "They also have a chat on the other number", in THAT number's colours so it
+ * cannot be taken for this one. It sits above the messages, where it is seen
+ * before anything is typed, and is slim: one or two lines and a button.
+ */
+function ElsewhereBar({
+  notice,
+  onOpen,
+}: {
+  notice: NonNullable<ReturnType<typeof elsewhereNotice>>;
+  onOpen: (line: WhatsAppLine) => void;
+}) {
+  return (
+    <div
+      data-line={notice.line}
+      className="wa-line flex shrink-0 items-center gap-2 border-b border-[var(--line-border)] bg-[var(--line-soft)] px-3 py-1 text-xs text-[var(--line-strong)]"
+    >
+      <LineIcon line={notice.line} size={14} />
+      <p className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+        {notice.words}
+        {notice.unreadWords ? <span className="font-semibold"> · {notice.unreadWords}</span> : null}
+      </p>
+      <button
+        type="button"
+        onClick={() => onOpen(notice.line)}
+        className="inline-flex min-h-11 shrink-0 items-center rounded-md bg-[var(--line)] px-3 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:min-h-8"
+      >
+        Open that chat
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The link names a person who has no message on THIS number. If they have one
+ * on the other, say so and offer it; otherwise the link is just old.
+ */
+function NotOnThisLine({
+  line,
+  person,
+  onOpenOnLine,
+  onClose,
+}: {
+  line: WhatsAppLine;
+  person: string;
+  onOpenOnLine: (line: WhatsAppLine) => void;
+  onClose: () => void;
+}) {
+  const lines = useWhatsAppChatLines(person);
+  const other = (lines.data?.lines ?? []).find((c) => c.line !== line);
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center">
+      <EmptyState
+        icon={<MessageCircleOff width={28} height={28} strokeWidth={1.5} />}
+        title={`No chat with this person on ${lineName(line)}`}
+        description={
+          other
+            ? `They have a chat on ${lineNameAndJob(other.line)}.`
+            : 'Nobody by that number has a message here. The link may be old.'
+        }
+        cta={
+          other ? (
+            <Button size="sm" onClick={() => onOpenOnLine(other.line)}>
+              Open that chat
+            </Button>
+          ) : (
+            <Button size="sm" variant="secondary" onClick={onClose}>
+              Back to the chats
+            </Button>
+          )
+        }
+      />
+    </div>
+  );
+}
+
+/**
  * One open chat: its header, its messages and the box under them.
  *
  * Mounted with the person as its key, so everything it holds — what was being
@@ -82,23 +175,25 @@ function ComposerNotice({
  * that chat and is dropped when another is opened.
  */
 export function ChatPane({
+  line,
   person,
   config,
   configFailed,
   onRetryConfig,
   onClose,
+  onOpenOnLine,
   detailsOpen,
   onToggleDetails,
   panelIsColumn,
 }: ChatPaneProps) {
   const qc = useQueryClient();
   const toast = useToast();
-  const detailQ = useWhatsAppChat(person);
-  const messagesQ = useWhatsAppMessages(person);
+  const detailQ = useWhatsAppChat(line, person);
+  const messagesQ = useWhatsAppMessages(line, person);
   const patch = usePatchWhatsAppChat();
   const markRead = useMarkWhatsAppRead();
   const sender = useSendWhatsApp();
-  const pending = usePending(person);
+  const pending = usePending(line, person);
   const admin = useAuthStore((s) => s.admin);
   const user = useAuthStore((s) => s.user);
 
@@ -146,11 +241,14 @@ export function ChatPane({
 
   const detail = detailQ.data;
   // The header opens with what the list already knew, before the chat itself arrives.
-  const chat = detail?.chat ?? findCachedChat(qc, person);
+  const chat = detail?.chat ?? findCachedChat(qc, line, person);
   const contactName = chat ? chatTitle(chat) : 'them';
   // How the next message goes. The server's word, except that a window which
   // has run out since it spoke goes as the template.
   const mode = detail ? effectiveMode(detail.chat, detail.reply, now) : null;
+  // The server has said it sends from THIS inbox, about THIS inbox's chat. If not
+  // — a server older than this page — nothing goes, whatever the box shows.
+  const linesAgree = serverSendsFrom(config, line) && detailIsOnLine(detail, line);
 
   // The window runs out at a known minute, but `now` only ticks once a minute and
   // the chat is only asked about when something happens. So at the minute it
@@ -188,21 +286,22 @@ export function ChatPane({
     if (pending.length === 0) return;
     const held = new Set<string>();
     for (const m of serverMessages) if (m.clientId) held.add(m.clientId);
-    for (const p of pending) if (held.has(p.clientId)) removePending(person, p.clientId);
-  }, [serverMessages, pending, person]);
+    for (const p of pending) if (held.has(p.clientId)) removePending(line, person, p.clientId);
+  }, [serverMessages, pending, line, person]);
 
   // ── replying to a message, and sending ──
   const [replyTo, setReplyTo] = React.useState<WhatsAppChatMessage | null>(null);
   const [bottomToken, setBottomToken] = React.useState(0);
 
   const send = (text: string, link: string | null) => {
-    if (!detail) return;
+    if (!detail || !linesAgree) return;
     // Worked out now, not from the minute-old clock: the waiting bubble should
     // look like what the server will send, and a window can close mid-sentence.
     // A link always goes in its template.
     const sendMode = link ? 'template' : effectiveMode(detail.chat, detail.reply, Date.now());
     const quoted = sendMode === 'text' ? replyTo : null;
     sender.send({
+      line,
       person,
       text,
       mode: sendMode,
@@ -216,12 +315,15 @@ export function ChatPane({
   // The thread's callbacks are handed to memoised bubbles; they must keep the
   // same identity between renders or every bubble redraws on every tick.
   const modeRef = React.useRef(mode);
+  const linesAgreeRef = React.useRef(linesAgree);
   React.useEffect(() => {
     modeRef.current = mode;
+    linesAgreeRef.current = linesAgree;
   });
   const { retry, remove, send: sendNew } = sender;
   const retryPending = React.useCallback(
     (p: PendingMessage) => {
+      if (!linesAgreeRef.current) return;
       retry(p, modeRef.current ?? p.mode);
       setBottomToken((n) => n + 1);
     },
@@ -236,12 +338,12 @@ export function ChatPane({
   const retryMessage = React.useCallback(
     (m: WhatsAppChatMessage) => {
       const text = typedTextOf(m);
-      if (!text || isRetried(m.id)) return;
+      if (!text || isRetried(m.id) || !linesAgreeRef.current) return;
       markRetried(m.id);
-      sendNew({ person, text, mode: modeRef.current ?? 'template', replyTo: null });
+      sendNew({ line, person, text, mode: modeRef.current ?? 'template', replyTo: null });
       setBottomToken((n) => n + 1);
     },
-    [sendNew, person],
+    [sendNew, line, person],
   );
   const removePendingMessage = React.useCallback((p: PendingMessage) => remove(p), [remove]);
   const { refetch: refetchMessages } = messagesQ;
@@ -251,14 +353,17 @@ export function ChatPane({
   }, [refetchMessages, refetchDetail]);
 
   const { mutateAsync: markReadAsync } = markRead;
-  const markThreadRead = React.useCallback((upTo: string) => markReadAsync({ person, upTo }), [markReadAsync, person]);
+  const markThreadRead = React.useCallback(
+    (upTo: string) => markReadAsync({ line, person, upTo }),
+    [markReadAsync, line, person],
+  );
 
   // ── opening a chat clears a hand-set "unread" mark, once ──
   const clearedMark = React.useRef(false);
   React.useEffect(() => {
     if (clearedMark.current || !detail) return;
     clearedMark.current = true;
-    if (detail.chat.markedUnread) patch.mutate({ person, patch: { markedUnread: false } });
+    if (detail.chat.markedUnread) patch.mutate({ line, person, patch: { markedUnread: false } });
     // Once per chat: marking it unread again while it is open must stay marked.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail]);
@@ -266,11 +371,11 @@ export function ChatPane({
   // ── header actions ──
   const [dialog, setDialog] = React.useState<'rename' | 'stage' | null>(null);
   const savePatch = (body: Parameters<typeof patch.mutateAsync>[0]['patch']) =>
-    patch.mutateAsync({ person, patch: body });
+    patch.mutateAsync({ line, person, patch: body });
 
   function markUnread() {
     patch.mutate(
-      { person, patch: { markedUnread: true } },
+      { line, person, patch: { markedUnread: true } },
       {
         onSuccess: () => {
           toast.success('Marked as unread.');
@@ -284,9 +389,10 @@ export function ChatPane({
   function togglePin() {
     if (!chat) return;
     patch.mutate(
-      { person, patch: { pinned: !chat.pinned } },
+      { line, person, patch: { pinned: !chat.pinned } },
       {
-        onSuccess: () => toast.success(chat.pinned ? 'Unpinned.' : 'Pinned to the top.'),
+        onSuccess: () =>
+          toast.success(chat.pinned ? `Unpinned on ${lineName(line)}.` : `Pinned to the top on ${lineName(line)}.`),
         onError: (e) => toast.error(errorWords(e)),
       },
     );
@@ -309,6 +415,7 @@ export function ChatPane({
     return (
       <div className="flex min-h-0 flex-1 flex-col bg-surface">
         <ChatHeader
+          line={line}
           person={person}
           chat={undefined}
           route={null}
@@ -323,18 +430,7 @@ export function ChatPane({
           onEditName={() => undefined}
           onSetStage={() => undefined}
         />
-        <div className="flex min-h-0 flex-1 items-center justify-center">
-          <EmptyState
-            icon={<MessageCircleOff width={28} height={28} strokeWidth={1.5} />}
-            title="No messages from this person"
-            description="Nobody by that number has a message here. The link may be old."
-            cta={
-              <Button size="sm" variant="secondary" onClick={onClose}>
-                Back to the chats
-              </Button>
-            }
-          />
-        </div>
+        <NotOnThisLine line={line} person={person} onOpenOnLine={onOpenOnLine} onClose={onClose} />
       </div>
     );
   }
@@ -345,9 +441,12 @@ export function ChatPane({
   // blank for ever.
   const unreadKnown = detailSettled;
 
+  const elsewhere = detail ? elsewhereNotice(detail.elsewhere, line) : null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       <ChatHeader
+        line={line}
         person={person}
         chat={chat}
         route={detail?.reply ?? null}
@@ -362,6 +461,8 @@ export function ChatPane({
         onEditName={() => setDialog('rename')}
         onSetStage={() => setDialog('stage')}
       />
+
+      {elsewhere ? <ElsewhereBar notice={elsewhere} onOpen={onOpenOnLine} /> : null}
 
       <MessageThread
         entries={entries}
@@ -387,10 +488,10 @@ export function ChatPane({
         now={now}
       />
 
-      {/* The footer's colour runs under the home-indicator strip as well. */}
+      {/* The footer's colour runs under the home-indicator strip as well; its top edge wears the number's colour. */}
       <div
         ref={bottomRef}
-        className="shrink-0 border-t border-border bg-[var(--wa-footer)] pb-[env(safe-area-inset-bottom)]"
+        className="shrink-0 border-t border-[var(--line-border)] bg-[var(--wa-footer)] pb-[env(safe-area-inset-bottom)]"
       >
         {configFailed && !config ? (
           <ComposerNotice
@@ -410,6 +511,10 @@ export function ChatPane({
             Sending is switched off: the server has no WhatsApp access token. You can read this chat but not answer it
             from here.
           </ComposerNotice>
+        ) : !serverSendsFrom(config, line) || (detail && !detailIsOnLine(detail, line)) ? (
+          <ComposerNotice icon={<TriangleAlert width={18} height={18} strokeWidth={1.75} />}>
+            {OUT_OF_DATE_WORDS}
+          </ComposerNotice>
         ) : !detail ? (
           <ComposerNotice
             icon={<TriangleAlert width={18} height={18} strokeWidth={1.75} />}
@@ -427,6 +532,7 @@ export function ChatPane({
           </ComposerNotice>
         ) : (
           <ReplyComposer
+            line={line}
             person={person}
             config={config}
             detail={detail}

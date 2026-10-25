@@ -235,7 +235,8 @@ export function WhatsAppResultsPage() {
                   </p>
                 }
                 rowKey={(p) => `${p.sendId}:${p.person}:${p.sentAt}`}
-                onRowClick={(p) => navigate(`/whatsapp?chat=${encodeURIComponent(p.person)}`)}
+                // Promotions go from the MDG Services number: the chat is in that inbox.
+                onRowClick={(p) => navigate(`/whatsapp?line=marketing&chat=${encodeURIComponent(p.person)}`)}
                 cardVariant="rows"
                 minWidth={data.counts.withLink > 0 ? '54rem' : '44rem'}
                 columns={[

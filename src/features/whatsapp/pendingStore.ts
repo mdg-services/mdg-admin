@@ -8,17 +8,23 @@
  * component's own state is gone by then, and a query that nothing fetches is
  * not what the query cache is for.
  *
+ * Each chat is its own inbox AND person (`chatKeyOf`): a waiting message
+ * belongs to the number it was typed in, and must never show in the same
+ * person's chat on the other one.
+ *
  * Held in memory only. A message that never got an answer before the page was
  * closed is not something to bring back on the next visit: whether it went is
  * answered by the thread itself, which the server holds.
  */
 import * as React from 'react';
 
-import type { PendingMessage } from './format';
+import type { WhatsAppLine } from '@dk/shared';
+
+import { chatKeyOf, type PendingMessage } from './format';
 
 const EMPTY: readonly PendingMessage[] = Object.freeze([]);
 
-const byPerson = new Map<string, readonly PendingMessage[]>();
+const byChat = new Map<string, readonly PendingMessage[]>();
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -33,36 +39,47 @@ function subscribe(listener: () => void): () => void {
 }
 
 export function addPending(p: PendingMessage): void {
-  byPerson.set(p.person, [...(byPerson.get(p.person) ?? EMPTY), p]);
+  const key = chatKeyOf(p.line, p.person);
+  byChat.set(key, [...(byChat.get(key) ?? EMPTY), p]);
   emit();
 }
 
-export function updatePending(person: string, clientId: string, patch: Partial<PendingMessage>): void {
-  const list = byPerson.get(person);
+export function updatePending(
+  line: WhatsAppLine,
+  person: string,
+  clientId: string,
+  patch: Partial<PendingMessage>,
+): void {
+  const key = chatKeyOf(line, person);
+  const list = byChat.get(key);
   if (!list?.some((p) => p.clientId === clientId)) return;
-  byPerson.set(
-    person,
+  byChat.set(
+    key,
     list.map((p) => (p.clientId === clientId ? { ...p, ...patch } : p)),
   );
   emit();
 }
 
-export function removePending(person: string, clientId: string): void {
-  const list = byPerson.get(person);
+export function removePending(line: WhatsAppLine, person: string, clientId: string): void {
+  const key = chatKeyOf(line, person);
+  const list = byChat.get(key);
   if (!list?.some((p) => p.clientId === clientId)) return;
   const next = list.filter((p) => p.clientId !== clientId);
-  if (next.length === 0) byPerson.delete(person);
-  else byPerson.set(person, next);
+  if (next.length === 0) byChat.delete(key);
+  else byChat.set(key, next);
   emit();
 }
 
-export function getPending(person: string, clientId: string): PendingMessage | undefined {
-  return byPerson.get(person)?.find((p) => p.clientId === clientId);
+export function getPending(line: WhatsAppLine, person: string, clientId: string): PendingMessage | undefined {
+  return byChat.get(chatKeyOf(line, person))?.find((p) => p.clientId === clientId);
 }
 
-/** One person's unconfirmed messages, oldest first. The same array until something changes. */
-export function usePending(person: string | null): readonly PendingMessage[] {
-  const get = React.useCallback(() => (person ? (byPerson.get(person) ?? EMPTY) : EMPTY), [person]);
+/** One chat's unconfirmed messages, oldest first. The same array until something changes. */
+export function usePending(line: WhatsAppLine | null, person: string | null): readonly PendingMessage[] {
+  const get = React.useCallback(
+    () => (line && person ? (byChat.get(chatKeyOf(line, person)) ?? EMPTY) : EMPTY),
+    [line, person],
+  );
   return React.useSyncExternalStore(subscribe, get, () => EMPTY);
 }
 

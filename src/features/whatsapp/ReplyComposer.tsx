@@ -10,12 +10,14 @@ import {
   type WhatsAppChatDetail,
   type WhatsAppChatMessage,
   type WhatsAppInboxConfig,
+  type WhatsAppLine,
   type WhatsAppQuickReply,
 } from '@dk/shared';
 
 import { getDraft, setDraft } from './drafts';
 import {
   LINK_ROUTE_LINE,
+  composerPlaceholder,
   composerRouteLine,
   effectiveMode,
   filterQuickReplies,
@@ -25,7 +27,9 @@ import {
   planSend,
   quoteWords,
   readLink,
+  sendButtonLabel,
 } from './format';
+import { FromStrip } from './LineMark';
 
 /** Lines the box grows to before it scrolls inside itself: six at a desk, four on a phone with a keyboard up. */
 const MAX_ROWS_MD = 6;
@@ -34,6 +38,8 @@ const LINE_HEIGHT = 20;
 const BOX_PADDING = 20;
 
 export interface ReplyComposerProps {
+  /** The inbox this box is in, and so the number what is typed in it leaves from. */
+  line: WhatsAppLine;
   person: string;
   config: WhatsAppInboxConfig;
   detail: WhatsAppChatDetail;
@@ -49,15 +55,22 @@ export interface ReplyComposerProps {
 /**
  * The box at the bottom of a chat, in WhatsApp's footer dress.
  *
- * Above the box, one slim line says which way the message will go — an
+ * It is always typed into FROM one number, and says so three ways at the moment
+ * of typing: a strip above it, "From Dealer's Kavach · +91 94702 93427", in that
+ * number's colours; the placeholder, "Message from Dealer's Kavach"; and the
+ * round Send button, which is that number's colour rather than WhatsApp green
+ * and is named for it. The server is told the number with every send.
+ *
+ * Under the strip, one slim line says which way the message will go — an
  * ordinary message while the 24-hour window is open, the greeting template
  * once it is not — and, for the template, a preview of exactly what the person
  * will be sent, so nobody is surprised that their words arrive between a
  * greeting and a sign-off. The server decides the route; this only says so.
  *
- * Keyed on the chat by its parent, and the draft is kept per chat
+ * Keyed on the chat by its parent, and the draft is kept per chat AND number
  * (`drafts.ts`): the half-written answer to one lead cannot be sent to
- * another, and is still there when the admin comes back.
+ * another, nor to the same lead from the other number, and is still there when
+ * the admin comes back.
  *
  * A link can be added (once the server says its template is approved): the
  * message then goes in the link template whatever the window says, with a
@@ -65,8 +78,18 @@ export interface ReplyComposerProps {
  * on the Message results page. The link is not part of the draft — it is
  * cleared when the message goes or the chat changes.
  */
-export function ReplyComposer({ person, config, detail, replyTo, contactName, onCancelReply, onSend, now }: ReplyComposerProps) {
-  const [value, setValue] = React.useState(() => getDraft(person));
+export function ReplyComposer({
+  line,
+  person,
+  config,
+  detail,
+  replyTo,
+  contactName,
+  onCancelReply,
+  onSend,
+  now,
+}: ReplyComposerProps) {
+  const [value, setValue] = React.useState(() => getDraft(line, person));
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [pickerIndex, setPickerIndex] = React.useState(0);
   // Escape closes the picker; it stays closed until the box no longer starts with a slash.
@@ -125,7 +148,7 @@ export function ReplyComposer({ person, config, detail, replyTo, contactName, on
 
   function change(next: string) {
     setValue(next);
-    setDraft(person, next);
+    setDraft(line, person, next);
     setPickerIndex(0);
     if (pickerQuery(next) === null) setPickerDismissed(false);
   }
@@ -148,7 +171,7 @@ export function ReplyComposer({ person, config, detail, replyTo, contactName, on
     if (!canSend) return;
     onSend(typed, link.state === 'ok' ? link.target : null);
     setValue('');
-    setDraft(person, '');
+    setDraft(line, person, '');
     setPreviewOpen(false);
     setPickerDismissed(false);
     setLinkOpen(false);
@@ -211,6 +234,9 @@ export function ReplyComposer({ person, config, detail, replyTo, contactName, on
 
   return (
     <div>
+      <div className="px-2 pt-1.5 md:px-3">
+        <FromStrip line={line} />
+      </div>
       <div className="flex items-start gap-2 px-3 pt-1.5 text-xs text-[var(--wa-meta)]">
         {mode === 'text' ? (
           <MessageCircle width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-[var(--wa-green-strong)]" aria-hidden />
@@ -408,7 +434,7 @@ export function ReplyComposer({ person, config, detail, replyTo, contactName, on
           rows={1}
           onChange={(e) => change(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={isMd ? 'Type a message, or / for quick replies' : 'Type a message'}
+          placeholder={composerPlaceholder(line)}
           aria-label="Message"
           aria-controls={pickerOpen ? listId : undefined}
           aria-activedescendant={pickerOpen && matches[activeIndex] ? `${ids}-opt-${activeIndex}` : undefined}
@@ -420,18 +446,18 @@ export function ReplyComposer({ person, config, detail, replyTo, contactName, on
           className={cn(
             'block max-h-[160px] min-h-11 w-full min-w-0 resize-none rounded-lg border-0 bg-[var(--wa-field)] px-3 py-2.5 text-base leading-5',
             'text-[var(--wa-text)] placeholder:text-[var(--wa-meta)] md:text-[15px]',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wa-send)]',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--line)]',
           )}
         />
         <button
           type="button"
-          aria-label="Send"
-          title="Send"
+          aria-label={sendButtonLabel(line)}
+          title={sendButtonLabel(line)}
           disabled={!canSend}
           // Keeps the keyboard up on a phone: a press on the button must not take focus from the box.
           onMouseDown={(e) => e.preventDefault()}
           onClick={submit}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--wa-send)] text-white transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-45"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--line)] text-white transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-45"
         >
           <SendHorizontal width={20} height={20} strokeWidth={2} aria-hidden />
         </button>

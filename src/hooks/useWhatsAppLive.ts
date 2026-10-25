@@ -3,7 +3,15 @@ import * as React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useToast } from '@/components/ui';
-import { incomingHeadline } from '@/features/whatsapp/format';
+import {
+  chatIsOpenOnLine,
+  chatKeyOf,
+  inboxTitle,
+  incomingHeadline,
+  incomingHref,
+  parseLine,
+  wantsIncomingToast,
+} from '@/features/whatsapp/format';
 import {
   playIncomingSound,
   showDesktopNotification,
@@ -16,7 +24,7 @@ import {
 } from '@/hooks/api/useWhatsAppInbox';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
-import type { WhatsAppChangedEvent, WhatsAppIncomingEvent } from '@dk/shared';
+import type { WhatsAppChangedEvent, WhatsAppIncomingEvent, WhatsAppLine } from '@dk/shared';
 
 /** A toast is a headline, not a message: long previews are cut. */
 const PREVIEW_CHARS = 140;
@@ -39,13 +47,18 @@ const REFRESH_THROTTLE_MS = 2500;
  *   into view (the socket's events are lost while a tab sleeps, and the app
  *   turns refetch-on-focus off globally).
  * - On `whatsapp:incoming` — somebody wrote — tells the admin, unless they are
- *   already looking at that very chat: a toast with an Open button, a soft
- *   sound, and, while the tab is hidden and the browser has been given leave,
- *   a system notification. On the inbox page itself there is no toast: the list
- *   is live there and the sound plays, as in WhatsApp Web, and a toast on that
- *   page sat on top of the chat's Send button.
+ *   already looking at that very chat ON THAT NUMBER: a toast with an Open
+ *   button, a soft sound, and, while the tab is hidden and the browser has been
+ *   given leave, a system notification. All of them name the number the message
+ *   came to ("Ramesh · to Dealer's Kavach"), and Open goes to that number's
+ *   inbox. On the inbox page the list is live and the sound plays, as in
+ *   WhatsApp Web, and a toast on that page sat on top of the chat's Send
+ *   button — so there is none, EXCEPT for a message to the other number, which
+ *   nothing on screen but a badge would show.
  * - Puts "(3) " in front of the tab's title while three chats have something
- *   unread, so a tab at the back of the window still says so.
+ *   unread, so a tab at the back of the window still says so — and, on the
+ *   inbox page, names the number ("WhatsApp · Dealer's Kavach") so a tab at the
+ *   back says which inbox it is.
  *
  * Two copies of this would refresh every query twice for one event and ring
  * twice for one message; the nav badge needs it on every screen anyway, so it
@@ -63,15 +76,21 @@ export function useWhatsAppLive(): void {
   // The socket handlers below are set up once per login and outlive many
   // renders, so what they need from the router is read through refs.
   const openChat = React.useRef<string | null>(null);
+  const openLine = React.useRef<WhatsAppLine | null>(null);
   const onInbox = React.useRef(false);
   const go = React.useRef(navigate);
-  // One toast per person at a time: a second message from the same chat
-  // replaces the first instead of stacking under it.
+  // One toast per chat at a time: a second message to the same chat on the same
+  // number replaces the first instead of stacking under it.
   const toasts = React.useRef(new Map<string, string>());
+  // The number the inbox page is showing, from its address. Null elsewhere, and
+  // for the moment before the page has put it there.
+  const viewedLine = location.pathname === '/whatsapp' ? parseLine(new URLSearchParams(location.search).get('line')) : null;
   React.useEffect(() => {
     go.current = navigate;
     onInbox.current = location.pathname === '/whatsapp';
-    openChat.current = onInbox.current ? new URLSearchParams(location.search).get('chat') : null;
+    const params = new URLSearchParams(location.search);
+    openChat.current = onInbox.current ? params.get('chat') : null;
+    openLine.current = onInbox.current ? parseLine(params.get('line')) : null;
     // Arriving at the inbox with a toast still up from another screen: it would
     // sit over the box for the rest of its eight seconds.
     if (onInbox.current) {
@@ -85,7 +104,7 @@ export function useWhatsAppLive(): void {
     const socket = getSocket();
     if (!socket) return;
 
-    const toGo = (person: string) => go.current(`/whatsapp?chat=${encodeURIComponent(person)}`);
+    const toGo = (person: string, line: WhatsAppLine | null) => go.current(incomingHref(person, line));
 
     // Throttled, leading and trailing: the people the events were about are
     // gathered until the refresh runs, which then happens once for all of them.
@@ -109,23 +128,36 @@ export function useWhatsAppLive(): void {
 
     const onIncoming = (e: WhatsAppIncomingEvent) => {
       const visible = document.visibilityState === 'visible';
-      // Looking at that very chat: the message is on screen and is being read.
-      if (visible && openChat.current === e.person) return;
+      // Looking at that very chat on that very number: the message is on
+      // screen and is being read. The same person on the other number is not it.
+      if (
+        chatIsOpenOnLine({
+          visible,
+          openPerson: openChat.current,
+          openLine: openLine.current,
+          eventPerson: e.person,
+          eventLine: e.line,
+        })
+      ) {
+        return;
+      }
 
-      const headline = incomingHeadline(e.name, e.phone);
+      const headline = incomingHeadline(e.name, e.phone, e.line);
       const preview =
         e.preview.length > PREVIEW_CHARS ? `${e.preview.slice(0, PREVIEW_CHARS).trimEnd()}…` : e.preview;
-      // No toast on the inbox page: the list there moves by itself and the
-      // sound plays. Every other screen gets one.
-      if (!onInbox.current) {
-        const previous = toasts.current.get(e.person);
+      const chatKey = e.line ? chatKeyOf(e.line, e.person) : e.person;
+      // No toast for a message to the number the inbox page is showing: its list
+      // moves by itself and the sound plays. Every other screen gets one, and so
+      // does a message to the OTHER number.
+      if (wantsIncomingToast({ onInbox: onInbox.current, viewedLine: openLine.current, eventLine: e.line })) {
+        const previous = toasts.current.get(chatKey);
         if (previous) toast.dismiss(previous);
         toasts.current.set(
-          e.person,
+          chatKey,
           toast.info(`New WhatsApp · ${headline}`, {
             description: preview,
             duration: TOAST_MS,
-            action: { label: 'Open', onSelect: () => toGo(e.person) },
+            action: { label: 'Open', onSelect: () => toGo(e.person, e.line) },
           }),
         );
       }
@@ -133,12 +165,12 @@ export function useWhatsAppLive(): void {
       playIncomingSound();
       if (!visible) {
         showDesktopNotification({
-          tag: e.person,
+          tag: chatKey,
           title: headline,
           body: preview,
           onClick: () => {
             window.focus();
-            toGo(e.person);
+            toGo(e.person, e.line);
           },
         });
       }
@@ -188,12 +220,15 @@ export function useWhatsAppLive(): void {
     };
   }, [signedIn]);
 
+  // The tab's title: the unread count, and on the inbox page the number it is
+  // showing. Written in one place so neither can overwrite the other.
   React.useEffect(() => {
-    if (!signedIn || unread <= 0) return;
+    if (!signedIn) return;
     const plain = document.title.replace(/^\(\d+\)\s*/, '');
-    document.title = `(${unread}) ${plain}`;
+    const base = viewedLine ? inboxTitle(viewedLine) : plain;
+    document.title = unread > 0 ? `(${unread}) ${base}` : base;
     return () => {
       document.title = plain;
     };
-  }, [signedIn, unread]);
+  }, [signedIn, unread, viewedLine]);
 }

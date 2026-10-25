@@ -12,11 +12,15 @@
  */
 import type { Intent } from '@/lib/statusIntent';
 import {
+  isWhatsAppLine,
   renderLinkTemplate,
   renderSimpleTemplate,
   toLinkTarget,
   toTemplateParam,
   WHATSAPP_CHAT_FILTERS,
+  WHATSAPP_DEFAULT_LINE,
+  WHATSAPP_LINE_INFO,
+  WHATSAPP_LINES,
   WHATSAPP_LINK_TEMPLATE,
   WHATSAPP_SIMPLE_TEMPLATE,
   WHATSAPP_STAGES,
@@ -24,9 +28,12 @@ import {
   type WhatsAppChatLast,
   type WhatsAppChatList,
   type WhatsAppChatMessage,
+  type WhatsAppChatOnLine,
   type WhatsAppChatSummary,
   type WhatsAppDelivery,
   type WhatsAppInboxConfig,
+  type WhatsAppInboxSummary,
+  type WhatsAppLine,
   type WhatsAppMessagePage,
   type WhatsAppQuickReply,
   type WhatsAppReplyRoute,
@@ -222,6 +229,181 @@ export function avatarColour(person: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Which number you are in
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Where the browser remembers the inbox the admin was last in. */
+export const LINE_STORAGE_KEY = 'dk.whatsapp.line';
+
+/** A `?line=` value, or null when it is missing or not one of our numbers. */
+export function parseLine(raw: string | null | undefined): WhatsAppLine | null {
+  return isWhatsAppLine(raw) ? raw : null;
+}
+
+/** What the browser remembered, read as it was stored; the default inbox when it is empty or garbage. */
+export function rememberedLineOf(raw: string | null | undefined): WhatsAppLine {
+  return parseLine(raw) ?? WHATSAPP_DEFAULT_LINE;
+}
+
+/**
+ * Which inbox a link that names only a person should open: the one where they
+ * have the most unread, else the one they wrote to or were written to most
+ * recently, else `fallback` (the remembered inbox) when they have no chat at
+ * all. A tie on unread goes to the newer chat.
+ */
+export function pickLine(
+  chats: readonly Pick<WhatsAppChatOnLine, 'line' | 'unread' | 'lastAt'>[],
+  fallback: WhatsAppLine,
+): WhatsAppLine {
+  let best: Pick<WhatsAppChatOnLine, 'line' | 'unread' | 'lastAt'> | null = null;
+  let bestAt = 0;
+  for (const c of chats) {
+    if (!isWhatsAppLine(c.line)) continue;
+    const at = Date.parse(c.lastAt);
+    const ms = Number.isFinite(at) ? at : 0;
+    if (best === null || c.unread > best.unread || (c.unread === best.unread && ms > bestAt)) {
+      best = c;
+      bestAt = ms;
+    }
+  }
+  return best?.line ?? fallback;
+}
+
+/** The other inbox. There are two. */
+export function otherLine(line: WhatsAppLine): WhatsAppLine {
+  return WHATSAPP_LINES.find((l) => l !== line) ?? line;
+}
+
+/** The name WhatsApp shows people for this number: "Dealer's Kavach". */
+export function lineName(line: WhatsAppLine): string {
+  return WHATSAPP_LINE_INFO[line].name;
+}
+
+/** "MDG Services (Marketing)" — the name and the job, for a sentence. */
+export function lineNameAndJob(line: WhatsAppLine): string {
+  const info = WHATSAPP_LINE_INFO[line];
+  return `${info.name} (${info.purpose})`;
+}
+
+/** The strip above the box: "From Dealer's Kavach · +91 94702 93427". */
+export function fromStripText(line: WhatsAppLine): string {
+  const info = WHATSAPP_LINE_INFO[line];
+  return `From ${info.name} · ${info.phone}`;
+}
+
+export const composerPlaceholder = (line: WhatsAppLine): string => `Message from ${lineName(line)}`;
+export const sendButtonLabel = (line: WhatsAppLine): string => `Send from ${lineName(line)}`;
+export const newChatTitle = (line: WhatsAppLine): string => `New chat from ${lineName(line)}`;
+/** Said once in the contact panel: what is about the person is not per number. */
+export const SHARED_BY_BOTH_WORDS = 'Name, stage and note are shared by both numbers.';
+export const NEW_CHAT_WRONG_NUMBER = 'Wrong number? Close this and switch at the top of the list.';
+
+/** The browser tab's title while an inbox is open, so a tab at the back still says which number it is. */
+export function inboxTitle(line: WhatsAppLine): string {
+  return `WhatsApp · ${lineName(line)}`;
+}
+
+/** What the right-hand pane says while no chat is open. */
+export function emptyPaneWords(line: WhatsAppLine): { title: string; use: string } {
+  const info = WHATSAPP_LINE_INFO[line];
+  return { title: `Chats on ${info.name} · ${info.phone}`, use: info.use };
+}
+
+/** The unread chats an inbox has, from the summary; zero until it has loaded (or from an older server). */
+export function unreadOnLine(summary: Pick<WhatsAppInboxSummary, 'lines'> | undefined, line: WhatsAppLine): number {
+  return summary?.lines?.[line]?.unreadChats ?? 0;
+}
+
+/** What a screen reader hears for one segment of the inbox switch. */
+export function lineSwitchLabel(line: WhatsAppLine, unread: number): string {
+  const info = WHATSAPP_LINE_INFO[line];
+  const base = `${info.name}, ${info.purpose}`;
+  if (unread <= 0) return base;
+  return `${base}, ${unread} ${unread === 1 ? 'chat' : 'chats'} unread`;
+}
+
+/**
+ * The note that this person also has a chat on the other number, or null when
+ * they have none there. `elsewhere` is already only the other inboxes; the
+ * guard on `line` keeps a same-inbox row from ever being offered as "the other".
+ */
+export function elsewhereNotice(
+  elsewhere: readonly WhatsAppChatOnLine[] | undefined,
+  line: WhatsAppLine,
+): { line: WhatsAppLine; words: string; unreadWords: string | null } | null {
+  const other = (elsewhere ?? []).find((c) => c.line !== line && isWhatsAppLine(c.line));
+  if (!other) return null;
+  const extra = [
+    ...(other.unread > 0 ? [`${other.unread} unread`] : []),
+    // The other number's window is open: an ordinary message can go from there, not from here.
+    ...(other.windowOpen === true ? ['you can reply normally there'] : []),
+  ];
+  return {
+    line: other.line,
+    words: `They also have a chat on ${lineNameAndJob(other.line)}`,
+    unreadWords: extra.length > 0 ? extra.join(' · ') : null,
+  };
+}
+
+/**
+ * May a message go from this inbox? Only when the server has said it sends from
+ * it (`config.lines`) and the chat it described is this inbox's on every count.
+ * A server from before the two inboxes says neither — and would pick the number
+ * itself — so against one the box stays closed rather than promise a number.
+ */
+export function serverSendsFrom(config: Pick<WhatsAppInboxConfig, 'lines'> | undefined, line: WhatsAppLine): boolean {
+  return Array.isArray(config?.lines) && config.lines.includes(line);
+}
+
+export function detailIsOnLine(
+  detail: { line?: unknown; chat?: { line?: unknown } | null; reply?: { line?: unknown } | null } | undefined,
+  line: WhatsAppLine,
+): boolean {
+  return !!detail && detail.line === line && detail.chat?.line === line && detail.reply?.line === line;
+}
+
+/** Said wherever the box is closed because the server is older than this page. */
+export const OUT_OF_DATE_WORDS = 'This page and the server do not match yet, so sending is off. Reload the page in a minute.';
+
+/** The key a draft or a waiting message is kept under: one per inbox AND person, never one for the person alone. */
+export function chatKeyOf(line: WhatsAppLine, person: string): string {
+  return `${line}:${person}`;
+}
+
+/** Where a toast or a desktop notification takes the admin. No `line=` for a number that is not one of ours: the page works it out. */
+export function incomingHref(person: string, line: WhatsAppLine | null): string {
+  const chat = `chat=${encodeURIComponent(person)}`;
+  return line ? `/whatsapp?line=${line}&${chat}` : `/whatsapp?${chat}`;
+}
+
+/**
+ * Is the admin looking at the very chat the message was written in? Only then is
+ * the message already on screen and being read, so no toast and no sound. The
+ * same person's chat on the OTHER number does not count, and neither does a
+ * message from a number that is not one of ours (`eventLine` null).
+ */
+export function chatIsOpenOnLine(o: {
+  visible: boolean;
+  openPerson: string | null;
+  openLine: WhatsAppLine | null;
+  eventPerson: string;
+  eventLine: WhatsAppLine | null;
+}): boolean {
+  return o.visible && o.eventLine !== null && o.openLine === o.eventLine && o.openPerson === o.eventPerson;
+}
+
+/**
+ * Should a toast go up? Everywhere but the inbox, yes. On the inbox the list on
+ * screen moves by itself, but only the list of the number the admin is in: a
+ * message to the other number gets a toast, because nothing on screen shows it
+ * but a badge on the switch.
+ */
+export function wantsIncomingToast(o: { onInbox: boolean; viewedLine: WhatsAppLine | null; eventLine: WhatsAppLine | null }): boolean {
+  if (!o.onInbox) return true;
+  return o.eventLine === null || o.viewedLine === null || o.eventLine !== o.viewedLine;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // The list: filters, stages, and its rows
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -294,6 +476,7 @@ export function isSystemPreview(last: WhatsAppChatLast): boolean {
 export function emptyListWords(
   filter: WhatsAppChatFilter,
   narrowed: boolean,
+  line: WhatsAppLine = WHATSAPP_DEFAULT_LINE,
 ): { title: string; description: string } {
   if (narrowed) {
     return {
@@ -316,7 +499,7 @@ export function emptyListWords(
     default:
       return {
         title: 'No chats yet',
-        description: 'Everyone we message, and everyone who writes to us, gets a chat here.',
+        description: `Everyone we message from ${lineName(line)}, and everyone who writes to it, gets a chat here.`,
       };
   }
 }
@@ -554,6 +737,14 @@ const ERROR_WORDS: Record<string, string> = {
   WHATSAPP_SHORTCUT_TAKEN: 'Another quick reply already uses that shortcut.',
 };
 
+/**
+ * The page and the server disagree about which number a message belongs to: a
+ * tab opened before the two inboxes existed, or a message that was sent from
+ * the other one. Whatever sentence the server gave, the cure is the same.
+ */
+export const LINE_OUT_OF_DATE_WORDS = 'This page is out of date. Reload it.';
+const LINE_ERROR_CODES = new Set(['WHATSAPP_LINE_REQUIRED', 'WHATSAPP_LINE_MISMATCH']);
+
 export interface SendFailure {
   /** `unknown`: may or may not have gone, never retried for the person. */
   kind: 'failed' | 'unknown';
@@ -622,6 +813,10 @@ export function describeSendError(err: unknown): SendFailure {
   const fallback = (code && ERROR_WORDS[code]) || 'That did not go through.';
   const words = generic ? fallback : message;
 
+  // Nothing was sent for either, and a second press cannot fix it: the id is spent.
+  if (code && LINE_ERROR_CODES.has(code)) {
+    return { kind: 'failed', code, text: LINE_OUT_OF_DATE_WORDS, networkLost: false };
+  }
   if (code === 'WHATSAPP_UNKNOWN_OUTCOME') {
     return { kind: 'unknown', code, text: UNKNOWN_OUTCOME_NOTE, networkLost: true };
   }
@@ -664,6 +859,8 @@ export function errorWords(err: unknown): string {
 /** A message the admin typed that the server has not confirmed yet, or could not send. */
 export interface PendingMessage {
   clientId: string;
+  /** The inbox it was typed in, which is the number it leaves from. */
+  line: WhatsAppLine;
   person: string;
   /** The words as typed. */
   text: string;
@@ -737,7 +934,7 @@ export function pendingAsMessage(
     stop: false,
     stopRecorded: false,
     seenAt: null,
-    phoneNumberId: null,
+    phoneNumberId: WHATSAPP_LINE_INFO[p.line].numberId,
     clientId: p.clientId,
   };
 }
@@ -1094,9 +1291,10 @@ export function badgeCount(n: number): string {
   return n > 99 ? '99+' : String(n);
 }
 
-/** One line for the desktop notification and the toast. */
-export function incomingHeadline(name: string | null, phone: string | null): string {
-  return name?.trim() || phoneLabel(phone);
+/** One line for the desktop notification and the toast: "Ramesh · to Dealer's Kavach". */
+export function incomingHeadline(name: string | null, phone: string | null, line: WhatsAppLine | null = null): string {
+  const who = name?.trim() || phoneLabel(phone);
+  return line ? `${who} · to ${lineName(line)}` : who;
 }
 
 /** The first name of whoever at MDG sent a message: "Aryan" from "Aryan Sharma". */

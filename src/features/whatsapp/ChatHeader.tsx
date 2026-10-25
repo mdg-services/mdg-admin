@@ -17,10 +17,11 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Menu, MenuItem, MenuSeparator } from '@/components/ui/Menu';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/lib/cn';
-import type { WhatsAppChatSummary, WhatsAppReplyRoute } from '@dk/shared';
+import type { WhatsAppChatSummary, WhatsAppLine, WhatsAppReplyRoute } from '@dk/shared';
 
 import { ChatAvatar } from './ChatAvatar';
 import { chatTitle, dialHref, hasName, headerStatus, phoneLabel, type StatusTone } from './format';
+import { LineChip } from './LineMark';
 
 const TONE_CLASS: Record<StatusTone, string> = {
   open: 'text-success-strong',
@@ -29,6 +30,8 @@ const TONE_CLASS: Record<StatusTone, string> = {
 };
 
 export interface ChatHeaderProps {
+  /** The number this chat is on: shown as a chip, so it is visible with the chat open. */
+  line: WhatsAppLine;
   person: string;
   /** From the chat itself once it has loaded, from the list row before that. */
   chat: WhatsAppChatSummary | undefined;
@@ -55,8 +58,14 @@ export interface ChatHeaderProps {
  * Built from the app's own tokens, laid out as WhatsApp's header is — back
  * arrow, picture, name over a line of status, then icons — and the whole
  * name block is the button that opens the contact panel, as it is there.
+ *
+ * The number the chat is on is shown in that number's colours: as a chip beside
+ * the status between md and lg; on a phone — where the name block has room for
+ * the name and one short line, no more — as the header's own pale wash; and from
+ * lg up not at all, because the number switch sits right beside the chat there.
  */
 export function ChatHeader({
+  line,
   person,
   chat,
   route,
@@ -76,7 +85,9 @@ export function ChatHeader({
   const phone = chat?.phone ?? null;
 
   return (
-    <header className="flex items-center gap-1 border-b border-border bg-surface px-1 py-1.5 md:px-2">
+    // Below lg the chat list (and its number switch) is off screen, so the header
+    // itself wears the number's pale colour — a cue that costs no height on a phone.
+    <header className="flex items-center gap-1 border-b border-border bg-[var(--line-soft)] px-1 py-1.5 md:px-2 lg:bg-surface">
       <IconButton aria-label="Back to the chat list" className="lg:hidden" onClick={onBack}>
         <ChevronLeft width={22} height={22} strokeWidth={1.75} />
       </IconButton>
@@ -99,6 +110,8 @@ export function ChatHeader({
                 {chatTitle(chat)}
               </span>
               <span className="flex min-w-0 items-center gap-1.5 text-xs text-text-muted">
+                {/* Only where it fits beside the status: at lg the switch is on screen beside the chat. */}
+                <LineChip line={line} className="hidden shrink-0 md:inline-flex lg:hidden" />
                 {/* On a phone the line is too short for both. The window state is
                     the one that changes what the admin does, and the number is a
                     tap away (the call button, the contact panel), so it gives way. */}

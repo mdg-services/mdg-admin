@@ -30,10 +30,12 @@ import {
   WHATSAPP_STAGES,
   type WhatsAppChatFilter,
   type WhatsAppChatSummary,
+  type WhatsAppLine,
 } from '@dk/shared';
 
 import { ChatListRow } from './ChatListRow';
-import { badgeCount, emptyListWords, NO_STAGE, type StageFilter } from './format';
+import { badgeCount, emptyListWords, newChatTitle, NO_STAGE, type StageFilter } from './format';
+import { LineSwitch } from './LineSwitch';
 import { setMuted, useDesktopAlerts, useMuted } from './notify';
 import { useFlashRows } from './useFlashRows';
 import { useSentinel } from './useInView';
@@ -42,6 +44,12 @@ import { useSentinel } from './useInView';
 const SEARCH_DEBOUNCE_MS = 250;
 
 export interface ChatListProps {
+  /** The inbox this list is: every chat in it is on this number. */
+  line: WhatsAppLine;
+  /** Switch to the other number. The page drops the open chat and the search. */
+  onLine: (line: WhatsAppLine) => void;
+  /** Unread chats on each number, for the switch's badges. */
+  unreadByLine: Record<WhatsAppLine, number>;
   chats: readonly WhatsAppChatSummary[];
   counts: Record<WhatsAppChatFilter, number> | undefined;
   /** The first page has not arrived and there is nothing to show yet. */
@@ -64,7 +72,7 @@ export interface ChatListProps {
   onStage: (stage: StageFilter | null) => void;
   q: string;
   onQ: (q: string) => void;
-  /** Chats with something unread, whatever list is showing. */
+  /** Chats with something unread in THIS inbox, whatever list is showing. */
   unreadTotal: number;
   onNewChat: () => void;
   onQuickReplies: () => void;
@@ -74,13 +82,16 @@ export interface ChatListProps {
 /**
  * The left-hand column: who is writing, newest first.
  *
- * Header with the controls that belong to the whole inbox, a search box, the
+ * At the very top, the switch between our two numbers; then the header with the controls that belong to the whole inbox, a search box, the
  * lists as chips with their counts, a stage filter, and the chats themselves.
  * It owns no data — the page hands it the list — and no routing: it says what
  * was asked for, and the page puts it in the URL.
  */
 export function ChatList(props: ChatListProps) {
   const {
+    line,
+    onLine,
+    unreadByLine,
     chats,
     counts,
     loading,
@@ -151,7 +162,8 @@ export function ChatList(props: ChatListProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ListHeader unreadTotal={unreadTotal} onNewChat={onNewChat} onQuickReplies={onQuickReplies} />
+      <LineSwitch line={line} onChange={onLine} unread={unreadByLine} />
+      <ListHeader line={line} unreadTotal={unreadTotal} onNewChat={onNewChat} onQuickReplies={onQuickReplies} />
 
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pb-2">
         <div className="relative">
@@ -275,6 +287,7 @@ export function ChatList(props: ChatListProps) {
           />
         ) : chats.length === 0 ? (
           <ListEmpty
+            line={line}
             filter={filter}
             narrowed={narrowed}
             onClear={() => {
@@ -308,10 +321,12 @@ export function ChatList(props: ChatListProps) {
 }
 
 function ListHeader({
+  line,
   unreadTotal,
   onNewChat,
   onQuickReplies,
 }: {
+  line: WhatsAppLine;
   unreadTotal: number;
   onNewChat: () => void;
   onQuickReplies: () => void;
@@ -342,7 +357,7 @@ function ListHeader({
           </span>
         ) : null}
       </h2>
-      <IconButton aria-label="New chat" title="New chat" onClick={onNewChat}>
+      <IconButton aria-label={newChatTitle(line)} title={newChatTitle(line)} onClick={onNewChat}>
         <MessageCirclePlus width={20} height={20} strokeWidth={1.75} />
       </IconButton>
       {alerts.permission !== 'unsupported' ? (
@@ -393,15 +408,17 @@ function ListHeader({
 }
 
 function ListEmpty({
+  line,
   filter,
   narrowed,
   onClear,
 }: {
+  line: WhatsAppLine;
   filter: WhatsAppChatFilter;
   narrowed: boolean;
   onClear: () => void;
 }) {
-  const words = emptyListWords(filter, narrowed);
+  const words = emptyListWords(filter, narrowed, line);
   return (
     <EmptyState
       icon={<MessageCircleOff width={28} height={28} strokeWidth={1.5} />}

@@ -33,6 +33,48 @@
   --wa-quote-out: #06cf9c;
 }
 
+/*
+ * One colour for each of our two numbers, and only for them. Every cue that
+ * says "this is the number you are typing from" — the bar across the top, the
+ * strip above the box, the Send button, the chip in the header — reads these
+ * four, so the two inboxes never look alike. Neither is WhatsApp green, which
+ * the thread keeps for itself, and neither is a status colour (red, amber).
+ *
+ * Set by `data-line` on the scope (the whole inbox) or on `.wa-line` (one small
+ * thing that must wear a particular number's colours whatever inbox it sits in:
+ * a segment of the switch, the "also on the other number" bar, a dialog).
+ *
+ *   --line         white text on it is 4.5:1 or better (5.2 and 6.7)
+ *   --line-strong  words on --line-soft, 7:1 or better (8.8 and 8.0)
+ *   --line-soft    a pale wash for a strip
+ *   --line-border  the hairline round a strip
+ *   --line-ink     the number's colour as words on white (a count on a white badge); not changed in the dark
+ *
+ * Colour is never the only cue: each number has its own icon as well (see
+ * `LineIcon`).
+ */
+.wa-scope[data-line='marketing'],
+.wa-line[data-line='marketing'] {
+  --line: #c2410c;
+  --line-strong: #7c2d12;
+  --line-soft: #fff7ed;
+  --line-border: #fed7aa;
+  --line-ink: #7c2d12;
+}
+.wa-scope[data-line='clients'],
+.wa-line[data-line='clients'] {
+  --line: #1d4ed8;
+  --line-strong: #1e40af;
+  --line-soft: #eff6ff;
+  --line-border: #bfdbfe;
+  --line-ink: #1e40af;
+}
+
+/* The bar across the top of the whole inbox: always there, whatever is open. */
+.wa-top-cue {
+  border-top: 3px solid var(--line);
+}
+
 .dark .wa-scope {
   --wa-wallpaper: #0b141a;
   --wa-dot: rgba(233, 237, 239, 0.035);
@@ -49,6 +91,20 @@
   --wa-notice-text: #ffd279;
   --wa-pill: #182229;
   --wa-pill-text: #8696a0;
+}
+
+/* In the dark the strip is a deep wash with a light word on it; --line stays as it is (white on it still reads). */
+.dark .wa-scope[data-line='marketing'],
+.dark .wa-line[data-line='marketing'] {
+  --line-strong: #fdba74;
+  --line-soft: #431407;
+  --line-border: #7c2d12;
+}
+.dark .wa-scope[data-line='clients'],
+.dark .wa-line[data-line='clients'] {
+  --line-strong: #93c5fd;
+  --line-soft: #172554;
+  --line-border: #1e3a8a;
 }
 
 /*

@@ -89,9 +89,12 @@ export function leadHref(id: string): string {
   return `/leads?lead=${id}`;
 }
 
-/** The WhatsApp inbox's address for their chat, or `null` when they have none to open. */
+/**
+ * The WhatsApp inbox's address for their chat, or `null` when they have none to
+ * open. A lead is a marketing chat, so it opens in the MDG Services inbox.
+ */
 export function chatHref(waId: string | null | undefined): string | null {
-  return waId ? `/whatsapp?chat=${encodeURIComponent(waId)}` : null;
+  return waId ? `/whatsapp?line=marketing&chat=${encodeURIComponent(waId)}` : null;
 }
 
 /** The badge's colour for each status: amber is "nobody has been in touch", green is "going ahead". */

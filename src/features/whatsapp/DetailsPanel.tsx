@@ -12,15 +12,28 @@ import { usePatchWhatsAppChat } from '@/hooks/api/useWhatsAppInbox';
 import { copyText } from '@/lib/clipboard';
 import { cn } from '@/lib/cn';
 import {
+  WHATSAPP_LINE_INFO,
   WHATSAPP_STAGE_LABELS,
   WHATSAPP_STAGES,
   type WhatsAppChatDetail,
   type WhatsAppChatPatch,
+  type WhatsAppLine,
   type WhatsAppStage,
 } from '@dk/shared';
 
 import { ChatAvatar } from './ChatAvatar';
-import { chatTitle, dialHref, errorWords, fullDateTime, hasName, headerStatus, phoneLabel } from './format';
+import {
+  chatTitle,
+  detailIsOnLine,
+  dialHref,
+  errorWords,
+  fullDateTime,
+  hasName,
+  headerStatus,
+  phoneLabel,
+  SHARED_BY_BOTH_WORDS,
+} from './format';
+import { LineChip } from './LineMark';
 
 /** What the note and the name are capped at here; the server is the authority and says so if it disagrees. */
 const NOTE_MAX = 2000;
@@ -36,6 +49,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export interface DetailsContentProps {
+  /** The inbox this panel was opened from. */
+  line: WhatsAppLine;
   person: string;
   detail: WhatsAppChatDetail;
   now: number;
@@ -46,11 +61,15 @@ export interface DetailsContentProps {
  * where they stand with us, a private note for the team, and the plain facts
  * about the stop list and about which of our numbers answers them.
  *
+ * The name, the stage and the note are about the PERSON and show in both
+ * numbers' inboxes; the panel says so once, under the name. A pin or a "mark
+ * unread" is not here: those belong to one number's inbox.
+ *
  * Every edit goes to the server as it is made — the name when it is confirmed,
  * the stage when it is picked, the note when the box loses focus or Ctrl/Cmd+Enter
  * is pressed — and each says in words when it did not take.
  */
-export function DetailsContent({ person, detail, now }: DetailsContentProps) {
+export function DetailsContent({ line, person, detail, now }: DetailsContentProps) {
   const toast = useToast();
   const patch = usePatchWhatsAppChat();
   const { chat } = detail;
@@ -58,7 +77,7 @@ export function DetailsContent({ person, detail, now }: DetailsContentProps) {
 
   function save(body: WhatsAppChatPatch, done?: () => void) {
     patch.mutate(
-      { person, patch: body },
+      { line, person, patch: body },
       {
         onSuccess: done,
         onError: (e) => toast.error(errorWords(e)),
@@ -100,7 +119,7 @@ export function DetailsContent({ person, detail, now }: DetailsContentProps) {
     if (note === savedNote) return;
     setNoteState('saving');
     patch.mutate(
-      { person, patch: { note: note.trim() === '' ? null : note } },
+      { line, person, patch: { note: note.trim() === '' ? null : note } },
       {
         onSuccess: () => setNoteState('saved'),
         onError: (e) => {
@@ -187,6 +206,7 @@ export function DetailsContent({ person, detail, now }: DetailsContentProps) {
           <p className="mt-0.5 text-sm text-text-muted [overflow-wrap:anywhere]">“{chat.profileName}” on WhatsApp</p>
         ) : null}
         {chat.source ? <p className="mt-0.5 text-xs text-text-subtle">{chat.source}</p> : null}
+        <p className="mt-2 text-xs text-text-subtle">{SHARED_BY_BOTH_WORDS}</p>
       </div>
 
       {/* A line only when this chat is on the Leads page; nothing otherwise. */}
@@ -267,7 +287,17 @@ export function DetailsContent({ person, detail, now }: DetailsContentProps) {
           ) : null}
           <div>
             <dt className="text-xs text-text-subtle">Replies go from</dt>
-            <dd className="text-text">{detail.reply.numberLabel}</dd>
+            <dd className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-text">
+              {/* A server older than this page names no inbox: say so rather than guess one. */}
+              {detailIsOnLine(detail, line) ? (
+                <>
+                  <LineChip line={line} />
+                  <span className="tabular-nums">{WHATSAPP_LINE_INFO[line].phone}</span>
+                </>
+              ) : (
+                <span className="text-warning-strong">Not known yet. Reload the page.</span>
+              )}
+            </dd>
           </div>
           {detail.firstAt ? (
             <div>

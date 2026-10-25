@@ -21,11 +21,13 @@ import { useAuthStore } from '@/store/auth';
 import type {
   WhatsAppChatDetail,
   WhatsAppChatFilter,
+  WhatsAppChatLines,
   WhatsAppChatList,
   WhatsAppChatMessage,
   WhatsAppChatPatch,
   WhatsAppInboxConfig,
   WhatsAppInboxSummary,
+  WhatsAppLine,
   WhatsAppMessagePage,
   WhatsAppNewChatInput,
   WhatsAppQuickReply,
@@ -35,6 +37,11 @@ import type {
 
 /**
  * The WhatsApp inbox's requests.
+ *
+ * Every number is its own inbox (`WhatsAppLine`), and every request that is
+ * about one chat, one list or one send names it: the keys carry the line so the
+ * two inboxes never share a cached chat, and the server refuses a request
+ * that does not say which number it is for.
  *
  * Every key hangs off `['whatsapp']`, so one call can refresh all of it. The
  * lists and the open chat are kept fresh three ways, as the alert list is:
@@ -53,8 +60,11 @@ export const whatsAppKeys = {
   /** Every chat list, whatever filter it was asked with. */
   chats: ['whatsapp', 'chats'] as const,
   chatList: (p: ChatListParams) => ['whatsapp', 'chats', p] as const,
-  chat: (person: string) => ['whatsapp', 'chat', person] as const,
-  messages: (person: string) => ['whatsapp', 'messages', person] as const,
+  /** Position 3 is the person in all three: `ofPerson` reads it. */
+  chat: (line: WhatsAppLine, person: string) => ['whatsapp', 'chat', line, person] as const,
+  messages: (line: WhatsAppLine, person: string) => ['whatsapp', 'messages', line, person] as const,
+  /** Which inboxes a person has a chat in. */
+  lines: (person: string) => ['whatsapp', 'lines', person] as const,
   quickReplies: ['whatsapp', 'quick-replies'] as const,
 };
 
@@ -65,13 +75,27 @@ const MESSAGE_PAGE = 60;
 type MessageData = InfiniteData<WhatsAppMessagePage, string | undefined>;
 type ChatListData = InfiniteData<WhatsAppChatList, string | undefined>;
 
-/** Ask again for what is on screen about these people, and for the lists and counts. */
+/**
+ * Every held copy of a person's chat or thread, in whichever inbox. A name, a
+ * stage or a note is about the person and shows in both, and the server does not
+ * say which number an event was about, so the person's chat is asked about in
+ * both. Only the one on screen is fetched; the other is marked out of date.
+ */
+function ofPerson(kind: 'chat' | 'messages', person: string) {
+  return {
+    queryKey: ['whatsapp', kind] as const,
+    predicate: (query: { queryKey: readonly unknown[] }) => query.queryKey[3] === person,
+  };
+}
+
+/** Ask again for what is on screen about these people, and for the lists (both inboxes) and counts. */
 export function refreshWhatsApp(qc: QueryClient, persons: readonly string[] = []): void {
   void qc.invalidateQueries({ queryKey: whatsAppKeys.chats });
   void qc.invalidateQueries({ queryKey: whatsAppKeys.summary });
   for (const person of persons) {
-    void qc.invalidateQueries({ queryKey: whatsAppKeys.chat(person) });
-    void qc.invalidateQueries({ queryKey: whatsAppKeys.messages(person) });
+    void qc.invalidateQueries(ofPerson('chat', person));
+    void qc.invalidateQueries(ofPerson('messages', person));
+    void qc.invalidateQueries({ queryKey: whatsAppKeys.lines(person) });
   }
 }
 
@@ -81,7 +105,7 @@ export function refreshWhatsApp(qc: QueryClient, persons: readonly string[] = []
  * screen — only if it is one of the people the events were about — is asked for
  * again too.
  *
- * Every other person's chat that is held in memory is only marked out of date,
+ * Every other person's chat that is held in memory (in either inbox) is only marked out of date,
  * without a request. Nothing is looking at it, and the next time it is opened
  * it is fetched, which is also what lets an opened chat know that its copy of
  * the thread is old (`openDataSettled`). A campaign sends a status for every
@@ -91,14 +115,14 @@ export function refreshWhatsAppLive(qc: QueryClient, changed: ReadonlySet<string
   void qc.invalidateQueries({ queryKey: whatsAppKeys.chats });
   void qc.invalidateQueries({ queryKey: whatsAppKeys.summary });
   if (open && changed.has(open)) {
-    void qc.invalidateQueries({ queryKey: whatsAppKeys.chat(open) });
-    void qc.invalidateQueries({ queryKey: whatsAppKeys.messages(open) });
+    void qc.invalidateQueries(ofPerson('chat', open));
+    void qc.invalidateQueries(ofPerson('messages', open));
   }
   if (changed.size === 0) return;
   void qc.invalidateQueries({
     refetchType: 'none',
     predicate: (query) => {
-      const [root, kind, who] = query.queryKey;
+      const [root, kind, , who] = query.queryKey;
       if (root !== 'whatsapp' || (kind !== 'chat' && kind !== 'messages')) return false;
       return typeof who === 'string' && who !== open && changed.has(who);
     },
@@ -109,7 +133,7 @@ export function refreshWhatsAppLive(qc: QueryClient, changed: ReadonlySet<string
 // Reading
 // ─────────────────────────────────────────────────────────────────────────
 
-/** Whether sending works, how a message will go, the numbers: nothing here changes within a visit. */
+/** Whether sending works and how a message will go: nothing here changes within a visit. */
 export function useWhatsAppConfig() {
   return useQuery({
     queryKey: whatsAppKeys.config,
@@ -139,6 +163,8 @@ export function useWhatsAppUnreadChats(): number {
 }
 
 export interface ChatListParams {
+  /** The inbox: a list is always one number's. */
+  line: WhatsAppLine;
   filter: WhatsAppChatFilter;
   stage: StageFilter | null;
   q: string;
@@ -157,6 +183,7 @@ export function useWhatsAppChats(params: ChatListParams) {
       api.get<WhatsAppChatList>(
         `${BASE}/chats`,
         {
+          line: params.line,
           filter: params.filter,
           stage: params.stage ?? undefined,
           q: params.q || undefined,
@@ -172,17 +199,33 @@ export function useWhatsAppChats(params: ChatListParams) {
   });
 }
 
-/** One person: how a message to them would go, their note and every name we hold. */
-export function useWhatsAppChat(person: string | null) {
+/** One person in one inbox: how a message to them would go from that number, their note and every name we hold. */
+export function useWhatsAppChat(line: WhatsAppLine | null, person: string | null) {
   return useQuery({
-    queryKey: whatsAppKeys.chat(person ?? ''),
+    queryKey: whatsAppKeys.chat(line ?? 'marketing', person ?? ''),
     queryFn: ({ signal }) =>
-      api.get<WhatsAppChatDetail>(`${BASE}/chats/${enc(person ?? '')}`, undefined, signal),
-    enabled: !!person,
+      api.get<WhatsAppChatDetail>(`${BASE}/chats/${enc(person ?? '')}`, { line: line ?? undefined }, signal),
+    enabled: !!line && !!person,
     staleTime: 10_000,
     refetchInterval: POLL_MS,
     // A 404 is an answer — nobody by that id has a message — not a hiccup.
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 1,
+  });
+}
+
+/**
+ * Which inboxes this person has a chat in, newest first — for a link that
+ * carries a person and no number. Empty (not an error) when they have no
+ * message on either.
+ */
+export function useWhatsAppChatLines(person: string | null, enabled = true) {
+  return useQuery({
+    queryKey: whatsAppKeys.lines(person ?? ''),
+    queryFn: ({ signal }) =>
+      api.get<WhatsAppChatLines>(`${BASE}/chats/${enc(person ?? '')}/lines`, undefined, signal),
+    enabled: enabled && !!person,
+    staleTime: 10_000,
+    retry: 1,
   });
 }
 
@@ -194,15 +237,15 @@ export function useWhatsAppChat(person: string | null) {
  * page's `before` from the page it has just received, not from the old one. So
  * a message that arrived since cannot leave a gap or a repeat between pages.
  */
-export function useWhatsAppMessages(person: string | null) {
+export function useWhatsAppMessages(line: WhatsAppLine | null, person: string | null) {
   return useInfiniteQuery({
-    queryKey: whatsAppKeys.messages(person ?? ''),
-    enabled: !!person,
+    queryKey: whatsAppKeys.messages(line ?? 'marketing', person ?? ''),
+    enabled: !!line && !!person,
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) =>
       api.get<WhatsAppMessagePage>(
         `${BASE}/chats/${enc(person ?? '')}/messages`,
-        { before: pageParam, limit: MESSAGE_PAGE },
+        { line: line ?? undefined, before: pageParam, limit: MESSAGE_PAGE },
         signal,
       ),
     getNextPageParam: (last) => (last.hasMore ? last.items[0]?.id : undefined),
@@ -246,6 +289,8 @@ export function newClientId(): string {
 }
 
 export interface SendArgs {
+  /** The inbox the message was typed in. It leaves from this number and no other. */
+  line: WhatsAppLine;
   person: string;
   text: string;
   /** How the server said this would go. Decides what the waiting bubble looks like. */
@@ -259,9 +304,9 @@ export interface SendArgs {
  * Put the server's copy of a message we sent into the open chat, newest page,
  * without a refetch. False when there is no thread in memory to put it in.
  */
-function landSent(qc: QueryClient, person: string, message: WhatsAppChatMessage): boolean {
-  if (!qc.getQueryData(whatsAppKeys.messages(person))) return false;
-  qc.setQueryData<MessageData>(whatsAppKeys.messages(person), (data) => {
+function landSent(qc: QueryClient, line: WhatsAppLine, person: string, message: WhatsAppChatMessage): boolean {
+  if (!qc.getQueryData(whatsAppKeys.messages(line, person))) return false;
+  qc.setQueryData<MessageData>(whatsAppKeys.messages(line, person), (data) => {
     if (!data) return data;
     if (data.pages.some((p) => p.items.some((m) => m.id === message.id))) return data;
     const [head, ...older] = data.pages;
@@ -274,6 +319,7 @@ function landSent(qc: QueryClient, person: string, message: WhatsAppChatMessage)
 async function deliver(qc: QueryClient, p: PendingMessage): Promise<void> {
   try {
     const result = await api.post<WhatsAppSendResult>(`${BASE}/chats/${enc(p.person)}/messages`, {
+      line: p.line,
       text: p.text,
       clientId: p.clientId,
       replyTo: p.mode === 'text' && !p.link ? (p.replyTo?.id ?? null) : null,
@@ -284,11 +330,11 @@ async function deliver(qc: QueryClient, p: PendingMessage): Promise<void> {
     // which the bubble is gone and its replacement has not yet arrived.
     // With no thread in memory to put it in, ask for the thread instead, or the
     // waiting bubble would keep its clock until the chat was next opened.
-    refreshWhatsApp(qc, landSent(qc, p.person, result.message) ? [] : [p.person]);
-    void qc.invalidateQueries({ queryKey: whatsAppKeys.chat(p.person) });
+    refreshWhatsApp(qc, landSent(qc, p.line, p.person, result.message) ? [] : [p.person]);
+    void qc.invalidateQueries({ queryKey: whatsAppKeys.chat(p.line, p.person) });
   } catch (err) {
     const f = describeSendError(err);
-    updatePending(p.person, p.clientId, {
+    updatePending(p.line, p.person, p.clientId, {
       status: f.kind,
       error: f.text,
       code: f.code,
@@ -297,11 +343,11 @@ async function deliver(qc: QueryClient, p: PendingMessage): Promise<void> {
     // A refusal often means the way a message goes has changed — the window
     // closed while it was being typed, or they said stop. Ask again, so the
     // box under the thread tells the truth.
-    void qc.invalidateQueries({ queryKey: whatsAppKeys.chat(p.person) });
+    void qc.invalidateQueries({ queryKey: whatsAppKeys.chat(p.line, p.person) });
     // A message that may have gone — or that the server says did, with its row
     // not in the chat yet — is settled by the thread, not by this bubble: ask
     // for it, so the server's copy replaces the waiting one.
-    if (f.kind === 'unknown') void qc.invalidateQueries({ queryKey: whatsAppKeys.messages(p.person) });
+    if (f.kind === 'unknown') void qc.invalidateQueries({ queryKey: whatsAppKeys.messages(p.line, p.person) });
   }
 }
 
@@ -333,6 +379,7 @@ export function useSendWhatsApp(): WhatsAppSender {
     const start = (args: SendArgs, clientId: string): string => {
       const pending: PendingMessage = {
         clientId,
+        line: args.line,
         person: args.person,
         text: args.text,
         // A link always goes in its template, whatever the window says.
@@ -352,22 +399,34 @@ export function useSendWhatsApp(): WhatsAppSender {
     return {
       send: (args) => start(args, newClientId()),
       retry: (pending, mode) => {
-        const current = getPending(pending.person, pending.clientId) ?? pending;
+        const current = getPending(pending.line, pending.person, pending.clientId) ?? pending;
         if (current.status === 'sending') return;
         // A message with a link stays one: it goes in its template, window or not.
         const next = current.link ? 'template' : mode;
         if (current.networkLost) {
-          updatePending(current.person, current.clientId, { status: 'sending', error: null, code: null, mode: next });
+          updatePending(current.line, current.person, current.clientId, {
+            status: 'sending',
+            error: null,
+            code: null,
+            mode: next,
+          });
           void deliver(qc, { ...current, status: 'sending', error: null, code: null, mode: next });
           return;
         }
-        removePending(current.person, current.clientId);
+        removePending(current.line, current.person, current.clientId);
         start(
-          { person: current.person, text: current.text, mode: next, replyTo: current.replyTo, link: current.link },
+          {
+            line: current.line,
+            person: current.person,
+            text: current.text,
+            mode: next,
+            replyTo: current.replyTo,
+            link: current.link,
+          },
           newClientId(),
         );
       },
-      remove: (pending) => removePending(pending.person, pending.clientId),
+      remove: (pending) => removePending(pending.line, pending.person, pending.clientId),
     };
   }, [qc]);
 }
@@ -412,12 +471,12 @@ export function useNewWhatsAppChat() {
 export function useMarkWhatsAppRead() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ person, upTo }: { person: string; upTo: string }) =>
-      api.post<{ marked: number }>(`${BASE}/chats/${enc(person)}/read`, { upTo }),
-    onSuccess: (_data, { person, upTo }) => {
+    mutationFn: ({ line, person, upTo }: { line: WhatsAppLine; person: string; upTo: string }) =>
+      api.post<{ marked: number }>(`${BASE}/chats/${enc(person)}/read`, { line, upTo }),
+    onSuccess: (_data, { line, person, upTo }) => {
       const limit = Date.parse(upTo);
       const seenAt = new Date().toISOString();
-      qc.setQueryData<MessageData>(whatsAppKeys.messages(person), (data) => {
+      qc.setQueryData<MessageData>(whatsAppKeys.messages(line, person), (data) => {
         if (!data) return data;
         return {
           ...data,
@@ -431,32 +490,39 @@ export function useMarkWhatsAppRead() {
       });
       void qc.invalidateQueries({ queryKey: whatsAppKeys.chats });
       void qc.invalidateQueries({ queryKey: whatsAppKeys.summary });
-      void qc.invalidateQueries({ queryKey: whatsAppKeys.chat(person) });
+      void qc.invalidateQueries({ queryKey: whatsAppKeys.chat(line, person) });
+      void qc.invalidateQueries({ queryKey: whatsAppKeys.lines(person) });
       // The reply raised an alert; the server has closed it.
       void qc.invalidateQueries({ queryKey: ['admin-alerts'] });
     },
   });
 }
 
-/** Rename, set the stage, pin, mark unread, or write the private note. The reply is the whole chat again. */
+/**
+ * Rename, set the stage, pin, mark unread, or write the private note. The reply
+ * is the whole chat again. Pin and mark-unread are this inbox's alone; the name,
+ * stage and note are the person's, so the same person's chat in the other inbox
+ * is marked out of date too.
+ */
 export function usePatchWhatsAppChat() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ person, patch }: { person: string; patch: WhatsAppChatPatch }) =>
-      api.patch<WhatsAppChatDetail>(`${BASE}/chats/${enc(person)}`, patch),
-    onSuccess: (detail, { person }) => {
-      qc.setQueryData(whatsAppKeys.chat(person), detail);
+    mutationFn: ({ line, person, patch }: { line: WhatsAppLine; person: string; patch: WhatsAppChatPatch }) =>
+      api.patch<WhatsAppChatDetail>(`${BASE}/chats/${enc(person)}?line=${enc(line)}`, patch),
+    onSuccess: (detail, { line, person }) => {
+      qc.setQueryData(whatsAppKeys.chat(line, person), detail);
+      void qc.invalidateQueries(ofPerson('chat', person));
       void qc.invalidateQueries({ queryKey: whatsAppKeys.chats });
       void qc.invalidateQueries({ queryKey: whatsAppKeys.summary });
     },
   });
 }
 
-/** Finds a chat's row in whichever list is already loaded, for a header that opens before its detail arrives. */
-export function findCachedChat(qc: QueryClient, person: string) {
+/** Finds a chat's row in whichever of THIS inbox's lists is already loaded, for a header that opens before its detail arrives. */
+export function findCachedChat(qc: QueryClient, line: WhatsAppLine, person: string) {
   for (const [, data] of qc.getQueriesData<ChatListData>({ queryKey: whatsAppKeys.chats })) {
     for (const page of data?.pages ?? []) {
-      const hit = page.items.find((c) => c.person === person);
+      const hit = page.items.find((c) => c.person === person && c.line === line);
       if (hit) return hit;
     }
   }
