@@ -8,7 +8,7 @@ import {
   type ButtonVariant,
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
-import { leadName } from '@/lib/leads';
+import { leadName, type ContactPrefill } from '@/lib/leads';
 import type { LeadRow } from '@dk/shared';
 
 /** What to tell a person when a request did not go through. */
@@ -19,10 +19,22 @@ export function errorText(err: unknown): string {
 /** What a lead's row can ask for: the forms that open over the page. */
 export type LeadAction = 'contact' | 'followUp' | 'assign' | 'note' | 'close' | 'reopen' | 'phone';
 
+/**
+ * What opens a form. The third argument is for "Log this call" on a call
+ * recording's summary, which opens Log contact already filled in.
+ */
+export type LeadActionHandler = (
+  action: LeadAction,
+  lead: LeadRow,
+  contactPrefill?: ContactPrefill,
+) => void;
+
 /** Which form is open and for whom. `null` is none. */
 export interface LeadDialogState {
   action: LeadAction;
   lead: LeadRow;
+  /** Only for the Log contact form, opened from a call summary. */
+  contactPrefill?: ContactPrefill;
 }
 
 /**

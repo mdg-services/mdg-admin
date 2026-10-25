@@ -1,4 +1,4 @@
-import { MessageCircle } from 'lucide-react';
+import { Headphones, MessageCircle } from 'lucide-react';
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -14,6 +14,7 @@ import {
   dueLine,
   inviteLine,
   isClosed,
+  lastCallLine,
   lastContactLine,
   leadName,
   noteLine,
@@ -215,7 +216,8 @@ export function LeadInterestCell({ lead, now }: { lead: LeadRow; now: number }) 
  * The third column: where it stands. The status, how soon the next follow-up is
  * (red once late, amber inside two hours, plain after that, always in words
  * too), the last contact and the tries that got no answer, the newest note the
- * team wrote, and who owns it. A lead nobody has been in touch with says so in
+ * team wrote, how the last recorded call went (its gist in two lines, with a
+ * badge for how keen they sounded), and who owns it. A lead nobody has been in touch with says so in
  * amber. A closed lead says who closed it and when; a registered one says
  * Onboarding has it.
  *
@@ -236,6 +238,8 @@ export function LeadStandsCell({
   const last = lastContactLine(lead.lastContact, now);
   const tries = triesLine(lead.unanswered);
   const note = noteLine(lead.lastNote, now);
+  // A server one release behind sends no `lastCall`; there is then nothing to say.
+  const call = lastCallLine(lead.lastCall);
   return (
     <div className="min-w-0 [overflow-wrap:anywhere]">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -290,6 +294,20 @@ export function LeadStandsCell({
               them: a long note is read in the drawer, but who wrote it is not. */}
           <p className="line-clamp-2 select-text text-text">{note.quote}</p>
           {note.by ? <p className="mt-0.5 text-text-subtle">— {note.by}</p> : null}
+        </div>
+      ) : null}
+      {call ? (
+        <div className="mt-1.5 flex items-start gap-1.5 text-xs">
+          <Headphones
+            width={13}
+            height={13}
+            strokeWidth={1.75}
+            aria-hidden
+            className="mt-0.5 shrink-0 text-text-subtle"
+          />
+          {/* Two lines of what the call came to; the badge beside it is how keen they sounded. */}
+          <p className="line-clamp-2 min-w-0 flex-1 select-text text-text">{call.text}</p>
+          <Badge intent={call.tone}>{call.label}</Badge>
         </div>
       ) : null}
       {closed ? null : <p className="mt-1 text-xs text-text-subtle">{ownerLine(lead.owner)}</p>}

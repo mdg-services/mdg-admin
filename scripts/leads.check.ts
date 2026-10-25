@@ -1,7 +1,8 @@
 /**
  * Checks for the Leads page's rules (`src/lib/leads.ts`): the words, the
- * working window (the whole day, since 25 Oct 2026), the follow-up the contact form suggests, and that every body
- * a form builds is one the shared schema accepts.
+ * working window (the whole day, since 25 Oct 2026), the follow-up the contact form suggests, the call-recording
+ * rules (which file may be picked, what a failure says, how a summary is cut
+ * down), and that every body a form builds is one the shared schema accepts.
  *
  * This app has no test runner, so these are plain `node:test` checks over the
  * pure module, run through the `tsx` the repo root already carries:
@@ -22,16 +23,20 @@ import {
   LEAD_FOLLOW_UP_MAX_DAYS,
   LEAD_NOTE_MAX,
   addLeadPhoneSchema,
+  addLeadRecordingSchema,
   assignLeadSchema,
   closeLeadSchema,
   leadNoteSchema,
   logLeadContactSchema,
+  presignLeadRecordingSchema,
   reopenLeadSchema,
   setLeadFollowUpSchema,
 } from '../shared/src/schemas/lead';
 import {
   LEAD_ACTIVITY_KINDS,
   LEAD_ADMIN_CLOSE_REASONS,
+  LEAD_CALL_INTEREST,
+  LEAD_CALL_INTEREST_LABELS,
   LEAD_CLOSING_OUTCOMES,
   LEAD_CONTACT_CHANNELS,
   LEAD_CONTACT_CHANNEL_LABELS,
@@ -41,15 +46,22 @@ import {
   LEAD_INVITE_DELIVERIES,
   LEAD_INVITE_FAILURES,
   LEAD_ORIGINS,
+  LEAD_RECORDING_FAILURES,
+  LEAD_RECORDING_MAX_BYTES,
+  LEAD_RECORDING_STATUSES,
+  LEAD_RECORDING_TYPES,
   LEAD_SIGN_KINDS,
   LEAD_SIGN_LABELS,
   LEAD_STATUSES,
   LEAD_STATUS_LABELS,
+  LEAD_TIMELINE_KINDS,
   LEAD_VIEWS,
   type LeadActivity,
+  type LeadCallInterest,
   type LeadContactOutcome,
   type LeadInvite,
   type LeadNote,
+  type LeadRecordingFailure,
   type LeadSigns,
   type LeadWatch,
 } from '../shared/src/types/lead';
@@ -62,7 +74,12 @@ import {
   NOTE_MAX,
   OPEN_OUTCOMES,
   OUTCOME_HINTS,
+  RECORDING_ACCEPT,
+  RECORDING_DURATION_MAX_SEC,
+  RECORDING_FAILURE_WORDS,
+  RECORDING_FILENAME_MAX,
   STATUS_TONE,
+  SUMMARY_BULLETS_MAX,
   WINDOW_WORDS,
   activityLine,
   addWorkingHours,
@@ -70,6 +87,7 @@ import {
   assignBody,
   canReopen,
   chatHref,
+  callLength,
   clockWords,
   closeBody,
   closeProblem,
@@ -84,15 +102,21 @@ import {
   followUpBody,
   followUpGuide,
   followUpProblem,
+  fileSizeWords,
   funnelSteps,
+  hasProcessing,
   idFromParam,
   inTalksCount,
   inWindow,
+  interestLabel,
+  interestTone,
   inviteLine,
   isClosed,
+  lastCallLine,
   lastContactLine,
   leadHref,
   leadName,
+  logCallPrefill,
   lookupLine,
   mobileTen,
   moveIntoWindow,
@@ -108,16 +132,28 @@ import {
   phoneProblem,
   quickPicks,
   reachOutLine,
+  recordingAddBody,
+  recordingFailureWords,
+  recordingFileProblem,
+  recordingFilename,
+  recordingHeader,
+  recordingPresignBody,
+  recordingType,
   registrationWords,
   reminderLine,
   reopenBody,
   reopenProblem,
+  retryHelps,
+  canRetryRecording,
+  RECORDING_STUCK_MS,
+  shortList,
   signLine,
   sinceLine,
   statusLabel,
   suggestNextAt,
   triesLine,
   unansweredAfter,
+  uploadLine,
   viewFromParam,
   viewLabel,
   visitsLine,
@@ -1109,5 +1145,327 @@ describe('"How follow-ups work"', () => {
       rows.find((r) => r.when.startsWith('You sent a message'))?.then,
       'the next day, then 2 days later, then 3 days later, then a week later',
     );
+  });
+});
+
+describe('call recordings: the words cover every value the server can send', () => {
+  it('every kind of failure has one plain sentence, and a retry is offered only where it can help', () => {
+    for (const f of LEAD_RECORDING_FAILURES) {
+      const words = RECORDING_FAILURE_WORDS[f];
+      assert.ok(words.length > 0 && words.endsWith('.'), f);
+      assert.equal(recordingFailureWords(f), words, f);
+      // One sentence, and none says the audio is gone: it plays in every case.
+      assert.equal(words.split('. ').length, 1, f);
+      assert.doesNotMatch(words, /lost|deleted|gone/i, f);
+    }
+    assert.match(RECORDING_FAILURE_WORDS.too_big, /50 MB/);
+    // The file is the problem for these two: asking again changes nothing.
+    const noHelp: LeadRecordingFailure[] = ['unsupported', 'too_big'];
+    for (const f of LEAD_RECORDING_FAILURES) assert.equal(retryHelps(f), !noHelp.includes(f), f);
+    // A failure with no kind (or one from a newer server) still says something true, and may be retried.
+    assert.match(recordingFailureWords(null), /could not listen/);
+    assert.match(recordingFailureWords('brand_new' as LeadRecordingFailure), /could not listen/);
+    assert.equal(retryHelps(null), true);
+
+    // A call still "listening" may be started again a quarter of an hour after it went up, not before.
+    const up = FRI(10, 0);
+    const listening = { status: 'processing' as const, failure: null, uploadedAt: new Date(up).toISOString() };
+    assert.equal(canRetryRecording(listening, up + RECORDING_STUCK_MS - 1), false);
+    assert.equal(canRetryRecording(listening, up + RECORDING_STUCK_MS), true);
+    assert.equal(canRetryRecording({ ...listening, status: 'ready' }, up + 2 * RECORDING_STUCK_MS), false);
+    assert.equal(canRetryRecording({ ...listening, status: 'failed', failure: 'too_big' }, up), false);
+    assert.equal(canRetryRecording({ ...listening, status: 'failed', failure: 'summary_failed' }, up), true);
+  });
+
+  it('every interest has a label and a colour, and one this screen does not know reads as unclear', () => {
+    for (const i of LEAD_CALL_INTEREST) {
+      assert.equal(interestLabel(i), LEAD_CALL_INTEREST_LABELS[i], i);
+      assert.ok(interestTone(i), i);
+    }
+    assert.deepEqual(
+      LEAD_CALL_INTEREST.map((i) => [i, interestTone(i)]),
+      [
+        ['hot', 'success'],
+        ['warm', 'warning'],
+        ['cold', 'info'],
+        ['unclear', 'neutral'],
+      ],
+    );
+    assert.equal(interestLabel('gone' as LeadCallInterest), 'Unclear');
+    assert.equal(interestTone('gone' as LeadCallInterest), 'neutral');
+  });
+
+  it('only a recording still being listened to keeps the drawer asking', () => {
+    for (const status of LEAD_RECORDING_STATUSES) {
+      assert.equal(hasProcessing([{ status }]), status === 'processing', status);
+    }
+    assert.equal(hasProcessing([]), false);
+    assert.equal(hasProcessing(undefined), false);
+    assert.equal(hasProcessing(null), false);
+    assert.equal(hasProcessing([{ status: 'ready' }, { status: 'failed' }, { status: 'processing' }]), true);
+  });
+
+  it('the new kind of history item is one the timeline knows', () => {
+    assert.ok((LEAD_TIMELINE_KINDS as readonly string[]).includes('call_recording'));
+  });
+});
+
+describe('call recordings: which file may be picked', () => {
+  const file = (name: string, type: string, size = 1_000_000) => ({ name, type, size });
+
+  it('takes every type the server lists, as the browser reports it', () => {
+    for (const t of LEAD_RECORDING_TYPES) {
+      assert.equal(recordingType(file('call', t)), t, t);
+      assert.equal(recordingFileProblem(file('call', t)), null, t);
+    }
+    // A codec after the type is not part of it.
+    assert.equal(recordingType(file('x.webm', 'audio/webm;codecs=opus')), 'audio/webm');
+    assert.equal(recordingType(file('x.m4a', ' Audio/MP4 ')), 'audio/mp4');
+  });
+
+  it('turns the other names browsers use for the same formats into the listed ones', () => {
+    const aliases: Record<string, string> = {
+      'audio/mp3': 'audio/mpeg',
+      'audio/mpeg3': 'audio/mpeg',
+      'audio/x-mpeg-3': 'audio/mpeg',
+      'audio/m4a': 'audio/x-m4a',
+      'audio/x-aac': 'audio/aac',
+      'audio/wave': 'audio/wav',
+      'audio/vnd.wave': 'audio/wav',
+    };
+    for (const [seen, sent] of Object.entries(aliases)) {
+      assert.equal(recordingType(file('call', seen)), sent, seen);
+      assert.ok((LEAD_RECORDING_TYPES as readonly string[]).includes(sent), sent);
+    }
+  });
+
+  it('goes by the name when the browser says nothing useful, upper case or not', () => {
+    const byName: Record<string, string> = {
+      mp3: 'audio/mpeg',
+      m4a: 'audio/mp4',
+      aac: 'audio/aac',
+      wav: 'audio/wav',
+      ogg: 'audio/ogg',
+      opus: 'audio/ogg',
+      webm: 'audio/webm',
+    };
+    for (const [ext, type] of Object.entries(byName)) {
+      for (const seen of ['', 'application/octet-stream']) {
+        assert.equal(recordingType(file(`Call 25-10.${ext}`, seen)), type, `${ext} ${seen}`);
+        assert.equal(recordingType(file(`CALL.${ext.toUpperCase()}`, seen)), type, `${ext} upper`);
+      }
+      assert.ok((LEAD_RECORDING_TYPES as readonly string[]).includes(type), type);
+    }
+    // A sound or video type the server spells differently: the name decides here too.
+    assert.equal(recordingType(file('call.webm', 'video/webm')), 'audio/webm');
+    assert.equal(recordingType(file('call.opus', 'audio/opus')), 'audio/ogg');
+    assert.equal(recordingType(file('call.amr', 'audio/amr')), null);
+    assert.equal(recordingType(file('notes.pdf', 'application/pdf')), null);
+    assert.equal(recordingType(file('call.amr', '')), null);
+    assert.equal(recordingType(file('call.3gp', '')), null);
+    assert.equal(recordingType(file('notes.pdf', '')), null);
+    assert.equal(recordingType(file('call', '')), null);
+    // A non-sound type the browser names wins over the name; an unfamiliar sound type
+    // does not (the name decides, and the server checks the bytes).
+    assert.equal(recordingType(file('call.mp3', 'application/pdf')), null);
+    assert.equal(recordingType(file('call.mp3', 'audio/flac')), 'audio/mpeg');
+    assert.equal(recordingType(file('call.flac', 'audio/flac')), null);
+  });
+
+  it('the picker offers exactly these, spelled out and not "any audio"', () => {
+    const offered = RECORDING_ACCEPT.split(',');
+    for (const t of LEAD_RECORDING_TYPES) assert.ok(offered.includes(t), t);
+    for (const ext of ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'opus', 'webm']) {
+      assert.ok(offered.includes(`.${ext}`), ext);
+    }
+    assert.ok(!offered.includes('audio/*'));
+    assert.equal(offered.length, new Set(offered).size);
+  });
+
+  it('refuses with a sentence that says what to do', () => {
+    assert.equal(recordingFileProblem(file('call.mp3', 'audio/mpeg', 0)), 'That file is empty.');
+    assert.match(
+      recordingFileProblem(file('photo.jpg', 'image/jpeg')) ?? '',
+      /MP3, M4A, AAC, WAV, OGG, WebM or Opus/,
+    );
+    assert.match(recordingFileProblem(file('notes.pdf', '')) ?? '', /not a recording/);
+    // Wrong type is said before too big: the bigger problem is the one that cannot be fixed by trimming.
+    assert.match(recordingFileProblem(file('big.pdf', 'application/pdf', 99 * 1024 * 1024)) ?? '', /not a recording/);
+    assert.match(
+      recordingFileProblem(file('long.m4a', 'audio/mp4', 62 * 1024 * 1024)) ?? '',
+      /62 MB.*50 MB.*about an hour/,
+    );
+  });
+
+  it('the size limit is the shared one, and the edge is exact', () => {
+    assert.equal(LEAD_RECORDING_MAX_BYTES, 50 * 1024 * 1024);
+    assert.equal(recordingFileProblem(file('a.mp3', 'audio/mpeg', LEAD_RECORDING_MAX_BYTES)), null);
+    assert.notEqual(recordingFileProblem(file('a.mp3', 'audio/mpeg', LEAD_RECORDING_MAX_BYTES + 1)), null);
+    assert.equal(recordingFileProblem(file('a.mp3', 'audio/mpeg', 1)), null);
+  });
+
+  it('says a size in the units a person reads', () => {
+    assert.equal(fileSizeWords(500), '1 KB');
+    assert.equal(fileSizeWords(340 * 1024), '340 KB');
+    assert.equal(fileSizeWords(Math.round(6.2 * 1024 * 1024)), '6.2 MB');
+    assert.equal(fileSizeWords(1024 * 1024), '1 MB');
+    assert.equal(fileSizeWords(62 * 1024 * 1024), '62 MB');
+    assert.equal(fileSizeWords(LEAD_RECORDING_MAX_BYTES), '50 MB');
+  });
+});
+
+describe('call recordings: what is sent', () => {
+  it('a name is kept whole, tidied, or cut to the longest the server takes with its extension kept', () => {
+    assert.equal(recordingFilename('Call with Ramesh.m4a'), 'Call with Ramesh.m4a');
+    assert.equal(recordingFilename('  Call   with\n Ramesh.m4a '), 'Call with Ramesh.m4a');
+    assert.equal(recordingFilename(''), 'Call recording');
+    assert.equal(recordingFilename('   '), 'Call recording');
+    const long = recordingFilename(`${'a'.repeat(300)}.m4a`);
+    assert.equal(long.length, RECORDING_FILENAME_MAX);
+    assert.ok(long.endsWith('.m4a'));
+    // No extension to keep, and an "extension" that is really most of the name.
+    assert.equal(recordingFilename('b'.repeat(300)).length, RECORDING_FILENAME_MAX);
+    assert.equal(recordingFilename(`${'c'.repeat(150)}.${'d'.repeat(150)}`).length, RECORDING_FILENAME_MAX);
+  });
+
+  it('the limits the bodies keep are the schemas', () => {
+    const ok = (filename: string) =>
+      presignLeadRecordingSchema.safeParse({ filename, contentType: 'audio/mpeg', size: 1000 }).success;
+    assert.equal(ok('a'.repeat(RECORDING_FILENAME_MAX)), true);
+    assert.equal(ok('a'.repeat(RECORDING_FILENAME_MAX + 1)), false);
+    const lasts = (durationSec: number) =>
+      addLeadRecordingSchema.safeParse({
+        key: 'k',
+        filename: 'a.mp3',
+        contentType: 'audio/mpeg',
+        size: 1000,
+        durationSec,
+      }).success;
+    assert.equal(lasts(RECORDING_DURATION_MAX_SEC), true);
+    assert.equal(lasts(RECORDING_DURATION_MAX_SEC + 1), false);
+  });
+
+  it('the signing request and the "it is there" request are ones the schemas accept, for every type', () => {
+    for (const type of LEAD_RECORDING_TYPES) {
+      const f = { name: 'Call.m4a', size: 6_800_000 };
+      assert.ok(presignLeadRecordingSchema.safeParse(recordingPresignBody(f, type)).success, type);
+      assert.deepEqual(recordingPresignBody(f, type), { filename: 'Call.m4a', contentType: type, size: 6_800_000 });
+      assert.ok(
+        addLeadRecordingSchema.safeParse(recordingAddBody('lead-recordings/abc/1.m4a', f, type, 392)).success,
+        type,
+      );
+    }
+    // The biggest file and the longest name still pass.
+    const edge = { name: `${'x'.repeat(400)}.mp3`, size: LEAD_RECORDING_MAX_BYTES };
+    assert.ok(presignLeadRecordingSchema.safeParse(recordingPresignBody(edge, 'audio/mpeg')).success);
+    assert.ok(addLeadRecordingSchema.safeParse(recordingAddBody('k', edge, 'audio/mpeg', null)).success);
+  });
+
+  it('the length goes whole seconds, and only when it is one the server will take', () => {
+    const f = { name: 'a.mp3', size: 1000 };
+    const body = (d: number | null) => recordingAddBody('k', f, 'audio/mpeg', d);
+    assert.equal(body(392.4).durationSec, 392);
+    assert.equal(body(392.6).durationSec, 393);
+    assert.equal(body(RECORDING_DURATION_MAX_SEC).durationSec, RECORDING_DURATION_MAX_SEC);
+    // Not known, not a length, or longer than the server allows: no field, and the upload carries on.
+    for (const d of [null, 0, 0.2, -5, Number.NaN, Number.POSITIVE_INFINITY, RECORDING_DURATION_MAX_SEC + 1]) {
+      assert.equal('durationSec' in body(d), false, String(d));
+      assert.ok(addLeadRecordingSchema.safeParse(body(d)).success, String(d));
+    }
+    assert.equal(body(392).key, 'k');
+  });
+
+  it('the line under the button says where the upload is, and never more than 100', () => {
+    assert.equal(uploadLine('sending', 0), 'Sending the recording… 0%');
+    assert.equal(uploadLine('sending', 42.4), 'Sending the recording… 42%');
+    assert.equal(uploadLine('sending', 140), 'Sending the recording… 100%');
+    assert.equal(uploadLine('sending', -3), 'Sending the recording… 0%');
+    assert.equal(uploadLine('saving', 100), 'Saving the recording…');
+  });
+});
+
+describe('call recordings: the lines in the drawer and the list', () => {
+  const iso = (ms: number) => new Date(ms).toISOString();
+
+  it('says how long the call ran, as m:ss and past the hour as h:mm:ss', () => {
+    assert.equal(callLength(392), '6:32');
+    assert.equal(callLength(5), '0:05');
+    assert.equal(callLength(60), '1:00');
+    assert.equal(callLength(59.6), '1:00');
+    assert.equal(callLength(3599), '59:59');
+    assert.equal(callLength(3725), '1:02:05');
+    for (const d of [null, undefined, 0, -3, Number.NaN, Number.POSITIVE_INFINITY]) {
+      assert.equal(callLength(d), null, String(d));
+    }
+  });
+
+  it('puts when, how long and who on one line, and leaves out what is not known', () => {
+    const now = FRI(15, 0);
+    const r = { uploadedAt: iso(FRI(14, 20)), durationSec: 392 as number | null, uploadedByName: 'Pawan' as string | null };
+    assert.equal(recordingHeader(r, now), '23 Oct, 14:20 · 6:32 · by Pawan');
+    assert.equal(recordingHeader({ ...r, durationSec: null }, now), '23 Oct, 14:20 · by Pawan');
+    assert.equal(recordingHeader({ ...r, uploadedByName: null }, now), '23 Oct, 14:20 · 6:32');
+    assert.equal(recordingHeader({ ...r, uploadedByName: '   ' }, now), '23 Oct, 14:20 · 6:32');
+    assert.equal(recordingHeader({ ...r, durationSec: 3725 }, now), '23 Oct, 14:20 · 1:02:05 · by Pawan');
+    // The day is the India one, and the year appears once it is not this year.
+    assert.equal(recordingHeader({ ...r, uploadedAt: iso(ist(2025, 12, 31, 23, 59)) }, now), '31 Dec 2025, 23:59 · 6:32 · by Pawan');
+    // Nothing known at all still reads as a line.
+    assert.equal(
+      recordingHeader({ uploadedAt: 'not a date', durationSec: null, uploadedByName: null }, now),
+      'Call recording',
+    );
+  });
+
+  it('shows at most three short bullets under a heading, none empty', () => {
+    assert.equal(SUMMARY_BULLETS_MAX, 3);
+    assert.deepEqual(shortList(['  Wants the price list  ', '', '   ', 'Call his son\n after 6', 'Visit Monday', 'Fourth', 'Fifth']), [
+      'Wants the price list',
+      'Call his son after 6',
+      'Visit Monday',
+    ]);
+    assert.deepEqual(shortList([]), []);
+    assert.deepEqual(shortList(null), []);
+    assert.deepEqual(shortList(undefined), []);
+  });
+
+  it('"Log this call" opens Log contact as a call, with the suggested outcome and the gist as the note', () => {
+    for (const outcome of LEAD_CONTACT_OUTCOMES) {
+      const p = logCallPrefill({ gist: 'Wants the price list.', suggestedOutcome: outcome });
+      assert.deepEqual(p, { channel: 'call', outcome, note: 'Wants the price list.' }, outcome);
+      // What the form would then send is a contact the server takes.
+      assert.equal(contactProblem({ ...p, next: null }, FRI(15, 0)), null, outcome);
+      assert.ok(logLeadContactSchema.safeParse(contactBody({ ...p, next: null })).success, outcome);
+    }
+    // No outcome suggested, or one this screen does not know: the person picks, nothing is guessed for them.
+    for (const suggestedOutcome of [null, 'brand_new' as LeadContactOutcome]) {
+      const p = logCallPrefill({ gist: 'Not clear.', suggestedOutcome });
+      assert.equal(p.outcome, '');
+      assert.match(contactProblem({ ...p, next: null }, FRI(15, 0)) ?? '', /Pick what came of it/);
+    }
+    assert.equal(logCallPrefill({ gist: '  Asked\n for   a visit.  ', suggestedOutcome: null }).note, 'Asked for a visit.');
+    // A gist longer than a note may be is cut, so the form opens ready to save.
+    const long = logCallPrefill({ gist: 'word '.repeat(300), suggestedOutcome: 'thinking' });
+    assert.ok(long.note.length <= NOTE_MAX);
+    assert.ok(long.note.endsWith('…'));
+    assert.equal(contactProblem({ ...long, next: null }, FRI(15, 0)), null);
+  });
+
+  it('the list says how the last call went, with a badge for every interest', () => {
+    for (const interest of LEAD_CALL_INTEREST) {
+      const line = lastCallLine({ at: iso(FRI(14, 20)), gist: 'Wants the price list.', interest });
+      assert.deepEqual(line, {
+        text: 'Last call: Wants the price list.',
+        label: LEAD_CALL_INTEREST_LABELS[interest],
+        tone: interestTone(interest),
+      });
+    }
+    assert.equal(
+      lastCallLine({ at: iso(FRI(14, 20)), gist: ' Wants\n the   price list. ', interest: 'hot' })?.text,
+      'Last call: Wants the price list.',
+    );
+    // No call, a server that sends none, or a gist that is only blank space: nothing printed.
+    assert.equal(lastCallLine(null), null);
+    assert.equal(lastCallLine(undefined), null);
+    assert.equal(lastCallLine({ at: iso(FRI(14, 20)), gist: '  \n ', interest: 'warm' }), null);
   });
 });

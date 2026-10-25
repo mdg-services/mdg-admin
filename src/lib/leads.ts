@@ -6,7 +6,9 @@
  * What lives here: the words (labels, the due line, the watch line, who last
  * did what), the follow-up suggestion a contact form pre-fills, the working
  * window that suggestion lives in, what each form may send, and why a form is
- * not ready yet.
+ * not ready yet. The call-recording rules sit at the end: which file may be
+ * picked, what a failed recording says, and how a summary is cut down to what
+ * a glance can take in.
  *
  * What does NOT live here: whether a lead is due, cold or closed. The server's
  * clock decides that and says so in `LeadRow`; this file only turns the answer
@@ -21,17 +23,22 @@
  */
 import {
   LEAD_ADMIN_CLOSE_REASONS,
+  LEAD_CALL_INTEREST_LABELS,
   LEAD_CLOSED_STATUSES,
   LEAD_CLOSING_OUTCOMES,
   LEAD_CONTACT_CHANNELS,
   LEAD_CONTACT_OUTCOMES,
   LEAD_CONTACT_OUTCOME_LABELS,
   LEAD_ORIGIN_LABELS,
+  LEAD_RECORDING_MAX_BYTES,
+  LEAD_RECORDING_TYPES,
   LEAD_SIGN_LABELS,
   LEAD_STATUS_LABELS,
   LEAD_VIEWS,
   type LeadActivity,
   type LeadAdminCloseReason,
+  type LeadCallInterest,
+  type LeadCallSummary,
   type LeadContactChannel,
   type LeadContactOutcome,
   type LeadContactSummary,
@@ -39,8 +46,12 @@ import {
   type LeadDueReason,
   type LeadFunnel,
   type LeadInvite,
+  type LeadLastCall,
   type LeadLookup,
   type LeadNote,
+  type LeadRecording,
+  type LeadRecordingFailure,
+  type LeadRecordingStatus,
   type LeadRow,
   type LeadSign,
   type LeadSigns,
@@ -1016,4 +1027,302 @@ export function phoneProblem(raw: string): string | null {
 /** The ten digits on their own: nothing for the server to misread. */
 export function phoneBody(raw: string): { mobile: string } {
   return { mobile: mobileTen(raw) ?? raw.trim() };
+}
+
+// ── Call recordings ─────────────────────────────────────────────────────────
+// The team uploads the recording of a call, the server writes it down and a
+// model boils it to a few lines, and the drawer shows those lines for the next
+// person who rings. The rules here are what that screen decides on its own:
+// which file may be picked, what a failure says, and how much of a summary a
+// glance is given.
+
+/** Mirrors the longest name `presignLeadRecordingSchema` takes; `scripts/leads.check.ts` fails if they disagree. */
+export const RECORDING_FILENAME_MAX = 200;
+/** Mirrors the longest call `addLeadRecordingSchema` takes a length for: four hours. */
+export const RECORDING_DURATION_MAX_SEC = 4 * 60 * 60;
+/** A summary shows this many bullets under each heading, whatever the server sent. */
+export const SUMMARY_BULLETS_MAX = 3;
+
+/** The three words the interest badge can mean, as the same colours the status badges use. */
+const INTEREST_TONE: Record<LeadCallInterest, Intent> = {
+  hot: 'success',
+  warm: 'warning',
+  cold: 'info',
+  unclear: 'neutral',
+};
+
+/** A badge for an interest this screen does not know (a newer server) reads as "Unclear", never as a blank pill. */
+export function interestLabel(interest: LeadCallInterest): string {
+  return LEAD_CALL_INTEREST_LABELS[interest] ?? LEAD_CALL_INTEREST_LABELS.unclear;
+}
+
+export function interestTone(interest: LeadCallInterest): Intent {
+  return INTEREST_TONE[interest] ?? INTEREST_TONE.unclear;
+}
+
+/**
+ * The type a picked file goes up as, by the extensions a phone's call recorder
+ * and a voice-memo app write. Used only when the browser names no type: an
+ * Android picker often hands back an empty one.
+ */
+const RECORDING_EXTENSIONS: Record<string, (typeof LEAD_RECORDING_TYPES)[number]> = {
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  // An .opus file is Opus inside an Ogg wrapper.
+  opus: 'audio/ogg',
+  webm: 'audio/webm',
+};
+
+/** Other names browsers give the same formats; the server's list holds only one name for each. */
+const RECORDING_TYPE_ALIASES: Record<string, (typeof LEAD_RECORDING_TYPES)[number]> = {
+  'audio/mp3': 'audio/mpeg',
+  'audio/mpeg3': 'audio/mpeg',
+  'audio/x-mpeg-3': 'audio/mpeg',
+  'audio/m4a': 'audio/x-m4a',
+  'audio/x-aac': 'audio/aac',
+  'audio/wave': 'audio/wav',
+  'audio/vnd.wave': 'audio/wav',
+};
+
+/**
+ * What the file picker offers. Spelled out rather than `audio/*`, so a phone's
+ * picker does not offer an .amr or a .flac that the server would then turn away.
+ */
+export const RECORDING_ACCEPT = [
+  ...Object.keys(RECORDING_EXTENSIONS).map((ext) => `.${ext}`),
+  ...LEAD_RECORDING_TYPES,
+].join(',');
+
+function extensionOf(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
+}
+
+/**
+ * The content type to send for a picked file, or `null` when it is not audio
+ * the server takes. The browser's own word wins when it gives one the server
+ * knows. When it gives none (or the useless "binary file"), the name decides.
+ */
+export function recordingType(file: { name: string; type: string }): string | null {
+  const raw = (file.type || '').split(';')[0]?.trim().toLowerCase() ?? '';
+  const named: string = RECORDING_TYPE_ALIASES[raw] ?? raw;
+  if ((LEAD_RECORDING_TYPES as readonly string[]).includes(named)) return named;
+  // No type, "binary file", or a sound or video type the server does not spell that
+  // way (a WebM recording reported as video/webm, an Opus one as audio/opus): the
+  // name decides, and the server checks the bytes either way.
+  if (
+    raw === '' ||
+    raw === 'application/octet-stream' ||
+    raw.startsWith('audio/') ||
+    raw.startsWith('video/')
+  ) {
+    return RECORDING_EXTENSIONS[extensionOf(file.name)] ?? null;
+  }
+  return null;
+}
+
+/** "340 KB", "6.2 MB", "62 MB". */
+export function fileSizeWords(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  if (mb < 1) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${mb < 10 ? Math.round(mb * 10) / 10 : Math.round(mb)} MB`;
+}
+
+/** Why a picked file cannot go up, in words for the person who picked it, or `null` when it can. */
+export function recordingFileProblem(file: {
+  name: string;
+  type: string;
+  size: number;
+}): string | null {
+  if (!(file.size > 0)) return 'That file is empty.';
+  if (recordingType(file) === null) {
+    return 'That is not a recording we can take. Use an MP3, M4A, AAC, WAV, OGG, WebM or Opus file.';
+  }
+  if (file.size > LEAD_RECORDING_MAX_BYTES) {
+    return `That recording is ${fileSizeWords(file.size)}. The most we can take is ${fileSizeWords(LEAD_RECORDING_MAX_BYTES)}, about an hour of a phone call.`;
+  }
+  return null;
+}
+
+/**
+ * The file's name as the server takes it: whole, or cut to the longest it
+ * allows with the extension kept, so a long name does not fail the upload.
+ */
+export function recordingFilename(name: string): string {
+  const n = name.replace(/\s+/g, ' ').trim();
+  if (!n) return 'Call recording';
+  if (n.length <= RECORDING_FILENAME_MAX) return n;
+  const dot = n.lastIndexOf('.');
+  const ext = dot > 0 && n.length - dot <= 10 ? n.slice(dot) : '';
+  return `${n.slice(0, RECORDING_FILENAME_MAX - ext.length)}${ext}`;
+}
+
+/** What `POST …/recordings/presign` takes. */
+export function recordingPresignBody(
+  file: { name: string; size: number },
+  contentType: string,
+): { filename: string; contentType: string; size: number } {
+  return { filename: recordingFilename(file.name), contentType, size: file.size };
+}
+
+/**
+ * What `POST …/recordings` takes once the file is up. The length goes only when
+ * the browser measured one the server will accept: it is a nicety on the row,
+ * never a reason for the upload to fail.
+ */
+export function recordingAddBody(
+  key: string,
+  file: { name: string; size: number },
+  contentType: string,
+  durationSec: number | null,
+): { key: string; filename: string; contentType: string; size: number; durationSec?: number } {
+  const seconds = durationSec === null ? null : Math.round(durationSec);
+  return {
+    key,
+    ...recordingPresignBody(file, contentType),
+    ...(seconds !== null && seconds > 0 && seconds <= RECORDING_DURATION_MAX_SEC
+      ? { durationSec: seconds }
+      : {}),
+  };
+}
+
+/** The line under the "Add call recording" button while a file goes up. */
+export function uploadLine(stage: 'sending' | 'saving', percent: number): string {
+  if (stage === 'saving') return 'Saving the recording…';
+  return `Sending the recording… ${Math.min(100, Math.max(0, Math.round(percent)))}%`;
+}
+
+/** "6:32", or "1:02:05" past the hour. `null` when the length is not known. */
+export function callLength(seconds: number | null | undefined): string | null {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || !(seconds > 0)) {
+    return null;
+  }
+  const total = Math.round(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h > 0 ? `${h}:${two(m)}:${two(s)}` : `${m}:${two(s)}`;
+}
+
+/** "25 Oct, 14:20 · 6:32 · by Pawan": when it went up, how long the call ran, and who put it there. */
+export function recordingHeader(
+  r: Pick<LeadRecording, 'uploadedAt' | 'durationSec' | 'uploadedByName'>,
+  now: number,
+): string {
+  const by = r.uploadedByName?.trim();
+  const line = [istStamp(r.uploadedAt, now), callLength(r.durationSec), by ? `by ${by}` : null]
+    .filter(Boolean)
+    .join(' · ');
+  return line || 'Call recording';
+}
+
+/** Whether any recording is still being listened to: the drawer asks again every few seconds while so. */
+export function hasProcessing(
+  recordings: readonly Pick<LeadRecording, 'status'>[] | null | undefined,
+): boolean {
+  return (recordings ?? []).some((r) => r.status === 'processing');
+}
+
+/**
+ * One sentence for why a recording has no summary. The audio still plays in
+ * every case, so none of them says it was lost.
+ */
+export const RECORDING_FAILURE_WORDS: Record<LeadRecordingFailure, string> = {
+  unsupported: 'This file is not audio we can read, so there is no summary.',
+  too_big: `This recording is over ${fileSizeWords(LEAD_RECORDING_MAX_BYTES)}, so nobody listened to it.`,
+  no_speech: 'Nobody could be heard talking in this recording, so there is no summary.',
+  transcribe_failed: 'We could not write the call down this time.',
+  summary_failed: 'We wrote the call down but could not sum it up this time.',
+  interrupted: 'The listening was cut off part way through.',
+};
+
+/** A failure this screen has no sentence for (a newer server) still says something true. */
+export function recordingFailureWords(failure: LeadRecordingFailure | null): string {
+  return (
+    (failure && RECORDING_FAILURE_WORDS[failure]) ||
+    'We could not listen to this call, so there is no summary.'
+  );
+}
+
+/**
+ * Whether "Try again" can change the outcome. A file that is not audio, or is
+ * too big, comes out the same every time; the rest were the services' bad day.
+ */
+export function retryHelps(failure: LeadRecordingFailure | null): boolean {
+  return failure !== 'unsupported' && failure !== 'too_big';
+}
+
+/** How long a recording may say "listening" before the server lets a person start it again. */
+export const RECORDING_STUCK_MS = 15 * 60 * 1000;
+
+/**
+ * Whether to offer "Try again": a failure that trying again can fix, or a call
+ * still "listening" a quarter of an hour after it went up — the server takes a
+ * retry from then on, and nobody should have to wait for a restart.
+ */
+export function canRetryRecording(
+  r: { status: LeadRecordingStatus; failure: LeadRecordingFailure | null; uploadedAt: string },
+  now: number,
+): boolean {
+  if (r.status === 'failed') return retryHelps(r.failure);
+  if (r.status === 'processing') return now - Date.parse(r.uploadedAt) >= RECORDING_STUCK_MS;
+  return false;
+}
+
+/** The bullets a summary shows under one heading: tidy, none empty, at most three. */
+export function shortList(items: readonly string[] | null | undefined): string[] {
+  return (items ?? [])
+    .map((t) => t.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .slice(0, SUMMARY_BULLETS_MAX);
+}
+
+/** What "Log this call" opens the Log contact form holding. */
+export interface ContactPrefill {
+  channel: LeadContactChannel;
+  /** A `LeadContactOutcome`, or empty when the call did not say. */
+  outcome: string;
+  note: string;
+}
+
+/**
+ * The Log contact form for a call that has a summary: how (a call), what came
+ * of it (the outcome the summary suggests, when it is one the form knows) and
+ * the note (the gist). The person reads it and presses Save; nothing is saved
+ * from here.
+ */
+export function logCallPrefill(
+  summary: Pick<LeadCallSummary, 'gist' | 'suggestedOutcome'>,
+): ContactPrefill {
+  const gist = summary.gist.replace(/\s+/g, ' ').trim();
+  const outcome = summary.suggestedOutcome;
+  return {
+    channel: 'call',
+    outcome:
+      outcome && (LEAD_CONTACT_OUTCOMES as readonly string[]).includes(outcome) ? outcome : '',
+    note: gist.length > NOTE_MAX ? `${gist.slice(0, NOTE_MAX - 1).trimEnd()}…` : gist,
+  };
+}
+
+/** The list's "Last call" line: the words, and the badge for how keen they sounded. */
+export interface LastCallLine {
+  /** "Last call: Wants the price list." The list clamps it to two lines. */
+  text: string;
+  label: string;
+  tone: Intent;
+}
+
+/** `null` when the lead has no analysed call, or its gist is only blank space. */
+export function lastCallLine(call: LeadLastCall | null | undefined): LastCallLine | null {
+  if (!call) return null;
+  const gist = call.gist.replace(/\s+/g, ' ').trim();
+  if (!gist) return null;
+  return {
+    text: `Last call: ${gist}`,
+    label: interestLabel(call.interest),
+    tone: interestTone(call.interest),
+  };
 }

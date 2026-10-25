@@ -26,6 +26,7 @@ import {
   suggestNextAt,
   unansweredAfter,
   whenInput,
+  type ContactPrefill,
   type WhenInput,
 } from '@/lib/leads';
 import {
@@ -54,15 +55,38 @@ import { LeadBox, errorText } from './shared';
  * before it is chosen. The first admin to log a contact on a lead nobody owns
  * becomes its owner, on the server.
  *
+ * "Log this call" on a call recording's summary opens it already holding what
+ * the summary says (a call, the outcome it suggests, the gist as the note). It
+ * is only a head start: the person reads it and presses Save, and the follow-up
+ * is worked out from the outcome exactly as if they had picked it.
+ *
  * Nothing here messages the lead. `lead` null is closed; the form mounts only
  * while one is open, keyed on who it is for, so the list refreshing underneath
  * never resets what the person is typing.
  */
-export function LogContactDialog({ lead, onClose }: { lead: LeadRow | null; onClose: () => void }) {
-  return lead ? <LogContactForm key={lead.id} lead={lead} onClose={onClose} /> : null;
+export function LogContactDialog({
+  lead,
+  prefill,
+  onClose,
+}: {
+  lead: LeadRow | null;
+  prefill?: ContactPrefill;
+  onClose: () => void;
+}) {
+  return lead ? (
+    <LogContactForm key={lead.id} lead={lead} prefill={prefill} onClose={onClose} />
+  ) : null;
 }
 
-function LogContactForm({ lead, onClose }: { lead: LeadRow; onClose: () => void }) {
+function LogContactForm({
+  lead,
+  prefill,
+  onClose,
+}: {
+  lead: LeadRow;
+  prefill?: ContactPrefill;
+  onClose: () => void;
+}) {
   const toast = useToast();
   const log = useLogLeadContact();
   const outcomeId = React.useId();
@@ -70,9 +94,9 @@ function LogContactForm({ lead, onClose }: { lead: LeadRow; onClose: () => void 
   // The moment the form opened: the suggestion is worked out from it, so it does
   // not creep forward while somebody types a note.
   const [openedAt] = React.useState(() => Date.now());
-  const [channel, setChannel] = React.useState<LeadContactChannel>('call');
-  const [outcome, setOutcome] = React.useState('');
-  const [note, setNote] = React.useState('');
+  const [channel, setChannel] = React.useState<LeadContactChannel>(prefill?.channel ?? 'call');
+  const [outcome, setOutcome] = React.useState(prefill?.outcome ?? '');
+  const [note, setNote] = React.useState(prefill?.note ?? '');
   const [next, setNext] = React.useState<WhenInput | null>(null);
   const [touched, setTouched] = React.useState(false);
 
@@ -127,6 +151,12 @@ function LogContactForm({ lead, onClose }: { lead: LeadRow; onClose: () => void 
         }}
       >
         <LeadBox lead={lead} />
+
+        {prefill ? (
+          <p className="text-xs text-text-muted">
+            Filled in from the call summary. Check it, then save.
+          </p>
+        ) : null}
 
         <div>
           <p className="mb-1 text-sm font-medium text-text">

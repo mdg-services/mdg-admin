@@ -1,12 +1,17 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as React from 'react';
 
 import { api } from '@/lib/api';
+import { hasProcessing } from '@/lib/leads';
+import { uploadLeadRecording, type UploadLeadRecordingInput } from '@/lib/uploadLeadRecording';
 import type {
   LeadCounts,
   LeadDetail,
   LeadList,
   LeadLookup,
   LeadOwnerOption,
+  LeadRecording,
+  LeadRecordingAudio,
   LeadView,
   LeadViewerList,
 } from '@dk/shared';
@@ -22,6 +27,8 @@ import type {
 /** Every Leads query hangs off this prefix, so one invalidation refreshes the lists, the counts and any open lead. */
 export const leadsRoot = ['leads'] as const;
 export const leadsListKey = (view: LeadView, q: string) => ['leads', 'list', view, q] as const;
+/** Every tab's list, whatever it was searched for. */
+export const leadsListRoot = ['leads', 'list'] as const;
 /** The nav badge's own small request: counts only, under the same root. */
 export const leadCountsKey = ['leads', 'counts'] as const;
 export const leadKey = (id: string) => ['leads', 'detail', id] as const;
@@ -64,13 +71,23 @@ export function useLeadsTodoCount(): number {
   return useLeadCountsQuery().data?.todo ?? 0;
 }
 
-/** One lead in full, fetched by id so a link from an alert opens it even when it is not on the page the list shows. */
+/** How often an open lead asks again while a call recording is being listened to. */
+const PROCESSING_POLL_MS = 5_000;
+
+/**
+ * One lead in full, fetched by id so a link from an alert opens it even when it is not on the page the list shows.
+ *
+ * While a call recording is being written down and summarised it asks again
+ * every five seconds, so the summary appears by itself; otherwise it does not poll.
+ */
 export function useLeadQuery(id: string | null) {
   return useQuery({
     queryKey: leadKey(id ?? ''),
     queryFn: () => api.get<LeadDetail>(`/admin/leads/${id}`),
     enabled: !!id,
     staleTime: 10_000,
+    refetchInterval: (query) =>
+      hasProcessing(query.state.data?.recordings) ? PROCESSING_POLL_MS : false,
   });
 }
 
@@ -213,4 +230,95 @@ export function useAddLeadPhone() {
       survivingLeadId(await api.post<unknown>(`/admin/leads/${id}/phone`, body), id),
     onSettled: refresh,
   });
+}
+
+// ── Call recordings ─────────────────────────────────────────────────────────
+
+/** The same refresh as `useRefreshAfterChange`, without the alerts: a recording moves no alert. */
+function useRefreshLeads() {
+  const qc = useQueryClient();
+  return () => void qc.invalidateQueries({ queryKey: leadsRoot });
+}
+
+/**
+ * Put a call recording on a lead: sign, send, tell the server. The server's
+ * answer is the whole lead, which goes straight into the open drawer so the new
+ * recording shows (as "listening") without waiting for the next fetch.
+ */
+export function useUploadLeadRecording() {
+  const qc = useQueryClient();
+  const refresh = useRefreshLeads();
+  return useMutation({
+    mutationFn: (input: UploadLeadRecordingInput) => uploadLeadRecording(input),
+    onSuccess: (detail, { id }) => {
+      qc.setQueryData(leadKey(id), detail);
+    },
+    onSettled: refresh,
+  });
+}
+
+/**
+ * A short-lived link to play one recording. Asked for when somebody presses
+ * Play, never kept: a link runs out, and the answer to "it stopped" is another.
+ */
+export function fetchLeadRecordingAudio(
+  leadId: string,
+  recordingId: string,
+  signal?: AbortSignal,
+): Promise<LeadRecordingAudio> {
+  return api.get<LeadRecordingAudio>(
+    `/admin/leads/${leadId}/recordings/${recordingId}/audio`,
+    undefined,
+    signal,
+  );
+}
+
+interface RecordingVars {
+  id: string;
+  recordingId: string;
+}
+
+/**
+ * Wait for the lead to be read again before saying done. Retry and Remove
+ * change what the card shows, and a button that stopped spinning on the old
+ * card ("failed", still there) would look as if nothing had happened.
+ */
+function useRefreshLeadsAndWait() {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: leadsRoot });
+}
+
+/** Listen to a recording that failed once more. */
+export function useRetryLeadRecording() {
+  const refresh = useRefreshLeadsAndWait();
+  return useMutation({
+    mutationFn: ({ id, recordingId }: RecordingVars) =>
+      api.post<unknown>(`/admin/leads/${id}/recordings/${recordingId}/retry`),
+    onSettled: refresh,
+  });
+}
+
+/** Take a recording and its summary off the lead, for everybody. */
+export function useDeleteLeadRecording() {
+  const refresh = useRefreshLeadsAndWait();
+  return useMutation({
+    mutationFn: ({ id, recordingId }: RecordingVars) =>
+      api.del<unknown>(`/admin/leads/${id}/recordings/${recordingId}`),
+    onSettled: refresh,
+  });
+}
+
+/**
+ * When the last recording on an open lead finishes being listened to, the
+ * list's "Last call" line has something new to say. Refresh the lists once,
+ * then, rather than wait for their minute.
+ */
+export function useRefreshListsWhenAnalysed(recordings: readonly Pick<LeadRecording, 'status'>[]) {
+  const qc = useQueryClient();
+  const busy = hasProcessing(recordings);
+  const wasBusy = React.useRef(busy);
+  React.useEffect(() => {
+    if (wasBusy.current && !busy) void qc.invalidateQueries({ queryKey: leadsListRoot });
+    wasBusy.current = busy;
+  }, [busy, qc]);
 }

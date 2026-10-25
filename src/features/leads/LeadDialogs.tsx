@@ -29,7 +29,11 @@ export function LeadDialogs({
   const forAction = (action: LeadAction) => (state?.action === action ? state.lead : null);
   return (
     <>
-      <LogContactDialog lead={forAction('contact')} onClose={onClose} />
+      <LogContactDialog
+        lead={forAction('contact')}
+        prefill={state?.contactPrefill}
+        onClose={onClose}
+      />
       <FollowUpDialog lead={forAction('followUp')} onClose={onClose} />
       <AssignDialog lead={forAction('assign')} onClose={onClose} />
       <AddNoteDialog lead={forAction('note')} onClose={onClose} />

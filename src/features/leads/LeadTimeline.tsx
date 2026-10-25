@@ -1,6 +1,7 @@
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  AudioLines,
   BadgeCheck,
   BellOff,
   Clapperboard,
@@ -34,6 +35,7 @@ const ICONS: Record<LeadTimelineKind, LucideIcon> = {
   assistant: Headset,
   opted_out: BellOff,
   activity: PenLine,
+  call_recording: AudioLines,
 };
 
 /** Shown first. The server sends up to 150, newest first, and a phone does not want them all at once. */

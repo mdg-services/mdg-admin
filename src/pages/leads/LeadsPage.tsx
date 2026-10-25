@@ -21,7 +21,7 @@ import { LeadRowActions } from '@/features/leads/LeadActions';
 import { LeadInterestCell, LeadStandsCell, LeadWhoCell } from '@/features/leads/LeadCells';
 import { LeadDialogs } from '@/features/leads/LeadDialogs';
 import { LeadDrawer } from '@/features/leads/LeadDrawer';
-import { type LeadAction, type LeadDialogState } from '@/features/leads/shared';
+import { type LeadActionHandler, type LeadDialogState } from '@/features/leads/shared';
 import { ViewersList } from '@/features/leads/ViewersList';
 import {
   leadsRoot,
@@ -170,9 +170,9 @@ export function LeadsPage() {
     if (window.getSelection()?.toString()) return;
     openLead(lead.id);
   }
-  function onAction(action: LeadAction, lead: LeadRow) {
-    setDialog({ action, lead });
-  }
+  const onAction: LeadActionHandler = (action, lead, contactPrefill) => {
+    setDialog({ action, lead, ...(contactPrefill ? { contactPrefill } : {}) });
+  };
   const hrefFor = (id: string) => {
     const next = new URLSearchParams(search);
     next.set('lead', id);

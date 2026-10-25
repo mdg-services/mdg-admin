@@ -34,10 +34,11 @@ import {
 import { dealerCodeLabel } from '@dk/shared';
 import type { LeadActivity, LeadDetail, LeadRow, LeadVisit } from '@dk/shared';
 
+import { CallRecordings } from './CallRecordings';
 import { LeadDrawerActions } from './LeadActions';
 import { WatchBar, WrapChip } from './LeadCells';
 import { LeadTimeline } from './LeadTimeline';
-import type { LeadAction } from './shared';
+import type { LeadActionHandler } from './shared';
 
 const LINK =
   'inline-flex min-h-11 select-text items-center rounded-sm text-brand underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:min-h-0';
@@ -47,8 +48,9 @@ const LOG_FIRST = 8;
 
 /**
  * One lead in full: where it stands and what to do next, every action as a
- * button, what we know about them, how they watched the film, everything that
- * has happened with them from every source, and what the team has logged.
+ * button, the recordings of the team's calls with their summaries, what we know
+ * about them, how they watched the film, everything that has happened with them
+ * from every source, and what the team has logged.
  *
  * Opened by `?lead=<id>` on the Leads page, so the link the three lead alerts
  * carry lands here. It fetches the lead itself rather than being handed a row
@@ -69,7 +71,7 @@ export function LeadDrawer({
   id: string | null;
   now: number;
   onClose: () => void;
-  onAction: (action: LeadAction, lead: LeadRow) => void;
+  onAction: LeadActionHandler;
 }) {
   const q = useLeadQuery(id);
   const d = q.data;
@@ -125,7 +127,7 @@ function LeadBody({
 }: {
   detail: LeadDetail;
   now: number;
-  onAction: (action: LeadAction, lead: LeadRow) => void;
+  onAction: LeadActionHandler;
 }) {
   const { lead, visits, activity, timeline, nextStep } = detail;
   const closed = isClosed(lead.status);
@@ -146,6 +148,18 @@ function LeadBody({
       </p>
 
       <LeadDrawerActions lead={lead} onAction={onAction} />
+
+      <Section title="Call recordings">
+        <CallRecordings
+          // One per lead: an upload under way belongs to the lead it was started on.
+          key={lead.id}
+          lead={lead}
+          // A server one release behind sends none, and a lead then has nothing to show.
+          recordings={detail.recordings ?? []}
+          now={now}
+          onLogCall={(prefill) => onAction('contact', lead, prefill)}
+        />
+      </Section>
 
       <Section title="About them">
         <KeyValueList items={facts(lead, now)} />
