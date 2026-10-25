@@ -2,22 +2,20 @@ import {
   CalendarClock,
   MessageCircle,
   NotebookPen,
-  Phone,
   PhoneCall,
   RotateCcw,
   UserRound,
   UserPlus,
   XCircle,
-  ExternalLink,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import { ActionRow, Button, Menu, MenuItem } from '@/components/ui';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { dialHref } from '@/lib/intake';
 import { canReopen, chatHref, isClosed, leadName } from '@/lib/leads';
 import type { LeadRow } from '@dk/shared';
 
-import { ActionLink, IconLink, type LeadAction } from './shared';
+import { ActionLink, type LeadAction } from './shared';
 
 interface ActionsProps {
   lead: LeadRow;
@@ -39,20 +37,24 @@ function reach(lead: LeadRow) {
 }
 
 /**
- * The rest of what can be done to an open lead, behind one button. `onOpen` is
- * the way into the drawer from a list; the drawer itself leaves it out.
+ * The rest of what can be done to an open lead, behind one button: the two ways
+ * to reach them that used to be icons on the row (the number and the WhatsApp
+ * icon in the lead's own cell cover the quick paths now), then the follow-up,
+ * the owner, a note and the close.
  */
-function MoreMenu({
-  lead,
-  onAction,
-  onOpen,
-}: ActionsProps & { onOpen?: (lead: LeadRow) => void }) {
-  const { needsNumber } = reach(lead);
+function MoreMenu({ lead, onAction }: ActionsProps) {
+  const navigate = useNavigate();
+  const { tel, chat, needsNumber } = reach(lead);
   return (
     <Menu label={`More actions for ${leadName(lead)}`} title={leadName(lead)}>
-      {onOpen ? (
-        <MenuItem icon={<ExternalLink {...ICON} />} onSelect={() => onOpen(lead)}>
-          Open details
+      {chat ? (
+        <MenuItem icon={<MessageCircle {...ICON} />} onSelect={() => navigate(chat)}>
+          Open WhatsApp chat
+        </MenuItem>
+      ) : null}
+      {tel ? (
+        <MenuItem icon={<PhoneCall {...ICON} />} onSelect={() => window.location.assign(tel)}>
+          Call
         </MenuItem>
       ) : null}
       <MenuItem icon={<CalendarClock {...ICON} />} onSelect={() => onAction('followUp', lead)}>
@@ -90,92 +92,29 @@ function ReopenButton({ lead, onAction }: ActionsProps) {
 }
 
 /**
- * What a row offers in the last column of the table (md and up): Log contact, a
- * quiet WhatsApp and Call, and the rest in a menu. A closed lead offers only
- * Reopen (never for a client).
+ * What a row offers in the last column of the table, which only exists from md
+ * up: Log contact and the menu. A closed lead offers only Reopen (never for a
+ * client). The row itself opens the drawer.
  *
- * Below md the same slot is the top right of the card, where a design-system
- * list puts its overflow menu, and it holds only that menu: the buttons that
- * matter are under the row (`LeadCardActions`) where a thumb can reach them.
- * Which one is decided in JS, as `DataList` decides its own shape, so only one
- * is ever mounted.
+ * A phone has no such column. Its card is one tap target that opens the drawer,
+ * where every action is a labelled 44px button, and a button cannot sit inside
+ * a tappable card; the page passes no actions to the list there.
  */
-export function LeadRowActions({
-  lead,
-  onAction,
-  onOpen,
-}: ActionsProps & { onOpen: (lead: LeadRow) => void }) {
-  const isMd = useMediaQuery('(min-width: 768px)');
-  const closed = isClosed(lead.status);
-  if (!isMd) return closed ? null : <MoreMenu lead={lead} onAction={onAction} onOpen={onOpen} />;
-  if (closed) {
+export function LeadRowActions({ lead, onAction }: ActionsProps) {
+  if (isClosed(lead.status)) {
     return (
       <div className="flex items-center justify-end gap-1">
         {canReopen(lead.status) ? <ReopenButton lead={lead} onAction={onAction} /> : null}
       </div>
     );
   }
-  const { tel, chat, needsNumber } = reach(lead);
   return (
     <div className="flex items-center justify-end gap-1">
       <Button size="sm" onClick={() => onAction('contact', lead)}>
         Log contact
       </Button>
-      {chat ? (
-        <IconLink to={chat} label={`WhatsApp ${leadName(lead)}`}>
-          <MessageCircle width={16} height={16} strokeWidth={1.75} />
-        </IconLink>
-      ) : null}
-      {tel ? (
-        <IconLink href={tel} label={`Call ${leadName(lead)}`}>
-          <Phone width={16} height={16} strokeWidth={1.75} />
-        </IconLink>
-      ) : null}
-      {needsNumber ? (
-        <Button size="sm" variant="secondary" onClick={() => onAction('phone', lead)}>
-          Add number
-        </Button>
-      ) : null}
-      <MoreMenu lead={lead} onAction={onAction} onOpen={onOpen} />
+      <MoreMenu lead={lead} onAction={onAction} />
     </div>
-  );
-}
-
-/**
- * The same on a phone card, under the row: every button is a labelled 44px
- * target, wrapping onto a second line instead of running off the edge. The
- * overflow menu is the card's top-right button (`LeadRowActions`).
- */
-export function LeadCardActions({ lead, onAction }: ActionsProps) {
-  if (isClosed(lead.status)) {
-    return canReopen(lead.status) ? (
-      <ActionRow below="wrap" align="start">
-        <ReopenButton lead={lead} onAction={onAction} />
-      </ActionRow>
-    ) : null;
-  }
-  const { tel, chat, needsNumber } = reach(lead);
-  return (
-    <ActionRow below="wrap" align="start">
-      <Button size="sm" onClick={() => onAction('contact', lead)}>
-        Log contact
-      </Button>
-      {chat ? (
-        <ActionLink to={chat} icon={<MessageCircle {...ICON} />}>
-          WhatsApp
-        </ActionLink>
-      ) : null}
-      {tel ? (
-        <ActionLink href={tel} icon={<PhoneCall {...ICON} />}>
-          Call
-        </ActionLink>
-      ) : null}
-      {needsNumber ? (
-        <Button size="sm" variant="secondary" onClick={() => onAction('phone', lead)}>
-          Add number
-        </Button>
-      ) : null}
-    </ActionRow>
   );
 }
 

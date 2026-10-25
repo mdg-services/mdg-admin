@@ -201,7 +201,7 @@ function facts(lead: LeadRow, now: number): KeyValueItem[] {
     // The bar prints its own line ("Watched 12:30 of 26:29 · …"), so the fact adds only the bar and the note.
     value: (
       <>
-        <WatchBar watch={lead.watch} />
+        <WatchBar watch={lead.watch} className="mt-1.5" />
         {note ? <span className="mt-1 block text-xs text-text-subtle">{note}</span> : null}
       </>
     ),

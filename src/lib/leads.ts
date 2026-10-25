@@ -38,9 +38,12 @@ import {
   type LeadCounts,
   type LeadDueReason,
   type LeadFunnel,
+  type LeadInvite,
   type LeadLookup,
+  type LeadNote,
   type LeadRow,
   type LeadSign,
+  type LeadSigns,
   type LeadStatus,
   type LeadView,
   type LeadWatch,
@@ -513,6 +516,53 @@ export function signLine(
   return `${LEAD_SIGN_LABELS[sign.kind]} · ${agoWords(sign.at, now)}`;
 }
 
+/**
+ * "22 Oct" in India time, with the year added once it is not this year, so a list
+ * that keeps every lead cannot leave "3 Mar" to be guessed at. Empty for a time
+ * that cannot be read.
+ */
+export function dayWords(iso: string | null | undefined, now: number): string {
+  if (!iso) return '';
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return '';
+  const d = new Date(at + IST_OFFSET);
+  const day = `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+  const year = d.getUTCFullYear();
+  return year === new Date(now + IST_OFFSET).getUTCFullYear() ? day : `${day} ${year}`;
+}
+
+/** "Lead since 22 Oct": when they became a lead, as a day. `null` for a time that cannot be read. */
+export function sinceLine(firstSeenAt: string | null | undefined, now: number): string | null {
+  const day = dayWords(firstSeenAt, now);
+  return day ? `Lead since ${day}` : null;
+}
+
+/** "2 tries without an answer": the calls and messages since they last engaged that nobody picked up. `null` for none. */
+export function triesLine(unanswered: number): string | null {
+  if (!(unanswered > 0)) return null;
+  return `${unanswered} ${unanswered === 1 ? 'try' : 'tries'} without an answer`;
+}
+
+/** The newest note on a lead as the list shows it: the words in quotes, and who wrote them and when. */
+export interface NoteLine {
+  /** “The words”, on one line with the breaks taken out: the list clamps it to two lines. */
+  quote: string;
+  /** "Aryan, 2 h ago". Empty only when neither is known. */
+  by: string;
+}
+
+/**
+ * The latest note somebody wrote, so the list says what was agreed without
+ * opening the lead. `null` when there is none, or when it is only blank space.
+ */
+export function noteLine(note: LeadNote | null, now: number): NoteLine | null {
+  if (!note) return null;
+  const text = note.text.replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  const by = [note.byName?.trim(), agoWords(note.at, now)].filter(Boolean).join(', ');
+  return { quote: `“${text}”`, by };
+}
+
 export function ownerLine(owner: LeadRow['owner']): string {
   return owner ? `Owner: ${owner.name}` : 'Nobody owns it yet';
 }
@@ -557,18 +607,130 @@ export function clockWords(seconds: number): string {
   return h > 0 ? `${h}:${two(m)}:${sec}` : `${m}:${sec}`;
 }
 
-/** "Watched 12:30 of 26:29 · 2 visits · sound on": how far they got, and whether they could hear it. */
-export function watchLine(w: LeadWatch): string {
+/**
+ * "Watched 12:30 of 26:29 · 2 visits · sound on": how far they got, and whether
+ * they could hear it. `withVisits` false leaves the count out, for the Leads
+ * table, whose next line ("2 visits · last watched 2 h ago") already says it.
+ */
+export function watchLine(w: LeadWatch, withVisits = true): string {
   // A call-back from the film page with no link code: they were on the page, but
   // no visit can be tied to them, so there is nothing to measure.
   if (w.visits === 0) return 'Was on the film page; no visit we can tie to them';
   const length = w.durationSeconds > 0 ? ` of ${clockWords(w.durationSeconds)}` : '';
   const parts = [
     w.completed ? 'Watched to the end' : `Watched ${clockWords(w.bestSeconds)}${length}`,
-    w.visits > 1 ? `${w.visits} visits` : '',
+    withVisits && w.visits > 1 ? `${w.visits} visits` : '',
     w.soundOn ? 'sound on' : 'sound off',
   ];
   return parts.filter(Boolean).join(' · ');
+}
+
+/**
+ * "4 visits · last watched 2 h ago", and "· 2 devices" when more than one browser
+ * opened it. One visit leaves the count out ("Last watched 2 h ago"). `null`
+ * when no visit is tied to them: a call-back from the film page has none, and
+ * "0 visits" would read as a fact about them.
+ */
+export function visitsLine(
+  w: Pick<LeadWatch, 'visits' | 'lastAt' | 'devices'>,
+  now: number,
+): string | null {
+  if (w.visits < 1) return null;
+  const ago = agoWords(w.lastAt, now);
+  const line = [
+    w.visits > 1 ? `${w.visits} visits` : '',
+    ago ? `last watched ${ago}` : '',
+    w.devices > 1 ? `${w.devices} devices` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return line ? line.charAt(0).toUpperCase() + line.slice(1) : null;
+}
+
+/** Why an invite did not arrive, as the end of "Invite not delivered — …". */
+const INVITE_FAILURE_WORDS: Record<NonNullable<LeadInvite['failure']>, string> = {
+  held_back: 'held back by WhatsApp',
+  not_on_whatsapp: 'not on WhatsApp',
+  other: '',
+};
+
+/**
+ * How the WhatsApp film invite fared, in one line: "Invite read 22 Oct · no
+ * reply yet", "Invite sent 22 Oct", "Invite not delivered — not on WhatsApp".
+ * `null` for a lead that was never sent one (a call-back from the film page).
+ * The day is the day the invite went: the list is not told when it was read.
+ *
+ * "Not opened yet" is only said while nothing says otherwise. WhatsApp reports
+ * no read tick when the person has read receipts off, so a lead can sit on
+ * "delivered" for good while watching the film from their own link; then the
+ * line says "delivered" and no more, instead of contradicting the visits line
+ * under it. "No reply yet" counts a written reply or a tap on "Call me".
+ */
+export function inviteLine(
+  row: Pick<LeadRow, 'invite' | 'signs' | 'watch'>,
+  now: number,
+): string | null {
+  const { invite, signs, watch } = row;
+  if (!invite) return null;
+  const day = dayWords(invite.at, now);
+  const say = (head: string, tail = '') => [head, day].filter(Boolean).join(' ') + tail;
+  const wrote = signs.replied !== null || signs.callMe !== null;
+  switch (invite.delivery) {
+    case 'read':
+      return say('Invite read', wrote ? '' : ' · no reply yet');
+    case 'delivered':
+      return wrote || watch.visits > 0
+        ? say('Invite delivered')
+        : 'Invite delivered, not opened yet';
+    case 'sent':
+      return say('Invite sent');
+    case 'failed': {
+      const why = invite.failure ? INVITE_FAILURE_WORDS[invite.failure] : '';
+      return why ? `Invite not delivered — ${why}` : 'Invite not delivered';
+    }
+  }
+}
+
+/**
+ * What they did to get in touch, newest first, that the chip beside the invite
+ * line says. Watching is left out (the visits line has it) and so is
+ * registering (a registered lead's row says Onboarding has them).
+ */
+// The more specific first: a "Call me" tap is also an incoming message, so it
+// lands as a reply at the same moment, and a tie goes to the first in this list.
+// The same order as the server's (services/leads/clock.ts SIGN_ORDER).
+const REACHED_OUT: readonly (readonly [keyof LeadSigns, LeadSign['kind']])[] = [
+  ['callMe', 'call_me'],
+  ['callback', 'callback'],
+  ['assistant', 'assistant'],
+  ['replied', 'replied'],
+];
+
+/** The newest of the ways they reached out, or `null` when they have not. */
+export function newestReachOut(signs: LeadSigns | null | undefined): LeadSign | null {
+  // A server older than this page sends no signs: say nothing rather than crash.
+  if (!signs) return null;
+  let best: LeadSign | null = null;
+  for (const [key, kind] of REACHED_OUT) {
+    const at = signs[key];
+    const ms = at ? Date.parse(at) : NaN;
+    if (at && !Number.isNaN(ms) && (!best || ms > Date.parse(best.at))) best = { at, kind };
+  }
+  return best;
+}
+
+/**
+ * The chip in the "Their interest" column: "Tapped “Call me” · 1 h ago". It is
+ * worked from every kind of sign and not from `lastSign`, which is only the
+ * newest: a lead who replied at ten and watched again at eleven has "watched"
+ * as their last sign, and the reply would never show. The same rule as
+ * `signLine` applies: once we have been in touch since, it is not news.
+ */
+export function reachOutLine(
+  row: Pick<LeadRow, 'signs' | 'lastContact'>,
+  now: number,
+): string | null {
+  return signLine(newestReachOut(row.signs), row.lastContact, now);
 }
 
 /** How much of the film the best visit covered, as a whole 0 to 100 for the bar. */

@@ -387,7 +387,8 @@ describe('the Call-backs page', () => {
       refLine(sent, NOW)!,
       /^From the WhatsApp film message sent to Ramesh ji on 20 Oct/,
     );
-    assert.equal(chatHref(sent), '/whatsapp?chat=919800000001');
+    // A call-back is a marketing chat, so it opens in the MDG Services inbox (one inbox per number).
+    assert.equal(chatHref(sent), '/whatsapp?line=marketing&chat=919800000001');
     // a forwarded link: the film went to Ramesh, a friend of his is asking
     const forwarded = { ...sent, refSend: { ...sent.refSend, sameNumber: false } };
     assert.match(refLine(forwarded, NOW)!, /^Opened from a link first sent to Ramesh ji/);

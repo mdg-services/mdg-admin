@@ -2,6 +2,7 @@ import {
   Bell,
   ChevronDown,
   ChevronLeft,
+  GripVertical,
   LogOut,
   Search,
   Shield,
@@ -37,23 +38,86 @@ import { useAuthStore } from '@/store/auth';
 import { ErrorBoundary } from './ErrorBoundary';
 import { MobileTabBar } from './MobileTabBar';
 import { NAV_ITEMS, type NavItem } from './navItems';
+import { moveItem } from './navOrder';
+import { useNavOrder } from './useNavOrder';
+import { useSortableRows } from './useSortableRows';
 
+/**
+ * The sidebar's links, each one draggable to a new place (25 Oct 2026; how the
+ * drag works is in `useSortableRows`). Alt+↑ and Alt+↓ move the focused one,
+ * for whoever is on the keyboard.
+ */
 function NavList({
   items,
   badges,
   onNavigate,
+  onReorder,
 }: {
   items: NavItem[];
   /** Count badge to show next to a nav item, keyed by its route. */
   badges: Record<string, number>;
   onNavigate?: () => void;
+  /** The new order of routes, once a row has been dropped in a new place. */
+  onReorder: (routes: string[]) => void;
 }) {
+  const routes = React.useMemo(() => items.map((i) => i.to), [items]);
+  const { listRef, drag, onPointerDown, styleFor } = useSortableRows<HTMLUListElement>(
+    routes,
+    onReorder,
+  );
+
+  function moveBy(route: string, step: -1 | 1) {
+    const from = routes.indexOf(route);
+    const to = from + step;
+    if (to < 0 || to >= routes.length) return;
+    onReorder(moveItem(routes, from, to));
+    // React may move a different row's node to get there, and a node taken
+    // out of the page loses focus — so put it back on the link that moved.
+    requestAnimationFrame(() => {
+      listRef.current
+        ?.querySelector<HTMLElement>(`[data-nav-route="${route}"] a`)
+        ?.focus();
+    });
+  }
+
   return (
-    <ul className="flex flex-col gap-0.5">
-      {items.map((item) => {
+    <ul ref={listRef} className="flex flex-col gap-0.5">
+      {items.map((item, index) => {
         const badge = badges[item.to] ?? 0;
+        const held = drag?.from === index;
         return (
-          <li key={item.to}>
+          <li
+            key={item.to}
+            data-nav-route={item.to}
+            data-sort-row
+            onPointerDown={(e) => onPointerDown(e, index)}
+            onKeyDown={(e) => {
+              if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+              e.preventDefault();
+              moveBy(item.to, e.key === 'ArrowUp' ? -1 : 1);
+            }}
+            style={styleFor(index)}
+            // `select-none`: a press-and-move would otherwise start selecting
+            // the labels. The held row floats above the rest on a solid card,
+            // and loses its shadow as it settles.
+            className={cn(
+              'group relative select-none rounded-md',
+              held && 'z-10 bg-surface',
+              held && !drag?.settling && 'shadow-lg ring-1 ring-border',
+            )}
+          >
+            {/* Shown on hover only: the sign that a row can be picked up. It
+                sits in the row's left padding, so nothing else moves. */}
+            <GripVertical
+              aria-hidden
+              width={12}
+              height={12}
+              strokeWidth={2}
+              className={cn(
+                'pointer-events-none absolute left-0.5 top-1/2 -translate-y-1/2 text-text-subtle opacity-0 transition-opacity',
+                held ? 'opacity-100' : drag ? '' : 'group-hover:opacity-100',
+              )}
+            />
             <NavLink
               to={item.to}
               // Prefix matching is the default, so an item that is a prefix of
@@ -61,6 +125,9 @@ function NavList({
               // at once unless it opts out.
               end={item.end ?? item.to === '/'}
               onClick={onNavigate}
+              // The browser's own link drag would take over the pointer the
+              // moment a row is pulled, and carry the address off with it.
+              draggable={false}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
@@ -112,7 +179,12 @@ export function AppShell() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const isSuperAdmin = useIsSuperAdmin();
-  const navItems = NAV_ITEMS.filter((item) => !item.superAdminOnly || isSuperAdmin);
+  const visibleItems = React.useMemo(
+    () => NAV_ITEMS.filter((item) => !item.superAdminOnly || isSuperAdmin),
+    [isSuperAdmin],
+  );
+  // ...in the order this browser's admin dragged them into.
+  const navOrder = useNavOrder(visibleItems);
   // The same counts the phone's tab bar shows — one hook, so they cannot drift.
   const navBadges = useNavBadges();
 
@@ -172,9 +244,20 @@ export function AppShell() {
           <BrandMark />
         </div>
         <nav className="flex-1 overflow-y-auto px-2 py-3">
-          <NavList items={navItems} badges={navBadges} />
+          <NavList items={navOrder.items} badges={navBadges} onReorder={navOrder.save} />
         </nav>
-        <div className="border-t border-border p-3 text-xs text-text-subtle">v0.1.0</div>
+        <div className="flex items-center border-t border-border p-3 text-xs text-text-subtle">
+          <span>v0.1.0</span>
+          {navOrder.isCustom ? (
+            <button
+              type="button"
+              onClick={navOrder.reset}
+              className="ml-auto rounded px-1 text-text-muted hover:bg-surface-2 hover:text-text"
+            >
+              Reset order
+            </button>
+          ) : null}
+        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">

@@ -17,8 +17,8 @@ import {
   Tabs,
 } from '@/components/ui';
 import { HowFollowUpsWork } from '@/features/leads/HowFollowUpsWork';
-import { LeadCardActions, LeadRowActions } from '@/features/leads/LeadActions';
-import { LeadStandsCell, LeadWhoCell } from '@/features/leads/LeadCells';
+import { LeadRowActions } from '@/features/leads/LeadActions';
+import { LeadInterestCell, LeadStandsCell, LeadWhoCell } from '@/features/leads/LeadCells';
 import { LeadDialogs } from '@/features/leads/LeadDialogs';
 import { LeadDrawer } from '@/features/leads/LeadDrawer';
 import { type LeadAction, type LeadDialogState } from '@/features/leads/shared';
@@ -29,6 +29,7 @@ import {
   useLeadViewersQuery,
   useLeadsQuery,
 } from '@/hooks/api/useLeads';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cutShortNote } from '@/lib/intake';
 import {
   funnelSteps,
@@ -44,8 +45,8 @@ const SEARCH_DEBOUNCE_MS = 350;
 
 /**
  * How many rows are drawn at first. A busy week can have a few hundred open
- * leads, and every row carries a number, a bar and three buttons: on a cheap
- * phone the first fifty come up at once and "Show more" brings the rest.
+ * leads, and every row carries a number, a bar, a note and two buttons: on a
+ * cheap phone the first fifty come up at once and "Show more" brings the rest.
  */
 const FIRST_ROWS = 50;
 
@@ -63,9 +64,14 @@ const NUMBER = (n: number | undefined) => (n === undefined ? '—' : n.toLocaleS
  *
  * The tab, the search, and the open lead live in the address (`?view=`, `?q=`,
  * `?lead=`), so Back and a shared link land on the same screen, and the three
- * lead alerts open a lead directly (`/leads?lead=<id>`). A row's actions are
- * buttons on the row and in the drawer; the seven forms they open are mounted
- * once, here, and stack over the drawer.
+ * lead alerts open a lead directly (`/leads?lead=<id>`).
+ *
+ * The table carries what the team reads to decide whom to ring (how much of the
+ * film they watched, what became of the invite, what was last said) so the
+ * drawer is for acting, not for finding out. Clicking anywhere on a row opens
+ * it. On desktop a row also has Log contact and a menu; on a phone the card is
+ * one tap that opens the drawer, where every action is a button. The seven forms
+ * the actions open are mounted once, here, and stack over the drawer.
  *
  * "Unknown viewers" are not leads: people who opened the film without a personal
  * link. They are listed so the team can see the film is watched, and never
@@ -80,6 +86,9 @@ export function LeadsPage() {
   const [dialog, setDialog] = React.useState<LeadDialogState | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
   const [shown, setShown] = React.useState(FIRST_ROWS);
+  // The list decides its own shape from this too; the cells and the actions need
+  // the answer once per page, not one listener per row.
+  const isMd = useMediaQuery('(min-width: 768px)');
 
   // Due times and ages are relative ("Overdue 5 h"); keep them honest on a page left open all morning.
   React.useEffect(() => {
@@ -154,6 +163,12 @@ export function LeadsPage() {
   }
   function openLead(id: string | null) {
     patchParams({ lead: id });
+  }
+  function onRowClick(lead: LeadRow) {
+    // Dragging across a number or a note to copy it ends in a click on the row.
+    // That is somebody copying, not asking for the lead.
+    if (window.getSelection()?.toString()) return;
+    openLead(lead.id);
   }
   function onAction(action: LeadAction, lead: LeadRow) {
     setDialog({ action, lead });
@@ -267,7 +282,17 @@ export function LeadsPage() {
           {cutShort ? <p className="mb-3 text-xs text-text-subtle">{cutShort}</p> : null}
 
           <Card>
-            <CardContent padding="none">
+            {/* The page is not selectable except the numbers and notes, so a click on a
+                row's plain parts does not clear a number selected a moment ago — and the
+                row click below would then keep reading "somebody is copying" and never
+                open anything. A press outside the selection drops it first. */}
+            <CardContent
+              padding="none"
+              onMouseDownCapture={(e) => {
+                const s = window.getSelection();
+                if (s && !s.isCollapsed && !s.containsNode(e.target as Node, true)) s.removeAllRanges();
+              }}
+            >
               <DataList<LeadRow>
                 rows={rows}
                 rowKey={(l) => l.id}
@@ -293,28 +318,46 @@ export function LeadsPage() {
                     }} />
                   )
                 }
-                // The lead and where it stands are the two things the eye reads; the
-                // buttons are the last column. Narrower than this it scrolls inside its box.
-                minWidth="52rem"
+                onRowClick={onRowClick}
+                // Who they are, how interested they are, where it stands, and the
+                // buttons last. Narrower than this it scrolls inside its box.
+                minWidth="60rem"
                 columns={[
                   {
                     id: 'lead',
                     header: 'Lead',
                     mobile: 'primary',
-                    width: '22rem',
-                    cell: (l) => <LeadWhoCell lead={l} openHref={hrefFor(l.id)} />,
+                    width: '15rem',
+                    // `!`: the cell's own `align-middle` would win over a plain
+                    // `align-top`, and a row this tall reads from its top edge.
+                    tdClassName: '!align-top',
+                    cell: (l) => (
+                      <LeadWhoCell lead={l} openHref={hrefFor(l.id)} now={now} onPhone={!isMd} />
+                    ),
+                  },
+                  {
+                    id: 'interest',
+                    header: 'Their interest',
+                    // The card reads who, where it stands, then how interested:
+                    // slots run primary, secondary, meta whatever the column order.
+                    mobile: 'meta',
+                    width: '16rem',
+                    tdClassName: '!align-top',
+                    cell: (l) => <LeadInterestCell lead={l} now={now} />,
                   },
                   {
                     id: 'stands',
                     header: 'Where it stands',
                     mobile: 'secondary',
-                    cell: (l) => <LeadStandsCell lead={l} now={now} />,
+                    tdClassName: '!align-top',
+                    cell: (l) => <LeadStandsCell lead={l} now={now} onPhone={!isMd} />,
                   },
                 ]}
-                rowActions={(l) => (
-                  <LeadRowActions lead={l} onAction={onAction} onOpen={(lead) => openLead(lead.id)} />
-                )}
-                cardActions={(l) => <LeadCardActions lead={l} onAction={onAction} />}
+                // No actions on a phone: with any, the card could not be one tap
+                // target, and the drawer already has them all.
+                rowActions={
+                  isMd ? (l) => <LeadRowActions lead={l} onAction={onAction} /> : undefined
+                }
               />
               {items.length > shown && !loading ? (
                 <div className="border-t border-border p-3">
