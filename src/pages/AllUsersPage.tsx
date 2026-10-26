@@ -51,7 +51,12 @@ import { copyText } from '@/lib/clipboard';
 import { cn } from '@/lib/cn';
 import { generatePassword } from '@/lib/password';
 import { selectUser, useAuthStore } from '@/store/auth';
-import { dealerCodeLabel, type DealerUserGroup, type User } from '@dk/shared';
+import {
+  ACCOUNT_WIPE_AFTER_DAYS,
+  dealerCodeLabel,
+  type DealerUserGroup,
+  type User,
+} from '@dk/shared';
 import type { SuperAdminUpdateUserInput } from '@dk/shared/schemas';
 
 const ROLE_LABEL: Record<User['role'], string> = {
@@ -59,6 +64,28 @@ const ROLE_LABEL: Record<User['role'], string> = {
   'dealer-owner': 'Owner',
   'dealer-staff': 'Manager',
 };
+
+/** The day "Delete my account" wipes this login's name, email and phone. */
+function wipeDate(u: User): string | null {
+  if (!u.deletionRequestedAt) return null;
+  const at = new Date(u.deletionRequestedAt).getTime() + ACCOUNT_WIPE_AFTER_DAYS * 86_400_000;
+  return new Date(at).toLocaleDateString();
+}
+
+/**
+ * One user's state. A dealer who deleted their own account from the app reads
+ * differently from one an admin archived: theirs has a wipe date, and a restore
+ * before it is the only undo.
+ */
+function UserStatusBadge({ user: u }: { user: User }) {
+  if (u.personalDataWipedAt) return <Badge intent="danger">Deleted · details wiped</Badge>;
+  if (u.deletionRequestedAt && u.archivedAt) {
+    return <Badge intent="danger">Deleted · wipes {wipeDate(u)}</Badge>;
+  }
+  if (u.archivedAt) return <Badge intent="danger">Archived</Badge>;
+  if (u.status === 'ACTIVE') return <Badge intent="success">Active</Badge>;
+  return <Badge intent="neutral">Suspended</Badge>;
+}
 
 function DealerStatusBadge({ status }: { status: string }) {
   if (status === 'ACTIVE') return <Badge intent="success">Active</Badge>;
@@ -300,13 +327,7 @@ function GroupCard({
                     </Badge>
                   </TD>
                   <TD>
-                    {u.archivedAt ? (
-                      <Badge intent="danger">Archived</Badge>
-                    ) : u.status === 'ACTIVE' ? (
-                      <Badge intent="success">Active</Badge>
-                    ) : (
-                      <Badge intent="neutral">Suspended</Badge>
-                    )}
+                    <UserStatusBadge user={u} />
                   </TD>
                   <TD className="text-right">
                     <Button
@@ -362,13 +383,7 @@ function GroupCard({
             // truncated email in a <div> can be neither read in full nor
             // selected to recover the rest. Two lines is the cheaper failure.
             secondary: <span className="block break-all font-mono">{u.email}</span>,
-            meta: u.archivedAt ? (
-              <Badge intent="danger">Archived</Badge>
-            ) : u.status === 'ACTIVE' ? (
-              <Badge intent="success">Active</Badge>
-            ) : (
-              <Badge intent="neutral">Suspended</Badge>
-            ),
+            meta: <UserStatusBadge user={u} />,
             // `wrap`, not a full-width row: "Manage" is one word and this
             // stack is six or more users deep, so a 328px bar each cost a
             // screenful. `Button`'s own `min-h-11` keeps the 44px target.
@@ -452,6 +467,8 @@ function ManageUserDialog({
 
   const isSelf = !!user && user.id === currentUserId;
   const isArchived = !!user?.archivedAt;
+  // Deleted by the dealer from the app, and not wiped yet: restoring cancels it.
+  const pendingDeletion = isArchived && !!user?.deletionRequestedAt && !user?.personalDataWipedAt;
   const isDealerMember = user?.role === 'dealer-owner' || user?.role === 'dealer-staff';
   const isAdmin = user?.role === 'admin';
   const otherRole: 'dealer-owner' | 'dealer-staff' =
@@ -511,7 +528,11 @@ function ManageUserDialog({
     if (!user) return;
     try {
       await restoreUser.mutateAsync(user.id);
-      toast.success(`${user.name} restored. Reactivate to re-enable their login.`);
+      toast.success(
+        pendingDeletion
+          ? `${user.name} restored and their deletion cancelled. Reactivate to re-enable their login.`
+          : `${user.name} restored. Reactivate to re-enable their login.`,
+      );
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not restore');
     }
@@ -591,14 +612,31 @@ function ManageUserDialog({
           {isArchived ? (
             <div className="flex items-start gap-2 rounded-sm border border-border bg-surface-2 px-3 py-2 text-sm text-text-muted">
               <Archive width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-              <span>
-                Archived
-                {user.archivedAt
-                  ? ` on ${new Date(user.archivedAt).toLocaleDateString()}`
-                  : ''}
-                . Login is disabled and they&apos;re hidden from the roster. Restore them
-                below to manage access again.
-              </span>
+              {user.personalDataWipedAt ? (
+                <span>
+                  They deleted their own account from the app, and their name, email and
+                  phone were wiped on {new Date(user.personalDataWipedAt).toLocaleDateString()}.
+                  Restoring brings back only an empty record.
+                </span>
+              ) : pendingDeletion ? (
+                <span>
+                  They deleted their own account from the app
+                  {user.deletionRequestedAt
+                    ? ` on ${new Date(user.deletionRequestedAt).toLocaleDateString()}`
+                    : ''}
+                  . Login is disabled. Their name, email and phone are wiped on{' '}
+                  {wipeDate(user)} unless you restore them below before then.
+                </span>
+              ) : (
+                <span>
+                  Archived
+                  {user.archivedAt
+                    ? ` on ${new Date(user.archivedAt).toLocaleDateString()}`
+                    : ''}
+                  . Login is disabled and they&apos;re hidden from the roster. Restore them
+                  below to manage access again.
+                </span>
+              )}
             </div>
           ) : (
             <>
@@ -782,8 +820,10 @@ function ManageUserDialog({
             {isArchived ? (
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div className="text-sm text-text-muted">
-                  Bring this user back into the roster. Their login stays disabled until
-                  you reactivate them.
+                  {pendingDeletion
+                    ? 'Bring this user back and cancel their deletion. '
+                    : 'Bring this user back into the roster. '}
+                  Their login stays disabled until you reactivate them.
                 </div>
                 <Button
                   variant="secondary"
