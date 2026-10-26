@@ -1149,7 +1149,11 @@ describe('"How follow-ups work"', () => {
     }
     // The 4 hours are plain hours now, not "working hours": there is nothing to wait out.
     assert.doesNotMatch(text, /working hours/);
-    assert.equal(rows[0]?.then, '2 hours after we could first reach them');
+    // The first call keeps to 11:00–19:00 (26 Oct 2026): the evening invites wait for the morning.
+    assert.equal(
+      rows[0]?.then,
+      '2 hours after we could first reach them, between 11:00 and 19:00. A lead from the evening invites is called at 11:00 the next morning',
+    );
     assert.equal(
       rows.find((r) => r.when.startsWith('Nobody answered'))?.then,
       '4 hours later, then the next day, then 2 days later, then 3 days later, then a week later',

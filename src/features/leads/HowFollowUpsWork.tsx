@@ -56,7 +56,10 @@ export function HowFollowUpsWork() {
               Good to know
             </h3>
             <ul className="grid list-disc gap-1.5 pl-5">
-              <li>Reminders go out {WINDOW_WORDS}, every day.</li>
+              <li>
+                Reminders go out {WINDOW_WORDS}, every day. The one exception is a new lead’s
+                first call: it is only due between 11:00 and 19:00.
+              </li>
               <li>
                 When a follow-up is eight hours late, the lead is going cold and every admin is
                 told.

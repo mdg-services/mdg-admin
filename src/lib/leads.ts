@@ -392,18 +392,27 @@ export function suggestNextAt(
 export function followUpGuide(): { when: string; then: string }[] {
   const chain = (steps: readonly Step[]) => steps.map((s) => s.words).join(', then ');
   return [
-    { when: 'A new lead, and nobody has called', then: '2 hours after we could first reach them' },
+    // The first call keeps to 11:00–19:00 on the server (owner, 26 Oct 2026): the invites go out
+    // at about 19:00, and a lead who watches that night is called the next morning.
+    { when: 'A new lead, and nobody has called', then: FIRST_CALL_WORDS },
     { when: 'You spoke and they are interested', then: (AFTER_SPOKE.interested as Step).words },
     { when: 'You spoke and they are thinking it over', then: (AFTER_SPOKE.thinking as Step).words },
     { when: 'Nobody answered your call', then: chain(AFTER_NO_ANSWER) },
     { when: 'You sent a message and heard nothing', then: chain(AFTER_MESSAGE) },
-    { when: 'They did something: replied, tapped "Call me", asked for a call-back, watched again', then: 'Right away' },
+    {
+      when: 'They did something: replied, tapped "Call me", asked for a call-back, watched again',
+      then: 'Right away. Before anybody has called, between 11:00 and 19:00, like the first call',
+    },
     { when: 'You chose a time yourself', then: 'That time' },
   ];
 }
 
 /** The working window in words, for the dialogs that explain it. */
 export const WINDOW_WORDS = 'at any hour, day or night';
+
+/** When a new lead's first call falls due, as "How follow-ups work" says it. */
+export const FIRST_CALL_WORDS =
+  '2 hours after we could first reach them, between 11:00 and 19:00. A lead from the evening invites is called at 11:00 the next morning';
 
 // ── Due, last contact, signs ────────────────────────────────────────────────
 
