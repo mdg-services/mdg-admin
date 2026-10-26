@@ -35,6 +35,7 @@ import {
   billToSchema,
   cancelPaymentSchema,
   createPaymentSchema,
+  recordManualRefundSchema,
   refundPaymentSchema,
 } from '../shared/src/schemas/payment';
 import {
@@ -43,6 +44,7 @@ import {
   BILL_TO_NAME_MAX,
   BILL_TO_NAME_MIN,
   type BillToDraft,
+  DEFAULT_REQUEST_PURPOSE,
   EMPTY_BILL_TO,
   PAYMENT_NOTE_MAX,
   PAYMENT_REASON_MAX,
@@ -74,10 +76,17 @@ import {
   isPastDue,
   issuedMessage,
   linkSentLine,
+  manualRefundBody,
+  manualRefundLine,
+  manualRefundProblem,
+  manualRefundSentence,
+  manualRefundable,
   newestFirst,
   pageFromParam,
   reasonProblem,
   refundAmount,
+  refundAutopayWarning,
+  refundLine,
   refundSentence,
   refundable,
   rupeesText,
@@ -89,6 +98,8 @@ import {
   statusFromParam,
   statusHint,
   statusTone,
+  subscriptionKindWarning,
+  takenByAutopay,
   taxSplitHint,
   tidyPhone,
   validateRequest,
@@ -232,6 +243,7 @@ describe('allowedActions', () => {
       check: true,
       cancel: true,
       refund: false,
+      recordManualRefund: false,
       markChecked: false,
       recordPayment: true,
     });
@@ -243,8 +255,10 @@ describe('allowedActions', () => {
     assert.equal(allowedActions(payment({ status: 'processing' }), true).recordPayment, false);
     assert.equal(allowedActions(PAID, true).recordPayment, false);
     assert.equal(
-      allowedActions(payment({ status: 'cancelled', cancelledAt: '2026-10-24T05:00:00.000Z' }), true)
-        .recordPayment,
+      allowedActions(
+        payment({ status: 'cancelled', cancelledAt: '2026-10-24T05:00:00.000Z' }),
+        true,
+      ).recordPayment,
       false,
     );
   });
@@ -1018,5 +1032,285 @@ describe('validateRequest with who to bill', () => {
     // A junk GSTIN alone (say, an outlet record with "NA" in it) must not stop a payment.
     const { input } = validateRequest({ ...good, billTo: { ...EMPTY_BILL_TO, gstin: 'NA' } });
     assert.equal(input !== null, true);
+  });
+});
+
+// ---- Refunds: autopay warning, hand-recorded payments, hand refunds ----
+
+const HAND_PAID = payment({
+  status: 'paid',
+  paidAt: '2026-10-24T05:00:00.000Z',
+  razorpayLinkId: null,
+  linkUrl: null,
+  paidVia: 'manual',
+  manual: {
+    amountPaise: 499_900,
+    shortfallPaise: 0,
+    paidOn: '2026-10-24',
+    mode: 'upi',
+    reference: 'UTR123',
+    recordedByName: 'Asha',
+    recordedAt: '2026-10-24T05:00:00.000Z',
+  } as NonNullable<AdminPayment['manual']>,
+});
+
+describe('a payment taken by autopay', () => {
+  it('is known by its channel or its subscription id', () => {
+    assert.equal(takenByAutopay(payment({ paidVia: 'autopay' })), true);
+    assert.equal(takenByAutopay(payment({ razorpaySubscriptionId: 'sub_Abc123' })), true);
+    assert.equal(takenByAutopay(PAID), false);
+    assert.equal(takenByAutopay(HAND_PAID), false);
+  });
+});
+
+describe('the autopay warning on a refund', () => {
+  const TODAY = '2026-10-26';
+  const FIRST_ID = '65f0c0ffee0123456789abce';
+  const OTHER = {
+    id: '65f0c0ffee0123456789ab99',
+    paidVia: 'link',
+    razorpaySubscriptionId: null,
+  } as const;
+  const FIRST = { id: FIRST_ID, paidVia: 'link', razorpaySubscriptionId: null } as const;
+  const live = { state: 'active' } as NonNullable<
+    Parameters<typeof refundAutopayWarning>[1]
+  >['current'];
+  const firstMonth = (paymentId: string, refundableUntil: string | null = '2026-11-23') =>
+    ({ paymentId, refundableUntil }) as NonNullable<
+      Parameters<typeof refundAutopayWarning>[1]
+    >['firstMonth'];
+
+  it('says a full refund of the first bill also stops autopay and ends billing, and a part refund does not', () => {
+    const said =
+      refundAutopayWarning(FIRST, { current: null, firstMonth: firstMonth(FIRST_ID) }, TODAY) ?? '';
+    assert.match(said, /full refund of the first month also stops autopay and ends billing/);
+    assert.match(said, /Give the first month back/);
+    assert.match(said, /part refund does not/);
+  });
+
+  it('says it for the first bill whichever way it was paid, with autopay on or not', () => {
+    for (const p of [
+      FIRST,
+      { ...FIRST, paidVia: 'manual' as const },
+      { ...FIRST, paidVia: 'autopay' as const },
+    ]) {
+      for (const current of [null, live]) {
+        assert.match(
+          refundAutopayWarning(p, { current, firstMonth: firstMonth(FIRST_ID) }, TODAY) ?? '',
+          /also stops autopay and ends billing/,
+        );
+      }
+    }
+  });
+
+  it('says a refund of another payment leaves autopay on, while autopay is on', () => {
+    const said =
+      refundAutopayWarning(OTHER, { current: live, firstMonth: firstMonth(FIRST_ID) }, TODAY) ?? '';
+    assert.match(said, /does not stop autopay/);
+    assert.match(said, /charged again next month/);
+    assert.match(said, /Stop autopay/);
+    assert.doesNotMatch(said, /ends billing/);
+  });
+
+  it('says nothing for another payment when the outlet has no autopay on, even one autopay took', () => {
+    assert.equal(
+      refundAutopayWarning(OTHER, { current: null, firstMonth: firstMonth(FIRST_ID) }, TODAY),
+      null,
+    );
+    assert.equal(
+      refundAutopayWarning(
+        { ...OTHER, paidVia: 'autopay' },
+        { current: null, firstMonth: null },
+        TODAY,
+      ),
+      null,
+    );
+  });
+
+  it('stops promising a stop for the first bill once its first month is over', () => {
+    const late = { current: live, firstMonth: firstMonth(FIRST_ID, '2026-10-20') };
+    const said = refundAutopayWarning(FIRST, late, TODAY) ?? '';
+    assert.match(said, /does not stop autopay/);
+    assert.equal(
+      refundAutopayWarning(
+        FIRST,
+        { current: null, firstMonth: firstMonth(FIRST_ID, '2026-10-20') },
+        TODAY,
+      ),
+      null,
+    );
+  });
+
+  it('falls back to "autopay took this payment" while the outlet\'s autopay is still loading', () => {
+    assert.match(
+      refundAutopayWarning({ ...OTHER, paidVia: 'autopay' }, undefined, TODAY) ?? '',
+      /does not stop autopay/,
+    );
+    assert.equal(refundAutopayWarning(OTHER, undefined, TODAY), null);
+  });
+});
+
+describe('a payment recorded by hand', () => {
+  it('is never offered the Razorpay Refund; a super-admin is offered the hand refund instead', () => {
+    const can = allowedActions(HAND_PAID, true);
+    assert.equal(can.refund, false);
+    assert.equal(can.recordManualRefund, true);
+  });
+
+  it('offers the hand refund to a super-admin alone', () => {
+    assert.equal(allowedActions(HAND_PAID, false).recordManualRefund, false);
+    assert.equal(allowedActions(HAND_PAID, false).refund, false);
+  });
+
+  it('keeps the Razorpay Refund for money that came through Razorpay, and never offers it the hand refund', () => {
+    const can = allowedActions(PAID, true);
+    assert.equal(can.refund, true);
+    assert.equal(can.recordManualRefund, false);
+  });
+
+  it('stops offering the hand refund once none is left, or before it was paid', () => {
+    const all = { ...HAND_PAID, status: 'refunded' as const, refundedPaise: 499_900 };
+    assert.equal(allowedActions(all, true).recordManualRefund, false);
+    const due = payment({ manual: HAND_PAID.manual });
+    assert.equal(allowedActions(due, true).recordManualRefund, false);
+  });
+
+  it('can record back no more than came in by hand, less what went back already', () => {
+    assert.equal(manualRefundable(HAND_PAID), 499_900);
+    assert.equal(
+      manualRefundable({ ...HAND_PAID, refundedPaise: 100_000, status: 'partially_refunded' }),
+      399_900,
+    );
+    assert.equal(manualRefundable(PAID), 0);
+    const short = {
+      ...HAND_PAID,
+      manual: { ...HAND_PAID.manual!, amountPaise: 450_000, shortfallPaise: 49_900 },
+    };
+    assert.equal(manualRefundable(short), 450_000);
+  });
+});
+
+describe('recording a refund made by hand', () => {
+  const TODAY = '2026-10-26';
+  const draft = (over: Partial<Parameters<typeof manualRefundProblem>[0]> = {}) => ({
+    amountText: '3540',
+    refundedOn: '2026-10-26',
+    mode: 'upi' as const,
+    reference: 'UTR9',
+    reason: 'Owner asked for the first month back',
+    ...over,
+  });
+  const paid = {
+    ...HAND_PAID,
+    amountPaise: 354_000,
+    manual: { ...HAND_PAID.manual!, amountPaise: 354_000 },
+  };
+
+  it('accepts the whole amount that came, a real day and a reason', () => {
+    assert.equal(manualRefundProblem(draft(), paid, TODAY), null);
+  });
+
+  it('says why an amount cannot be taken', () => {
+    assert.match(
+      manualRefundProblem(draft({ amountText: '' }), paid, TODAY) ?? '',
+      /Enter the amount/,
+    );
+    assert.match(
+      manualRefundProblem(draft({ amountText: 'abc' }), paid, TODAY) ?? '',
+      /not an amount/,
+    );
+    assert.match(
+      manualRefundProblem(draft({ amountText: '3541' }), paid, TODAY) ?? '',
+      /At most ₹3,540/,
+    );
+  });
+
+  it('says why a day, a reference or a reason cannot be taken', () => {
+    assert.match(manualRefundProblem(draft({ refundedOn: '' }), paid, TODAY) ?? '', /Pick the day/);
+    assert.match(
+      manualRefundProblem(draft({ refundedOn: '2026-10-27' }), paid, TODAY) ?? '',
+      /future/,
+    );
+    // HAND_PAID came on 24 Oct: the money cannot go back on 23 Oct.
+    assert.match(
+      manualRefundProblem(draft({ refundedOn: '2026-10-23' }), paid, TODAY) ?? '',
+      /cannot go back before/,
+    );
+    assert.equal(manualRefundProblem(draft({ refundedOn: '2026-10-24' }), paid, TODAY), null);
+    assert.match(
+      manualRefundProblem(draft({ reference: 'x'.repeat(121) }), paid, TODAY) ?? '',
+      /reference/,
+    );
+    assert.match(manualRefundProblem(draft({ reason: ' ' }), paid, TODAY) ?? '', /Say why/);
+  });
+
+  it('builds a body the shared schema accepts, in paise, trimmed', () => {
+    const body = manualRefundBody(draft({ reason: '  Owner asked  ', reference: ' UTR9 ' }));
+    assert.deepEqual(body, {
+      amountPaise: 354_000,
+      refundedOn: '2026-10-26',
+      mode: 'upi',
+      reference: 'UTR9',
+      reason: 'Owner asked',
+    });
+    assert.equal(recordManualRefundSchema.safeParse(body).success, true);
+  });
+
+  it('leaves the reference out when it is empty', () => {
+    const body = manualRefundBody(draft({ reference: '  ' }));
+    assert.equal('reference' in body, false);
+  });
+
+  it('says no money is sent and that a credit note follows', () => {
+    const said = manualRefundSentence(paid, 354_000);
+    assert.match(said, /already given back/);
+    assert.match(said, /No money is sent from here/);
+    assert.match(said, /credit note follows/);
+  });
+});
+
+describe('a refund made by hand in the refunds list', () => {
+  const byHand = {
+    razorpayRefundId: '',
+    amountPaise: 354_000,
+    status: 'processed' as const,
+    reason: 'Owner asked for the first month back',
+    byName: 'Asha',
+    createdAt: '2026-10-26T05:00:00.000Z',
+    processedAt: '2026-10-26T05:00:00.000Z',
+    manual: { mode: 'bank' as const, reference: 'UTR9', refundedOn: '2026-10-26' },
+  };
+
+  it('names how it went back, the reference and the day', () => {
+    const line = manualRefundLine(byHand);
+    assert.match(line, /₹3,540/);
+    assert.match(line, /Given back by Bank transfer \(UTR9\)/);
+    assert.match(line, /26.*2026/);
+    assert.match(line, /Owner asked for the first month back/);
+    assert.equal(refundLine(byHand), line);
+  });
+
+  it('leaves the reference out when there is none, and reads a Razorpay refund as before', () => {
+    assert.doesNotMatch(
+      manualRefundLine({ ...byHand, manual: { ...byHand.manual, reference: null } }),
+      /\(/,
+    );
+    const razorpay = { ...byHand, razorpayRefundId: 'rfnd_Abc123', manual: null };
+    assert.doesNotMatch(refundLine(razorpay), /Given back by/);
+  });
+});
+
+describe('the Request a payment kind', () => {
+  it('does not start on subscription', () => {
+    assert.notEqual(DEFAULT_REQUEST_PURPOSE, 'subscription');
+  });
+
+  it('says where the monthly bill is sent from when subscription is chosen', () => {
+    const said = subscriptionKindWarning('subscription') ?? '';
+    assert.match(said, /Send bill on the outlet's Setup card/);
+    assert.match(said, /does not start the services/);
+    for (const k of ['setup', 'service', 'other'] as const) {
+      assert.equal(subscriptionKindWarning(k), null, k);
+    }
   });
 });

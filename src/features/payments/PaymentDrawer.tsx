@@ -62,6 +62,7 @@ import type { AdminPayment } from '@dk/shared';
 import { BillToDialog } from './BillToDialog';
 import { CancelPaymentDialog } from './CancelPaymentDialog';
 import { BillToCard, CreditNotesBody, InvoiceBody } from './GstSections';
+import { ManualRefundDialog } from './ManualRefundDialog';
 import { RecordPaymentDialog } from './RecordPaymentDialog';
 import { RefundPaymentDialog } from './RefundPaymentDialog';
 
@@ -139,6 +140,7 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
   const checked = useMarkPaymentProblemChecked();
   const [cancelling, setCancelling] = React.useState(false);
   const [refunding, setRefunding] = React.useState(false);
+  const [handRefunding, setHandRefunding] = React.useState(false);
   const [recording, setRecording] = React.useState(false);
   const [editingBillTo, setEditingBillTo] = React.useState(false);
   // The link, shown for copying by hand — only when this device refused to copy it for us.
@@ -149,6 +151,7 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
     setManualLink(null);
     setCancelling(false);
     setRefunding(false);
+    setHandRefunding(false);
     setRecording(false);
     setEditingBillTo(false);
   }, [p.id]);
@@ -374,7 +377,13 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
         </div>
       ) : null}
 
-      {can.copyLink || can.sendSms || can.check || can.cancel || can.refund || can.recordPayment ? (
+      {can.copyLink ||
+      can.sendSms ||
+      can.check ||
+      can.cancel ||
+      can.refund ||
+      can.recordManualRefund ||
+      can.recordPayment ? (
         <div className="grid gap-2">
           <ActionRow below="wrap" align="start">
             {can.copyLink ? (
@@ -439,7 +448,23 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
                 Refund
               </Button>
             ) : null}
+            {can.recordManualRefund ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => setHandRefunding(true)}
+              >
+                Record a refund made by hand…
+              </Button>
+            ) : null}
           </ActionRow>
+          {can.recordManualRefund ? (
+            <p className="text-xs text-text-muted">
+              This money came by hand, so Razorpay cannot refund it. Give it back the way it came,
+              then record it here. The GST credit note follows.
+            </p>
+          ) : null}
           {manualLink ? <Copyable value={manualLink} label="Payment link" mono /> : null}
         </div>
       ) : null}
@@ -512,12 +537,18 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
               >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <Badge intent={refundTone(r.status)}>{REFUND_LABELS[r.status]}</Badge>
+                  {r.manual ? <Badge intent="neutral">By hand</Badge> : null}
                   <span className="text-sm font-medium tabular-nums text-text">
                     {formatPaise(r.amountPaise)}
                   </span>
                 </div>
                 <p className="mt-1 break-words text-sm text-text-muted">{refundLine(r)}</p>
-                {r.processedAt ? (
+                {r.manual ? (
+                  <p className="mt-0.5 text-xs text-text-subtle">
+                    Given back outside Razorpay. The GST credit note follows.
+                  </p>
+                ) : null}
+                {r.processedAt && !r.manual ? (
                   <p className="mt-0.5 text-xs text-text-subtle">
                     Processed {istStamp(r.processedAt)}
                   </p>
@@ -558,6 +589,10 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
         onClose={() => setRecording(false)}
       />
       <RefundPaymentDialog payment={refunding ? p : null} onClose={() => setRefunding(false)} />
+      <ManualRefundDialog
+        payment={handRefunding ? p : null}
+        onClose={() => setHandRefunding(false)}
+      />
     </div>
   );
 }

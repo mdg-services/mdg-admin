@@ -13,8 +13,10 @@ import {
   Textarea,
   useToast,
 } from '@/components/ui';
+import { useAutopayOverview } from '@/hooks/api/useAutopay';
 import { usePauseBilling, useSendBill } from '@/hooks/api/useBilling';
 import { useOnboardingConfigQuery } from '@/hooks/api/useOnboarding';
+import { FIRST_BILL_AUTOPAY_RESEND_WORDS, firstBillAutopayWaiting } from '@/lib/autopay';
 import { billOutcome, waLinkWithText, type BillOutcome } from '@/lib/billing';
 import { copyText } from '@/lib/clipboard';
 import { istTodayYmd } from '@/lib/format';
@@ -89,6 +91,7 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
   const toast = useToast();
   const send = useSendBill();
   const config = useOnboardingConfigQuery(true);
+  const autopay = useAutopayOverview(outlet.dealerId);
   const amountId = React.useId();
   const dueId = React.useId();
   const billed = outlet.payment.amountPaise;
@@ -217,6 +220,11 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
             A bill is already out. With the same amount and day it is only sent again; with another
             it is replaced, and the old one is cancelled.
           </Callout>
+        ) : null}
+        {/* The server refuses a replacement at another amount while the autopay is out
+            (FIRST_BILL_HAS_AUTOPAY); its own sentence is shown if it does. */}
+        {firstBillAutopayWaiting(autopay.data?.current) ? (
+          <Callout intent="warning">{FIRST_BILL_AUTOPAY_RESEND_WORDS}</Callout>
         ) : null}
         <p className="text-xs text-text-muted">
           {config.data?.paymentsConfigured

@@ -161,7 +161,8 @@ export function statusFacts(
     );
     return facts;
   }
-  if (a.state !== 'off' && a.nextDebitOn) facts.push(`Next debit ${shortDay(a.nextDebitOn, today)}`);
+  if (a.state !== 'off' && a.nextDebitOn)
+    facts.push(`Next debit ${shortDay(a.nextDebitOn, today)}`);
   if (a.state !== 'off' || a.chargedCount > 0) facts.push(monthsTakenLine(a.chargedCount));
   return facts;
 }
@@ -188,11 +189,21 @@ export function stateHint(state: AutopayViewState): string | null {
  * `paidThrough` is the last paid day, `today` an IST `YYYY-MM-DD`.
  */
 export function startConfirmWords(
-  o: Pick<AdminAutopayOverview, 'monthlyPricePaise' | 'paidThrough'>,
+  o: Pick<AdminAutopayOverview, 'monthlyPricePaise' | 'paidThrough'> & {
+    firstMonth?: AdminAutopayOverview['firstMonth'];
+  },
   today: string,
 ): string {
   const lead = `Razorpay will text the owner an approval link for ${perMonth(o.monthlyPricePaise)}.`;
   const paid = o.paidThrough;
+  // No paid month yet: the approval takes the first month and pays the first bill.
+  if (
+    !paid &&
+    o.firstMonth &&
+    (o.firstMonth.status === 'due' || o.firstMonth.status === 'processing')
+  ) {
+    return `${lead} The first month is taken when the owner approves, and that pays the first bill (${o.firstMonth.number}). If they pay the bill's link instead, the approval charge goes back by itself.`;
+  }
   const firstDebit =
     isDay(paid) && paid >= today
       ? `The first debit is when the month already paid for runs out (paid until ${shortDay(paid, today)}).`
@@ -232,13 +243,47 @@ export function refreshOutcome(before: AutopayViewState, after: AutopayViewState
 // ── A failed press ──────────────────────────────────────────────────────────
 
 /**
- * What to say when a press was refused. The server's own plain sentence is shown
- * as it is (it names the reason: already on, the first month not paid yet, the
- * outlet paused or closed). Only "Razorpay is off" (503) is put in our words, as
- * the server's answer there is a machine's.
+ * The error codes that mean "Razorpay did not answer": the call to it timed out
+ * or could not be made, so nothing was changed on its side and trying again is
+ * safe. `PAYMENT_PROVIDER_ERROR` is NOT one of them: that is Razorpay answering
+ * and refusing, with its own reason in the server's message, and the reason is
+ * the only thing that tells the admin what to fix.
  */
-export function failedText(status: number | undefined, message: string | undefined): string {
-  if (status === 503) return 'Razorpay is not switched on yet, so autopay cannot be set up.';
+const RAZORPAY_NO_ANSWER_CODES: ReadonlySet<string> = new Set([
+  'AUTOPAY_NOT_STOPPED',
+  'RAZORPAY_UNREACHABLE',
+]);
+
+/**
+ * What to say when a press was refused, decided by the server's error CODE and
+ * never by the HTTP status alone: one status (503) carries both "Razorpay is
+ * switched off" and "Razorpay did not answer", and they ask for opposite things
+ * (wait for the owner to switch it on, or just press again).
+ *
+ *  - `PAYMENTS_NOT_CONFIGURED`: Razorpay is switched off on the server.
+ *  - `AUTOPAY_NOT_STOPPED`, `RAZORPAY_UNREACHABLE`: Razorpay did not answer;
+ *    nothing changed; try again.
+ *  - `PAYMENT_PROVIDER_ERROR`: Razorpay refused, and the server's sentence quotes
+ *    its reason (and, in the money-back, says what was already done). Shown as it is.
+ *  - a 5xx the web server made on its own (no error envelope, code `HTTP_5xx`):
+ *    a plain "did not answer" line.
+ *  - anything else: the server's own plain sentence, as it is (it names the
+ *    reason: already on, the first month not paid yet, the outlet paused or closed).
+ */
+export function failedText(
+  status: number | undefined,
+  message: string | undefined,
+  code?: string,
+): string {
+  if (code === 'PAYMENTS_NOT_CONFIGURED') {
+    return 'Razorpay is switched off, so this cannot be done yet.';
+  }
+  if (code && RAZORPAY_NO_ANSWER_CODES.has(code)) {
+    return 'Razorpay did not answer. Nothing has changed. Try again in a minute.';
+  }
+  if (status !== undefined && status >= 500 && code?.startsWith('HTTP_')) {
+    return 'The server did not answer. Wait a minute, check this page, and try again.';
+  }
   return message && message.trim() ? message : 'That did not go through.';
 }
 
@@ -268,3 +313,78 @@ export function endedByDetail(
 ): string | null {
   return endedBy === 'admin' && endedByName ? endedByName : null;
 }
+
+/**
+ * The first month came by hand (bank, UPI, cash, cheque): the money-back then
+ * records the refund given back by hand — how and when — instead of asking Razorpay.
+ */
+export function firstMonthByHand(fm: AdminAutopayOverview['firstMonth']): boolean {
+  return !!fm && fm.paidByHand;
+}
+
+/** The first-month money-back line on the outlet page, or null when there is nothing to say. */
+export function moneyBackLine(
+  fm: AdminAutopayOverview['firstMonth'],
+  today: string,
+): string | null {
+  if (!fm || fm.status === 'due' || fm.status === 'processing' || fm.status === 'cancelled')
+    return null;
+  if (fm.canMoneyBack) {
+    return fm.refundableUntil
+      ? `First month: money-back possible till ${shortDay(fm.refundableUntil, today)}.`
+      : 'First month: money-back possible.';
+  }
+  if (!fm.moneyBackReason) return null;
+  return `First month: ${fm.moneyBackReason}`;
+}
+
+/**
+ * Why the day money went back cannot be taken, or `null`. The money cannot go back
+ * on a day after today, nor before the day it came (`cameOn`, when known): the
+ * server refuses both, and says so here first so nothing is stopped for a press
+ * that was always going to fail.
+ */
+export function refundDayProblem(
+  day: string,
+  cameOn: string | null | undefined,
+  today: string,
+): string | null {
+  if (!isDay(day)) return 'Pick the day the money went back.';
+  if (day > today) return 'The day cannot be in the future.';
+  if (isDay(cameOn) && day < cameOn) {
+    return `The money came on ${ymdLabel(cameOn)}, so it cannot go back before that day.`;
+  }
+  return null;
+}
+
+/**
+ * What the money-back dialog says before the press. After the refund no further
+ * monthly bills are raised for the outlet and a bill already raised for the next
+ * month is cancelled; the services are not stopped, that is archiving the outlet.
+ */
+export function moneyBackWords(amount: string): string {
+  return `Autopay is stopped first, so nothing more is taken. Then ${amount} goes back to the owner the way they paid, and a credit note is issued. After that, no more monthly bills are raised for this outlet, and any bill already raised for the next month is cancelled. The services keep running until you archive the outlet.`;
+}
+
+// ── An autopay is waiting on the first bill ─────────────────────────────────
+
+/**
+ * An autopay is out for the owner's approval and will take the outlet's FIRST
+ * bill when they approve. `billId`, when given, is the bill the person is about to
+ * act on: only the first bill itself is affected.
+ */
+export function firstBillAutopayWaiting(
+  current: Pick<AdminAutopay, 'state' | 'firstBillId'> | null | undefined,
+  billId?: string | null,
+): boolean {
+  if (!current || current.state !== 'setting_up' || !current.firstBillId) return false;
+  return billId === undefined || billId === null || billId === current.firstBillId;
+}
+
+/** Said on "Send the bill again" while the autopay is waiting. The server enforces it (FIRST_BILL_HAS_AUTOPAY). */
+export const FIRST_BILL_AUTOPAY_RESEND_WORDS =
+  'Autopay is waiting for the owner to approve, and it will take this first bill. Sending the bill again at the same amount is fine. A bill at a different amount is refused while that approval is out. To change the amount, stop autopay first.';
+
+/** Said on "Record payment received" for that first bill while the autopay is waiting. */
+export const FIRST_BILL_AUTOPAY_RECORD_WORDS =
+  'Autopay is waiting for the owner to approve, and it will take this first bill. If you record the money here and the owner then approves, the approval charge goes back to them by itself. If the owner has already paid you, stop autopay first so they are not asked to approve.';

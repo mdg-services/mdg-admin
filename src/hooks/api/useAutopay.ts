@@ -2,7 +2,11 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 
 import { api } from '@/lib/api';
 import type { AdminAutopay, AdminAutopayOverview, StartAutopayResult } from '@dk/shared';
-import type { AutopayFollowUpInput, StopAutopayAdminInput } from '@dk/shared/schemas';
+import type {
+  AutopayFollowUpInput,
+  AutopayMoneyBackInput,
+  StopAutopayAdminInput,
+} from '@dk/shared/schemas';
 
 import { outletSetupRoot } from './useOnboarding';
 import { paymentsRoot } from './usePayments';
@@ -101,6 +105,20 @@ export function useRefreshAutopay() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post<AdminAutopay>(`/admin/autopay/${id}/refresh`),
+    onSettled: () => refreshAfterChange(qc),
+  });
+}
+
+/**
+ * The first-month money-back (`POST /admin/autopay/dealers/:dealerId/money-back`):
+ * autopay is stopped first, then the first bill is refunded in full (its credit
+ * note follows). Super-admins only; the note goes on the refund.
+ */
+export function useMoneyBack() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dealerId, ...body }: { dealerId: string } & AutopayMoneyBackInput) =>
+      api.post<AdminAutopayOverview>(`/admin/autopay/dealers/${dealerId}/money-back`, body),
     onSettled: () => refreshAfterChange(qc),
   });
 }

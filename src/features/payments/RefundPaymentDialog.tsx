@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { Link } from 'react-router-dom';
 
 import {
   Button,
@@ -10,12 +11,15 @@ import {
   Textarea,
   useToast,
 } from '@/components/ui';
+import { useAutopayOverview } from '@/hooks/api/useAutopay';
 import { useRefundPayment } from '@/hooks/api/usePayments';
+import { istTodayYmd } from '@/lib/format';
 import {
   PAYMENT_REASON_MAX,
   reasonProblem,
   refundAmount,
   refundSentence,
+  refundAutopayWarning,
   refundable,
   rupeesText,
 } from '@/pages/payments/format';
@@ -48,6 +52,7 @@ export function RefundPaymentDialog({
 }) {
   const toast = useToast();
   const refund = useRefundPayment();
+  const overview = useAutopayOverview(payment?.dealerId);
   const amountId = React.useId();
   const reasonId = React.useId();
   const [amount, setAmount] = React.useState('');
@@ -96,6 +101,9 @@ export function RefundPaymentDialog({
   }
 
   const confirming = step === 'confirm' && parsed?.ok === true;
+  const autopayWarning = payment
+    ? refundAutopayWarning(payment, overview.data, istTodayYmd())
+    : null;
 
   return (
     <Dialog
@@ -135,6 +143,19 @@ export function RefundPaymentDialog({
                 : payment.title}
             </p>
           </div>
+
+          {autopayWarning ? (
+            <Callout intent="warning">
+              {autopayWarning}{' '}
+              <Link
+                to={`/dealers/${payment.dealerId}`}
+                onClick={onClose}
+                className="font-semibold underline"
+              >
+                Open the outlet
+              </Link>
+            </Callout>
+          ) : null}
 
           {confirming ? (
             <>

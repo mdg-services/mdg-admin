@@ -36,8 +36,16 @@ import {
   needsFollowUp,
   newestEndedFirst,
   refreshOutcome,
+  refundDayProblem,
   sentToLine,
   shortDay,
+  moneyBackLine,
+  moneyBackWords,
+  firstMonthByHand,
+  firstBillAutopayWaiting,
+  FIRST_BILL_AUTOPAY_RESEND_WORDS,
+  FIRST_BILL_AUTOPAY_RECORD_WORDS,
+  BY_HAND_REFUND_POINTER,
   startConfirmWords,
   startedToast,
   stateHint,
@@ -142,7 +150,10 @@ describe('notes', () => {
   it('asks for what the owner said on the call', () => {
     assert.match(followUpNoteProblem('') ?? '', /what the owner said/i);
     assert.equal(followUpNoteProblem('Did not pick up'), null);
-    assert.match(followUpNoteProblem('a'.repeat(AUTOPAY_FOLLOW_UP_MAX + 1)) ?? '', /Keep it to 500/);
+    assert.match(
+      followUpNoteProblem('a'.repeat(AUTOPAY_FOLLOW_UP_MAX + 1)) ?? '',
+      /Keep it to 500/,
+    );
   });
 });
 
@@ -267,7 +278,10 @@ describe('setting it up', () => {
   });
 
   it('tells the person when the link had nowhere to go', () => {
-    assert.match(startedToast({ phone: '9876543210', email: null }), /is sending the approval link/);
+    assert.match(
+      startedToast({ phone: '9876543210', email: null }),
+      /is sending the approval link/,
+    );
     assert.match(startedToast({ phone: null, email: null }), /nowhere to send the link/);
     assert.match(startedToast(null), /nowhere to send the link/);
   });
@@ -290,8 +304,57 @@ describe('a refused press', () => {
     assert.equal(failedText(409, why), why);
   });
 
-  it('puts "Razorpay is off" in plain words', () => {
-    assert.match(failedText(503, 'Service Unavailable'), /not switched on yet/);
+  it('says Razorpay is switched off only for the code that means it', () => {
+    assert.match(
+      failedText(503, 'Payments are not switched on yet.', 'PAYMENTS_NOT_CONFIGURED'),
+      /switched off/,
+    );
+  });
+
+  it('does not call a 503 "switched off" because of its status', () => {
+    const said = failedText(503, 'Some other 503 sentence.', 'SOMETHING_ELSE');
+    assert.equal(said, 'Some other 503 sentence.');
+    assert.doesNotMatch(said, /switched/);
+  });
+
+  it('says Razorpay did not answer, and nothing changed, for the two codes that mean it', () => {
+    for (const code of ['AUTOPAY_NOT_STOPPED', 'RAZORPAY_UNREACHABLE']) {
+      const said = failedText(503, 'The server sentence.', code);
+      assert.match(said, /Razorpay did not answer/, code);
+      assert.match(said, /Nothing has changed/, code);
+      assert.match(said, /Try again/, code);
+      assert.doesNotMatch(said, /switched|set up/, code);
+    }
+  });
+
+  it('shows Razorpay\'s own refusal as the server wrote it, never "did not answer"', () => {
+    const why = 'Razorpay refused: the refund is more than the amount captured.';
+    for (const status of [502, 400]) {
+      const said = failedText(status, why, 'PAYMENT_PROVIDER_ERROR');
+      assert.equal(said, why);
+      assert.doesNotMatch(said, /did not answer|Nothing has changed/);
+    }
+  });
+
+  it("shows the money-back's 502, which says autopay is already stopped, as it is", () => {
+    const why =
+      'Razorpay refused the refund: the payment is too old. Autopay is stopped and billing has ended; press Give the first month back again once this is sorted.';
+    assert.equal(failedText(502, why, 'PAYMENT_PROVIDER_ERROR'), why);
+  });
+
+  it('does not tell a stop or a refund that "autopay cannot be set up"', () => {
+    for (const code of ['PAYMENTS_NOT_CONFIGURED', 'AUTOPAY_NOT_STOPPED']) {
+      assert.doesNotMatch(failedText(503, 'x', code), /set up/);
+    }
+  });
+
+  it('shows the web server\'s own 503, which carries no server sentence, as "did not answer"', () => {
+    assert.match(failedText(503, 'Service Unavailable', 'HTTP_503'), /server did not answer/);
+  });
+
+  it('shows the refusal for a changed first bill as the server wrote it', () => {
+    const why = 'This bill has an autopay waiting for approval. Stop autopay before changing it.';
+    assert.equal(failedText(409, why, 'FIRST_BILL_HAS_AUTOPAY'), why);
   });
 
   it('never prints nothing', () => {
@@ -301,7 +364,8 @@ describe('a refused press', () => {
 });
 
 describe('the ones that ended', () => {
-  const one = (id: string, endedAt: string | null): AdminAutopay => ({ id, endedAt }) as AdminAutopay;
+  const one = (id: string, endedAt: string | null): AdminAutopay =>
+    ({ id, endedAt }) as AdminAutopay;
 
   it('come newest first, whatever order they arrived in', () => {
     const list = [
@@ -338,5 +402,145 @@ describe('the ones that ended', () => {
     assert.equal(endedByDetail('admin', null), null);
     assert.equal(endedByDetail('dealer', 'Rahul'), null);
     assert.equal(endedByDetail(null, null), null);
+  });
+});
+
+describe('the first month', () => {
+  const fm = (over: Record<string, unknown> = {}) => ({
+    paymentId: 'p1',
+    number: 'MDG-2026-00007',
+    amountPaise: 354_000,
+    status: 'paid' as const,
+    paidOn: '2026-10-26',
+    refundableUntil: '2026-11-25',
+    canMoneyBack: true,
+    moneyBackReason: null,
+    paidByHand: false,
+    paidPaise: 354_000,
+    ...over,
+  });
+
+  it('says the approval takes the first month and pays the first bill', () => {
+    const words = startConfirmWords(
+      {
+        monthlyPricePaise: 354_000,
+        paidThrough: null,
+        firstMonth: fm({ status: 'due', paidOn: null }),
+      },
+      TODAY,
+    );
+    assert.match(words, /first month is taken when the owner approves/);
+    assert.match(words, /MDG-2026-00007/);
+  });
+
+  it('offers the money-back while it can be given, and says why not when it cannot', () => {
+    assert.match(moneyBackLine(fm(), TODAY)!, /money-back possible till/);
+    assert.equal(
+      moneyBackLine(
+        fm({ canMoneyBack: false, moneyBackReason: 'The first month has already been refunded.' }),
+        TODAY,
+      ),
+      'First month: The first month has already been refunded.',
+    );
+    assert.equal(moneyBackLine(fm({ status: 'due', paidOn: null }), TODAY), null);
+    assert.equal(moneyBackLine(null, TODAY), null);
+  });
+});
+
+describe('the money-back words', () => {
+  const words = moneyBackWords('₹3,540');
+
+  it("say what stops: no more monthly bills, and the next month's bill is cancelled", () => {
+    assert.match(words, /no more monthly bills are raised for this outlet/);
+    assert.match(words, /already raised for the next month is cancelled/);
+  });
+
+  it('say the services keep running until the outlet is archived', () => {
+    assert.match(words, /services keep running until you archive the outlet/);
+  });
+
+  it('keep the order: autopay stops, then the amount goes back with a credit note', () => {
+    assert.match(words, /Autopay is stopped first/);
+    assert.match(words, /₹3,540 goes back to the owner/);
+    assert.match(words, /credit note/);
+  });
+});
+
+describe('a first month recorded by hand', () => {
+  const handFm = {
+    paymentId: 'p1',
+    number: 'MDG-2026-00007',
+    amountPaise: 354_000,
+    status: 'paid' as const,
+    paidOn: '2026-10-26',
+    refundableUntil: '2026-11-25',
+    canMoneyBack: true,
+    moneyBackReason: null,
+    paidByHand: true,
+    paidPaise: 350_460,
+  };
+
+  it('is told by the server flag, not by words', () => {
+    assert.equal(firstMonthByHand(handFm), true);
+    assert.equal(firstMonthByHand({ ...handFm, paidByHand: false }), false);
+    assert.equal(firstMonthByHand(null), false);
+  });
+
+  it('offers the money-back like any other first month', () => {
+    assert.match(moneyBackLine(handFm, '2026-10-27')!, /money-back possible till/);
+  });
+});
+
+describe('an autopay waiting on the first bill', () => {
+  const waiting = { state: 'setting_up' as const, firstBillId: 'b1' };
+
+  it('is only when the approval is out and it is meant to take the first bill', () => {
+    assert.equal(firstBillAutopayWaiting(waiting), true);
+    assert.equal(firstBillAutopayWaiting({ state: 'on', firstBillId: 'b1' }), false);
+    assert.equal(firstBillAutopayWaiting({ state: 'setting_up', firstBillId: null }), false);
+    assert.equal(firstBillAutopayWaiting(null), false);
+    assert.equal(firstBillAutopayWaiting(undefined), false);
+  });
+
+  it('is about one bill only when a bill is named', () => {
+    assert.equal(firstBillAutopayWaiting(waiting, 'b1'), true);
+    assert.equal(firstBillAutopayWaiting(waiting, 'b2'), false);
+  });
+
+  it('says a different amount is refused and the same amount is fine', () => {
+    assert.match(FIRST_BILL_AUTOPAY_RESEND_WORDS, /same amount is fine/);
+    assert.match(FIRST_BILL_AUTOPAY_RESEND_WORDS, /different amount is refused/);
+  });
+
+  it('says the approval charge goes back if the money is recorded by hand', () => {
+    assert.match(FIRST_BILL_AUTOPAY_RECORD_WORDS, /approval charge goes back/);
+    assert.match(FIRST_BILL_AUTOPAY_RECORD_WORDS, /stop autopay first/);
+  });
+});
+
+describe('the day the money went back', () => {
+  const TODAY_YMD = '2026-10-26';
+
+  it('accepts the day it came, any day after it, and today', () => {
+    assert.equal(refundDayProblem('2026-10-24', '2026-10-24', TODAY_YMD), null);
+    assert.equal(refundDayProblem('2026-10-25', '2026-10-24', TODAY_YMD), null);
+    assert.equal(refundDayProblem('2026-10-26', '2026-10-24', TODAY_YMD), null);
+  });
+
+  it('refuses a day before the day the money came, and names that day', () => {
+    const said = refundDayProblem('2026-10-23', '2026-10-24', TODAY_YMD) ?? '';
+    assert.match(said, /24 Oct 2026/);
+    assert.match(said, /cannot go back before/);
+  });
+
+  it('refuses a future day and a day that is not a day', () => {
+    assert.match(refundDayProblem('2026-10-27', '2026-10-24', TODAY_YMD) ?? '', /future/);
+    assert.match(refundDayProblem('', '2026-10-24', TODAY_YMD) ?? '', /Pick the day/);
+    assert.match(refundDayProblem('2026-02-30', null, TODAY_YMD) ?? '', /Pick the day/);
+  });
+
+  it('has no lower bound while the day it came is not known', () => {
+    assert.equal(refundDayProblem('2020-01-01', null, TODAY_YMD), null);
+    assert.equal(refundDayProblem('2020-01-01', undefined, TODAY_YMD), null);
   });
 });

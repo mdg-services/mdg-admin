@@ -12,6 +12,7 @@ import type {
   AdminPaymentsQuery,
   CancelPaymentInput,
   CreatePaymentInput,
+  RecordManualRefundInput,
   RefundPaymentInput,
   UpdateBillToInput,
 } from '@dk/shared/schemas';
@@ -137,6 +138,22 @@ export function useRefundPayment() {
   return useMutation({
     mutationFn: ({ id, amountPaise, reason }: { id: string } & RefundPaymentInput) =>
       api.post<AdminPayment>(`/admin/payments/${id}/refund`, { amountPaise, reason }),
+    onSettled: refresh,
+  });
+}
+
+/**
+ * Write down money that was given back by hand (`POST /admin/payments/:id/manual-refund`).
+ * For a payment that came by hand: Razorpay cannot refund it, so the money goes back
+ * the way it came and this records it, which also issues the credit note. Super-admin
+ * only (the server enforces it; the button is hidden for everyone else). No money
+ * moves from here.
+ */
+export function useRecordManualRefund() {
+  const refresh = useRefreshAfterChange();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & RecordManualRefundInput) =>
+      api.post<AdminPayment>(`/admin/payments/${id}/manual-refund`, body),
     onSettled: refresh,
   });
 }

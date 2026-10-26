@@ -10,7 +10,9 @@ import {
   Select,
   useToast,
 } from '@/components/ui';
+import { useAutopayOverview } from '@/hooks/api/useAutopay';
 import { useRecordManualPayment, useRecordSetupPayment } from '@/hooks/api/useBilling';
+import { FIRST_BILL_AUTOPAY_RECORD_WORDS, firstBillAutopayWaiting } from '@/lib/autopay';
 import { manualProblem, shortfallNote } from '@/lib/billing';
 import { istTodayYmd } from '@/lib/format';
 import {
@@ -72,6 +74,8 @@ function RecordPaymentForm({ target, onClose }: { target: RecordTarget; onClose:
   const toast = useToast();
   const recordById = useRecordManualPayment();
   const recordBySetup = useRecordSetupPayment();
+  const dealerId = target.kind === 'payment' ? target.payment.dealerId : target.outlet.dealerId;
+  const autopay = useAutopayOverview(dealerId);
   const amountId = React.useId();
   const dayId = React.useId();
   const modeId = React.useId();
@@ -212,6 +216,9 @@ function RecordPaymentForm({ target, onClose }: { target: RecordTarget; onClose:
             />
           </div>
         </div>
+        {firstBillAutopayWaiting(autopay.data?.current, paymentId) ? (
+          <Callout intent="warning">{FIRST_BILL_AUTOPAY_RECORD_WORDS}</Callout>
+        ) : null}
         {short ? <Callout intent="info">{short}</Callout> : null}
         <FieldError message={touched ? (problem ?? undefined) : undefined} />
         <p className="text-xs text-text-muted">

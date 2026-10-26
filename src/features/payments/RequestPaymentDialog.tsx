@@ -18,11 +18,13 @@ import { type CreatedPayment, useCreatePayment, usePaymentLink } from '@/hooks/a
 import {
   EMPTY_BILL_TO,
   PAYMENT_NOTE_MAX,
+  DEFAULT_REQUEST_PURPOSE,
   type RequestDraft,
   billToForOutlet,
   billToState,
   linkSentLine,
   sentence,
+  subscriptionKindWarning,
   taxSplitHint,
   validateRequest,
 } from '@/pages/payments/format';
@@ -40,7 +42,7 @@ import { BillToFields } from './BillToFields';
 const EMPTY_DRAFT: RequestDraft = {
   dealerId: '',
   title: '',
-  purpose: 'subscription',
+  purpose: DEFAULT_REQUEST_PURPOSE,
   amount: '',
   dueDate: '',
   note: '',
@@ -135,6 +137,7 @@ export function RequestPaymentDialog({
   const shown = attempted ? problems : {};
   const paise = parseRupeesToPaise(draft.amount);
   const noteLength = draft.note.trim().length;
+  const subscriptionNote = subscriptionKindWarning(draft.purpose);
 
   function set<K extends keyof RequestDraft>(key: K, value: RequestDraft[K]) {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -290,7 +293,7 @@ export function RequestPaymentDialog({
               id={`${uid}-title`}
               value={draft.title}
               onChange={(e) => set('title', e.target.value)}
-              placeholder="Dealer Kavach, October 2026"
+              placeholder="For example: extra report set-up"
               autoComplete="off"
               invalid={!!shown.title}
             />
@@ -340,6 +343,7 @@ export function RequestPaymentDialog({
               </p>
             ) : null}
           </div>
+          {subscriptionNote ? <Callout intent="warning">{subscriptionNote}</Callout> : null}
 
           <div>
             <Label htmlFor={`${uid}-due`} hint="Optional">

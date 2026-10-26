@@ -10,8 +10,10 @@
  * that answer allows, so a button is never offered that the server would
  * refuse.
  */
+import { refundDayProblem } from '@/lib/autopay';
 import { formatYmd, isYmd } from '@/lib/format';
 import { istStamp, phoneLabel } from '@/lib/intake';
+import { PAYMENT_MODE_LABEL, PAYMENT_REFERENCE_MAX } from '@/lib/onboarding';
 import type { Intent } from '@/lib/statusIntent';
 import {
   GST_RATE_PERCENT,
@@ -30,9 +32,11 @@ import {
   splitGstInclusive,
 } from '@dk/shared';
 import type {
+  AdminAutopayOverview,
   AdminPayment,
   GstDocumentSummary,
   InvoiceBlocker,
+  ManualPaymentMode,
   PaymentAttempt,
   PaymentBillTo,
   PaymentChannel,
@@ -43,7 +47,7 @@ import type {
   RefundStatus,
 } from '@dk/shared';
 import { billToSchema, createPaymentSchema } from '@dk/shared/schemas';
-import type { BillToInput, CreatePaymentInput } from '@dk/shared/schemas';
+import type { BillToInput, CreatePaymentInput, RecordManualRefundInput } from '@dk/shared/schemas';
 
 /**
  * How long the free text may be. Mirror `createPaymentSchema` and
@@ -113,6 +117,19 @@ export function refundable(
   return Math.max(0, p.amountPaise - p.refundedPaise);
 }
 
+/**
+ * The most that can be written down as given back by hand: what actually came in
+ * by hand (a short payment, tax deducted at source, came short of the bill) less
+ * what has been given back already. Zero for anything that did not come by hand.
+ */
+export function manualRefundable(
+  p: Pick<AdminPayment, 'status' | 'amountPaise' | 'refundedPaise' | 'manual'>,
+): number {
+  if (!p.manual) return 0;
+  const came = Math.min(p.amountPaise, p.manual.amountPaise);
+  return Math.min(refundable(p), Math.max(0, came - p.refundedPaise));
+}
+
 export interface PaymentActions {
   /** Get a link to paste into WhatsApp. */
   copyLink: boolean;
@@ -122,8 +139,10 @@ export interface PaymentActions {
   check: boolean;
   /** Withdraw it. */
   cancel: boolean;
-  /** Give money back. */
+  /** Give money back through Razorpay. Never for money that came by hand. */
   refund: boolean;
+  /** Write down money that was given back by hand (bank, UPI, cash), for a payment that came by hand. */
+  recordManualRefund: boolean;
   /** Say a person has looked at what went wrong. */
   markChecked: boolean;
   /** Money came outside Razorpay: record it by hand. */
@@ -143,7 +162,9 @@ export interface PaymentActions {
  *  - looking a payment up needs something to look up at Razorpay — a cancelled
  *    one still counts, because it may have been paid after it was withdrawn;
  *  - refunding is a super-admin's alone (money going back is not onboarding), and
- *    only of what is still unreturned;
+ *    only of what is still unreturned. Money that came by hand cannot go back
+ *    through Razorpay (the server refuses it), so it is never offered the
+ *    Razorpay Refund; it is offered "Record a refund made by hand" instead;
  *  - recording money that came outside Razorpay is any admin's, and only while the
  *    payment is `due` (one Razorpay is confirming is left to settle).
  */
@@ -154,7 +175,8 @@ export function allowedActions(p: AdminPayment, isSuperAdmin: boolean): PaymentA
     sendSms: due && !!p.linkUrl,
     check: Boolean(p.razorpayOrderId || p.razorpayLinkId || p.razorpayPaymentId),
     cancel: due,
-    refund: isSuperAdmin && refundable(p) > 0,
+    refund: isSuperAdmin && refundable(p) > 0 && !p.manual,
+    recordManualRefund: isSuperAdmin && manualRefundable(p) > 0,
     markChecked: hasOpenProblem(p),
     recordPayment: due,
   };
@@ -286,7 +308,17 @@ export function refundTone(status: RefundStatus): Intent {
 
 /** "₹500 · Customer asked for it · Asha · 12 Oct, 14:05" */
 export function refundLine(r: PaymentRefund): string {
+  if (r.manual) return manualRefundLine(r);
   return [formatPaise(r.amountPaise), r.reason, byAt(r.byName, r.createdAt)].join(' · ');
+}
+
+/** A refund made by hand, in words: how it went back, the reference, the day, why, who wrote it down. */
+export function manualRefundLine(r: PaymentRefund): string {
+  const m = r.manual;
+  const how = m
+    ? `Given back by ${PAYMENT_MODE_LABEL[m.mode]}${m.reference ? ` (${m.reference})` : ''} on ${formatYmd(m.refundedOn)}`
+    : 'Given back by hand';
+  return [formatPaise(r.amountPaise), how, r.reason, byAt(r.byName, r.createdAt)].join(' · ');
 }
 
 /** A second capture, in words: what happened to the extra money. */
@@ -403,6 +435,106 @@ export function refundSentence(
   paise: number,
 ): string {
   return `You are giving ${formatPaise(paise)} back to outlet ${dealerCodeLabel(p.dealerCode)} for payment ${p.number}. The money returns to the card, bank account or UPI app it was paid from. This cannot be undone.`;
+}
+
+/** True when autopay took this payment: refunding it does not stop that autopay. */
+export function takenByAutopay(
+  p: Pick<AdminPayment, 'paidVia' | 'razorpaySubscriptionId'>,
+): boolean {
+  return p.paidVia === 'autopay' || !!p.razorpaySubscriptionId;
+}
+
+/** What the outlet's autopay overview says that a refund warning needs. */
+export type RefundWarningOverview = Pick<AdminAutopayOverview, 'current' | 'firstMonth'>;
+
+/**
+ * Said in both refund dialogs. What a refund does to autopay depends on which
+ * payment it is:
+ *
+ *  - the outlet's FIRST bill, inside its first month: a FULL refund also stops
+ *    autopay and ends billing, as "Give the first month back" does; a part refund
+ *    does not;
+ *  - any other payment of an outlet whose autopay is still on: the refund gives
+ *    money back and nothing else, so autopay takes the next month. (With the
+ *    overview not yet loaded, a payment autopay took is warned the same way.)
+ *
+ * `null` when there is nothing to say. `overview` is `undefined` while it loads.
+ */
+export function refundAutopayWarning(
+  p: Pick<AdminPayment, 'id' | 'paidVia' | 'razorpaySubscriptionId'>,
+  overview: RefundWarningOverview | undefined,
+  today: string,
+): string | null {
+  const first = overview?.firstMonth;
+  const inFirstMonth = !first?.refundableUntil || today <= first.refundableUntil;
+  if (first && first.paymentId === p.id && inFirstMonth) {
+    return 'A full refund of the first month also stops autopay and ends billing for this outlet, the same as "Give the first month back" on its page. A part refund does not.';
+  }
+  const autopayOn = overview ? overview.current !== null : takenByAutopay(p);
+  if (!autopayOn) return null;
+  return 'Refunding this payment does not stop autopay, so the owner is charged again next month. To stop it, use "Stop autopay" on the outlet\'s page, in its Setup card.';
+}
+
+/** The "Record a refund made by hand" form as typed: everything is still text. */
+export interface ManualRefundDraft {
+  /** Rupees, as typed. */
+  amountText: string;
+  /** `YYYY-MM-DD`: the day the money went back. */
+  refundedOn: string;
+  mode: ManualPaymentMode;
+  reference: string;
+  reason: string;
+}
+
+/** Why the hand refund cannot be saved, or `null`. Mirrors `recordManualRefundSchema` and the amount left. */
+export function manualRefundProblem(
+  d: ManualRefundDraft,
+  p: Pick<AdminPayment, 'status' | 'amountPaise' | 'refundedPaise' | 'manual'>,
+  today: string,
+): string | null {
+  const paise = parseRupeesToPaise(d.amountText);
+  if (!d.amountText.trim()) return 'Enter the amount you gave back, in rupees.';
+  if (paise === null) {
+    return 'That is not an amount. Use rupees, for example 500 or 499.50.';
+  }
+  if (paise < PAYMENT_MIN_PAISE) return `The smallest refund is ${formatPaise(PAYMENT_MIN_PAISE)}.`;
+  const most = manualRefundable(p);
+  if (paise > most) {
+    return most === 0
+      ? 'Nothing is left to record.'
+      : `At most ${formatPaise(most)} can be recorded.`;
+  }
+  // Not in the future, and not before the day the money came: the server refuses both.
+  const dayIssue = refundDayProblem(d.refundedOn, p.manual?.paidOn, today);
+  if (dayIssue) return dayIssue;
+  if (d.reference.trim().length > PAYMENT_REFERENCE_MAX) {
+    return `Keep the reference under ${PAYMENT_REFERENCE_MAX} characters.`;
+  }
+  return reasonProblem(d.reason);
+}
+
+/**
+ * The body for `POST /admin/payments/:id/manual-refund`; only call it once
+ * `manualRefundProblem` is `null`. `scripts/payments.check.ts` checks it against
+ * `recordManualRefundSchema`.
+ */
+export function manualRefundBody(d: ManualRefundDraft): RecordManualRefundInput {
+  const reference = d.reference.trim();
+  return {
+    amountPaise: parseRupeesToPaise(d.amountText) ?? 0,
+    refundedOn: d.refundedOn,
+    mode: d.mode,
+    ...(reference ? { reference } : {}),
+    reason: d.reason.trim(),
+  };
+}
+
+/** What recording a hand refund does, in words, with the figures. */
+export function manualRefundSentence(
+  p: Pick<AdminPayment, 'number' | 'dealerCode'>,
+  paise: number,
+): string {
+  return `This writes down that ${formatPaise(paise)} was already given back to outlet ${dealerCodeLabel(p.dealerCode)} for payment ${p.number}. No money is sent from here. The payment then counts as refunded by that much, and the GST credit note follows.`;
 }
 
 /** What cancelling does, in words, with this payment's figures. */
@@ -724,6 +856,21 @@ export function creditNoteLine(doc: GstDocumentSummary): string {
 }
 
 // ------------------------------------------------------ the request form ----
+
+/**
+ * The kind a new "Request a payment" starts on. NOT "subscription": a payment
+ * raised here is not tied to the outlet's setup, so it does not start the
+ * outlet's services or move its paid-through day. The monthly bill is sent from
+ * the outlet's Setup card.
+ */
+export const DEFAULT_REQUEST_PURPOSE: PaymentPurpose = 'service';
+
+/** Said when "Subscription" is picked on the request form. `null` for the other kinds. */
+export function subscriptionKindWarning(purpose: PaymentPurpose): string | null {
+  return purpose === 'subscription'
+    ? "For an outlet's monthly bill, use Send bill on the outlet's Setup card instead. A payment raised here is not tied to the outlet's setup, so paying it does not start the services or move the paid-until day."
+    : null;
+}
 
 /** The "Request a payment" form as typed: everything is still text. */
 export interface RequestDraft {

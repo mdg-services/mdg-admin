@@ -13,11 +13,8 @@ import {
   Textarea,
   useToast,
 } from '@/components/ui';
-import {
-  useAutopayOverview,
-  useRefreshAutopay,
-  useStartAutopay,
-} from '@/hooks/api/useAutopay';
+import { useAutopayOverview, useRefreshAutopay, useStartAutopay } from '@/hooks/api/useAutopay';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import {
   AUTOPAY_STATE_INTENT,
   AUTOPAY_STATE_LABEL,
@@ -25,6 +22,7 @@ import {
   endedByDetail,
   followUpLine,
   modeBadge,
+  moneyBackLine,
   monthsTakenLine,
   needsFollowUp,
   newestEndedFirst,
@@ -45,7 +43,7 @@ import {
   type StartAutopayResult,
 } from '@dk/shared';
 
-import { FollowUpDialog, StopAutopayDialog, errorText } from './AutopayDialogs';
+import { FollowUpDialog, MoneyBackDialog, StopAutopayDialog, errorText } from './AutopayDialogs';
 
 /** Ended ones shown before "Show older". */
 const SHOWN = 3;
@@ -73,6 +71,8 @@ export function AutopayPanel({ dealerId, code }: { dealerId: string; code: strin
   const [stopping, setStopping] = React.useState(false);
   const [callFor, setCallFor] = React.useState<AdminAutopay | null>(null);
   const [started, setStarted] = React.useState<StartAutopayResult | null>(null);
+  const [givingBack, setGivingBack] = React.useState(false);
+  const isSuper = useIsSuperAdmin();
 
   const data = overview.data;
   const current = data?.current ?? null;
@@ -134,9 +134,7 @@ export function AutopayPanel({ dealerId, code }: { dealerId: string; code: strin
         </Callout>
       ) : (
         <>
-          {current ? (
-            <CurrentBlock current={current} today={today} started={started} />
-          ) : null}
+          {current ? <CurrentBlock current={current} today={today} started={started} /> : null}
 
           {canStart || current ? (
             <ActionRow below="wrap" align="start">
@@ -171,9 +169,20 @@ export function AutopayPanel({ dealerId, code }: { dealerId: string; code: strin
             </p>
           ) : null}
 
-          {data.history.length > 0 ? (
-            <History list={data.history} onCallDone={setCallFor} />
+          {/* The first-month money-back: what it is now, and the one press that keeps
+              the promise (stop autopay, refund the first bill). Super-admins only. */}
+          {moneyBackLine(data.firstMonth, today) ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm text-text-muted">{moneyBackLine(data.firstMonth, today)}</p>
+              {data.firstMonth?.canMoneyBack && isSuper ? (
+                <Button size="sm" variant="secondary" onClick={() => setGivingBack(true)}>
+                  Give the first month back
+                </Button>
+              ) : null}
+            </div>
           ) : null}
+
+          {data.history.length > 0 ? <History list={data.history} onCallDone={setCallFor} /> : null}
 
           <ConfirmDialog
             open={asking}
@@ -193,6 +202,14 @@ export function AutopayPanel({ dealerId, code }: { dealerId: string; code: strin
       ) : null}
       {callFor ? (
         <FollowUpDialog autopay={callFor} code={code} onClose={() => setCallFor(null)} />
+      ) : null}
+      {givingBack && data?.firstMonth ? (
+        <MoneyBackDialog
+          dealerId={dealerId}
+          code={code}
+          firstMonth={data.firstMonth}
+          onClose={() => setGivingBack(false)}
+        />
       ) : null}
     </section>
   );
@@ -349,7 +366,9 @@ function EndedRow({
         {when ? <span className="text-text-muted">{` · ${when}`}</span> : null}
       </span>
       {why ? <span className="select-text text-xs text-text-muted">{why}</span> : null}
-      {a.stopNote ? <span className="select-text text-xs text-text-muted">{a.stopNote}</span> : null}
+      {a.stopNote ? (
+        <span className="select-text text-xs text-text-muted">{a.stopNote}</span>
+      ) : null}
       {a.chargedCount > 0 ? (
         <span className="text-xs text-text-subtle">{monthsTakenLine(a.chargedCount)}</span>
       ) : null}
