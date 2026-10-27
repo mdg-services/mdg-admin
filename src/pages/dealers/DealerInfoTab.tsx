@@ -125,7 +125,7 @@ export function DealerInfoTab({ dealer, setup = null, onOpenPasswordVault, onOpe
             its Setup card and it has no steps. */}
         <OldOnboardingRecord dealer={dealer} />
 
-        {/* Every login — the dealer's own, and the IRAS/SDMS portal ones — moved
+        {/* Every login — the dealer's own, and the portal ones (IRAS/SDMS, or the BPCL/HPCL portal) — moved
             to its own tab. An archived dealer cannot reach that tab (the strip
             collapses to Info, which is where Restore lives), so for those the
             app login is shown here instead of being made unreachable. */}
@@ -137,7 +137,8 @@ export function DealerInfoTab({ dealer, setup = null, onOpenPasswordVault, onOpe
               <div>
                 <CardTitle>Logins</CardTitle>
                 <CardSubtitle>
-                  The app sign-in and the IRAS and SDMS portal credentials.
+                  The app sign-in and the portal credentials: IRAS and SDMS, or the
+                  BPCL or HPCL portal.
                 </CardSubtitle>
               </div>
               <KeyRound

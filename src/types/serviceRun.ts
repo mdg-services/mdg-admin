@@ -75,6 +75,9 @@ export interface IrasCredentialsStatus {
   setVia?: PortalSetVia;
 }
 
+/** A BPCL or HPCL portal login's status: the same four facts as IRAS's, and no dealer type. */
+export type CompanyPortalCredentialsStatus = IrasCredentialsStatus;
+
 export type SdmsDealerType = 'retail' | 'lpg' | '1906';
 
 export interface SdmsCredentialsStatus {

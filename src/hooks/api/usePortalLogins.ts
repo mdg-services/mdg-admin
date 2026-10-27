@@ -9,9 +9,11 @@ export const portalLoginKeys = {
 };
 
 /**
- * `GET /dealers/:id/portal-logins` — where the outlet's SDMS and IRAS logins
- * stand. Only read while the ask dialog is open (`enabled`), and always fresh:
- * the dialog's pre-ticked boxes come from it.
+ * `GET /dealers/:id/portal-logins` — where the outlet's portal logins stand. It always
+ * has SDMS and IRAS, plus a BPCL or HPCL row when the outlet needs one or has one saved,
+ * so a caller shows only the outlet's company's (`loginsOfCompany` in `lib/portalLogin.ts`).
+ * Only read while the ask dialog is open (`enabled`), and always fresh: the dialog's
+ * pre-ticked boxes come from it.
  */
 export function usePortalLogins(dealerId: string | null | undefined, enabled: boolean) {
   return useQuery({
@@ -30,8 +32,8 @@ export interface AskPortalLoginInput {
 
 /**
  * `POST /dealers/:id/portal-login/ask` — puts the login box (and, if asked, the
- * explainer video) into every owner's chat. Answers 409 `NOTHING_TO_ASK` when
- * no login is needed.
+ * explainer video, which only an SDMS or IRAS ask carries) into every owner's chat.
+ * Answers 409 `NOTHING_TO_ASK` when no login is needed.
  */
 export function useAskPortalLogin(dealerId: string | null | undefined) {
   const qc = useQueryClient();

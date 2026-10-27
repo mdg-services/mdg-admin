@@ -11,13 +11,14 @@ import { dealerCodeLabel, type OutletSetupAdmin } from '@dk/shared';
 import { MarkSignedInDialog, PortalNotNeededDialog, SendWelcomeDialog } from './DealerStepDialogs';
 import { EnterLoginsDialog } from './EnterLoginsDialog';
 import { FillBillingDialog } from './FillBillingDialog';
+import { FillCompanyDialog } from './FillCompanyDialog';
 import { errorText } from './SetupDialogs';
 
 /**
  * "Do it for the dealer": the dealer's own steps an admin can take over at the
- * open step (round 3, 24 Oct) — mark signed in, send the welcome, fill the bill
- * details, enter the logins, say a login is not needed — and a link to the Team
- * tab for Reset password.
+ * open step (round 3, 24 Oct) — mark signed in, send the welcome, choose the oil
+ * company, fill the bill details, enter the logins, say a login is not needed — and a
+ * link to the Team tab for Reset password.
  *
  * WHICH ones is `dealerActions` (`lib/onboarding.ts`): the stage and the facts
  * decide, so a button is only here where the server will take the call. Each one
@@ -124,6 +125,7 @@ export function DoItForDealer({
         description="Press this once you have sent the welcome from your own phone. It records that it went and stops a second one being sent."
         confirmLabel="Mark sent by hand"
       />
+      <FillCompanyDialog outlet={open === 'fill_company' ? outlet : null} onClose={dismiss} />
       <FillBillingDialog outlet={open === 'fill_billing' ? outlet : null} onClose={dismiss} />
       <EnterLoginsDialog
         outlet={open === 'fill_logins' ? outlet : null}

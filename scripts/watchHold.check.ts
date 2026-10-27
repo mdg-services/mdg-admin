@@ -20,6 +20,7 @@ import {
   DROP_REASON_MIN,
   audienceLabel,
   canRetryLoginCheck,
+  checklistLabel,
   checklistOpenKeys,
   checklistSummary,
   dropBody,
@@ -109,6 +110,16 @@ describe('the setup checklist', () => {
 
   it('has a plain label for every key the server can send', () => {
     for (const k of SETUP_CHECKLIST_KEYS) assert.ok(CHECKLIST_LABEL[k].length > 0, k);
+  });
+
+  it('says a BPCL or HPCL outlet’s login is saved, not that it works: nothing tries it', () => {
+    assert.equal(checklistLabel('logins_working', false), 'Portal logins work');
+    assert.equal(checklistLabel('logins_working', true), 'Portal login saved');
+    // no other line changes with the company
+    for (const k of SETUP_CHECKLIST_KEYS.filter((k) => k !== 'logins_working')) {
+      assert.equal(checklistLabel(k, true), CHECKLIST_LABEL[k], k);
+      assert.equal(checklistLabel(k, false), CHECKLIST_LABEL[k], k);
+    }
   });
 
   it('only a missing line is open; not_needed and done never are', () => {

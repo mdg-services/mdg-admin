@@ -7,13 +7,16 @@
  * It imports TYPES from `@dk/shared` and no values: the check script runs this
  * file outside Vite, where `@dk/shared` resolves to the package's compiled
  * `dist/`, which a pending shared change can leave behind the source. Service
- * names are passed in by the caller for the same reason.
+ * names are passed in by the caller for the same reason. The few shared tables it
+ * does need (the oil companies, the portals' names) are read by path, as
+ * `watchHold.ts` reads its own.
  *
  * The words are the admin's, in English (the dealer's Hindi lives in the app).
  * "Waiting on" always means whose move the outlet is stuck on: the dealer's, or
  * MDG's own, which is the one an admin can act on.
  */
 import type {
+  OilCompanyId,
   OnboardingBoardRow,
   OnboardingBoard,
   OutletSetupAdmin,
@@ -32,6 +35,16 @@ import type {
   SetupWelcomeAdminView,
   SetupWelcomeState,
 } from '@dk/shared';
+
+// By path, not from '@dk/shared': the check script (`tsx --test`) resolves the package to its
+// compiled `dist/`, which these tables are newer than.
+import {
+  COMPANY_PORTALS,
+  DEFAULT_OIL_COMPANY,
+  OIL_COMPANIES,
+  OIL_COMPANY_NAMES,
+} from '../../shared/src/types/oilCompany';
+import { PORTAL_NAMES, isCompanyPortal } from '../../shared/src/types/portalLogin';
 
 import type { Intent } from './statusIntent';
 import { watchNeedsDecision } from './watchHold';
@@ -76,6 +89,8 @@ export function stageLabel(o: StageFacts): string {
   switch (o.stage) {
     case 'sign_in':
       return 'Waiting for first sign-in';
+    case 'company':
+      return 'Choosing company';
     case 'billing':
       return 'Waiting for billing details';
     case 'payment':
@@ -225,7 +240,8 @@ export type MainActionId =
   | 'close';
 
 /**
- * The steps that are the DEALER's, which an admin can take over (round 3, 24 Oct):
+ * The steps that are the DEALER's, which an admin can take over (round 3, 24 Oct; the
+ * company on 27 Oct):
  * the same service the dealer's own tap runs, with the admin as the actor, so the
  * facts come out the same and the record says who did it.
  */
@@ -234,6 +250,7 @@ export type DealerActionId =
   | 'send_welcome'
   | 'welcome_hand_sent'
   | 'reset_password'
+  | 'fill_company'
   | 'fill_billing'
   | 'fill_logins'
   | 'portal_not_needed';
@@ -307,14 +324,29 @@ export function stageActions(o: StageFacts): StageActionSpec[] {
 // ── What an admin can do FOR the dealer ─────────────────────────────────────
 
 /**
- * The two portals every outlet is asked for, SDMS first. Mirrors `STANDARD_PORTALS`
- * in `@dk/shared` (a value import is kept out of this file; the check script holds
- * the two equal).
+ * The portals an outlet is asked for, in the order the dealer is asked: its company's
+ * (`COMPANY_PORTALS` in `@dk/shared`) — SDMS then IRAS for Indian Oil, the one company
+ * portal for BPCL or HPCL. An outlet with no company on record is Indian Oil.
  */
-export const STANDARD_PORTAL_IDS: readonly PortalId[] = ['sdms', 'iras'];
+export function companyPortalIds(company: OilCompanyId | null | undefined): readonly PortalId[] {
+  return COMPANY_PORTALS[company ?? DEFAULT_OIL_COMPANY];
+}
 
-/** The portal's name as the team and the dealer know it. */
-export const PORTAL_LABEL: Record<PortalId, string> = { sdms: 'SDMS', iras: 'IRAS' };
+/**
+ * True for a BPCL or HPCL outlet: its one login is a company portal, which MDG's team
+ * uses by hand (nothing tries it automatically). An outlet with no company on record is
+ * Indian Oil, and false.
+ */
+export function isCompanyPortalOutlet(company: OilCompanyId | null | undefined): boolean {
+  return companyPortalIds(company).some(isCompanyPortal);
+}
+
+/**
+ * The portal's name as the team and the dealer know it: `PORTAL_NAMES` in `@dk/shared`
+ * ("SDMS", "IRAS", "BPCL portal", "HPCL portal"). A company portal is named by its
+ * company only, never by what MDG does on it.
+ */
+export const PORTAL_LABEL: Readonly<Record<PortalId, string>> = PORTAL_NAMES;
 
 /** The dealer tab a link opens: Team holds Reset password, Services the attached list, the vault every login. */
 export type DealerTabId = 'members' | 'services' | 'passwords';
@@ -329,7 +361,14 @@ export interface DealerActionSpec {
 
 type DealerActionFacts = Pick<
   OutletSetupAdmin,
-  'stage' | 'payment' | 'billing' | 'loginsNeeded' | 'portalsNotNeeded' | 'welcome' | 'enrolmentId'
+  | 'stage'
+  | 'payment'
+  | 'company'
+  | 'billing'
+  | 'loginsNeeded'
+  | 'portalsNotNeeded'
+  | 'welcome'
+  | 'enrolmentId'
 >;
 
 /** The welcome has already gone: Meta took it, it arrived, or a person says they sent it. */
@@ -337,14 +376,26 @@ export function welcomeAlreadyWent(state: SetupWelcomeState | null | undefined):
   return state === 'sent' || state === 'delivered' || state === 'handSent';
 }
 
-/** A portal can be marked "not needed" until its login would be asked for: before the setup is ready. */
+/**
+ * A portal can be marked "not needed" until its login would be asked for: before the setup
+ * is ready, and only once the company is chosen — the company decides which logins there are.
+ */
 function canMarkNotNeeded(stage: SetupStage): boolean {
-  return stage === 'sign_in' || stage === 'billing' || stage === 'payment' || stage === 'logins';
+  return stage === 'billing' || stage === 'payment' || stage === 'logins';
 }
 
-/** …and the mark can be taken back until the services start. */
+/**
+ * The company is chosen at its own step and can be changed at every step after it
+ * until the services start: the server answers 409 `SIGN_IN_FIRST` before the owner's
+ * first sign-in and `SETUP_OVER` once the services have started.
+ */
+function canChangeCompany(stage: SetupStage): boolean {
+  return stage === 'billing' || stage === 'payment' || stage === 'logins' || stage === 'setup';
+}
+
+/** …and a mark can be taken back at any step until the services start. */
 function canUndoNotNeeded(stage: SetupStage): boolean {
-  return canMarkNotNeeded(stage) || stage === 'setup';
+  return stage === 'sign_in' || stage === 'company' || canMarkNotNeeded(stage) || stage === 'setup';
 }
 
 /**
@@ -357,6 +408,8 @@ function canUndoNotNeeded(stage: SetupStage): boolean {
  *   real sign-in), the welcome again (words and a link if WhatsApp cannot send;
  *   only for an outlet made from a registration) or "sent by hand" (not once it
  *   already went), and a link to the Team tab for Reset password
+ * - company: "Choose company…", and "Change company…" at every step after it until the
+ *   services start (the logins asked for follow the company)
  * - billing: "Fill billing details…"; at payment too, while the bill is not paid
  * - logins: "Enter logins…"
  * - a login the outlet does not need: before the setup is ready, and the way back
@@ -368,6 +421,7 @@ export function dealerActions(o: DealerActionFacts): DealerActionSpec[] {
   const out: DealerActionSpec[] = [];
   const add = (id: DealerActionId, label: string, tab?: DealerTabId) =>
     out.push(tab ? { id, label, tab } : { id, label });
+  const companyLabel = o.company ? 'Change company…' : 'Choose company…';
   switch (o.stage) {
     case 'sign_in': {
       add('mark_signed_in', 'Mark signed in…');
@@ -380,6 +434,9 @@ export function dealerActions(o: DealerActionFacts): DealerActionSpec[] {
       add('reset_password', 'Reset password…', 'members');
       break;
     }
+    case 'company':
+      add('fill_company', companyLabel);
+      break;
     case 'billing':
       add('fill_billing', o.billing ? 'Change billing details…' : 'Fill billing details…');
       break;
@@ -395,6 +452,8 @@ export function dealerActions(o: DealerActionFacts): DealerActionSpec[] {
     default:
       break;
   }
+  // After the open step's own button: the open step is the one to press.
+  if (canChangeCompany(o.stage)) add('fill_company', companyLabel);
   const canMark = canMarkNotNeeded(o.stage) && o.loginsNeeded.length > 0;
   const canUndo = canUndoNotNeeded(o.stage) && o.portalsNotNeeded.length > 0;
   if (canMark || canUndo) add('portal_not_needed', 'Login not needed…');
@@ -415,13 +474,14 @@ export interface PortalNeedRow {
 }
 
 /**
- * Both portals in the order the dealer is asked, each with whether it is asked
- * for, and whether this stage lets an admin change that.
+ * The outlet's company's portals in the order the dealer is asked (both for Indian Oil,
+ * the one company portal for BPCL or HPCL), each with whether it is asked for, and
+ * whether this stage lets an admin change that.
  */
 export function portalNeedRows(
-  o: Pick<OutletSetupAdmin, 'stage' | 'loginsNeeded' | 'portalsNotNeeded'>,
+  o: Pick<OutletSetupAdmin, 'stage' | 'company' | 'loginsNeeded' | 'portalsNotNeeded'>,
 ): PortalNeedRow[] {
-  return STANDARD_PORTAL_IDS.map((portal) => {
+  return companyPortalIds(o.company).map((portal) => {
     const marked = o.portalsNotNeeded.find((p) => p.portal === portal);
     const asked = o.loginsNeeded.includes(portal);
     const day = marked ? istDay(marked.at) : '';
@@ -435,6 +495,14 @@ export function portalNeedRows(
       canUndo: !!marked && canUndoNotNeeded(o.stage),
     };
   });
+}
+
+/**
+ * The logins "Enter logins" shows a card for: the company's portals in the order the
+ * dealer is asked, less any the outlet is not asked for (marked "not needed").
+ */
+export function loginsToEnter(o: Pick<OutletSetupAdmin, 'company' | 'loginsNeeded'>): PortalId[] {
+  return companyPortalIds(o.company).filter((p) => o.loginsNeeded.includes(p));
 }
 
 /** Why a reason cannot be sent, or `null`. Judged on the trimmed text, as the server does. */
@@ -769,23 +837,30 @@ export function mdgTurnCount(rows: readonly OnboardingBoardRow[]): number {
 
 /**
  * An outlet's setup as an OLDER server sends it: before round 3 there was no
- * `doneBy`, `portalsNotNeeded` or `welcome`. The release order is backend first,
- * then this app, and a tab can be on either side of that gap for a few minutes, so
- * the screens never read those three fields off a raw body.
+ * `doneBy`, `portalsNotNeeded` or `welcome`, and before the company step there was no
+ * `company` (nor `doneBy.company` or `milestones.companySavedAt`). The release order is
+ * backend first, then this app, and a tab can be on either side of that gap for a few
+ * minutes, so the screens never read those fields off a raw body.
  */
-export type RawOutletSetup = Omit<OutletSetupAdmin, 'doneBy' | 'portalsNotNeeded' | 'welcome'> &
-  Partial<Pick<OutletSetupAdmin, 'doneBy' | 'portalsNotNeeded' | 'welcome'>>;
+export type RawOutletSetup = Omit<
+  OutletSetupAdmin,
+  'doneBy' | 'portalsNotNeeded' | 'welcome' | 'company'
+> &
+  Partial<Pick<OutletSetupAdmin, 'doneBy' | 'portalsNotNeeded' | 'welcome' | 'company'>>;
 
 /**
- * The setup with the three round-3 fields filled in as "nothing happened":
- * nobody did a step for the dealer, no portal is marked, no welcome was tried.
- * That is also exactly what an outlet from before round 3 has. A current server's
- * body comes back unchanged in content.
+ * The setup with the fields an older server leaves out filled in as "nothing
+ * happened": nobody did a step for the dealer, no portal is marked, no welcome was
+ * tried, and the outlet is Indian Oil (every outlet was, before the company step).
+ * That is also exactly what an outlet from before them has. A current server's body
+ * comes back unchanged in content; a company of `null` ("not chosen yet") stays null.
  */
 export function readSetup(raw: RawOutletSetup): OutletSetupAdmin {
   return {
     ...raw,
-    doneBy: { signIn: null, billing: null, logins: null, ...raw.doneBy },
+    company: raw.company === undefined ? DEFAULT_OIL_COMPANY : raw.company,
+    milestones: { ...raw.milestones, companySavedAt: raw.milestones.companySavedAt ?? null },
+    doneBy: { signIn: null, company: null, billing: null, logins: null, ...raw.doneBy },
     portalsNotNeeded: raw.portalsNotNeeded ?? [],
     welcome: raw.welcome ?? { state: null, at: null },
   };
@@ -844,6 +919,7 @@ export function funnelTiles(f: OnboardingBoard['funnel']): FunnelTile[] {
 const MILESTONE_LABEL: Record<keyof SetupMilestones, string> = {
   approvedAt: 'Approved',
   firstSignInAt: 'First sign-in',
+  companySavedAt: 'Company chosen',
   billingSavedAt: 'Billing details saved',
   billSentAt: 'Bill sent',
   paidAt: 'Payment received',
@@ -856,6 +932,7 @@ const MILESTONE_LABEL: Record<keyof SetupMilestones, string> = {
 /** Which step's "done by" a milestone shows. A step with no entry here has no one to credit. */
 const MILESTONE_DONE_BY: Partial<Record<keyof SetupMilestones, keyof SetupDoneByMap>> = {
   firstSignInAt: 'signIn',
+  companySavedAt: 'company',
   billingSavedAt: 'billing',
   loginsDoneAt: 'logins',
 };
@@ -880,6 +957,7 @@ export function doneByLine(
       const why = d.reason?.trim();
       return `marked by ${who}, for the dealer. Not a real sign-in${why ? `: ${why}` : ''}`;
     }
+    case 'company':
     case 'billing':
       return `by ${who}, for the dealer`;
     case 'logins':
@@ -900,26 +978,41 @@ export interface MilestoneRow {
  * The milestones in the order they happen, each with its time or `null` when it
  * has not. `done` is false for one that has a time still ahead: the end of a
  * watch is on the list from the day it starts, and is not done until it passes.
- * `by` names the admin when sign-in, billing or the logins were done for the dealer.
+ * `by` names the admin when sign-in, the company, billing or the logins were done for
+ * the dealer.
+ *
+ * `company` is the outlet's oil company. It names the company on its row ("Company
+ * chosen: BPCL"), and it drops the row for an outlet that has a company but never
+ * chose one (it saved its bill details before the step existed and reads as Indian
+ * Oil): a step that can never be ticked is not a thing left to do. Left out, the row
+ * is always kept.
  */
 export function milestoneRows(
   m: SetupMilestones,
   now: number,
   doneBy?: SetupDoneByMap | null,
+  company?: OilCompanyId | null,
 ): MilestoneRow[] {
-  return (Object.keys(MILESTONE_LABEL) as Array<keyof SetupMilestones>).map((key) => {
+  const rows: MilestoneRow[] = [];
+  for (const key of Object.keys(MILESTONE_LABEL) as Array<keyof SetupMilestones>) {
     const at = m[key] ?? null;
+    const isCompany = key === 'companySavedAt';
+    if (isCompany && company && at === null) continue;
     const t = at ? Date.parse(at) : NaN;
     const done = at !== null && !(Number.isFinite(t) && t > now);
     const step = MILESTONE_DONE_BY[key];
-    return {
+    rows.push({
       key,
-      label: MILESTONE_LABEL[key],
+      label:
+        isCompany && company
+          ? `${MILESTONE_LABEL[key]}: ${OIL_COMPANY_NAMES[company].short}`
+          : MILESTONE_LABEL[key],
       at,
       done,
       by: done && step && doneBy ? doneByLine(doneBy[step], step) : null,
-    };
-  });
+    });
+  }
+  return rows;
 }
 
 /** Where the registration came from, in the admin's words. */
@@ -983,6 +1076,69 @@ export function portalsLine(
   const asked = needed.length ? needed.map((p) => PORTAL_LABEL[p]).join(', ') : 'None asked for';
   const left = notNeeded.map((n) => `${PORTAL_LABEL[n.portal]} not needed (${n.reason})`);
   return [asked, ...left].join(' · ');
+}
+
+// ── The oil company ─────────────────────────────────────────────────────────
+
+/** The three companies in the order the choice shows them, each by its short name on the pump's board. */
+export const COMPANY_CHOICES = OIL_COMPANIES.map((value) => ({
+  value,
+  label: OIL_COMPANY_NAMES[value].short,
+  name: OIL_COMPANY_NAMES[value].en,
+}));
+
+/** The company in the Setup card: "Indian Oil (IOCL)", "Bharat Petroleum (BPCL)", or that none is chosen yet. */
+export function companyLine(company: OilCompanyId | null | undefined): string {
+  if (!company) return 'Not chosen yet';
+  const n = OIL_COMPANY_NAMES[company];
+  return `${n.en} (${n.short})`;
+}
+
+/**
+ * The small chip on an outlet's row: "BPCL" or "HPCL". Nothing for Indian Oil, which is
+ * what almost every outlet is, nor for an outlet that has not chosen yet (its stage says
+ * so). The detail (`companyLine`) names every company.
+ */
+export function companyChipText(company: OilCompanyId | null | undefined): string | null {
+  if (!company || !isCompanyPortalOutlet(company)) return null;
+  return OIL_COMPANY_NAMES[company].short;
+}
+
+/** The logins a company asks for, as a phrase: "the SDMS and IRAS logins", "the BPCL portal login". */
+export function companyLoginsPhrase(company: OilCompanyId): string {
+  const names = companyPortalIds(company).map((p) => PORTAL_LABEL[p]);
+  return names.length > 1 ? `the ${names.join(' and ')} logins` : `the ${names[0]} login`;
+}
+
+/** What a company asks the dealer for, in the dialog's hint: "Asks for the SDMS and IRAS logins." */
+export function companyAsksLine(company: OilCompanyId): string {
+  return `Asks for ${companyLoginsPhrase(company)}.`;
+}
+
+/** The body of `PUT setup/company`. */
+export function companyBody(company: OilCompanyId): { company: OilCompanyId } {
+  return { company };
+}
+
+/**
+ * The plain sentence for the refusals the company and billing steps can meet, or `null`
+ * for any other error (the caller then says what the server said):
+ *
+ * - `SIGN_IN_FIRST`: the owner has not signed in (nor been marked signed in) yet
+ * - `SETUP_OVER`: the services have started, or the setup was closed
+ * - `COMPANY_FIRST`: billing was tried while the oil company is not chosen
+ */
+export function setupRefusalWords(code: string | null | undefined): string | null {
+  switch (code) {
+    case 'SIGN_IN_FIRST':
+      return 'The owner has not signed in yet. Mark them signed in first, or wait for their first sign-in.';
+    case 'SETUP_OVER':
+      return 'This setup is already over: the services have started or it was closed, so it can no longer be changed.';
+    case 'COMPANY_FIRST':
+      return 'The oil company is not chosen yet. Choose the company first, then the billing details.';
+    default:
+      return null;
+  }
 }
 
 // ── Members' sign-in name ───────────────────────────────────────────────────

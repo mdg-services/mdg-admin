@@ -72,6 +72,12 @@ export interface PortalCredentialsCardProps<TValues extends BaseCredentialValues
   extraFields?: React.ReactNode;
   /** Extra summary rows beside Username and Set. */
   extraDetails?: CredentialDetail[];
+  /**
+   * What clearing costs, in the Clear prompt, after "The stored … ID and password are
+   * removed." Defaults to the services that sign in with it; a portal that nothing signs
+   * into on its own says what really follows.
+   */
+  clearEffect?: string;
   onSave: (values: TValues) => Promise<unknown>;
   onClear: () => Promise<unknown>;
   onReveal: () => Promise<RevealedPortalCredentials>;
@@ -110,6 +116,7 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
   editDefaults,
   extraFields,
   extraDetails,
+  clearEffect = 'Every service that signs in with them stops running until a new pair is saved.',
   onSave,
   onClear,
   onReveal,
@@ -347,7 +354,7 @@ export function PortalCredentialsCard<TValues extends BaseCredentialValues>({
         loading={clearing}
         description={
           <>
-            {`The stored ${portal} ID and password are removed. Every service that signs in with them stops running until a new pair is saved. A cleared password cannot be recovered — if anyone will need it again, note it first.`}
+            {`The stored ${portal} ID and password are removed. ${clearEffect} A cleared password cannot be recovered — if anyone will need it again, note it first.`}
             {/* `ConfirmDialog`'s title is a plain string, so the help button
                 sits at the foot of the description rather than in a header
                 slot. */}

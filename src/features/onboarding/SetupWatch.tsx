@@ -35,7 +35,7 @@ export function SetupWatch({ setup, now }: { setup: OutletSetupAdmin; now: numbe
           </Link>
         </Callout>
       ) : null}
-      <SetupChecklist dealerId={setup.dealerId} items={setup.checklist} />
+      <SetupChecklist dealerId={setup.dealerId} items={setup.checklist} company={setup.company} />
       {showChecks ? <LoginChecks checks={setup.loginChecks} now={now} /> : null}
     </div>
   );

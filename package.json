@@ -11,6 +11,7 @@
     "check:intake": "npx tsx --test scripts/intake.check.ts",
     "check:onboarding": "npx tsx --test scripts/onboarding.check.ts",
     "check:onboarding-calls": "npx tsx --test scripts/onboardingCalls.check.ts",
+    "check:portal-login": "npx tsx --test scripts/portalLogin.check.ts",
     "check:payments": "npx tsx --test scripts/payments.check.ts",
     "check:billing": "npx tsx --test scripts/billing.check.ts",
     "check:autopay": "npx tsx --test scripts/autopay.check.ts",

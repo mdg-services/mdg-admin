@@ -29,6 +29,7 @@ import { agoLabel, istStamp } from '@/lib/intake';
 import {
   boardRowKey,
   closeBody,
+  companyChipText,
   daysInStage,
   daysLabel,
   formatPaise,
@@ -344,6 +345,7 @@ function RegistrationCell({ r, now }: { r: RegistrationRow; now: number }) {
 /** An outlet: its code (a link to the dealer), its owner and how to reach them. */
 function OutletCell({ row }: { row: Extract<OnboardingBoardRow, { kind: 'outlet' }> }) {
   const o = row.outlet;
+  const company = companyChipText(o.company);
   return (
     <div className="min-w-0 [overflow-wrap:anywhere]">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
@@ -354,6 +356,8 @@ function OutletCell({ row }: { row: Extract<OnboardingBoardRow, { kind: 'outlet'
           {dealerCodeLabel(o.code)}
         </Link>
         {o.ownerName ? <span className="select-text text-text">{o.ownerName}</span> : null}
+        {/* BPCL or HPCL only: Indian Oil is the usual case and draws nothing (the Setup card names it). */}
+        {company ? <Badge>{company}</Badge> : null}
       </div>
       {o.mobile ? (
         <div className="mt-0.5">

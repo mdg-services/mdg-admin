@@ -1,18 +1,20 @@
 import { Button, Callout, Dialog } from '@/components/ui';
-import type { DealerTabId } from '@/lib/onboarding';
+import { isCompanyPortalOutlet, loginsToEnter, type DealerTabId } from '@/lib/onboarding';
+import { CompanyPortalCredentialsSection } from '@/pages/dealers/CompanyPortalCredentialsSection';
 import { IrasCredentialsSection } from '@/pages/dealers/IrasCredentialsSection';
 import { SdmsCredentialsSection } from '@/pages/dealers/SdmsCredentialsSection';
-import { dealerCodeLabel, type OutletSetupAdmin } from '@dk/shared';
+import { dealerCodeLabel, type OutletSetupAdmin, type PortalId } from '@dk/shared';
 
 import { DealerTabLink } from './DealerTabLink';
 import { ForOutlet } from './SetupDialogs';
 
 /**
- * Type the dealer's portal logins for them: the same two cards the Password vault
- * tab has (user ID, password, and for SDMS the dealer type), for the portals the
- * outlet is asked for. They save through the same routes the vault uses, encrypted
- * the same way, so the logins step, the checklist and the queued login check all
- * move as if the owner had typed them.
+ * Type the dealer's portal logins for them: the same cards the Password vault tab has
+ * (user ID, password, and for SDMS the dealer type), for the portals the outlet is asked
+ * for. An Indian Oil outlet gets the SDMS and IRAS cards; a BPCL or HPCL outlet gets the
+ * one card of its company's portal ("BPCL portal login"). They save through the same routes
+ * the vault uses, encrypted the same way, so the logins step, the checklist and (for SDMS
+ * and IRAS) the queued login check all move as if the owner had typed them.
  *
  * While the outlet is being set up the server also posts a plain line in the owner's
  * chat that the team entered the login for them. Nothing typed here ever goes into
@@ -32,6 +34,8 @@ export function EnterLoginsDialog({
   onGoToTab?: ((tab: DealerTabId) => void) | undefined;
 }) {
   if (!outlet) return null;
+  const portals = loginsToEnter(outlet);
+  const byHand = isCompanyPortalOutlet(outlet.company);
   return (
     <Dialog
       open
@@ -44,23 +48,21 @@ export function EnterLoginsDialog({
         <ForOutlet outlet={outlet} />
         {outlet.loginsNeeded.length === 0 ? (
           <Callout intent="info">
-            No login is asked for: both portals are marked as not needed for{' '}
-            {dealerCodeLabel(outlet.code)}.
+            No login is asked for: {byHand ? 'the portal is' : 'both portals are'} marked as not
+            needed for {dealerCodeLabel(outlet.code)}.
           </Callout>
         ) : (
           <>
             <p className="text-xs text-text-muted">
-              Type the user ID and password the dealer gave you. They are stored encrypted, and
-              the portal is tried once in the background. The owner’s chat gets a line saying the
-              team entered the login for them.
+              {byHand
+                ? 'Type the user ID and password the dealer gave you. They are stored encrypted. MDG’s team uses the login by hand: nothing tries it in the background. '
+                : 'Type the user ID and password the dealer gave you. They are stored encrypted, and the portal is tried once in the background. '}
+              The owner’s chat gets a line saying the team entered the login for them.
             </p>
-            {/* SDMS first, as the dealer is asked. A card only for a portal the outlet is asked for. */}
-            {outlet.loginsNeeded.includes('sdms') ? (
-              <SdmsCredentialsSection dealerId={outlet.dealerId} />
-            ) : null}
-            {outlet.loginsNeeded.includes('iras') ? (
-              <IrasCredentialsSection dealerId={outlet.dealerId} />
-            ) : null}
+            {/* In the order the dealer is asked. A card only for a portal the outlet is asked for. */}
+            {portals.map((portal) => (
+              <PortalLoginCard key={portal} portal={portal} dealerId={outlet.dealerId} />
+            ))}
           </>
         )}
         <p className="text-xs text-text-muted">
@@ -78,4 +80,17 @@ export function EnterLoginsDialog({
       </div>
     </Dialog>
   );
+}
+
+/** The vault's card for one portal. */
+function PortalLoginCard({ portal, dealerId }: { portal: PortalId; dealerId: string }) {
+  switch (portal) {
+    case 'sdms':
+      return <SdmsCredentialsSection dealerId={dealerId} />;
+    case 'iras':
+      return <IrasCredentialsSection dealerId={dealerId} />;
+    case 'bpcl':
+    case 'hpcl':
+      return <CompanyPortalCredentialsSection dealerId={dealerId} portal={portal} expected />;
+  }
 }

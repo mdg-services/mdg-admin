@@ -25,24 +25,33 @@ import {
   portalNotNeededSchema,
   recordSetupPaymentSchema,
   saveSetupBillingSchema,
+  saveSetupCompanySchema,
   sendSetupBillSchema,
   sendSetupWelcomeSchema,
   startSetupServicesSchema,
 } from '../shared/src/schemas/outletSetup';
 import { sendSetupBillRequestSchema } from '../shared/src/schemas/payment';
 import {
+  COMPANY_PORTALS,
+  DEFAULT_OIL_COMPANY,
+  OIL_COMPANIES,
+  OIL_COMPANY_NAMES,
+} from '../shared/src/types/oilCompany';
+import { PORTAL_NAMES } from '../shared/src/types/portalLogin';
+import {
   SETUP_MESSAGE_LANGS,
   SETUP_PAYMENT_MODES,
   SETUP_STAGES,
+  SETUP_STRIP_STEPS,
   SETUP_WELCOME_STATES,
-  STANDARD_PORTALS,
   type OnboardingBoardRow,
   type OutletSetupAdmin,
 } from '../shared/src/types/outletSetup';
 import {
   REASON_MAX,
   REASON_MIN,
-  STANDARD_PORTAL_IDS,
+  COMPANY_CHOICES,
+  PORTAL_LABEL,
   amountProblem,
   billBody,
   billProblem,
@@ -70,6 +79,14 @@ import {
   SOURCE_LABEL,
   billingLine,
   chosenMessageLang,
+  companyAsksLine,
+  companyBody,
+  companyChipText,
+  companyLine,
+  companyLoginsPhrase,
+  companyPortalIds,
+  isCompanyPortalOutlet,
+  loginsToEnter,
   paiseToRupeesText,
   parseRupees,
   paymentBody,
@@ -85,6 +102,7 @@ import {
   reasonProblem,
   sendWelcomeBody,
   setupChip,
+  setupRefusalWords,
   sortBoardRows,
   stageActions,
   stageIntent,
@@ -105,6 +123,7 @@ const TODAY = '2026-10-23';
 const milestones = {
   approvedAt: '2026-10-20T04:00:00.000Z',
   firstSignInAt: '2026-10-20T05:00:00.000Z',
+  companySavedAt: null,
   billingSavedAt: null,
   billSentAt: null,
   paidAt: null,
@@ -126,7 +145,8 @@ function outlet(over: Partial<OutletSetupAdmin> = {}): OutletSetupAdmin {
     waitingOn: 'dealer',
     stageSince: '2026-10-21T12:00:00.000Z',
     milestones,
-    doneBy: { signIn: null, billing: null, logins: null },
+    doneBy: { signIn: null, company: null, billing: null, logins: null },
+    company: 'iocl',
     billing: null,
     payment: {
       state: 'sent',
@@ -157,6 +177,7 @@ describe('stage words', () => {
     );
     assert.equal(stageLabel(outlet()), 'Waiting for payment');
     assert.equal(stageLabel(outlet({ stage: 'setup' })), 'Ready to set up');
+    assert.equal(stageLabel(outlet({ stage: 'company', company: null })), 'Choosing company');
   });
 
   it('colours the move that is MDG’s amber and the dealer’s blue', () => {
@@ -267,6 +288,7 @@ describe('what each stage offers', () => {
     assert.deepEqual(ids({ stage: 'setup' }), ['start_services', 'close']);
     assert.deepEqual(ids({ stage: 'watch' }), ['end_watch', 'extend_watch', 'pause_billing']);
     assert.deepEqual(ids({ stage: 'sign_in' }), ['close']);
+    assert.deepEqual(ids({ stage: 'company' }), ['close']);
     assert.deepEqual(ids({ stage: 'billing' }), ['close']);
     assert.deepEqual(ids({ stage: 'live' }), ['pause_billing']);
     assert.deepEqual(ids({ stage: 'lost' }), []);
@@ -570,6 +592,7 @@ describe('the Setup card', () => {
       [
         'Approved',
         'First sign-in',
+        'Company chosen',
         'Billing details saved',
         'Bill sent',
         'Payment received',
@@ -580,9 +603,9 @@ describe('the Setup card', () => {
       ],
     );
     assert.equal(rows[0]!.at, milestones.approvedAt);
-    assert.equal(rows[2]!.at, null);
+    assert.equal(rows[3]!.at, null);
     assert.equal(rows[0]!.done, true);
-    assert.equal(rows[2]!.done, false);
+    assert.equal(rows[3]!.done, false);
     // the service choice is gone: nothing on the list is called by it
     assert.equal(
       rows.some((r) => /services chosen/i.test(r.label)),
@@ -751,8 +774,23 @@ describe('no choice of services', () => {
     assert.equal(stageLabel(outlet({ stage: 'billing' })), 'Waiting for billing details');
   });
 
-  it('asks for the same two portals the shared contract does', () => {
-    assert.deepEqual([...STANDARD_PORTAL_IDS], [...STANDARD_PORTALS]);
+  it('asks for the portals of the company, as the shared contract lists them', () => {
+    for (const c of OIL_COMPANIES) {
+      assert.deepEqual([...companyPortalIds(c)], [...COMPANY_PORTALS[c]], c);
+    }
+    // no company on record is Indian Oil
+    assert.equal(DEFAULT_OIL_COMPANY, 'iocl');
+    assert.deepEqual([...companyPortalIds(null)], ['sdms', 'iras']);
+    assert.deepEqual([...companyPortalIds(undefined)], ['sdms', 'iras']);
+    assert.deepEqual([...companyPortalIds('bpcl')], ['bpcl']);
+    assert.deepEqual([...companyPortalIds('hpcl')], ['hpcl']);
+  });
+
+  it('names every portal as the shared contract does, a company portal by its company only', () => {
+    assert.deepEqual({ ...PORTAL_LABEL }, { ...PORTAL_NAMES });
+    assert.equal(PORTAL_LABEL.bpcl, 'BPCL portal');
+    assert.equal(PORTAL_LABEL.hpcl, 'HPCL portal');
+    for (const p of ['bpcl', 'hpcl'] as const) assert.doesNotMatch(PORTAL_LABEL[p], /SDMS|IRAS/);
   });
 });
 
@@ -767,12 +805,12 @@ describe('what an admin can do for the dealer', () => {
   };
 
   it('offers, at the first sign-in, the stamp, the welcome, the hand-sent mark and the password link', () => {
+    // No "login not needed" yet: which logins there are depends on the company, chosen next.
     assert.deepEqual(ids({ stage: 'sign_in', welcome: { state: 'not_sent', at: null } }), [
       'mark_signed_in',
       'send_welcome',
       'welcome_hand_sent',
       'reset_password',
-      'portal_not_needed',
     ]);
     // Reset password is a link to the Team tab, and only that one is
     const reset = dealerActions(outlet({ stage: 'sign_in' })).find(
@@ -804,7 +842,11 @@ describe('what an admin can do for the dealer', () => {
   });
 
   it('offers the billing form at billing, and at payment until it is paid', () => {
-    assert.deepEqual(ids({ stage: 'billing' }), ['fill_billing', 'portal_not_needed']);
+    assert.deepEqual(ids({ stage: 'billing' }), [
+      'fill_billing',
+      'fill_company',
+      'portal_not_needed',
+    ]);
     assert.deepEqual(labels({ stage: 'billing' }).slice(0, 1), ['Fill billing details…']);
     assert.deepEqual(labels({ stage: 'billing', billing }).slice(0, 1), [
       'Change billing details…',
@@ -818,10 +860,36 @@ describe('what an admin can do for the dealer', () => {
   });
 
   it('offers the logins at the logins stage, and nothing of the dealer’s once the services are ready', () => {
-    assert.deepEqual(ids({ stage: 'logins' }), ['fill_logins', 'portal_not_needed']);
-    assert.deepEqual(ids({ stage: 'setup' }), []);
+    assert.deepEqual(ids({ stage: 'logins' }), ['fill_logins', 'fill_company', 'portal_not_needed']);
+    // at "ready to set up" only the company is still the dealer's to change
+    assert.deepEqual(ids({ stage: 'setup' }), ['fill_company']);
     for (const stage of ['watch', 'live', 'lost'] as const)
       assert.deepEqual(ids({ stage }), [], stage);
+  });
+
+  it('offers the company at its own step, and to change until the services start', () => {
+    // the open step: not chosen yet, so it is "Choose", and it is the only dealer step
+    assert.deepEqual(ids({ stage: 'company', company: null, loginsNeeded: [] }), ['fill_company']);
+    assert.deepEqual(labels({ stage: 'company', company: null, loginsNeeded: [] }), [
+      'Choose company…',
+    ]);
+    // after it: "Change", behind the open step's own button
+    for (const stage of ['billing', 'payment', 'logins', 'setup'] as const) {
+      assert.ok(ids({ stage, billing }).includes('fill_company'), stage);
+      assert.ok(labels({ stage, billing }).includes('Change company…'), stage);
+      assert.ok(!labels({ stage, billing }).includes('Choose company…'), stage);
+    }
+    assert.deepEqual(ids({ stage: 'billing' }).slice(0, 2), ['fill_billing', 'fill_company']);
+    assert.deepEqual(ids({ stage: 'logins' }).slice(0, 2), ['fill_logins', 'fill_company']);
+    // paid: the bill details are locked but the company is not
+    assert.deepEqual(
+      ids({ stage: 'payment', billing, payment: { ...outlet().payment, state: 'paid' } }).slice(0, 1),
+      ['fill_company'],
+    );
+    // not before the owner has signed in (SIGN_IN_FIRST), nor once the services have started (SETUP_OVER)
+    for (const stage of ['sign_in', 'watch', 'live', 'lost'] as const) {
+      assert.ok(!ids({ stage }).includes('fill_company'), stage);
+    }
   });
 
   it('offers "login not needed" while a login is asked for, and the way back until the services start', () => {
@@ -843,9 +911,10 @@ describe('what an admin can do for the dealer', () => {
     );
     // at "ready to set up" the mark can be taken back, but a new one is not offered
     assert.deepEqual(ids({ stage: 'setup', loginsNeeded: ['sdms'], portalsNotNeeded: marked }), [
+      'fill_company',
       'portal_not_needed',
     ]);
-    assert.deepEqual(ids({ stage: 'setup', loginsNeeded: ['sdms'] }), []);
+    assert.deepEqual(ids({ stage: 'setup', loginsNeeded: ['sdms'] }), ['fill_company']);
   });
 
   it('never makes one of them the primary button: they have no such field', () => {
@@ -880,6 +949,49 @@ describe('the portals a dealer is asked for', () => {
     );
   });
 
+  it('lists the one portal of a BPCL or HPCL outlet, named by its company only', () => {
+    for (const [company, name] of [
+      ['bpcl', 'BPCL portal'],
+      ['hpcl', 'HPCL portal'],
+    ] as const) {
+      const rows = portalNeedRows({
+        stage: 'logins',
+        company,
+        loginsNeeded: [company],
+        portalsNotNeeded: [],
+      });
+      assert.deepEqual(
+        rows.map((r) => [r.portal, r.label, r.state, r.canMark]),
+        [[company, name, 'asked', true]],
+        company,
+      );
+    }
+    // marked "not needed": the portal is not asked for, and the mark can be taken back
+    const rows = portalNeedRows({
+      stage: 'logins',
+      company: 'bpcl',
+      loginsNeeded: [],
+      portalsNotNeeded: [{ ...marked, portal: 'bpcl' }],
+    });
+    assert.deepEqual(
+      rows.map((r) => [r.portal, r.state, r.canUndo]),
+      [['bpcl', 'not_needed', true]],
+    );
+  });
+
+  it('cannot mark a portal not needed before the company is chosen: the company decides which logins there are', () => {
+    const rows = portalNeedRows({
+      stage: 'company',
+      company: null,
+      loginsNeeded: ['sdms', 'iras'],
+      portalsNotNeeded: [],
+    });
+    assert.ok(rows.every((r) => !r.canMark));
+    // …and from the bill details on, it can
+    const billing = portalNeedRows({ stage: 'billing', loginsNeeded: ['sdms', 'iras'], portalsNotNeeded: [] });
+    assert.ok(billing.every((r) => r.canMark));
+  });
+
   it('shows who marked a portal and why, and lets it be undone, not marked again', () => {
     const rows = portalNeedRows({
       stage: 'logins',
@@ -900,7 +1012,9 @@ describe('the portals a dealer is asked for', () => {
     assert.equal(at('setup').find((r) => r.portal === 'sdms')!.canMark, false);
     assert.equal(at('setup').find((r) => r.portal === 'iras')!.canUndo, true);
     assert.equal(at('watch').find((r) => r.portal === 'iras')!.canUndo, false);
-    assert.equal(at('sign_in').find((r) => r.portal === 'sdms')!.canMark, true);
+    assert.equal(at('sign_in').find((r) => r.portal === 'sdms')!.canMark, false);
+    assert.equal(at('sign_in').find((r) => r.portal === 'iras')!.canUndo, true);
+    assert.equal(at('billing').find((r) => r.portal === 'sdms')!.canMark, true);
   });
 });
 
@@ -1063,13 +1177,18 @@ describe('who did a step', () => {
 describe('a setup from a server one release behind', () => {
   // Before round 3 the server sent no `doneBy`, `portalsNotNeeded` or `welcome`.
   const old = (): RawOutletSetup => {
-    const { doneBy: _d, portalsNotNeeded: _p, welcome: _w, ...rest } = outlet({ stage: 'sign_in' });
+    const {
+      doneBy: _d,
+      portalsNotNeeded: _p,
+      welcome: _w,
+      ...rest
+    } = outlet({ stage: 'sign_in' });
     return rest;
   };
 
   it('fills the three fields as "nothing happened"', () => {
     const o = readSetup(old());
-    assert.deepEqual(o.doneBy, { signIn: null, billing: null, logins: null });
+    assert.deepEqual(o.doneBy, { signIn: null, company: null, billing: null, logins: null });
     assert.deepEqual(o.portalsNotNeeded, []);
     assert.deepEqual(o.welcome, { state: null, at: null });
   });
@@ -1087,6 +1206,7 @@ describe('a setup from a server one release behind', () => {
     const current = outlet({
       doneBy: {
         signIn: { by: 'mdg', name: 'Asha', reason: 'helped by phone' },
+        company: null,
         billing: null,
         logins: null,
       },
@@ -1102,7 +1222,7 @@ describe('a setup from a server one release behind', () => {
     assert.deepEqual(readSetup(current), current);
     // a partial `doneBy` gets its other steps as null
     const partial = readSetup({ ...old(), doneBy: { signIn: null } as never });
-    assert.deepEqual(partial.doneBy, { signIn: null, billing: null, logins: null });
+    assert.deepEqual(partial.doneBy, { signIn: null, company: null, billing: null, logins: null });
   });
 
   it('does not change the body it is given', () => {
@@ -1139,5 +1259,200 @@ describe('a setup from a server one release behind', () => {
     assert.equal(row.kind, 'outlet');
     if (row.kind === 'outlet') assert.equal(row.outlet.welcome.state, null);
     assert.equal(board.funnel.registered, 1);
+  });
+});
+
+describe('the oil company', () => {
+  const bpcl = () =>
+    outlet({
+      company: 'bpcl',
+      loginsNeeded: ['bpcl'],
+      stage: 'logins',
+    });
+
+  it('offers all three companies, by the short name on the pump’s board', () => {
+    assert.deepEqual(
+      COMPANY_CHOICES.map((c) => [c.value, c.label, c.name]),
+      OIL_COMPANIES.map((c) => [c, OIL_COMPANY_NAMES[c].short, OIL_COMPANY_NAMES[c].en]),
+    );
+    assert.deepEqual(
+      COMPANY_CHOICES.map((c) => c.label),
+      ['IOCL', 'BPCL', 'HPCL'],
+    );
+  });
+
+  it('says the company in the Setup card, and that none is chosen yet', () => {
+    assert.equal(companyLine('iocl'), 'Indian Oil (IOCL)');
+    assert.equal(companyLine('bpcl'), 'Bharat Petroleum (BPCL)');
+    assert.equal(companyLine('hpcl'), 'Hindustan Petroleum (HPCL)');
+    assert.equal(companyLine(null), 'Not chosen yet');
+  });
+
+  it('puts a chip on a BPCL or HPCL row and none on Indian Oil’s, nor before it is chosen', () => {
+    assert.equal(companyChipText('bpcl'), 'BPCL');
+    assert.equal(companyChipText('hpcl'), 'HPCL');
+    assert.equal(companyChipText('iocl'), null);
+    assert.equal(companyChipText(null), null);
+    assert.equal(companyChipText(undefined), null);
+  });
+
+  it('knows a BPCL or HPCL outlet, whose one login MDG’s team uses by hand', () => {
+    assert.equal(isCompanyPortalOutlet('bpcl'), true);
+    assert.equal(isCompanyPortalOutlet('hpcl'), true);
+    assert.equal(isCompanyPortalOutlet('iocl'), false);
+    assert.equal(isCompanyPortalOutlet(null), false);
+  });
+
+  it('says which logins a company asks for, naming a company portal by its company only', () => {
+    assert.equal(companyLoginsPhrase('iocl'), 'the SDMS and IRAS logins');
+    assert.equal(companyLoginsPhrase('bpcl'), 'the BPCL portal login');
+    assert.equal(companyLoginsPhrase('hpcl'), 'the HPCL portal login');
+    assert.equal(companyAsksLine('bpcl'), 'Asks for the BPCL portal login.');
+    for (const c of ['bpcl', 'hpcl'] as const) assert.doesNotMatch(companyAsksLine(c), /SDMS|IRAS/);
+  });
+
+  it('builds a company body the shared schema takes, and only for a real company', () => {
+    for (const c of OIL_COMPANIES) {
+      const body = companyBody(c);
+      assert.deepEqual(body, { company: c });
+      assert.ok(saveSetupCompanySchema.safeParse(body).success, c);
+    }
+    assert.equal(saveSetupCompanySchema.safeParse({ company: 'shell' }).success, false);
+    assert.equal(saveSetupCompanySchema.safeParse({}).success, false);
+  });
+
+  it('shows "Enter logins" a card for the company’s portals the outlet is asked for, in order', () => {
+    assert.deepEqual(loginsToEnter(outlet()), ['sdms', 'iras']);
+    assert.deepEqual(loginsToEnter(outlet({ loginsNeeded: ['iras'] })), ['iras']);
+    assert.deepEqual(loginsToEnter(outlet({ loginsNeeded: [] })), []);
+    assert.deepEqual(loginsToEnter(bpcl()), ['bpcl']);
+    assert.deepEqual(loginsToEnter(outlet({ company: 'hpcl', loginsNeeded: ['hpcl'] })), ['hpcl']);
+    // a BPCL outlet is never shown the SDMS or IRAS box, whatever the server listed
+    assert.deepEqual(loginsToEnter(outlet({ company: 'bpcl', loginsNeeded: ['sdms', 'bpcl'] })), [
+      'bpcl',
+    ]);
+    // no company on record is Indian Oil
+    assert.deepEqual(loginsToEnter(outlet({ company: null })), ['sdms', 'iras']);
+  });
+
+  it('lists the portals of a BPCL outlet as just its own', () => {
+    const o = bpcl();
+    assert.equal(portalsLine(o.loginsNeeded, o.portalsNotNeeded), 'BPCL portal');
+    assert.equal(
+      portalsLine([], [{ portal: 'bpcl', reason: 'no login yet' }]),
+      'None asked for · BPCL portal not needed (no login yet)',
+    );
+  });
+
+  it('puts the company on its milestone row, with who chose it, as billing’s row reads', () => {
+    const chosen = { ...milestones, companySavedAt: '2026-10-20T06:00:00.000Z' };
+    const doneBy = {
+      signIn: null,
+      company: { by: 'mdg' as const, name: 'Ravi', reason: null },
+      billing: null,
+      logins: null,
+    };
+    const rows = milestoneRows(chosen, NOW, doneBy, 'bpcl');
+    const row = rows.find((r) => r.key === 'companySavedAt')!;
+    assert.equal(row.label, 'Company chosen: BPCL');
+    assert.equal(row.done, true);
+    assert.equal(row.by, 'by Ravi, for the dealer');
+    // in the order they happen: after the first sign-in, before the billing details
+    const keys = rows.map((r) => r.key);
+    assert.ok(keys.indexOf('firstSignInAt') < keys.indexOf('companySavedAt'));
+    assert.ok(keys.indexOf('companySavedAt') < keys.indexOf('billingSavedAt'));
+    // the dealer's own choice names nobody
+    assert.equal(
+      milestoneRows(chosen, NOW, { ...doneBy, company: { by: 'dealer', name: null, reason: null } }, 'hpcl').find(
+        (r) => r.key === 'companySavedAt',
+      )!.by,
+      null,
+    );
+    assert.equal(doneByLine({ by: 'mdg', name: null, reason: null }, 'company'), 'by the MDG team, for the dealer');
+  });
+
+  it('keeps the row as a step still to do while no company is chosen', () => {
+    const row = milestoneRows(milestones, NOW, null, null).find((r) => r.key === 'companySavedAt')!;
+    assert.equal(row.label, 'Company chosen');
+    assert.equal(row.done, false);
+    assert.equal(row.at, null);
+    // …and when the caller does not say (the row is always kept)
+    assert.ok(milestoneRows(milestones, NOW).some((r) => r.key === 'companySavedAt'));
+  });
+
+  it('drops the row for an outlet from before the step, which never chose and reads as Indian Oil', () => {
+    const rows = milestoneRows(milestones, NOW, null, 'iocl');
+    assert.equal(rows.some((r) => r.key === 'companySavedAt'), false);
+    assert.equal(rows.length, milestoneRows(milestones, NOW).length - 1);
+  });
+
+  it('turns the refusals the company and billing steps meet into plain sentences', () => {
+    for (const code of ['SIGN_IN_FIRST', 'SETUP_OVER', 'COMPANY_FIRST']) {
+      const words = setupRefusalWords(code);
+      assert.ok(words && words.length > 20, code);
+      assert.doesNotMatch(words, new RegExp(code));
+    }
+    assert.match(setupRefusalWords('SIGN_IN_FIRST') ?? '', /not signed in/);
+    assert.match(setupRefusalWords('SETUP_OVER') ?? '', /started/);
+    assert.match(setupRefusalWords('COMPANY_FIRST') ?? '', /company is not chosen/);
+    // any other error is left to say what the server said
+    assert.equal(setupRefusalWords('SETUP_LOCKED'), null);
+    assert.equal(setupRefusalWords(undefined), null);
+    assert.equal(setupRefusalWords(null), null);
+  });
+
+  it('has a step on the owner’s strip that the admin’s stage labels cover', () => {
+    // The admin draws no strip, but its words must cover every stage the strip is built from.
+    assert.deepEqual([...SETUP_STRIP_STEPS], ['company', 'billing', 'payment', 'logins', 'start']);
+    assert.ok((SETUP_STAGES as readonly string[]).includes('company'));
+    assert.equal(
+      SETUP_STAGES.indexOf('company'),
+      SETUP_STAGES.indexOf('sign_in') + 1,
+    );
+    assert.equal(
+      SETUP_STAGES.indexOf('billing'),
+      SETUP_STAGES.indexOf('company') + 1,
+    );
+  });
+});
+
+describe('a setup from a server that has no company yet', () => {
+  const old = (): RawOutletSetup => {
+    const { company: _c, ...rest } = outlet({ stage: 'billing' });
+    return {
+      ...rest,
+      doneBy: { signIn: null, billing: null, logins: null } as never,
+      milestones: { ...milestones, billingSavedAt: null } as never,
+    } as RawOutletSetup;
+  };
+
+  it('reads as Indian Oil, with nobody having chosen it', () => {
+    const o = readSetup(old());
+    assert.equal(o.company, 'iocl');
+    assert.equal(o.doneBy.company, null);
+    assert.equal(o.milestones.companySavedAt, null);
+    assert.deepEqual([...companyPortalIds(o.company)], ['sdms', 'iras']);
+    assert.ok(dealerActions(o).length > 0);
+  });
+
+  it('keeps a "not chosen yet" that a current server sends, rather than turning it into Indian Oil', () => {
+    const o = readSetup({ ...outlet({ stage: 'company', company: null }) });
+    assert.equal(o.company, null);
+    assert.equal(companyLine(o.company), 'Not chosen yet');
+  });
+
+  it('leaves a current body unchanged in content', () => {
+    const current = outlet({
+      company: 'hpcl',
+      loginsNeeded: ['hpcl'],
+      milestones: { ...milestones, companySavedAt: '2026-10-20T06:00:00.000Z' },
+      doneBy: {
+        signIn: null,
+        company: { by: 'mdg', name: 'Asha', reason: null },
+        billing: null,
+        logins: null,
+      },
+    });
+    assert.deepEqual(readSetup(current), current);
   });
 });

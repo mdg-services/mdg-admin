@@ -19,8 +19,10 @@ import type {
   SetupBilling,
   SetupMessageLang,
 } from '@dk/shared';
+import type { SaveSetupCompanyInput } from '@dk/shared/schemas';
 
 import { enrolmentsRoot } from './useEnrolments';
+import { portalLoginKeys } from './usePortalLogins';
 
 /** Every onboarding query hangs off these roots, so one invalidation refreshes them all. */
 export const onboardingRoot = ['onboarding'] as const;
@@ -258,9 +260,30 @@ export function useWelcomeHandSent() {
 }
 
 /**
+ * Choose, or change, the oil company for the dealer: the same save the owner's company
+ * card makes, and the logins the outlet is asked for follow it. The server refuses before
+ * the owner's first sign-in (409 `SIGN_IN_FIRST`) and once the services have started
+ * (409 `SETUP_OVER`). Any admin. Answers the fresh setup.
+ */
+export function useSaveCompanyForDealer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dealerId, body }: { dealerId: string; body: SaveSetupCompanyInput }) =>
+      api.put<OutletSetupAdmin>(`/dealers/${dealerId}/setup/company`, body),
+    // The portals asked for change with the company, so the vault's cards and the ask
+    // dialog's list are read again too.
+    onSettled: (_data, _err, vars) => {
+      refreshAfterChange(qc, vars.dealerId);
+      void qc.invalidateQueries({ queryKey: portalLoginKeys.dealer(vars.dealerId) });
+    },
+  });
+}
+
+/**
  * Fill, or change, the bill-to details for the dealer: the same save the owner's
  * billing card makes, so an open bill is refreshed too. The server refuses before
- * the first sign-in (409 `SIGN_IN_FIRST`) and once the bill is paid (409 `SETUP_LOCKED`).
+ * the first sign-in (409 `SIGN_IN_FIRST`), while the company is not chosen (409
+ * `COMPANY_FIRST`) and once the bill is paid (409 `SETUP_LOCKED`).
  */
 export function useSaveBillingForDealer() {
   const qc = useQueryClient();

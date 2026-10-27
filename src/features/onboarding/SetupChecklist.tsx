@@ -3,12 +3,19 @@ import { Check, Circle, Minus } from 'lucide-react';
 import { Badge, Button, useToast } from '@/components/ui';
 import { useCheckPortalLogins } from '@/hooks/api/useHeldMessages';
 import { istStamp } from '@/lib/intake';
+import { isCompanyPortalOutlet } from '@/lib/onboarding';
 import {
-  CHECKLIST_LABEL,
   canRetryLoginCheck,
+  checklistLabel,
   checklistSummary,
 } from '@/lib/watchHold';
-import { PORTAL_NAMES, type OutletSetupAdmin, type PortalLoginCheck, type SetupChecklistItem } from '@dk/shared';
+import {
+  PORTAL_NAMES,
+  type OilCompanyId,
+  type OutletSetupAdmin,
+  type PortalLoginCheck,
+  type SetupChecklistItem,
+} from '@dk/shared';
 
 const errorText = (err: unknown) =>
   err instanceof Error && err.message ? err.message : 'That did not go through.';
@@ -30,10 +37,13 @@ const errorText = (err: unknown) =>
 export function SetupChecklist({
   dealerId,
   items,
+  company,
   className,
 }: {
   dealerId: string;
   items: readonly SetupChecklistItem[];
+  /** The outlet's oil company: a BPCL or HPCL outlet's login line says "saved", not "works". */
+  company?: OilCompanyId | null;
   className?: string;
 }) {
   const toast = useToast();
@@ -42,6 +52,7 @@ export function SetupChecklist({
 
   const logins = items.find((i) => i.key === 'logins_working');
   const summary = checklistSummary(items);
+  const byHand = isCompanyPortalOutlet(company);
 
   async function tryAgain() {
     try {
@@ -74,7 +85,7 @@ export function SetupChecklist({
             )}
             <div className="min-w-0 [overflow-wrap:anywhere]">
               <span className={i.state === 'missing' ? 'text-text' : 'text-text-muted'}>
-                {CHECKLIST_LABEL[i.key]}
+                {checklistLabel(i.key, byHand)}
                 {i.state === 'not_needed' ? <span className="text-text-subtle"> · not needed</span> : null}
               </span>
               {i.detail && i.state !== 'done' ? (
@@ -122,7 +133,7 @@ export function LoginChecks({
     <ul aria-label="Login tries" className="grid gap-1 text-sm">
       {checks.map((c) => (
         <li key={c.portal} className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="w-12 font-medium text-text">{PORTAL_NAMES[c.portal]}</span>
+          <span className="min-w-12 font-medium text-text">{PORTAL_NAMES[c.portal]}</span>
           <Badge intent={CHECK_BADGE[c.result].intent}>{CHECK_BADGE[c.result].text}</Badge>
           {c.at ? <span className="text-xs text-text-subtle">tried {istStamp(c.at, now)}</span> : null}
         </li>

@@ -27,7 +27,7 @@ import {
 } from '@/lib/onboarding';
 import { serviceLabel } from '@/lib/serviceLabel';
 import { CHECKLIST_LABEL, checklistOpenKeys, missingChecklist, startNeedsReason } from '@/lib/watchHold';
-import { dealerCodeLabel, type OutletSetupAdmin } from '@dk/shared';
+import { dealerCodeLabel, type OutletSetupAdmin, type PortalId } from '@dk/shared';
 
 import { DealerTabLink } from './DealerTabLink';
 import { SetupChecklist } from './SetupChecklist';
@@ -140,7 +140,7 @@ function StartServicesForm({ outlet, onClose, onGoToTab }: FormProps) {
     }
   }
 
-  const loginStatus = (portal: string) => logins.data?.find((l) => l.portal === portal)?.status;
+  const loginStatus = (portal: PortalId) => logins.data?.find((l) => l.portal === portal)?.status;
 
   return (
     <Dialog
@@ -181,7 +181,7 @@ function StartServicesForm({ outlet, onClose, onGoToTab }: FormProps) {
         ) : null}
 
         {/* ── watch hold ── the setup checklist; a line still open needs a reason too */}
-        <SetupChecklist dealerId={outlet.dealerId} items={checklist} />
+        <SetupChecklist dealerId={outlet.dealerId} items={checklist} company={outlet.company} />
         {!early && openLines.length > 0 ? (
           <Callout intent="warning">
             The checklist is not complete. Starting now is allowed, but say why. The reason is kept
@@ -233,7 +233,7 @@ function StartServicesForm({ outlet, onClose, onGoToTab }: FormProps) {
                 const status = loginStatus(portal);
                 return (
                   <li key={portal} className="flex items-center gap-2">
-                    <span className="w-12 font-medium uppercase text-text">{portal}</span>
+                    <span className="min-w-12 font-medium text-text">{PORTAL_LABEL[portal]}</span>
                     {logins.isPending ? (
                       <span className="text-text-subtle">checking…</span>
                     ) : status === 'saved' ? (
@@ -253,7 +253,7 @@ function StartServicesForm({ outlet, onClose, onGoToTab }: FormProps) {
             <ul className="mt-1 grid gap-1 text-sm">
               {outlet.portalsNotNeeded.map((n) => (
                 <li key={n.portal} className="flex flex-wrap items-center gap-2">
-                  <span className="w-12 font-medium text-text">{PORTAL_LABEL[n.portal]}</span>
+                  <span className="min-w-12 font-medium text-text">{PORTAL_LABEL[n.portal]}</span>
                   <Badge>Not needed</Badge>
                   <span className="text-xs text-text-muted">{n.reason}</span>
                 </li>

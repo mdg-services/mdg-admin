@@ -21,6 +21,7 @@ import { phoneLabel } from '@/lib/intake';
 import {
   REASON_MAX,
   chosenMessageLang,
+  isCompanyPortalOutlet,
   markSignedInBody,
   messageLangLabel,
   portalNeedRows,
@@ -304,6 +305,7 @@ function PortalNotNeededForm({ outlet, onClose }: FormProps) {
   const [touched, setTouched] = React.useState(false);
 
   const rows = portalNeedRows(outlet);
+  const byHand = isCompanyPortalOutlet(outlet.company);
   // What the board refreshes to may take the picked portal away (somebody else marked it).
   const picked = rows.find((r) => r.portal === portal && r.canMark) ?? null;
   const problem = reasonProblem(reason);
@@ -371,9 +373,9 @@ function PortalNotNeededForm({ outlet, onClose }: FormProps) {
       <div className="grid gap-3">
         <ForOutlet outlet={outlet} />
         <p className="text-xs text-text-muted">
-          The dealer is asked for both the SDMS and the IRAS login. Mark one as not needed when this
-          outlet has no use for it (an outlet whose figures are typed by hand has no IRAS). It stops
-          being asked for and stops showing as missing.
+          {byHand
+            ? `The dealer is asked for the ${rows[0]?.label ?? 'company portal'} login. Mark it as not needed when this outlet has none to give. It stops being asked for and stops showing as missing.`
+            : 'The dealer is asked for both the SDMS and the IRAS login. Mark one as not needed when this outlet has no use for it (an outlet whose figures are typed by hand has no IRAS). It stops being asked for and stops showing as missing.'}
         </p>
         <ul className="grid gap-2">
           {rows.map((r) => (
@@ -382,7 +384,7 @@ function PortalNotNeededForm({ outlet, onClose }: FormProps) {
               className="min-w-0 rounded-md border border-border p-2.5 [overflow-wrap:anywhere]"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <span className="w-12 text-sm font-medium text-text">{r.label}</span>
+                <span className="min-w-12 text-sm font-medium text-text">{r.label}</span>
                 {r.state === 'asked' ? (
                   <Badge intent="info">Asked for</Badge>
                 ) : (
@@ -434,7 +436,11 @@ function PortalNotNeededForm({ outlet, onClose }: FormProps) {
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               onBlur={() => setTouched(true)}
-              placeholder="For example: no IRAS automation, the sales are typed in by hand."
+              placeholder={
+                byHand
+                  ? 'For example: the dealer has no login for it yet.'
+                  : 'For example: no IRAS automation, the sales are typed in by hand.'
+              }
               invalid={!!shown}
             />
             <FieldError message={shown ?? undefined} />

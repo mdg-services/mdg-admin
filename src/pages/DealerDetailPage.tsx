@@ -321,9 +321,10 @@ const TABS: TabDef[] = [
     // their app sign-in and the IRAS/SDMS portal credentials — and reading a
     // stored portal password back is ordinary support work, not an engineer's
     // errand. The backend gates it to admins, caps it per person per hour and
-    // audits every reveal before releasing the plaintext.
+    // audits every reveal before releasing the plaintext. A BPCL/HPCL outlet's one
+    // company portal login is here too, drawn from the outlet's setup.
     icon: <KeyRound {...ICON} />,
-    body: (dealer) => <DealerPasswordVaultTab dealer={dealer} />,
+    body: (dealer, ctx) => <DealerPasswordVaultTab dealer={dealer} setup={ctx.setup} />,
   },
   {
     id: 'provided',

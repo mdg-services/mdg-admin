@@ -1,9 +1,15 @@
-import { PORTAL_NAMES, type PortalId, type PortalLoginState } from '@dk/shared';
+import type { OilCompanyId, PortalId, PortalLoginState } from '@dk/shared';
+
+// By path, not from '@dk/shared': the check script (`tsx --test`) resolves the package to its
+// compiled `dist/`, which these tables are newer than (`lib/onboarding.ts` does the same).
+import { PORTAL_NAMES, isCompanyPortal } from '../../shared/src/types/portalLogin';
+
+import { companyPortalIds } from './onboarding';
 
 /**
  * Plain-words helpers for the "Ask for portal login" box. Kept free of React so
- * the decisions (what to pre-tick, what to say) can be read in one place — this
- * app has no test runner.
+ * the decisions (which logins to offer, what to pre-tick, what to say) can be read
+ * in one place — this app has no test runner; `scripts/portalLogin.check.ts` runs them.
  */
 
 const DATE_FMT = new Intl.DateTimeFormat(undefined, {
@@ -18,14 +24,38 @@ function day(iso?: string): string {
   return Number.isNaN(d.getTime()) ? '' : DATE_FMT.format(d);
 }
 
-/** "SDMS", "SDMS and IRAS" — the logins named in a sentence. */
+/** "SDMS", "SDMS and IRAS", "BPCL portal" — the logins named in a sentence. */
 export function portalNames(portals: readonly PortalId[]): string {
   return portals.map((p) => PORTAL_NAMES[p]).join(' and ');
 }
 
-/** "SDMS login, IRAS login" — the label under a login-box message in the thread. */
+/** "SDMS login, IRAS login", "BPCL portal login" — the label under a login-box message in the thread. */
 export function portalLoginAskedLabel(portals: readonly PortalId[]): string {
   return portals.map((p) => `${PORTAL_NAMES[p]} login`).join(', ');
+}
+
+/**
+ * The logins to offer for an outlet: only its company's portals (SDMS and IRAS for Indian
+ * Oil, the one company portal for BPCL or HPCL), in the order the dealer is asked. The
+ * server answers with every portal the outlet has a row for, so a BPCL outlet's list still
+ * carries SDMS and IRAS, and an Indian Oil outlet that once saved a BPCL login carries
+ * that: neither is the outlet's to be asked for. A portal the server did not send is not
+ * invented. An outlet with no company on record is Indian Oil.
+ */
+export function loginsOfCompany(
+  states: readonly PortalLoginState[],
+  company: OilCompanyId | null | undefined,
+): PortalLoginState[] {
+  return companyPortalIds(company).flatMap((portal) => states.filter((s) => s.portal === portal));
+}
+
+/**
+ * Does the ask come with the explainer video? The video explains the SDMS and IRAS logins,
+ * so it is offered only when one of them is being asked for; a company portal (BPCL, HPCL)
+ * is asked for on its own, with nothing about what it is used for.
+ */
+export function offersExplainerVideo(portals: readonly PortalId[]): boolean {
+  return portals.some((p) => !isCompanyPortal(p));
 }
 
 /** The one-line status an admin reads next to a login. */

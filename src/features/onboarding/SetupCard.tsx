@@ -15,6 +15,7 @@ import { istStamp } from '@/lib/intake';
 import {
   SOURCE_LABEL,
   billingLine,
+  companyLine,
   milestoneRows,
   portalsLine,
   stageIntent,
@@ -53,7 +54,7 @@ export function SetupCard({
   onGoToTab?: (tab: DealerTabId) => void;
 }) {
   const waiting = waitingLabel(setup.waitingOn);
-  const milestones = milestoneRows(setup.milestones, now, setup.doneBy);
+  const milestones = milestoneRows(setup.milestones, now, setup.doneBy, setup.company);
   return (
     <Card>
       <CardHeader
@@ -85,6 +86,13 @@ export function SetupCard({
               value: setup.approvedByName
                 ? `${SOURCE_LABEL[setup.source]} · approved by ${setup.approvedByName}`
                 : SOURCE_LABEL[setup.source],
+              block: true,
+            },
+            // Which oil company: it decides the portal logins below. Every company is named here.
+            {
+              key: 'company',
+              label: 'Oil company',
+              value: companyLine(setup.company),
               block: true,
             },
             {

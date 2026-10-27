@@ -84,6 +84,16 @@ export const CHECKLIST_LABEL: Readonly<Record<SetupChecklistKey, string>> = {
   first_run_ok: 'First run went well',
 };
 
+/**
+ * A checklist line's words. A BPCL or HPCL outlet's login is saved, not tried (MDG's team
+ * uses it by hand, and nothing signs in with it), so its line does not claim that it
+ * "works". `byHand` is `isCompanyPortalOutlet(company)` from `lib/onboarding.ts`, passed in
+ * so the two files do not import each other.
+ */
+export function checklistLabel(key: SetupChecklistKey, byHand: boolean): string {
+  return key === 'logins_working' && byHand ? 'Portal login saved' : CHECKLIST_LABEL[key];
+}
+
 /** The lines that still stop a clean start. `not_needed` never does. */
 export function missingChecklist(list: readonly SetupChecklistItem[]): SetupChecklistKey[] {
   return list.filter((i) => i.state === 'missing').map((i) => i.key);

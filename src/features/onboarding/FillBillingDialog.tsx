@@ -3,7 +3,8 @@ import * as React from 'react';
 import { Button, Callout, Dialog, FieldError, useToast } from '@/components/ui';
 import { useDealerQuery } from '@/hooks/api/useDealers';
 import { useSaveBillingForDealer } from '@/hooks/api/useOnboarding';
-import { billingSaveBody } from '@/lib/onboarding';
+import { ApiError } from '@/lib/api';
+import { billingSaveBody, setupRefusalWords } from '@/lib/onboarding';
 import {
   type BillToDraft,
   type BillToProblems,
@@ -28,9 +29,9 @@ import { ForOutlet, errorText } from './SetupDialogs';
  * what the owner's billing card does too, and the server saves both through one
  * function, so an open bill is brought up to date in either case.
  *
- * Before the first sign-in the server refuses (the owner has not opened the app),
- * and once the payment is in the details are locked; a refusal comes back as a
- * toast with the form left open. The dealer's chat gets one plain line that the
+ * The server refuses before the first sign-in (the owner has not opened the app),
+ * while the oil company is not chosen (`COMPANY_FIRST`), and once the payment is in
+ * (the details are locked); a refusal comes back as a toast with the form left open. The dealer's chat gets one plain line that the
  * team filled in their bill details, and the card shows them read-only with a
  * small "filled in by MDG's team" note.
  *
@@ -79,7 +80,8 @@ function FillBillingForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClos
       toast.success(`${label}: billing details saved.`);
       onClose();
     } catch (err) {
-      toast.error(errorText(err));
+      // 409 COMPANY_FIRST: the oil company is not chosen yet, so billing waits for it.
+      toast.error((err instanceof ApiError && setupRefusalWords(err.code)) || errorText(err));
     }
   }
 
