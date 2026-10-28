@@ -90,6 +90,7 @@ function PortalLoginCard({ portal, dealerId }: { portal: PortalId; dealerId: str
     case 'iras':
       return <IrasCredentialsSection dealerId={dealerId} />;
     case 'bpcl':
+    case 'econnect':
     case 'hpcl':
       return <CompanyPortalCredentialsSection dealerId={dealerId} portal={portal} expected />;
   }

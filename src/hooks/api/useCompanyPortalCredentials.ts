@@ -7,8 +7,8 @@ import type { SaveCompanyPortalLoginInput } from '@dk/shared/schemas';
 import { onboardingRoot, outletSetupRoot } from './useOnboarding';
 import { portalLoginKeys } from './usePortalLogins';
 
-/** The two company portals: the one dealer portal of BPCL and of HPCL. */
-export type CompanyPortalId = 'bpcl' | 'hpcl';
+/** The company portals: BPCL's dealer portal and BROMA/eConnect, and HPCL's one portal. */
+export type CompanyPortalId = 'bpcl' | 'econnect' | 'hpcl';
 
 const path = (dealerId: string | undefined, portal: CompanyPortalId) =>
   `/dealers/${dealerId}/company-portal-credentials/${portal}`;

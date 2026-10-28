@@ -11,7 +11,7 @@ import { IrasCredentialsSection } from './IrasCredentialsSection';
 import { SdmsCredentialsSection } from './SdmsCredentialsSection';
 
 /** The company portals, in the order their cards are drawn. */
-const COMPANY_PORTAL_IDS: readonly CompanyPortalId[] = ['bpcl', 'hpcl'];
+const COMPANY_PORTAL_IDS: readonly CompanyPortalId[] = ['bpcl', 'econnect', 'hpcl'];
 
 interface Props {
   dealer: Dealer;
