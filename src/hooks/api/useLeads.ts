@@ -18,6 +18,7 @@ import type {
 import type {
   AssignLeadInput,
   CloseLeadInput,
+  CreateLeadInput,
   LeadNoteInput,
   LogLeadContactInput,
   ReopenLeadInput,
@@ -220,6 +221,25 @@ export function survivingLeadId(res: unknown, fallback: string): string {
     }
   }
   return fallback;
+}
+
+/**
+ * Add a lead by hand. The answer is the lead made, or the one that already had
+ * the number (`existed`), whose drawer the page opens either way.
+ */
+export function useCreateLead() {
+  const refresh = useRefreshAfterChange();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: CreateLeadInput) => {
+      const res = await api.post<LeadDetail & { id: string; existed: boolean }>('/admin/leads', body);
+      return { id: res.id || res.lead.id, existed: res.existed === true, detail: res as LeadDetail };
+    },
+    onSuccess: ({ id, detail }) => {
+      qc.setQueryData(leadKey(id), detail);
+    },
+    onSettled: refresh,
+  });
 }
 
 /** Give a share-link lead the number somebody knows for them. */

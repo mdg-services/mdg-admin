@@ -16,6 +16,7 @@ import {
   RefreshTool,
   Tabs,
 } from '@/components/ui';
+import { AddLeadButton } from '@/features/leads/AddLeadDialog';
 import { HowFollowUpsWork } from '@/features/leads/HowFollowUpsWork';
 import { LeadRowActions } from '@/features/leads/LeadActions';
 import { LeadInterestCell, LeadStandsCell, LeadWhoCell } from '@/features/leads/LeadCells';
@@ -72,6 +73,9 @@ const NUMBER = (n: number | undefined) => (n === undefined ? '—' : n.toLocaleS
  * it. On desktop a row also has Log contact and a menu; on a phone the card is
  * one tap that opens the drawer, where every action is a button. The seven forms
  * the actions open are mounted once, here, and stack over the drawer.
+ *
+ * "Add lead" makes one by hand, for somebody who never came in through the
+ * film; the new lead's drawer opens as soon as it is made.
  *
  * "Unknown viewers" are not leads: people who opened the film without a personal
  * link. They are listed so the team can see the film is watched, and never
@@ -190,8 +194,13 @@ export function LeadsPage() {
     <div>
       <PageHeader
         title="Leads"
-        subtitle="Everyone who started the full film. Each one stays here until they say no, ask us to stop, or become a client."
-        actions={<HowFollowUpsWork />}
+        subtitle="Everyone who started the full film, and anyone the team added by hand. Each one stays here until they say no, ask us to stop, or become a client."
+        actions={
+          <>
+            <AddLeadButton onOpenLead={(id) => openLead(id)} />
+            <HowFollowUpsWork />
+          </>
+        }
         tools={
           <RefreshTool
             label="Refresh the leads"
@@ -420,7 +429,7 @@ function Empty({
     todo: {
       title: 'No leads yet',
       description:
-        'Anyone who starts the full film from a personal link, or asks for a call-back on its page, appears here.',
+        'Anyone who starts the full film from a personal link, or asks for a call-back on its page, appears here. Use Add lead for anyone else.',
     },
     open: {
       title: 'No open leads',

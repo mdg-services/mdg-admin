@@ -23,6 +23,7 @@
  * `@dk/shared` resolves to a compiled `dist/` that a pending shared change can
  * leave behind the source.
  */
+import type { CreateLeadInput } from '../../shared/src/schemas/lead';
 import {
   LEAD_ADMIN_CLOSE_REASONS,
   LEAD_CALL_INTEREST_LABELS,
@@ -51,6 +52,7 @@ import {
   type LeadLastCall,
   type LeadLookup,
   type LeadNote,
+  type LeadOrigin,
   type LeadRecording,
   type LeadRecordingFailure,
   type LeadRecordingStatus,
@@ -76,6 +78,8 @@ import type { Intent } from './statusIntent';
 export const NOTE_MAX = 500;
 /** Mirrors `LEAD_FOLLOW_UP_MAX_DAYS`. */
 export const FOLLOW_UP_MAX_DAYS = 90;
+/** Mirrors `LEAD_NAME_MAX`: the longest name or place on a lead added by hand. */
+export const NAME_MAX = 80;
 
 // ── Words ───────────────────────────────────────────────────────────────────
 
@@ -649,8 +653,11 @@ export function clockWords(seconds: number): string {
  * "Watched 12:30 of 26:29 · 2 visits · sound on": how far they got, and whether
  * they could hear it. `withVisits` false leaves the count out, for the Leads
  * table, whose next line ("2 visits · last watched 2 h ago") already says it.
+ * `origin` tells a lead added by hand, who need never have seen the film, from
+ * a call-back that was on the film page.
  */
-export function watchLine(w: LeadWatch, withVisits = true): string {
+export function watchLine(w: LeadWatch, withVisits = true, origin?: LeadOrigin): string {
+  if (w.visits === 0 && origin === 'manual') return 'Has not watched the film';
   // A call-back from the film page with no link code: they were on the page, but
   // no visit can be tied to them, so there is nothing to measure.
   if (w.visits === 0) return 'Was on the film page; no visit we can tie to them';
@@ -1355,6 +1362,43 @@ export function phoneProblem(raw: string): string | null {
 /** The ten digits on their own: nothing for the server to misread. */
 export function phoneBody(raw: string): { mobile: string } {
   return { mobile: mobileTen(raw) ?? raw.trim() };
+}
+
+/** "Add lead": somebody the team wants to work, typed in by hand. Only the number is needed. */
+export interface AddLeadForm {
+  mobile: string;
+  name: string;
+  place: string;
+  note: string;
+}
+
+export type AddLeadProblems = Partial<Record<keyof AddLeadForm, string>>;
+
+/** What is wrong with the form, field by field. Empty when it can be sent. */
+export function addLeadProblems(form: AddLeadForm): AddLeadProblems {
+  const out: AddLeadProblems = {};
+  const mobile = phoneProblem(form.mobile);
+  if (mobile) out.mobile = mobile;
+  for (const field of ['name', 'place'] as const) {
+    const length = form[field].trim().length;
+    if (length > NAME_MAX) out[field] = `Keep it under ${NAME_MAX} characters. It is ${length} now.`;
+  }
+  const note = noteTooLong(form.note);
+  if (note) out.note = note;
+  return out;
+}
+
+/** The form as the server takes it: the ten digits, and only the boxes that were filled in. */
+export function addLeadBody(form: AddLeadForm): CreateLeadInput {
+  const name = form.name.trim();
+  const place = form.place.trim();
+  const note = form.note.trim();
+  return {
+    ...phoneBody(form.mobile),
+    ...(name ? { name } : {}),
+    ...(place ? { place } : {}),
+    ...(note ? { note } : {}),
+  };
 }
 
 // ── Call recordings ─────────────────────────────────────────────────────────

@@ -336,7 +336,7 @@ function WhereItStands({ lead, now }: { lead: LeadRow; now: number }) {
             </WrapChip>
           </p>
         ) : null}
-        <WatchBar watch={lead.watch} size="lg" showPercent />
+        <WatchBar watch={lead.watch} origin={lead.origin} size="lg" showPercent />
         {lastWatched ? <p className="text-xs text-text-muted">{lastWatched}</p> : null}
         {devices ? <p className="text-xs text-text-muted">{devices}</p> : null}
       </StandRow>

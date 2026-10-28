@@ -28,7 +28,7 @@ import {
   watchLine,
   watchPercent,
 } from '@/lib/leads';
-import { LEAD_ORIGIN_LABELS, type LeadRow, type LeadWatch } from '@dk/shared';
+import { LEAD_ORIGIN_LABELS, type LeadOrigin, type LeadRow, type LeadWatch } from '@dk/shared';
 
 import { IconLink } from './shared';
 
@@ -180,21 +180,24 @@ export function FilmBar({
  */
 export function WatchBar({
   watch,
+  origin,
   withVisits = true,
   size = 'sm',
   showPercent = false,
   className,
 }: {
   watch: LeadWatch;
+  /** How the lead came in: one added by hand has no film visit to speak of. */
+  origin?: LeadOrigin;
   withVisits?: boolean;
   size?: 'sm' | 'lg';
   showPercent?: boolean;
   className?: string;
 }) {
   const percent = watchPercent(watch);
-  const text = watchLine(watch, withVisits);
+  const text = watchLine(watch, withVisits, origin);
   const textClass = size === 'lg' ? 'text-sm text-text' : 'text-xs text-text-muted';
-  // No visit tied to them (a call-back from the film page): an empty bar would
+  // No visit tied to them (a call-back from the film page, a lead added by hand): an empty bar would
   // read as "watched nothing", which nobody knows.
   if (watch.visits === 0) return <p className={cn(textClass, className)}>{text}</p>;
   return (
@@ -295,7 +298,7 @@ export function LeadInterestCell({ lead, now }: { lead: LeadRow; now: number }) 
   const sign = isClosed(lead.status) ? null : reachOutLine(lead, now);
   return (
     <div className="min-w-0 [overflow-wrap:anywhere]">
-      <WatchBar watch={lead.watch} withVisits={false} />
+      <WatchBar watch={lead.watch} origin={lead.origin} withVisits={false} />
       {visits ? <p className="mt-1 text-xs text-text-muted">{visits}</p> : null}
       {invite ? (
         <p

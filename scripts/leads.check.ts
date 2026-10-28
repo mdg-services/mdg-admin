@@ -23,11 +23,13 @@ import { describe, it } from 'node:test';
 
 import {
   LEAD_FOLLOW_UP_MAX_DAYS,
+  LEAD_NAME_MAX,
   LEAD_NOTE_MAX,
   addLeadPhoneSchema,
   addLeadRecordingSchema,
   assignLeadSchema,
   closeLeadSchema,
+  createLeadSchema,
   leadNoteSchema,
   logLeadContactSchema,
   presignLeadRecordingSchema,
@@ -74,6 +76,7 @@ import {
   CLOSING_OUTCOMES,
   DUE_REASON_LABELS,
   FOLLOW_UP_MAX_DAYS,
+  NAME_MAX,
   LEAD_VIEW_LABELS,
   NOTE_MAX,
   OPEN_OUTCOMES,
@@ -144,6 +147,8 @@ import {
   originText,
   ownerLine,
   parseWhen,
+  addLeadBody,
+  addLeadProblems,
   phoneBody,
   phoneProblem,
   quickPicks,
@@ -277,6 +282,7 @@ describe('the limits the forms mirror', () => {
   it('are the schemas', () => {
     assert.equal(NOTE_MAX, LEAD_NOTE_MAX);
     assert.equal(FOLLOW_UP_MAX_DAYS, LEAD_FOLLOW_UP_MAX_DAYS);
+    assert.equal(NAME_MAX, LEAD_NAME_MAX);
   });
 });
 
@@ -673,6 +679,10 @@ describe('what they watched', () => {
       watchLine(watch({ visits: 0, bestSeconds: 0 })),
       'Was on the film page; no visit we can tie to them',
     );
+    // A lead added by hand need never have been on the page at all.
+    assert.equal(watchLine(watch({ visits: 0, bestSeconds: 0 }), true, 'manual'), 'Has not watched the film');
+    // Once they do watch, it reads like anybody else's.
+    assert.equal(watchLine(watch(), true, 'manual'), 'Watched 12:30 of 26:29 · sound on');
   });
 
   it('draws the bar from the best visit, never past the ends', () => {
@@ -1136,6 +1146,37 @@ describe('assign, note, close, reopen and number', () => {
       assert.equal(mobileTen(typed), null, typed);
       assert.match(phoneProblem(typed) ?? '', /10-digit mobile/, typed);
     }
+  });
+
+  it('"Add lead" needs only the number, and sends only the boxes filled in', () => {
+    const empty = { mobile: '', name: '', place: '', note: '' };
+    assert.deepEqual(Object.keys(addLeadProblems(empty)), ['mobile']);
+    const bare = { ...empty, mobile: '+91 98765 43210' };
+    assert.deepEqual(addLeadProblems(bare), {});
+    assert.deepEqual(addLeadBody(bare), { mobile: '9876543210' });
+    assert.ok(createLeadSchema.safeParse(addLeadBody(bare)).success);
+
+    const full = { mobile: '98765 43210', name: ' Suresh ji ', place: 'Patna ', note: ' Met at the meet ' };
+    assert.deepEqual(addLeadBody(full), {
+      mobile: '9876543210',
+      name: 'Suresh ji',
+      place: 'Patna',
+      note: 'Met at the meet',
+    });
+    assert.ok(createLeadSchema.safeParse(addLeadBody(full)).success);
+
+    const long = {
+      mobile: '9876543210',
+      name: 'x'.repeat(NAME_MAX + 1),
+      place: 'y'.repeat(NAME_MAX + 1),
+      note: 'z'.repeat(NOTE_MAX + 1),
+    };
+    const p = addLeadProblems(long);
+    assert.deepEqual(Object.keys(p).sort(), ['name', 'note', 'place']);
+    assert.match(p.name ?? '', /under 80/);
+    // What the form lets through, the server takes; what it stops, the server would refuse.
+    assert.ok(!createLeadSchema.safeParse(addLeadBody(long)).success);
+    assert.ok(createLeadSchema.safeParse(addLeadBody({ ...long, name: 'x'.repeat(NAME_MAX), place: '', note: '' })).success);
   });
 });
 
