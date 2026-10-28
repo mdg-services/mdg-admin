@@ -485,6 +485,11 @@ export function emptyListWords(
     };
   }
   switch (filter) {
+    case 'replied':
+      return {
+        title: 'Nobody has written back yet',
+        description: 'Chats where they have answered us, or written to us first, appear here.',
+      };
     case 'unread':
       return { title: 'Nothing unread', description: 'You have read everything. A new message will appear here.' };
     case 'needs_reply':
