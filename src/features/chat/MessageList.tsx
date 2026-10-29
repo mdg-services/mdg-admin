@@ -2,15 +2,32 @@ import { X } from 'lucide-react';
 import * as React from 'react';
 
 import { useToast } from '@/components/ui/Toast';
+import { useOutletSetupQuery } from '@/hooks/api/useOnboarding';
+import { usePortalLogins } from '@/hooks/api/usePortalLogins';
 import { useStickToBottom } from '@/hooks/useStickToBottom';
-import type { DealerOpenRequest, Message } from '@dk/shared';
+import { cn } from '@/lib/cn';
+import type { DealerOpenRequest, Message, UserRole } from '@dk/shared';
 
+import {
+  DealerViewContext,
+  isRetiredSetupCard,
+  setupCardHasBody,
+  type AskPreviewPhase,
+  type DealerViewValue,
+} from './DealerCards';
+import { dayChipLabel, guessDealerLang } from './dealerView';
 import { MessageActionsMenu, type MenuAnchor } from './MessageActionsMenu';
 import { MessageBubble } from './MessageBubble';
 
 interface MessageListProps {
   messages: Message[];
   currentUserId: string;
+  /** The outlet: the setup cards and the login box are drawn from its state. */
+  dealerId?: string;
+  /** The thread's primary member. An owner's cards are the editable ones; a manager's are read-only. */
+  memberRole?: UserRole;
+  /** The manager's group thread: dealer-side bubbles carry their sender's name. */
+  group?: boolean;
   /** More history exists — shows the "Load earlier" button. */
   hasEarlier?: boolean;
   loadingEarlier?: boolean;
@@ -58,28 +75,12 @@ function readLongPressHintSeen(): boolean {
   }
 }
 
-function startOfDay(d: Date): number {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
-
-function dayLabel(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const today = startOfDay(new Date());
-  const that = startOfDay(d);
-  const diffDays = Math.round((today - that) / 86400000);
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  return d.toLocaleDateString(undefined, {
-    month: 'short',
-    day: '2-digit',
-    year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
-  });
-}
-
 export function MessageList({
   messages,
   currentUserId,
+  dealerId,
+  memberRole,
+  group = false,
   hasEarlier,
   loadingEarlier,
   onLoadEarlier,
@@ -121,13 +122,14 @@ export function MessageList({
 
   // Display oldest -> newest. Each API page is oldest-first, but older pages
   // are appended after newer ones and realtime/optimistic messages land on the
-  // last page, so sort by timestamp for a stable chronological order.
+  // last page, so sort by timestamp for a stable chronological order. The
+  // retired "which services?" question is not drawn (the app drops it too), so
+  // it is not a row and does not split a run.
   const ordered = React.useMemo(
     () =>
-      [...messages].sort(
-        (a, b) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      ),
+      messages
+        .filter((m) => !isRetiredSetupCard(m))
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
     [messages],
   );
 
@@ -149,24 +151,22 @@ export function MessageList({
   }, []);
 
   /** Center a loaded message in view and pulse its row. False if not in the DOM. */
-  const scrollToMessage = React.useCallback((id: string): boolean => {
-    const el = scrollRef.current?.querySelector<HTMLElement>(
-      `[data-message-id="${id}"]`,
-    );
-    if (!el) return false;
-    el.scrollIntoView({ block: 'center' });
-    el.classList.remove('message-flash');
-    void el.offsetWidth; // restart the animation when re-jumping to the same row
-    el.classList.add('message-flash');
-    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
-    flashTimerRef.current = window.setTimeout(
-      () => el.classList.remove('message-flash'),
-      2000,
-    );
-    return true;
-    // `scrollRef` comes from the hook rather than a local useRef, so the lint
-    // rule cannot see that it is stable; it is.
-  }, [scrollRef]);
+  const scrollToMessage = React.useCallback(
+    (id: string): boolean => {
+      const el = scrollRef.current?.querySelector<HTMLElement>(`[data-message-id="${id}"]`);
+      if (!el) return false;
+      el.scrollIntoView({ block: 'center' });
+      el.classList.remove('message-flash');
+      void el.offsetWidth; // restart the animation when re-jumping to the same row
+      el.classList.add('message-flash');
+      if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = window.setTimeout(() => el.classList.remove('message-flash'), 2000);
+      return true;
+      // `scrollRef` comes from the hook rather than a local useRef, so the lint
+      // rule cannot see that it is stable; it is.
+    },
+    [scrollRef],
+  );
 
   // Jump-to-quote: if the original isn't loaded yet, keep fetching older
   // pages (capped) until it appears, then scroll to it.
@@ -205,104 +205,148 @@ export function MessageList({
     void onLoadEarlier().finally(() => {
       if (cancelled) return;
       // Re-runs this effect against the freshly rendered page.
-      setPendingJump((p) =>
-        p && p.id === pendingJump.id ? { id: p.id, tries: p.tries + 1 } : p,
-      );
+      setPendingJump((p) => (p && p.id === pendingJump.id ? { id: p.id, tries: p.tries + 1 } : p));
     });
     return () => {
       cancelled = true;
     };
   }, [pendingJump, hasEarlier, onLoadEarlier, scrollToMessage, toast]);
 
-  const lastOwnId = React.useMemo(() => {
-    for (let i = ordered.length - 1; i >= 0; i--) {
-      const m = ordered[i]!;
-      if (m.senderId === currentUserId) return m.id;
-    }
-    return null;
-  }, [ordered, currentUserId]);
+  // What the dealer's cards are drawn from. Each is asked for only when the
+  // thread holds a message that draws it, so most threads make neither call.
+  const needsSetup = React.useMemo(
+    () => ordered.some((m) => !!m.setupCard && setupCardHasBody(m.setupCard.card)),
+    [ordered],
+  );
+  const needsLogins = React.useMemo(() => ordered.some((m) => !!m.portalLogin), [ordered]);
+  const setupQ = useOutletSetupQuery(needsSetup ? dealerId : undefined);
+  const loginsQ = usePortalLogins(dealerId, needsLogins);
+  const lang = React.useMemo(() => guessDealerLang(ordered), [ordered]);
+  const dealerView = React.useMemo<DealerViewValue>(
+    () => ({
+      lang,
+      // A lookup that failed draws as "nothing to show" (the message keeps its
+      // words), never as a spinner that never stops.
+      setup: !needsSetup ? undefined : setupQ.isError ? null : setupQ.data,
+      portalLogins: loginsQ.data,
+      portalLoginsFailed: loginsQ.isError && !loginsQ.data,
+      // A manager's thread shows the cards read-only, as the manager's app does.
+      canEdit: memberRole !== 'dealer-staff',
+      group,
+    }),
+    [
+      lang,
+      needsSetup,
+      setupQ.isError,
+      setupQ.data,
+      loginsQ.isError,
+      loginsQ.data,
+      memberRole,
+      group,
+    ],
+  );
 
+  // The same request posted twice (a nudge): only the newest post carries the
+  // buttons, as in the app.
+  const newestAskPost = React.useMemo(() => {
+    const out = new Map<string, string>();
+    for (const m of ordered) if (m.ask) out.set(m.ask.ref, m.id);
+    return out;
+  }, [ordered]);
+  const askPhaseOf = (m: Message): AskPreviewPhase => {
+    if (!m.ask || newestAskPost.get(m.ask.ref) !== m.id) return 'none';
+    const status = askStatuses?.get(m.ask.ref);
+    return status === 'open' || status === 'sent' ? status : 'none';
+  };
+
+  // Day chips and runs, as the app lays them out: a chip where the day changes;
+  // a new run where the sender changes (or a notice follows a typed line, which
+  // carries a different name). The first bubble of a run gets the tail and an
+  // 8px gap above it, the rest 2px.
   const items: React.ReactNode[] = [];
-  let lastDay: number | null = null;
-  for (const m of ordered) {
-    const d = new Date(m.createdAt);
-    const day = startOfDay(d);
-    if (day !== lastDay) {
+  const now = new Date();
+  let lastDay = '';
+  ordered.forEach((m, i) => {
+    const day = new Date(m.createdAt).toDateString();
+    const showDay = day !== lastDay;
+    lastDay = day;
+    const prev = i > 0 ? ordered[i - 1] : undefined;
+    const first = !prev || showDay || prev.senderId !== m.senderId || !!prev.system !== !!m.system;
+    if (showDay) {
       items.push(
-        <div
-          key={`day-${m.id}`}
-          className="my-2 flex items-center justify-center"
-        >
-          <span className="rounded-full bg-surface-2 px-3 py-0.5 text-xs text-text-muted">
-            {dayLabel(m.createdAt)}
+        <div key={`day-${m.id}`} className="flex justify-center px-3 pb-1 pt-3">
+          <span className="rounded-lg bg-wa-chip px-3 py-1 text-[12.5px] leading-tight text-wa-chip-text shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
+            {dayChipLabel(m.createdAt, lang, now)}
           </span>
         </div>,
       );
-      lastDay = day;
     }
     items.push(
-      <div key={m.id} data-message-id={m.id} className="rounded-xl">
+      <div
+        key={m.id}
+        data-message-id={m.id}
+        className={cn('rounded-xl px-3', first ? 'pt-2' : 'pt-0.5')}
+      >
         <MessageBubble
           message={m}
           currentUserId={currentUserId}
-          isLastOwn={m.id === lastOwnId}
+          first={first}
           isMenuOpen={menu?.message.id === m.id}
           onOpenMenu={openMenu}
           onJumpTo={handleJumpTo}
           onOpenReactions={onOpenReactions}
           pendingAnswer={pendingAnswers?.get(m.id)}
-          askStatus={m.ask ? askStatuses?.get(m.ask.ref) : undefined}
+          askPhase={askPhaseOf(m)}
           onOpenAnswer={onMarkReceived}
         />
       </div>,
     );
-  }
+  });
 
   return (
     <>
-      <div
-        ref={scrollRef}
-        className="flex h-full flex-col gap-2 overflow-y-auto overscroll-contain px-4 py-3"
-      >
-        {hasEarlier ? (
-          <div className="mb-1 flex justify-center">
-            <button
-              type="button"
-              onClick={() => void onLoadEarlier?.()}
-              disabled={loadingEarlier}
-              className="min-h-11 rounded-full border border-border bg-surface px-4 py-1 text-xs text-text-muted hover:bg-surface-2 disabled:opacity-60 md:min-h-0 md:px-3"
-            >
-              {loadingEarlier ? 'Loading…' : 'Load earlier'}
-            </button>
+      {/* The dealer app's wallpaper and its faint pattern sit behind the
+          thread; the pattern stays put while the messages scroll over it. */}
+      <div className="relative h-full bg-wa-wallpaper font-chat text-wa-bubble-text">
+        <Doodles />
+        <div ref={scrollRef} className="relative z-10 h-full overflow-y-auto overscroll-contain">
+          {/* ONE wrapper for everything in the scroller: the stick-to-bottom
+              hook watches it, so a picture or a card that fills in after the
+              thread opened keeps the newest message in view. */}
+          <div className="flex flex-col pb-2">
+            {hasEarlier ? (
+              <div className="flex justify-center px-3 pb-1 pt-3">
+                <button
+                  type="button"
+                  onClick={() => void onLoadEarlier?.()}
+                  disabled={loadingEarlier}
+                  className="min-h-11 rounded-full bg-wa-chip px-4 py-1 text-[13px] text-wa-chip-text shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] hover:bg-wa-row-active disabled:opacity-60 md:min-h-0 md:px-3.5"
+                >
+                  {loadingEarlier ? 'Loading…' : 'Load earlier'}
+                </button>
+              </div>
+            ) : null}
+            <DealerViewContext.Provider value={dealerView}>{items}</DealerViewContext.Provider>
+            {!hintSeen && ordered.length > 0 ? (
+              <div className="flex justify-center px-3 pt-2 md:hidden">
+                <button
+                  type="button"
+                  onClick={dismissHint}
+                  className="flex min-h-11 items-center gap-2 rounded-full bg-wa-chip px-3 text-xs text-wa-chip-text shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]"
+                >
+                  Press and hold a message for reply, copy and download
+                  <X width={13} height={13} strokeWidth={1.75} className="shrink-0" aria-hidden />
+                </button>
+              </div>
+            ) : null}
           </div>
-        ) : null}
-        {items}
-        {!hintSeen && ordered.length > 0 ? (
-          <div className="flex justify-center md:hidden">
-            <button
-              type="button"
-              onClick={dismissHint}
-              className="flex min-h-11 items-center gap-2 rounded-full bg-surface-2 px-3 text-xs text-text-muted"
-            >
-              Press and hold a message for reply, copy and download
-              <X
-                width={13}
-                height={13}
-                strokeWidth={1.75}
-                className="shrink-0"
-                aria-hidden
-              />
-            </button>
-          </div>
-        ) : null}
+        </div>
       </div>
       {menu && onReply && onToggleReaction && onOpenInfo ? (
         <MessageActionsMenu
           // Read the message fresh from the list so an in-flight reaction
           // toggle is reflected while the menu is open.
-          message={
-            ordered.find((m) => m.id === menu.message.id) ?? menu.message
-          }
+          message={ordered.find((m) => m.id === menu.message.id) ?? menu.message}
           anchor={menu.anchor}
           currentUserId={currentUserId}
           onReply={onReply}
@@ -314,5 +358,34 @@ export function MessageList({
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * The wallpaper's faint pattern — the dealer app's own (`MessageList.Doodles` in
+ * mdg-client): a few small shapes, repeated, in the `--wa-doodle` ink.
+ */
+function Doodles() {
+  const ink = { fill: 'none', stroke: 'var(--wa-doodle)' } as const;
+  return (
+    <svg
+      aria-hidden
+      className="pointer-events-none absolute inset-0 z-0 h-full w-full"
+      focusable="false"
+    >
+      <defs>
+        <pattern id="wa-doodle-tile" width="84" height="84" patternUnits="userSpaceOnUse">
+          <g style={ink} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="14" cy="16" r="5" />
+            <path d="M52 10l8 8m0-8l-8 8" />
+            <path d="M10 56q5-7 10 0t10 0" />
+            <path d="M58 54l8 14h-16z" />
+            <rect x="38" y="36" width="10" height="10" rx="2" />
+            <path d="M70 30q4-5 8 0" />
+          </g>
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#wa-doodle-tile)" />
+    </svg>
   );
 }

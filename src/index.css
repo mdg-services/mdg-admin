@@ -20,6 +20,29 @@
 
   --color-focus-ring: #60a5fa;
 
+  /* ---- The chat thread, in the dealer app's colours -----------------------
+     The inbox draws a thread the way the dealer's app draws it, so an admin
+     sees what the dealer sees: the same wallpaper, bubbles, chips and the
+     brand's black where the app uses it. Copied from `mdg-client/src/index.css`
+     (`--wa-*`) and kept as FIXED values — not repointed in `.dark` below —
+     because the dealer's app has no dark mode: a thread drawn dark would no
+     longer be what the dealer is looking at. */
+  --wa-accent: #18181b;
+  --wa-accent-strong: #18181b;
+  --wa-wallpaper: #f3f2f0;
+  --wa-doodle: rgba(17, 27, 33, 0.045);
+  --wa-in: #ffffff;
+  --wa-out: #e7e5e4;
+  --wa-bubble-text: #111b21;
+  --wa-meta: #667781;
+  --wa-tick-read: #53bdeb;
+  --wa-chip: #ffffff;
+  --wa-chip-text: #54656f;
+  --wa-bar-icon: #54656f;
+  --wa-notice: #ffeecd;
+  --wa-row-active: #f0f2f5;
+  --wa-divider: #e9edef;
+
   /* ---- Safe areas ---------------------------------------------------------
      The raw insets, published once so a calc() elsewhere does not have to
      repeat the env() call. `--tab-bar-h` is the odd one out: it is written by

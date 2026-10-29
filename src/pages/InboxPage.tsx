@@ -1778,6 +1778,9 @@ export function InboxPage() {
                       key={conversation.id}
                       messages={messages}
                       currentUserId={currentUserId}
+                      dealerId={conversation.dealerId}
+                      memberRole={conversation.memberRole}
+                      group={conversation.kind === 'manager'}
                       hasEarlier={messagesQ.hasNextPage}
                       loadingEarlier={messagesQ.isFetchingNextPage}
                       onLoadEarlier={messagesQ.fetchNextPage}

@@ -72,6 +72,11 @@ export function useStickToBottom<T extends HTMLElement>(
     };
     const observer = new ResizeObserver(restore);
     observer.observe(el);
+    // The content, too, when it sits in one wrapper: a picture finishing its
+    // load, or a card under the newest message filling in once its data
+    // arrives, grows the content without resizing the scroller or adding a
+    // message — and left the newest lines below the fold.
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
     // On iOS the layout viewport can stay put while the visual one moves, so
     // the ResizeObserver alone would never hear the keyboard.
     const viewport = window.visualViewport;

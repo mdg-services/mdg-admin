@@ -51,6 +51,23 @@ export default {
         danger: { DEFAULT: '#dc2626', soft: '#fee2e2', strong: '#991b1b' },
         info: { DEFAULT: '#2563eb', soft: '#dbeafe', strong: '#1e40af' },
         neutral: { DEFAULT: '#475569', soft: '#e2e8f0' },
+        // The chat thread's palette, the dealer app's own — values in index.css (`--wa-*`).
+        wa: {
+          accent: 'var(--wa-accent)',
+          'accent-strong': 'var(--wa-accent-strong)',
+          wallpaper: 'var(--wa-wallpaper)',
+          in: 'var(--wa-in)',
+          out: 'var(--wa-out)',
+          'bubble-text': 'var(--wa-bubble-text)',
+          meta: 'var(--wa-meta)',
+          'tick-read': 'var(--wa-tick-read)',
+          chip: 'var(--wa-chip)',
+          'chip-text': 'var(--wa-chip-text)',
+          'bar-icon': 'var(--wa-bar-icon)',
+          notice: 'var(--wa-notice)',
+          'row-active': 'var(--wa-row-active)',
+          divider: 'var(--wa-divider)',
+        },
       },
       borderRadius: { sm: '4px', md: '8px', lg: '12px' },
       boxShadow: {
@@ -61,6 +78,17 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        // The dealer app's font (its native system stack), for the chat thread:
+        // the same words wrap in the same places as on the dealer's phone.
+        chat: [
+          'system-ui',
+          '-apple-system',
+          '"Segoe UI"',
+          'Roboto',
+          '"Helvetica Neue"',
+          'Arial',
+          'sans-serif',
+        ],
       },
     },
   },

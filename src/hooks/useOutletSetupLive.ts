@@ -6,6 +6,9 @@ import { useAuthStore } from '@/store/auth';
 
 import { onboardingRoot, outletSetupRoot } from './api/useOnboarding';
 
+/** Every outlet's portal-login query (`portalLoginKeys.dealer`) hangs off this prefix. */
+const portalLoginsRoot = ['portalLogins'] as const;
+
 /**
  * Refetch the Onboarding board and every open outlet setup whenever the server
  * says an outlet's setup moved (`outletSetup:changed`: a sign-in, billing saved, a bill
@@ -37,6 +40,8 @@ export function useOutletSetupLive(): void {
     const onChanged = () => {
       void qc.invalidateQueries({ queryKey: onboardingRoot });
       void qc.invalidateQueries({ queryKey: outletSetupRoot });
+      // A login the dealer saved moves the login box drawn in the inbox thread.
+      void qc.invalidateQueries({ queryKey: portalLoginsRoot });
     };
     socket.on('outletSetup:changed', onChanged);
     return () => {
@@ -49,6 +54,7 @@ export function useOutletSetupLive(): void {
       if (document.visibilityState === 'visible') {
         void qc.invalidateQueries({ queryKey: onboardingRoot });
         void qc.invalidateQueries({ queryKey: outletSetupRoot });
+        void qc.invalidateQueries({ queryKey: portalLoginsRoot });
       }
     };
     document.addEventListener('visibilitychange', onVisible);
