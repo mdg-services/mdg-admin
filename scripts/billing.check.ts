@@ -197,7 +197,10 @@ describe('the answer to "Send bill"', () => {
   it('says what was raised, where Razorpay sent the link, and hands over the WhatsApp words', () => {
     const o = billOutcome(sent());
     assert.equal(o.headline, 'MDG-2026-00012 raised.');
-    assert.deepEqual(o.sms, { state: 'sent', text: 'Razorpay sent the link to +919870000001.' });
+    assert.deepEqual(o.sms, {
+      state: 'sent',
+      text: 'Razorpay sent the payment link to +919870000001.',
+    });
     assert.equal(o.link, 'https://rzp.io/i/abc');
     assert.equal(o.whatsapp.state, 'by_hand');
     if (o.whatsapp.state === 'by_hand') {

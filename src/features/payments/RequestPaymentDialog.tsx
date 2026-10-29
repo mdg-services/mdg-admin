@@ -15,6 +15,7 @@ import {
 } from '@/components/ui';
 import { useDealersQuery } from '@/hooks/api/useDealers';
 import { type CreatedPayment, useCreatePayment, usePaymentLink } from '@/hooks/api/usePayments';
+import { requestPaymentAction } from '@/lib/billingRelease';
 import {
   EMPTY_BILL_TO,
   PAYMENT_NOTE_MAX,
@@ -38,6 +39,7 @@ import {
 } from '@dk/shared';
 
 import { BillToFields } from './BillToFields';
+import { DealerReceivesBox } from './DealerReceivesBox';
 
 const EMPTY_DRAFT: RequestDraft = {
   dealerId: '',
@@ -465,6 +467,15 @@ export function RequestPaymentDialog({
               </p>
             </div>
           ) : null}
+
+          <DealerReceivesBox
+            action={requestPaymentAction({
+              sendLink: draft.sendLink,
+              amountPaise: paise,
+              purpose: draft.purpose,
+              dueDate: draft.dueDate,
+            })}
+          />
 
           <FieldError message={shown.form} />
         </form>

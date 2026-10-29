@@ -13,6 +13,7 @@ import {
   Textarea,
   useToast,
 } from '@/components/ui';
+import { DealerReceivesBox } from '@/features/payments/DealerReceivesBox';
 import { useAutopayOverview, useRefreshAutopay, useStartAutopay } from '@/hooks/api/useAutopay';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import {
@@ -33,6 +34,14 @@ import {
   stateHint,
   statusFacts,
 } from '@/lib/autopay';
+import {
+  approvalExpiryLine,
+  autopayIsRunning,
+  payLinkInsteadFacts,
+  refundAskedAt,
+  refundAskedLine,
+  setUpAutopayAction,
+} from '@/lib/billingRelease';
 import { copyText } from '@/lib/clipboard';
 import { istTodayYmd } from '@/lib/format';
 import { istStamp } from '@/lib/intake';
@@ -43,7 +52,13 @@ import {
   type StartAutopayResult,
 } from '@dk/shared';
 
-import { FollowUpDialog, MoneyBackDialog, StopAutopayDialog, errorText } from './AutopayDialogs';
+import {
+  FollowUpDialog,
+  MoneyBackDialog,
+  PayLinkInsteadDialog,
+  StopAutopayDialog,
+  errorText,
+} from './AutopayDialogs';
 
 /** Ended ones shown before "Show older". */
 const SHOWN = 3;
@@ -58,9 +73,10 @@ const SHOWN = 3;
  * the server's answer (`useAutopayOverview`); a button is offered only where the
  * server would accept the press.
  *
- * The WhatsApp words come back once, in the answer to "Set up autopay", and are not
- * kept on the server, so they are held here for as long as the autopay is waiting.
- * Open the page again and the approval link is still on screen to copy.
+ * The WhatsApp words are the overview's own (`approvalWords`) for as long as an
+ * approval waits, so Copy and Open WhatsApp work at any time, not only right after
+ * "Set up autopay". The answer to that press still carries them and is the fallback
+ * for a server that does not send them yet.
  */
 export function AutopayPanel({ dealerId, code }: { dealerId: string; code: string }) {
   const toast = useToast();
@@ -72,6 +88,7 @@ export function AutopayPanel({ dealerId, code }: { dealerId: string; code: strin
   const [callFor, setCallFor] = React.useState<AdminAutopay | null>(null);
   const [started, setStarted] = React.useState<StartAutopayResult | null>(null);
   const [givingBack, setGivingBack] = React.useState(false);
+  const [swapping, setSwapping] = React.useState(false);
   const isSuper = useIsSuperAdmin();
 
   const data = overview.data;
@@ -80,6 +97,11 @@ export function AutopayPanel({ dealerId, code }: { dealerId: string; code: strin
   // The server says whether it can be started; an autopay already running is never started again.
   const canStart = !!data?.canStart && !current;
   const canStop = !!current && canStopAutopay(current);
+  // The owner stopped autopay and asked for the first month back: a call, then a super-admin's refund.
+  const asked = refundAskedAt(data);
+  // "Send a pay link instead" works from what the press needs, not from a live autopay:
+  // an approval that ran out unused has none (it is the newest ended one).
+  const payLink = data?.canPayLinkInstead ? payLinkInsteadFacts(data, Date.now()) : null;
 
   async function doStart() {
     try {
@@ -134,13 +156,29 @@ export function AutopayPanel({ dealerId, code }: { dealerId: string; code: strin
         </Callout>
       ) : (
         <>
-          {current ? <CurrentBlock current={current} today={today} started={started} /> : null}
+          {current ? (
+            <CurrentBlock
+              current={current}
+              today={today}
+              words={
+                data.approvalWords ??
+                (started && started.autopay.id === current.id
+                  ? { text: started.whatsappText, waLink: started.waLink }
+                  : null)
+              }
+            />
+          ) : null}
 
-          {canStart || current ? (
+          {canStart || current || payLink ? (
             <ActionRow below="wrap" align="start">
               {canStart ? (
                 <Button size="sm" onClick={() => setAsking(true)}>
                   Set up autopay
+                </Button>
+              ) : null}
+              {payLink ? (
+                <Button size="sm" variant="secondary" onClick={() => setSwapping(true)}>
+                  Send a pay link instead
                 </Button>
               ) : null}
               {canStop ? (
@@ -171,11 +209,28 @@ export function AutopayPanel({ dealerId, code }: { dealerId: string; code: strin
 
           {/* The first-month money-back: what it is now, and the one press that keeps
               the promise (stop autopay, refund the first bill). Super-admins only. */}
-          {moneyBackLine(data.firstMonth, today) ? (
+          {asked ? (
+            <Callout intent="warning">
+              {refundAskedLine(asked, today)}{' '}
+              {data.firstMonth?.canMoneyBack
+                ? isSuper
+                  ? 'Ring them first, then give it back.'
+                  : 'Ring them. A super-admin gives the money back.'
+                : ''}
+            </Callout>
+          ) : null}
+          {moneyBackLine(data.firstMonth, today) || (asked && data.firstMonth?.canMoneyBack) ? (
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm text-text-muted">{moneyBackLine(data.firstMonth, today)}</p>
+              {moneyBackLine(data.firstMonth, today) ? (
+                <p className="text-sm text-text-muted">{moneyBackLine(data.firstMonth, today)}</p>
+              ) : null}
               {data.firstMonth?.canMoneyBack && isSuper ? (
-                <Button size="sm" variant="secondary" onClick={() => setGivingBack(true)}>
+                // The owner has asked for it: this is the press that keeps the promise.
+                <Button
+                  size="sm"
+                  variant={asked ? 'primary' : 'secondary'}
+                  onClick={() => setGivingBack(true)}
+                >
                   Give the first month back
                 </Button>
               ) : null}
@@ -190,7 +245,20 @@ export function AutopayPanel({ dealerId, code }: { dealerId: string; code: strin
             onConfirm={() => void doStart()}
             loading={start.isPending}
             title="Set up autopay"
-            description={startConfirmWords(data, today)}
+            description={
+              <div className="grid gap-3">
+                <p>{startConfirmWords(data, today)}</p>
+                <DealerReceivesBox
+                  action={setUpAutopayAction({
+                    paidThrough: data.paidThrough,
+                    firstBillUnpaid:
+                      data.firstMonth?.status === 'due' || data.firstMonth?.status === 'processing',
+                    amountPaise: data.monthlyPricePaise,
+                    today,
+                  })}
+                />
+              </div>
+            }
             confirmLabel="Set up autopay"
             size="md"
           />
@@ -203,11 +271,22 @@ export function AutopayPanel({ dealerId, code }: { dealerId: string; code: strin
       {callFor ? (
         <FollowUpDialog autopay={callFor} code={code} onClose={() => setCallFor(null)} />
       ) : null}
+      {swapping && payLink ? (
+        <PayLinkInsteadDialog
+          dealerId={dealerId}
+          code={code}
+          amountPaise={payLink.amountPaise}
+          approvalExpiresAt={payLink.approvalExpiresAt}
+          ranOut={payLink.ranOut}
+          onClose={() => setSwapping(false)}
+        />
+      ) : null}
       {givingBack && data?.firstMonth ? (
         <MoneyBackDialog
           dealerId={dealerId}
           code={code}
           firstMonth={data.firstMonth}
+          autopayRunning={autopayIsRunning(current)}
           onClose={() => setGivingBack(false)}
         />
       ) : null}
@@ -219,17 +298,17 @@ export function AutopayPanel({ dealerId, code }: { dealerId: string; code: strin
 function CurrentBlock({
   current,
   today,
-  started,
+  words,
 }: {
   current: AdminAutopay;
   today: string;
-  started: StartAutopayResult | null;
+  /** The approval words, while one waits: for a person to copy or open in WhatsApp at any time. */
+  words: { text: string; waLink: string | null } | null;
 }) {
   const hint = stateHint(current.state);
   const sentTo = current.state === 'setting_up' ? sentToLine(current.sentTo) : null;
-  // The words are only for the autopay they were made for, and only while it waits.
-  const words =
-    started && started.autopay.id === current.id && current.state === 'setting_up' ? started : null;
+  // When the link stops working: said while it waits, so nobody is left guessing how long it has.
+  const expiry = current.state === 'setting_up' ? approvalExpiryLine(current.approvalExpiresAt, Date.now()) : null;
   return (
     <div className="grid gap-3">
       <p className="select-text text-sm text-text [overflow-wrap:anywhere]">
@@ -254,10 +333,13 @@ function CurrentBlock({
             <p className="text-sm text-text-muted">Razorpay has not given an approval link yet.</p>
           )}
           {sentTo ? <p className="text-xs text-text-muted">{sentTo}</p> : null}
+          {expiry ? <p className="text-xs text-text-muted">{expiry}</p> : null}
         </div>
       ) : null}
 
-      {words ? <AutopayWords text={words.whatsappText} waLink={words.waLink} /> : null}
+      {words && current.state === 'setting_up' ? (
+        <AutopayWords text={words.text} waLink={words.waLink} />
+      ) : null}
     </div>
   );
 }

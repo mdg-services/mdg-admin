@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { ActionRow, Button, ConfirmDialog, useToast } from '@/components/ui';
+import { DealerReceivesBox } from '@/features/payments/DealerReceivesBox';
 import { RecordPaymentDialog } from '@/features/payments/RecordPaymentDialog';
 import { useResumeBilling } from '@/hooks/api/useBilling';
 import { useChangeWatch, useCloseOutletSetup } from '@/hooks/api/useOnboarding';
@@ -143,8 +144,17 @@ export function StageActions({
         onConfirm={() => void resume()}
         loading={resumeBilling.isPending}
         title={`Resume the services for ${label}?`}
-        description="Brings back exactly the services the pause stopped. A service that was paused for another reason stays paused."
+        description={
+          <div className="grid gap-3">
+            <p>
+              Brings back exactly the services the pause stopped. A service that was paused for
+              another reason stays paused.
+            </p>
+            <DealerReceivesBox action={{ kind: 'resume_services' }} />
+          </div>
+        }
         confirmLabel="Resume services"
+        size="md"
       />
       {/* ── /billing ── */}
       <StartServicesDialog

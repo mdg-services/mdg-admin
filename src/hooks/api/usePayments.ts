@@ -12,6 +12,8 @@ import type {
   AdminPaymentsQuery,
   CancelPaymentInput,
   CreatePaymentInput,
+  GiveMoreTimeInput,
+  HoldChasingInput,
   RecordManualRefundInput,
   RefundPaymentInput,
   UpdateBillToInput,
@@ -236,4 +238,47 @@ export function useGstDocumentDownload() {
     mutationFn: ({ paymentId, docId }: { paymentId: string; docId: string }) =>
       api.get<GstDocumentDownload>(`/admin/payments/${paymentId}/documents/${docId}`),
   });
+}
+
+/**
+ * Move a bill's pay-by day (`POST /admin/payments/:id/more-time`). Its reminders and
+ * the overdue alert move with it. Nothing is sent unless `tellDealer` is true, which
+ * sends one app notification with the new day and no link. Any admin, up to 7 days
+ * past the bill's first due day; a super-admin further. The server's sentence is shown
+ * as it is when it refuses.
+ */
+export function useGiveMoreTime() {
+  const refresh = useRefreshAfterChange();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & GiveMoreTimeInput) =>
+      api.post<AdminPayment>(`/admin/payments/${id}/more-time`, body),
+    onSettled: refresh,
+  });
+}
+
+/**
+ * Hold chasing on a bill autopay is meant to take (`POST /admin/payments/:id/hold-chasing`):
+ * no overdue alert, reminder or payment link until the end of `until`. `until: null`
+ * lifts the hold. Razorpay's own retries of the debit go on either way.
+ */
+export function useHoldChasing() {
+  const refresh = useRefreshAfterChange();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & HoldChasingInput) =>
+      api.post<AdminPayment>(`/admin/payments/${id}/hold-chasing`, body),
+    onSettled: refresh,
+  });
+}
+
+/**
+ * The bill an outlet has open right now: its newest subscription bill that is still
+ * due (the first bill, or a renewal), with its send history, any hold and any moved
+ * day. `null` while there is none. Asked from the payments list because an outlet's
+ * Setup card only names its FIRST bill, and the one to act on may be a later one.
+ * Off while Razorpay is switched off: every payment route answers 503 then.
+ */
+export function useOpenBill(dealerId: string | undefined, enabled = true) {
+  const q = usePaymentsQuery({ status: 'due', dealerId, page: 1, limit: 20 }, enabled && !!dealerId);
+  const bill = (q.data?.items ?? []).find((p) => p.status === 'due' && p.purpose === 'subscription');
+  return { bill: bill ?? null, isPending: q.isPending && enabled && !!dealerId };
 }

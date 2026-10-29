@@ -26,6 +26,8 @@ import {
 import { dealerCodeLabel, formatPaise } from '@dk/shared';
 import type { AdminPayment } from '@dk/shared';
 
+import { DealerReceivesBox } from './DealerReceivesBox';
+
 /**
  * Give an outlet's money back. A super-admin's action, in two steps.
  *
@@ -160,6 +162,9 @@ export function RefundPaymentDialog({
           {confirming ? (
             <>
               <Callout intent="warning">{refundSentence(payment, parsed.paise)}</Callout>
+              <DealerReceivesBox
+                action={{ kind: 'refund', amountPaise: parsed.paise, byHand: false }}
+              />
               <div className="min-w-0 [overflow-wrap:anywhere]">
                 <p className="text-xs text-text-subtle">Reason kept with the payment</p>
                 <p className="mt-0.5 select-text whitespace-pre-wrap text-sm text-text">

@@ -12,8 +12,10 @@ import {
 } from '@/components/ui';
 import { useAutopayOverview } from '@/hooks/api/useAutopay';
 import { useRecordManualPayment, useRecordSetupPayment } from '@/hooks/api/useBilling';
+import { useOutletSetupQuery } from '@/hooks/api/useOnboarding';
 import { FIRST_BILL_AUTOPAY_RECORD_WORDS, firstBillAutopayWaiting } from '@/lib/autopay';
 import { manualProblem, shortfallNote } from '@/lib/billing';
+import { recordPaymentAction } from '@/lib/billingRelease';
 import { istTodayYmd } from '@/lib/format';
 import {
   PAYMENT_MODES,
@@ -22,6 +24,7 @@ import {
   formatPaise,
   isDay,
   paiseToRupeesText,
+  parseRupees,
   paymentBody,
   ymdLabel,
 } from '@/lib/onboarding';
@@ -31,6 +34,8 @@ import {
   type OutletSetupAdmin,
   type SetupPaymentMode,
 } from '@dk/shared';
+
+import { DealerReceivesBox } from './DealerReceivesBox';
 
 /**
  * "Record payment received": money that came outside Razorpay (UPI to the company
@@ -76,6 +81,10 @@ function RecordPaymentForm({ target, onClose }: { target: RecordTarget; onClose:
   const recordBySetup = useRecordSetupPayment();
   const dealerId = target.kind === 'payment' ? target.payment.dealerId : target.outlet.dealerId;
   const autopay = useAutopayOverview(dealerId);
+  // The outlet's setup tells whether this is its first bill and whether portal logins are still missing:
+  // a first payment also asks the owner for them in the app. A payment of an outlet from before
+  // onboarding v2 has no setup (null), and then nothing of that kind is said.
+  const setupQ = useOutletSetupQuery(dealerId);
   const amountId = React.useId();
   const dayId = React.useId();
   const modeId = React.useId();
@@ -98,6 +107,15 @@ function RecordPaymentForm({ target, onClose }: { target: RecordTarget; onClose:
   const amountBad = touched && amountProblem(amount) !== null;
   const dayBad = touched && (!isDay(paidOn) || paidOn > today);
   const short = shortfallNote(billed, amount);
+  const setup = target.kind === 'setup' ? target.outlet : (setupQ.data ?? null);
+  const action = recordPaymentAction({
+    // The setup's own bill is the outlet's first; a payment from the list is the first when the autopay overview says so.
+    firstBill:
+      target.kind === 'setup' || (!!paymentId && autopay.data?.firstMonth?.paymentId === paymentId),
+    loginsNeeded: setup?.loginsNeeded.length ?? 0,
+    loginsDoneAt: setup?.milestones.loginsDoneAt ?? null,
+    amountPaise: parseRupees(amount) ?? billed,
+  });
   const who =
     target.kind === 'payment'
       ? { code: target.payment.dealerCode, ownerName: null }
@@ -221,9 +239,11 @@ function RecordPaymentForm({ target, onClose }: { target: RecordTarget; onClose:
         ) : null}
         {short ? <Callout intent="info">{short}</Callout> : null}
         <FieldError message={touched ? (problem ?? undefined) : undefined} />
+        <DealerReceivesBox action={action} />
         <p className="text-xs text-text-muted">
           Every payment recorded is logged with who recorded it. The dealer gets their receipt and
-          the GST invoice, as for a Razorpay payment.
+          the GST invoice, as for a Razorpay payment. A first payment also asks the owner, in the
+          app, for the portal logins that are still missing.
         </p>
       </form>
     </Dialog>

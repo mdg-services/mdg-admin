@@ -1,10 +1,16 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { AdminAutopay, AdminAutopayOverview, StartAutopayResult } from '@dk/shared';
+import type {
+  AdminAutopay,
+  AdminAutopayOverview,
+  SendSetupBillResult,
+  StartAutopayResult,
+} from '@dk/shared';
 import type {
   AutopayFollowUpInput,
   AutopayMoneyBackInput,
+  PayLinkInsteadInput,
   StopAutopayAdminInput,
 } from '@dk/shared/schemas';
 
@@ -119,6 +125,22 @@ export function useMoneyBack() {
   return useMutation({
     mutationFn: ({ dealerId, ...body }: { dealerId: string } & AutopayMoneyBackInput) =>
       api.post<AdminAutopayOverview>(`/admin/autopay/dealers/${dealerId}/money-back`, body),
+    onSettled: () => refreshAfterChange(qc),
+  });
+}
+
+/**
+ * "Send a pay link instead" (`POST /admin/autopay/dealers/:dealerId/pay-link-instead`):
+ * a first-month autopay approval nobody has approved is stopped, and the first bill
+ * goes out as a one-time payment link (Razorpay's SMS and email, and the bill on
+ * WhatsApp). The answer has the same shape as "Send bill", so the same result panel
+ * shows it. Any admin.
+ */
+export function usePayLinkInstead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dealerId, ...body }: { dealerId: string } & PayLinkInsteadInput) =>
+      api.post<SendSetupBillResult>(`/admin/autopay/dealers/${dealerId}/pay-link-instead`, body),
     onSettled: () => refreshAfterChange(qc),
   });
 }

@@ -10,7 +10,15 @@ import {
   Textarea,
   useToast,
 } from '@/components/ui';
-import { useAutopayFollowUp, useMoneyBack, useStopAutopay } from '@/hooks/api/useAutopay';
+import { DealerReceivesBox } from '@/features/payments/DealerReceivesBox';
+import {
+  useAutopayFollowUp,
+  useMoneyBack,
+  usePayLinkInstead,
+  useStopAutopay,
+} from '@/hooks/api/useAutopay';
+import { useOnboardingConfigQuery } from '@/hooks/api/useOnboarding';
+import { useOpenBill } from '@/hooks/api/usePayments';
 import { ApiError } from '@/lib/api';
 import {
   AUTOPAY_FOLLOW_UP_MAX,
@@ -22,6 +30,12 @@ import {
   refundDayProblem,
   stopNoteProblem,
 } from '@/lib/autopay';
+import {
+  moneyBackAction,
+  payLinkInsteadWords,
+  stopAutopayAction,
+  stopAutopayWords,
+} from '@/lib/billingRelease';
 import { istTodayYmd } from '@/lib/format';
 import { istStamp } from '@/lib/intake';
 import { PAYMENT_MODES, PAYMENT_MODE_LABEL } from '@/lib/onboarding';
@@ -35,7 +49,10 @@ import {
   type AutopayFirstMonth,
   type AutopayStopReason,
   type ManualPaymentMode,
+  type SendSetupBillResult,
 } from '@dk/shared';
+
+import { BillResultDialog } from './BillingDialogs';
 
 /**
  * What a refused press says. Decided by the server's error code, not its HTTP
@@ -67,12 +84,22 @@ export function StopAutopayDialog({
 }) {
   const toast = useToast();
   const stop = useStopAutopay();
+  // A bill autopay was meant to take goes out as a link once autopay stops: the preview says so.
+  const openBill = useOpenBill(autopay.dealerId);
   const noteId = React.useId();
   const reasonId = React.useId();
   const [note, setNote] = React.useState('');
   const [reason, setReason] = React.useState<AutopayStopReason | ''>('');
   const [touched, setTouched] = React.useState(false);
   const problem = stopNoteProblem(note);
+  // What the preview below lists, said in one sentence above it: the two must agree.
+  const stopFacts = stopAutopayAction({
+    bill: openBill.bill,
+    firstBillWaiting: autopay.state === 'setting_up' && !!autopay.firstBillId,
+    approved: autopay.approvedAt !== null,
+    today: istTodayYmd(),
+  });
+  const stopWords = stopAutopayWords(stopFacts);
 
   async function submit() {
     if (stop.isPending) return;
@@ -80,7 +107,13 @@ export function StopAutopayDialog({
     if (problem) return;
     try {
       await stop.mutateAsync({ id: autopay.id, note: note.trim(), ...(reason ? { reason } : {}) });
-      toast.success('Autopay stopped. The next bill goes to the owner as a link.');
+      toast.success(
+        autopay.approvedAt !== null
+          ? 'Autopay stopped. The next bill goes to the owner as a link.'
+          : stopFacts.billWaiting
+            ? 'Approval stopped. The first bill goes to the owner as a one-time payment link.'
+            : 'Approval stopped.',
+      );
       onClose();
     } catch (err) {
       toast.error(errorText(err));
@@ -118,11 +151,7 @@ export function StopAutopayDialog({
         </div>
 
         <p className="text-sm leading-relaxed text-text-muted">
-          {autopay.state === 'setting_up'
-            ? 'The approval link the owner was sent stops working. '
-            : 'No more money is taken after this. '}
-          The services do not stop. The month already paid runs out as usual, and the next bill goes
-          to the owner as a link.
+          {stopWords}
         </p>
 
         <div>
@@ -158,6 +187,8 @@ export function StopAutopayDialog({
             ))}
           </Select>
         </div>
+
+        <DealerReceivesBox action={stopFacts} />
       </form>
     </Dialog>
   );
@@ -276,11 +307,14 @@ export function MoneyBackDialog({
   dealerId,
   code,
   firstMonth,
+  autopayRunning,
   onClose,
 }: {
   dealerId: string;
   code: string;
   firstMonth: AutopayFirstMonth;
+  /** The outlet's current autopay is approved and not ended: it is stopped first and the owner is told. */
+  autopayRunning: boolean;
   onClose: () => void;
 }) {
   const toast = useToast();
@@ -431,6 +465,143 @@ export function MoneyBackDialog({
           />
           <FieldError message={touched ? (problem ?? undefined) : undefined} />
         </div>
+
+        <DealerReceivesBox action={moneyBackAction(firstMonth, autopayRunning)} />
+      </form>
+    </Dialog>
+  );
+}
+
+/**
+ * "Send a pay link instead": the first month's autopay approval has been out and the
+ * owner has not approved it (their bank may not do UPI autopay, or they would rather
+ * pay once). The approval is stopped and the first bill goes out as a one-time payment
+ * link: Razorpay's SMS and email, and the bill on WhatsApp.
+ *
+ * It says one thing: the approval link stops working and the first bill goes as a
+ * link. If the server cannot stop the approval it refuses, in plain words, and the
+ * toast shows that sentence. An approval that already ran out is not running any
+ * more, so for that one nothing is said about stopping it.
+ *
+ * It needs only what the press needs (the outlet, the amount, when the approval was
+ * to run out), not a live autopay: an approval that ran out unused has none.
+ *
+ * On success it shows the same result panel "Send bill" shows (the answer has the same
+ * shape), with the new link to copy and the WhatsApp words. Mounted only while open.
+ */
+export function PayLinkInsteadDialog({
+  dealerId,
+  code,
+  amountPaise,
+  approvalExpiresAt,
+  ranOut,
+  onClose,
+}: {
+  dealerId: string;
+  code: string;
+  /** What the first bill is for, GST included. */
+  amountPaise: number;
+  /** When the approval link was to stop working (ISO); null when not known. */
+  approvalExpiresAt: string | null;
+  /** The approval has already ended or run out: nothing is said about stopping it. */
+  ranOut: boolean;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const swap = usePayLinkInstead();
+  const config = useOnboardingConfigQuery(true);
+  const noteId = React.useId();
+  const [note, setNote] = React.useState('');
+  const [touched, setTouched] = React.useState(false);
+  const [result, setResult] = React.useState<SendSetupBillResult | null>(null);
+  const trimmed = note.trim();
+  // Optional, but a note that is there must be a real one (the server's own limits).
+  const problem =
+    trimmed.length === 0
+      ? null
+      : trimmed.length < 3
+        ? 'Write a little more: at least 3 characters.'
+        : trimmed.length > AUTOPAY_STOP_NOTE_MAX
+          ? `That is ${trimmed.length} characters. Keep it to ${AUTOPAY_STOP_NOTE_MAX}.`
+          : null;
+
+  async function submit() {
+    if (swap.isPending) return;
+    setTouched(true);
+    if (problem) return;
+    try {
+      const r = await swap.mutateAsync({
+        dealerId,
+        ...(trimmed ? { note: trimmed } : {}),
+      });
+      setResult(r);
+      toast.success(
+        ranOut ? 'The pay link is on its way.' : 'Autopay approval stopped. The pay link is on its way.',
+      );
+    } catch (err) {
+      toast.error(errorText(err));
+    }
+  }
+
+  if (result) return <BillResultDialog result={result} outlet={result.setup} onClose={onClose} />;
+
+  return (
+    <Dialog
+      open
+      onClose={swap.isPending ? () => {} : onClose}
+      title="Send a pay link instead"
+      footerBelow="row"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={swap.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={() => void submit()} loading={swap.isPending}>
+            Send the pay link
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="grid gap-3"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <div className="min-w-0 rounded-md border border-border bg-surface-2 p-2.5 text-sm [overflow-wrap:anywhere]">
+          <span className="font-medium text-text">{dealerCodeLabel(code)}</span>
+          <span className="text-text-muted"> · first bill {formatPaise(amountPaise)}</span>
+        </div>
+
+        <p className="text-sm leading-relaxed text-text-muted">
+          {payLinkInsteadWords(ranOut, approvalExpiresAt, Date.now())}
+        </p>
+
+        <div>
+          <Label htmlFor={noteId} hint="Optional">
+            Why
+          </Label>
+          <Textarea
+            id={noteId}
+            rows={2}
+            value={note}
+            maxLength={AUTOPAY_STOP_NOTE_MAX + 50}
+            onChange={(e) => setNote(e.target.value)}
+            invalid={touched && problem !== null}
+            placeholder="For example: owner's bank does not do UPI autopay, asked for a link."
+          />
+          <FieldError message={touched ? (problem ?? undefined) : undefined} />
+        </div>
+
+        <DealerReceivesBox
+          action={{
+            kind: 'pay_link_instead',
+            amountPaise,
+            paymentsOn: config.data?.paymentsConfigured ?? true,
+          }}
+        />
       </form>
     </Dialog>
   );

@@ -10,6 +10,7 @@ import {
   KeyValueList,
   HowThisWorks,
 } from '@/components/ui';
+import { showsBillingStatus } from '@/lib/billingRelease';
 import { istTodayYmd } from '@/lib/format';
 import { istStamp } from '@/lib/intake';
 import {
@@ -27,6 +28,7 @@ import {
 import { GST_STATES, type OutletSetupAdmin } from '@dk/shared';
 
 import { AutopayPanel } from './AutopayPanel';
+import { BillingBlock } from './BillingBlock';
 import { billingItems } from './billingItems';
 import { SetupFollowUp } from './SetupFollowUp';
 import { SetupWatch } from './SetupWatch';
@@ -76,6 +78,8 @@ export function SetupCard({
         <SetupFollowUp setup={setup} />
         {/* ── watch hold ── held messages, the extend-or-end prompt, the checklist */}
         <SetupWatch setup={setup} now={now} />
+        {/* ── billing ── one line on where the money stands, what was sent, and the day-moving buttons */}
+        {showsBillingStatus(setup.stage, setup.payment.state) ? <BillingBlock setup={setup} /> : null}
 
         <KeyValueList
           className="select-text"

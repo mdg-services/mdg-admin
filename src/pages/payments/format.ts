@@ -171,8 +171,10 @@ export interface PaymentActions {
 export function allowedActions(p: AdminPayment, isSuperAdmin: boolean): PaymentActions {
   const due = p.status === 'due';
   return {
-    copyLink: due,
-    sendSms: due && !!p.linkUrl,
+    // While a first-month autopay approval is out, the server refuses a link or an SMS
+    // (409 WAITING_FOR_AUTOPAY): approving pays the bill, and a link too would be paying twice.
+    copyLink: due && !p.waitingForAutopayApproval,
+    sendSms: due && !!p.linkUrl && !p.waitingForAutopayApproval,
     check: Boolean(p.razorpayOrderId || p.razorpayLinkId || p.razorpayPaymentId),
     cancel: due,
     refund: isSuperAdmin && refundable(p) > 0 && !p.manual,
@@ -206,6 +208,9 @@ export function checkOutcome(before: PaymentStatus | undefined, after: PaymentSt
 export function statusHint(p: AdminPayment, today: string): string {
   switch (p.status) {
     case 'due':
+      if (p.waitingForAutopayApproval) {
+        return 'Waiting for the owner to approve autopay. Approving pays this bill. The link and SMS are off until then.';
+      }
       // Autopay is lined up to take it: nobody needs to chase the owner for it.
       if (p.autopayOn) return `Autopay will take this on ${formatYmd(p.autopayOn)}.`;
       return isPastDue(p, today)

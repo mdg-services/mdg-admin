@@ -2,9 +2,12 @@ import * as React from 'react';
 
 import { Button, Callout, Dialog, FieldError, Label, Textarea, useToast } from '@/components/ui';
 import { useCancelPayment } from '@/hooks/api/usePayments';
+import { cancelPaymentAction } from '@/lib/billingRelease';
 import { PAYMENT_REASON_MAX, cancelSentence, reasonProblem } from '@/pages/payments/format';
 import { formatPaise, dealerCodeLabel } from '@dk/shared';
 import type { AdminPayment } from '@dk/shared';
+
+import { DealerReceivesBox } from './DealerReceivesBox';
 
 /**
  * Withdraw a payment nobody has paid — and refuse to without a reason.
@@ -88,6 +91,7 @@ export function CancelPaymentDialog({
           </div>
 
           <Callout intent="warning">{cancelSentence(payment)}</Callout>
+          <DealerReceivesBox action={cancelPaymentAction(payment)} />
 
           <div>
             <Label htmlFor={reasonId} required>

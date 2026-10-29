@@ -13,11 +13,14 @@ import {
   Textarea,
   useToast,
 } from '@/components/ui';
+import { DealerReceivesBox } from '@/features/payments/DealerReceivesBox';
 import { useAutopayOverview } from '@/hooks/api/useAutopay';
 import { usePauseBilling, useSendBill } from '@/hooks/api/useBilling';
 import { useOnboardingConfigQuery } from '@/hooks/api/useOnboarding';
+import { usePaymentQuery } from '@/hooks/api/usePayments';
 import { FIRST_BILL_AUTOPAY_RESEND_WORDS, firstBillAutopayWaiting } from '@/lib/autopay';
 import { billOutcome, waLinkWithText, type BillOutcome } from '@/lib/billing';
+import { repeatSendWarning, sendBillAction, sendHistoryLine } from '@/lib/billingRelease';
 import { copyText } from '@/lib/clipboard';
 import { istTodayYmd } from '@/lib/format';
 import {
@@ -39,6 +42,7 @@ import {
   type SendSetupBillResult,
   type SetupMessageLang,
 } from '@dk/shared';
+
 
 import { MessageLangField } from './MessageLangField';
 
@@ -63,7 +67,7 @@ const errorText = (err: unknown) =>
   err instanceof Error && err.message ? err.message : 'That did not go through.';
 
 /** The line that says which outlet a form is for. */
-function ForOutlet({ outlet }: { outlet: Pick<OutletSetupAdmin, 'code' | 'ownerName'> }) {
+export function ForOutlet({ outlet }: { outlet: Pick<OutletSetupAdmin, 'code' | 'ownerName'> }) {
   return (
     <div className="min-w-0 rounded-md border border-border bg-surface-2 p-2.5 [overflow-wrap:anywhere]">
       <p className="text-sm font-medium text-text">
@@ -93,6 +97,8 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
   const send = useSendBill();
   const config = useOnboardingConfigQuery(true);
   const autopay = useAutopayOverview(outlet.dealerId);
+  // What has already gone out about this bill, to say so before a send is repeated.
+  const bill = usePaymentQuery(outlet.payment.paymentId);
   const amountId = React.useId();
   const dueId = React.useId();
   const billed = outlet.payment.amountPaise;
@@ -103,6 +109,8 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
   );
   const [touched, setTouched] = React.useState(false);
   const [result, setResult] = React.useState<SendSetupBillResult | null>(null);
+  // A third send in one day asks once more, on its own step, before it goes.
+  const [step, setStep] = React.useState<'form' | 'confirm'>('form');
   // The WhatsApp's language: what the person picked; until they do, the outlet's default.
   const [pickedLang, setPickedLang] = React.useState<SetupMessageLang | null>(null);
   const today = istTodayYmd();
@@ -125,11 +133,31 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
   const amountBad = touched && amountProblem(amount) !== null;
   const dueBad = touched && (!isDay(dueOn) || dueOn < today);
   const again = outlet.payment.state === 'sent';
+  const sends = bill.data?.sends ?? null;
+  const repeat = again && sends ? repeatSendWarning(sends, Date.now()) : null;
+  const action = sendBillAction({
+    paymentsOn: !!config.data?.paymentsConfigured,
+    amountPaise: typedPaise,
+    monthlyPricePaise: price ?? null,
+    billedPaise: billed,
+    billedDueOn: outlet.payment.dueOn,
+    dueOn,
+    billOpen: again,
+    approvalOut: firstBillAutopayWaiting(autopay.data?.current),
+    firstEver: !outlet.milestones.billSentAt,
+    firstBillAutopay: config.data?.firstBillAutopay ?? true,
+  });
+  // The same bill going out again (nothing new raised) is the send that can repeat; a new or changed bill is not.
+  const isResend = action.resend;
 
   async function submit() {
     if (send.isPending) return;
     setTouched(true);
     if (problem) return;
+    if (repeat && isResend && step === 'form') {
+      setStep('confirm');
+      return;
+    }
     try {
       const r = await send.mutateAsync({
         dealerId: outlet.dealerId,
@@ -152,6 +180,33 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
   }
 
   if (result) return <BillResultDialog result={result} outlet={outlet} onClose={onClose} />;
+
+  if (step === 'confirm' && repeat) {
+    return (
+      <Dialog
+        open
+        onClose={send.isPending ? () => {} : onClose}
+        title="Send the bill again?"
+        footerBelow="row"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setStep('form')} disabled={send.isPending}>
+              Back
+            </Button>
+            <Button onClick={() => void submit()} loading={send.isPending}>
+              Send anyway
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-3">
+          <ForOutlet outlet={outlet} />
+          <Callout intent="warning">{repeat}</Callout>
+          <DealerReceivesBox action={action} />
+        </div>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog
@@ -179,6 +234,10 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
         }}
       >
         <ForOutlet outlet={outlet} />
+        {/* Next to Send again: what has already gone out about this bill. */}
+        {again && sends ? (
+          <p className="text-xs text-text-muted">{sendHistoryLine(sends, Date.now())}</p>
+        ) : null}
         <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label htmlFor={amountId} required hint="₹, GST included">
@@ -234,22 +293,23 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
             ? 'Razorpay is not switched on, so there is no payment link. This raises the bill as a payment and gives you the WhatsApp message to send: add your UPI or bank details to it before you do.'
             : price && typedPaise !== null && typedPaise !== price
               ? `${formatPaise(typedPaise)} is not the monthly price (${formatPaise(price)}), and autopay only takes the monthly price, so this bill goes as a one-time payment link. Razorpay texts the owner the link; set up autopay once it is paid. You then get the WhatsApp message to send (or it goes by itself once the template is approved).`
-              : `This asks the owner to approve autopay. Razorpay texts them one approval link: approving it with their UPI PIN pays this ${price ? formatPaise(price) : 'bill'} now and then takes the same every month. There is no separate payment link, so they cannot pay twice. You then get the WhatsApp message to send (or it goes by itself once the template is approved).`}{' '}
+              : `This asks the owner to approve autopay: approving it pays this ${price ? formatPaise(price) : 'bill'} now and then takes the same every month. There is no separate payment link, so they cannot pay twice. You then get the WhatsApp message to send (or it goes by itself once the template is approved).`}{' '}
           In the dealer&rsquo;s app they see only the amount and the due date, never how to pay.
         </p>
+        <DealerReceivesBox action={action} />
       </form>
     </Dialog>
   );
 }
 
 /** What "Send bill" did, and what is left for the person to do by hand. */
-function BillResultDialog({
+export function BillResultDialog({
   result,
   outlet,
   onClose,
 }: {
   result: SendSetupBillResult;
-  outlet: OutletSetupAdmin;
+  outlet: Pick<OutletSetupAdmin, 'code' | 'ownerName'>;
   onClose: () => void;
 }) {
   const toast = useToast();
@@ -475,6 +535,7 @@ function PauseForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: () 
           still signs in and still sees the bill. &ldquo;Resume services&rdquo; brings back exactly
           the ones this stops.
         </Callout>
+        <DealerReceivesBox action={{ kind: 'pause_services' }} />
         <div>
           <Label htmlFor={reasonId} required>
             Why

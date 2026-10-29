@@ -14,6 +14,7 @@
     "check:portal-login": "npx tsx --test scripts/portalLogin.check.ts",
     "check:payments": "npx tsx --test scripts/payments.check.ts",
     "check:billing": "npx tsx --test scripts/billing.check.ts",
+    "check:billing-release": "npx tsx --test scripts/billingRelease.check.ts",
     "check:autopay": "npx tsx --test scripts/autopay.check.ts",
     "check:leads": "npx tsx --test scripts/leads.check.ts",
     "check:watch-hold": "npx tsx --test scripts/watchHold.check.ts",

@@ -1,10 +1,13 @@
 import { ExternalLink } from 'lucide-react';
 import * as React from 'react';
+import { Link } from 'react-router-dom';
 
 import {
   ActionRow,
   Badge,
   Button,
+  Callout,
+  ConfirmDialog,
   Copyable,
   DealerChip,
   Drawer,
@@ -24,6 +27,15 @@ import {
 } from '@/hooks/api/usePayments';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { manualDrawerLines } from '@/lib/billing';
+import {
+  canGiveMoreTime,
+  canHoldChasing,
+  holdIsOn,
+  repeatSendWarning,
+  sendHistoryLine,
+  sendSmsAction,
+  sendSmsAndEmailLabel,
+} from '@/lib/billingRelease';
 import { copyText } from '@/lib/clipboard';
 import { formatYmd, istTodayYmd } from '@/lib/format';
 import { istStamp } from '@/lib/intake';
@@ -46,7 +58,6 @@ import {
   newestFirst,
   refundLine,
   refundTone,
-  sendSmsLabel,
   statusHint,
   statusTone,
   wasPaid,
@@ -61,7 +72,10 @@ import type { AdminPayment } from '@dk/shared';
 
 import { BillToDialog } from './BillToDialog';
 import { CancelPaymentDialog } from './CancelPaymentDialog';
+import { DealerReceivesBox } from './DealerReceivesBox';
+import { GiveMoreTimeDialog } from './GiveMoreTimeDialog';
 import { BillToCard, CreditNotesBody, InvoiceBody } from './GstSections';
+import { HoldChasingDialog } from './HoldChasingDialog';
 import { ManualRefundDialog } from './ManualRefundDialog';
 import { RecordPaymentDialog } from './RecordPaymentDialog';
 import { RefundPaymentDialog } from './RefundPaymentDialog';
@@ -142,6 +156,10 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
   const [refunding, setRefunding] = React.useState(false);
   const [handRefunding, setHandRefunding] = React.useState(false);
   const [recording, setRecording] = React.useState(false);
+  const [givingTime, setGivingTime] = React.useState(false);
+  const [holding, setHolding] = React.useState(false);
+  // "Send SMS and email" asks first: it says what the owner will get, and warns before a third send in a day.
+  const [asking, setAsking] = React.useState(false);
   const [editingBillTo, setEditingBillTo] = React.useState(false);
   // The link, shown for copying by hand — only when this device refused to copy it for us.
   const [manualLink, setManualLink] = React.useState<string | null>(null);
@@ -153,6 +171,9 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
     setRefunding(false);
     setHandRefunding(false);
     setRecording(false);
+    setGivingTime(false);
+    setHolding(false);
+    setAsking(false);
     setEditingBillTo(false);
   }, [p.id]);
 
@@ -183,8 +204,10 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
   async function onSendSms() {
     try {
       await resend.mutateAsync(p.id);
-      toast.success('Asked Razorpay to send the link.');
+      setAsking(false);
+      toast.success('Asked Razorpay to send the link by SMS and email.');
     } catch (e) {
+      setAsking(false);
       toast.error(failedMessage(e));
     }
   }
@@ -222,6 +245,15 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
     { key: 'due', label: 'Due date', value: p.dueDate ? formatYmd(p.dueDate) : '—' },
     ...(p.autopayOn
       ? [{ key: 'autopayOn', label: 'Autopay takes it', value: formatYmd(p.autopayOn) }]
+      : []),
+    ...(holdIsOn(p.chaseHeldUntil, today)
+      ? [
+          {
+            key: 'held',
+            label: 'Chasing held',
+            value: `until ${formatYmd(p.chaseHeldUntil)}`,
+          },
+        ]
       : []),
     { key: 'raised', label: 'Raised', value: byAt(p.createdByName, p.createdAt) },
     { key: 'number', label: 'Receipt number', value: p.number, mono: true, copyable: true },
@@ -335,6 +367,12 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
   const extras = newestFirst(p.extraCaptures, (c) => c.at);
   // A server that has not been updated yet sends no list; that must not blank the drawer.
   const creditNotes = p.creditNotes ?? [];
+  // Older servers send none of the release's fields; the drawer must not blank for that.
+  const sends = p.sends ?? [];
+  const moves = p.dueDateChanges ?? [];
+  const moreTime = canGiveMoreTime(p);
+  const holdable = canHoldChasing(p);
+  const repeat = repeatSendWarning(sends, Date.now());
 
   return (
     <div className="grid gap-5">
@@ -346,7 +384,21 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
           <Badge intent={statusTone(p.status)}>{PAYMENT_STATUS_LABELS[p.status]}</Badge>
         </div>
         <p className="mt-1 text-sm text-text-muted">{statusHint(p, today)}</p>
+        {p.sends ? (
+          <p className="mt-1 text-xs text-text-subtle">{sendHistoryLine(sends, Date.now())}</p>
+        ) : null}
       </div>
+
+      {p.waitingForAutopayApproval ? (
+        <Callout intent="info">
+          The owner has an autopay approval to act on, and approving it pays this bill. No link or
+          SMS goes out meanwhile, so they cannot pay twice. To send a pay link instead, use{' '}
+          <Link className="font-semibold underline" to={`/dealers/${p.dealerId}?tab=info`}>
+            Send a pay link instead
+          </Link>{' '}
+          in the outlet&rsquo;s Autopay section.
+        </Callout>
+      ) : null}
 
       {hasOpenProblem(p) && p.problem ? (
         // Not a Callout: this one is red, and it carries the button that clears it.
@@ -383,6 +435,8 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
       can.cancel ||
       can.refund ||
       can.recordManualRefund ||
+      moreTime ||
+      holdable ||
       can.recordPayment ? (
         <div className="grid gap-2">
           <ActionRow below="wrap" align="start">
@@ -402,9 +456,9 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
                 variant="secondary"
                 loading={resend.isPending}
                 disabled={busy && !resend.isPending}
-                onClick={() => void onSendSms()}
+                onClick={() => setAsking(true)}
               >
-                {sendSmsLabel(p)}
+                {sendSmsAndEmailLabel(p)}
               </Button>
             ) : null}
             {can.check ? (
@@ -426,6 +480,26 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
                 onClick={() => setRecording(true)}
               >
                 Record payment received…
+              </Button>
+            ) : null}
+            {moreTime ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => setGivingTime(true)}
+              >
+                Give more time…
+              </Button>
+            ) : null}
+            {holdable ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => setHolding(true)}
+              >
+                Hold chasing…
               </Button>
             ) : null}
             {can.cancel ? (
@@ -501,6 +575,25 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
             : ''}
         </p>
       </Section>
+
+      {moves.length > 0 ? (
+        <Section title={`Pay-by day moved (${moves.length})`}>
+          <ul className="grid gap-2">
+            {moves.map((m, i) => (
+              <li key={`${m.at}-${i}`} className="rounded-md border border-border p-2.5">
+                <p className="text-sm text-text">
+                  {formatYmd(m.from)} to {formatYmd(m.to)}
+                </p>
+                <p className="mt-0.5 break-words text-sm text-text-muted">{m.reason}</p>
+                <p className="mt-0.5 text-xs text-text-subtle">
+                  {byAt(m.byName, m.at)}
+                  {m.toldDealer ? ' · the owner was told' : ' · the owner was not told'}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
 
       {attempts.length > 0 ? (
         <Section title={`Tries to pay (${attempts.length})`}>
@@ -587,6 +680,27 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
       <RecordPaymentDialog
         target={recording ? { kind: 'payment', payment: p } : null}
         onClose={() => setRecording(false)}
+      />
+      <GiveMoreTimeDialog payment={givingTime ? p : null} onClose={() => setGivingTime(false)} />
+      <HoldChasingDialog payment={holding ? p : null} onClose={() => setHolding(false)} />
+      <ConfirmDialog
+        open={asking}
+        onCancel={() => setAsking(false)}
+        onConfirm={() => void onSendSms()}
+        loading={resend.isPending}
+        title="Send SMS and email"
+        description={
+          <div className="grid gap-3">
+            <p>
+              Razorpay sends the owner this bill&rsquo;s payment link by SMS, and by email where
+              there is an address.
+            </p>
+            {repeat ? <Callout intent="warning">{repeat}</Callout> : null}
+            <DealerReceivesBox action={sendSmsAction(p)} />
+          </div>
+        }
+        confirmLabel={repeat ? 'Send anyway' : 'Send'}
+        size="md"
       />
       <RefundPaymentDialog payment={refunding ? p : null} onClose={() => setRefunding(false)} />
       <ManualRefundDialog

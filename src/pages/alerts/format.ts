@@ -74,6 +74,15 @@ const STILL_STANDING: Partial<Record<AdminAlertKind, string>> = {
   // ── autopay ── hiding the alert does not ring the owner; only a logged call clears it.
   autopay_stopped:
     "Hidden from this list. It clears once somebody rings the owner and marks the call done on the outlet's Autopay section.",
+  // ── billing release ── hiding these does not get the owner approved, paid or called.
+  autopay_approval_waiting:
+    "Hidden from this list. It clears once the owner approves, a pay link is sent instead, or the approval runs out. Both are on the outlet's Autopay section.",
+  autopay_approval_expired:
+    "Hidden from this list. It clears once the first bill is paid, or a new approval or a pay link goes out from the outlet's Autopay section.",
+  autopay_debit_failed:
+    'Hidden from this list. It clears once a debit goes through or autopay ends. Razorpay keeps trying by itself.',
+  first_month_refund_asked:
+    "Hidden from this list. The owner is still waiting: ring them, then a super-admin gives the first month back from the outlet's Autopay section.",
   // ── leads ── hiding the alert does not get anybody in touch; only a logged contact or a close does.
   lead_new: 'Hidden from this list. This lead stays on the Leads page until somebody gets in touch.',
   lead_due: 'Hidden from this list. This lead stays on the Leads page until somebody gets in touch.',

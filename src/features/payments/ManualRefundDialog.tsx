@@ -29,6 +29,8 @@ import {
 import { dealerCodeLabel, formatPaise } from '@dk/shared';
 import type { AdminPayment, ManualPaymentMode } from '@dk/shared';
 
+import { DealerReceivesBox } from './DealerReceivesBox';
+
 /**
  * "Record a refund made by hand": the way back for money that came by hand (bank,
  * UPI, cash, cheque). Razorpay never held it, so it cannot refund it; the money is
@@ -231,9 +233,18 @@ function ManualRefundForm({ payment, onClose }: { payment: AdminPayment; onClose
 
         <FieldError message={attempted ? (problem ?? undefined) : undefined} />
         {!problem ? (
-          <p className="text-xs text-text-muted">
-            {manualRefundSentence(payment, manualRefundBody(draft).amountPaise)}
-          </p>
+          <>
+            <p className="text-xs text-text-muted">
+              {manualRefundSentence(payment, manualRefundBody(draft).amountPaise)}
+            </p>
+            <DealerReceivesBox
+              action={{
+                kind: 'refund',
+                amountPaise: manualRefundBody(draft).amountPaise,
+                byHand: true,
+              }}
+            />
+          </>
         ) : null}
       </form>
     </Dialog>

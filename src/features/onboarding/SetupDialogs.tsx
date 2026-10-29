@@ -11,6 +11,7 @@ import {
   Textarea,
   useToast,
 } from '@/components/ui';
+import { DealerReceivesBox } from '@/features/payments/DealerReceivesBox';
 import { useDealerServicesQuery } from '@/hooks/api/useDealerServices';
 import { useChangeWatch, useOutletSetupQuery, useStartServices } from '@/hooks/api/useOnboarding';
 import { usePortalLogins } from '@/hooks/api/usePortalLogins';
@@ -46,9 +47,12 @@ import { SetupChecklist } from './SetupChecklist';
  * failure comes back from the server as a toast, with the form left open so the
  * retry is one more tap.
  *
- * Nothing here messages the dealer. The bill is sent by the team on WhatsApp,
- * outside the app: this records that it went, and the app then shows the dealer
- * the amount and the due date and nothing else.
+ * Most of what is here sends nothing. The exception is Start services: it sends the
+ * owner a notification and a line in the app's chat saying their services have
+ * started (and the dialog's "What the dealer receives" says so before the press).
+ * The bill itself is not sent from here: that is Send bill (`BillingDialogs`), which
+ * reaches the owner by Razorpay's SMS and by WhatsApp, outside the app, and the app
+ * shows the dealer the amount and the due date and nothing else.
  */
 
 type Props = {
@@ -297,8 +301,10 @@ function StartServicesForm({ outlet, onClose, onGoToTab }: FormProps) {
 
         <p className="text-xs text-text-muted">
           The outlet becomes Active and the watch begins. With 0 days it goes straight to Live. The
-          dealer is told their services have started.
+          owner gets a notification and a line in the app&rsquo;s chat saying their services have
+          started.
         </p>
+        <DealerReceivesBox action={{ kind: 'start_services' }} />
       </form>
     </Dialog>
   );
