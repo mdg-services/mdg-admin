@@ -3,7 +3,15 @@ import * as React from 'react';
 
 import { Button, Dialog, FieldError, Input, Label, Textarea, useToast } from '@/components/ui';
 import { useCreateLead } from '@/hooks/api/useLeads';
-import { NAME_MAX, NOTE_MAX, addLeadBody, addLeadProblems, type AddLeadForm } from '@/lib/leads';
+import {
+  NAME_MAX,
+  NOTE_MAX,
+  addLeadBody,
+  addLeadProblems,
+  addedAsLeadText,
+  isClosed,
+  type AddLeadForm,
+} from '@/lib/leads';
 
 import { errorText } from './shared';
 
@@ -11,9 +19,10 @@ const EMPTY: AddLeadForm = { mobile: '', name: '', place: '', note: '' };
 
 /**
  * "Add lead": a button and the form behind it, for somebody the team wants to
- * work who never came in through the film — met at a pump, referred, rang the
- * office. Only the number is needed. The lead is the adder's, and the follow-up
- * clock chases it like any other.
+ * follow up who has not written to us — met at a pump, referred, rang the
+ * office. (Somebody a WhatsApp campaign went to is added from Message results or
+ * the WhatsApp inbox, which knows the campaign.) Only the number is needed. The
+ * lead is the adder's, and the follow-up clock chases it like any other.
  *
  * A number that is already a lead makes nothing: the form opens that lead
  * instead, and says so, so the team works one lead per person.
@@ -64,10 +73,14 @@ function AddLeadForm({
     if (Object.keys(problems).length > 0) return;
     try {
       const made = await create.mutateAsync(addLeadBody(form));
+      const { ref, status } = made.detail.lead;
       if (made.existed) {
-        toast.success(`This number is already lead ${made.detail.lead.ref}. Opened it for you.`);
+        toast.success(`This number is already lead ${ref}. Opened it for you.`);
+      } else if (isClosed(status)) {
+        // An outlet's number, or one on the stop list: made, and closed by the server at once.
+        toast.info(addedAsLeadText(ref, false, status));
       } else {
-        toast.success(`Added as lead ${made.detail.lead.ref}. It is yours.`);
+        toast.success(addedAsLeadText(ref, false, status));
       }
       onClose();
       onOpenLead(made.id);
@@ -105,8 +118,8 @@ function AddLeadForm({
         }}
       >
         <p className="text-sm text-text-muted">
-          For somebody you want to follow up who did not come in through the film. They do not need
-          to have watched it.
+          For somebody you want to follow up who has not written to us — met at a pump, referred, or
+          rang the office.
         </p>
         <div>
           <Label htmlFor={ids.mobile} required>

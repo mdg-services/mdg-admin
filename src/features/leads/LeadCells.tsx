@@ -7,7 +7,7 @@ import { ContactLinks } from '@/features/intake/ContactLinks';
 import { cn } from '@/lib/cn';
 import { phoneLabel } from '@/lib/intake';
 import {
-  DUE_REASON_LABELS,
+  dueReasonWords,
   STATUS_TONE,
   chatHref,
   closedLine,
@@ -187,7 +187,7 @@ export function WatchBar({
   className,
 }: {
   watch: LeadWatch;
-  /** How the lead came in: one added by hand has no film visit to speak of. */
+  /** How the lead came in: only a call-back from the film page was on it without a visit we can tie to them. */
   origin?: LeadOrigin;
   withVisits?: boolean;
   size?: 'sm' | 'lg';
@@ -197,8 +197,8 @@ export function WatchBar({
   const percent = watchPercent(watch);
   const text = watchLine(watch, withVisits, origin);
   const textClass = size === 'lg' ? 'text-sm text-text' : 'text-xs text-text-muted';
-  // No visit tied to them (a call-back from the film page, a lead added by hand): an empty bar would
-  // read as "watched nothing", which nobody knows.
+  // No visit tied to them (a call-back from the film page, or any lead who wrote to us or was added
+  // by the team and has not watched): an empty bar would read as a measurement of nothing.
   if (watch.visits === 0) return <p className={cn(textClass, className)}>{text}</p>;
   return (
     <div className={className}>
@@ -380,7 +380,7 @@ export function LeadStandsCell({
             <Badge intent={due.tone}>{due.text}</Badge>
           )}
           {lead.dueReason ? (
-            <span className="text-xs text-text-subtle">· {DUE_REASON_LABELS[lead.dueReason]}</span>
+            <span className="text-xs text-text-subtle">· {dueReasonWords(lead)}</span>
           ) : null}
         </p>
       ) : null}

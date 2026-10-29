@@ -54,8 +54,11 @@ const FIRST_ROWS = 50;
 const NUMBER = (n: number | undefined) => (n === undefined ? '—' : n.toLocaleString('en-IN'));
 
 /**
- * Everyone who started the full Dealer Kavach film, what is going on with each,
- * and what to do next (docs/specs/leads.md).
+ * Everyone who wrote back to us on WhatsApp, asked for a call, or was added by
+ * the team: what is going on with each, and what to do next
+ * (docs/specs/leads.md). Watching the Dealer Kavach film does not make a lead;
+ * it shows on the lead the person already is.
+
  *
  * A lead stays here until it says no, asks us to stop, or becomes a client: the
  * server works out when each one is due again from what we have done and what
@@ -74,12 +77,13 @@ const NUMBER = (n: number | undefined) => (n === undefined ? '—' : n.toLocaleS
  * one tap that opens the drawer, where every action is a button. The seven forms
  * the actions open are mounted once, here, and stack over the drawer.
  *
- * "Add lead" makes one by hand, for somebody who never came in through the
- * film; the new lead's drawer opens as soon as it is made.
+ * "Add lead" makes one by hand, for somebody who has not written to us; the new
+ * lead's drawer opens as soon as it is made. (A person a WhatsApp campaign went
+ * to is added from Message results or the WhatsApp inbox instead.)
  *
  * "Unknown viewers" are not leads: people who opened the film without a personal
  * link. They are listed so the team can see the film is watched, and never
- * followed up.
+ * followed up; a lead is somebody who wrote to us.
  */
 export function LeadsPage() {
   const qc = useQueryClient();
@@ -194,7 +198,7 @@ export function LeadsPage() {
     <div>
       <PageHeader
         title="Leads"
-        subtitle="Everyone who started the full film, and anyone the team added by hand. Each one stays here until they say no, ask us to stop, or become a client."
+        subtitle="Everyone who wrote back to us on WhatsApp, asked for a call, or was added by the team. Each one stays here until they say no, ask us to stop, or become a client."
         actions={
           <>
             <AddLeadButton onOpenLead={(id) => openLead(id)} />
@@ -429,11 +433,11 @@ function Empty({
     todo: {
       title: 'No leads yet',
       description:
-        'Anyone who starts the full film from a personal link, or asks for a call-back on its page, appears here. Use Add lead for anyone else.',
+        'Anyone who writes back to us on WhatsApp, or asks for a call-back on the film page, appears here. Use Add lead for anyone else you want to follow up.',
     },
     open: {
       title: 'No open leads',
-      description: 'Every lead so far has closed. A new one appears here as soon as somebody starts the film.',
+      description: 'Every lead so far has closed. A new one appears here as soon as somebody writes to us.',
     },
     mine: {
       title: 'None are yours yet',

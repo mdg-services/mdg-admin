@@ -1,6 +1,6 @@
 import { AlertCircle, ChartColumn } from 'lucide-react';
 import * as React from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Meter, StatTile, StatTileGrid } from '@/components/charts';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -20,9 +20,11 @@ import {
   Select,
   Skeleton,
 } from '@/components/ui';
+import { AddAsLeadButton } from '@/features/leads/AddAsLeadButton';
 import { linkLabel, phoneLabel } from '@/features/whatsapp/format';
 import { useWhatsAppResultsQuery } from '@/hooks/api/useWhatsAppResults';
 import { ApiError } from '@/lib/api';
+import { leadHref, resultLeadAction } from '@/lib/leads';
 import {
   WHATSAPP_RESULTS_ALL,
   type WhatsAppResultCounts,
@@ -57,7 +59,7 @@ import {
  * arrive, did they open it, did they open the film or tap the link, who wants a
  * call — and where every message that did not arrive went, so the numbers add
  * up to what was sent. Then one line per person, which opens their chat, with a
- * filter for the ones to act on.
+ * filter for the ones to act on and, on each, the way to make them a lead.
  *
  * The send lives in the URL (`?send=`), so a link to one send's results can be
  * passed on. With none, the server opens the newest.
@@ -238,6 +240,10 @@ export function WhatsAppResultsPage() {
                 // Promotions go from the MDG Services number: the chat is in that inbox.
                 onRowClick={(p) => navigate(`/whatsapp?line=marketing&chat=${encodeURIComponent(p.person)}`)}
                 cardVariant="rows"
+                // Null when a row has nothing to offer, so its phone card stays one tap target.
+                rowActions={(p) =>
+                  resultLeadAction(p).kind === 'none' ? null : <LeadAction person={p} />
+                }
                 minWidth={data.counts.withLink > 0 ? '54rem' : '44rem'}
                 columns={[
                   {
@@ -324,6 +330,29 @@ export function WhatsAppResultsPage() {
       )}
     </div>
   );
+}
+
+/**
+ * A row's way to the Leads page: the lead's own link when the person is one,
+ * "Add as lead" when they have an Indian mobile and have not said stop, nothing
+ * otherwise. Adding does not leave the page; the results refresh and the button
+ * turns into the link.
+ */
+function LeadAction({ person }: { person: WhatsAppResultPerson }) {
+  const action = resultLeadAction(person);
+  if (action.kind === 'link') {
+    return (
+      <Link
+        to={leadHref(action.id)}
+        className="inline-flex min-h-11 items-center whitespace-nowrap rounded-sm px-1 text-sm font-medium text-brand underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:min-h-0"
+      >
+        Lead {action.ref}
+      </Link>
+    );
+  }
+  if (action.kind === 'add')
+    return <AddAsLeadButton person={action.person} className="whitespace-nowrap" />;
+  return null;
 }
 
 /** Under the picker: when it went, who to, and what it said in full. */

@@ -10,8 +10,9 @@ import type { LeadViewerList, LeadViewerRow } from '@dk/shared';
  * link in the last 30 days. They are counted and listed so the team can see the
  * film is being watched, and never followed up: the film page is anonymous (it
  * carries no name, phone number or account, and the privacy page says so), so
- * there is nobody to ring. The one line at the top says that, so a reader does
- * not look for a button that is not there.
+ * there is nobody to ring. Watching alone does not make anybody a lead either
+ * (since 29 Oct 2026 a lead is somebody who wrote to us). The line at the top
+ * says both, so a reader does not look for a button that is not there.
  */
 export function ViewersList({
   list,
@@ -31,8 +32,9 @@ export function ViewersList({
   return (
     <>
       <p className="mb-3 text-sm text-text-muted">
-        These people opened the full film without a personal link, so we do not know their name or
-        number and cannot contact them.
+        These people opened the full film without a personal link, so we cannot tell who they are
+        and cannot contact them. Watching alone does not make anybody a lead: a lead is somebody who
+        wrote to us.
       </p>
       {cutShort ? (
         <p className="mb-3 text-xs text-text-subtle">

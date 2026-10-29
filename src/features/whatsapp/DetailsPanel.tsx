@@ -209,8 +209,9 @@ export function DetailsContent({ line, person, detail, now }: DetailsContentProp
         <p className="mt-2 text-xs text-text-subtle">{SHARED_BY_BOTH_WORDS}</p>
       </div>
 
-      {/* A line only when this chat is on the Leads page; nothing otherwise. */}
-      <LeadLookupLine person={person} />
+      {/* The lead's line when this chat is on the Leads page; "Add as lead" for a number in this
+          inbox that could be one and is not; nothing otherwise. */}
+      <LeadLookupLine person={person} line={line} stopped={chat.optedOut} />
 
       <Section title="Stage">
         <Select

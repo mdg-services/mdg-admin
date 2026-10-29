@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as React from 'react';
 
+import { whatsAppResultsRoot } from '@/hooks/api/useWhatsAppResults';
 import { api } from '@/lib/api';
 import { hasProcessing } from '@/lib/leads';
 import { uploadLeadRecording, type UploadLeadRecordingInput } from '@/lib/uploadLeadRecording';
@@ -19,6 +20,7 @@ import type {
   AssignLeadInput,
   CloseLeadInput,
   CreateLeadInput,
+  LeadFromWhatsAppInput,
   LeadNoteInput,
   LogLeadContactInput,
   ReopenLeadInput,
@@ -239,6 +241,40 @@ export function useCreateLead() {
       qc.setQueryData(leadKey(id), detail);
     },
     onSettled: refresh,
+  });
+}
+
+/**
+ * "Add as lead" for somebody a WhatsApp campaign went to: a row of Message
+ * results, or a chat in the inbox. The server finds the campaign and the
+ * greeting it used; the answer is the lead made, or the one that already had
+ * the number (`existed`), like `useCreateLead`.
+ *
+ * Besides the Leads queries (which also carry the inbox's lead lookup) it
+ * refreshes Message results, so the row turns into a link to the lead.
+ */
+export function useAddLeadFromWhatsApp() {
+  const refresh = useRefreshAfterChange();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: LeadFromWhatsAppInput) => {
+      const res = await api.post<LeadDetail & { id: string; existed: boolean }>(
+        '/admin/leads/from-whatsapp',
+        body,
+      );
+      return {
+        id: res.id || res.lead.id,
+        existed: res.existed === true,
+        detail: res as LeadDetail,
+      };
+    },
+    onSuccess: ({ id, detail }) => {
+      qc.setQueryData(leadKey(id), detail);
+    },
+    onSettled: () => {
+      refresh();
+      void qc.invalidateQueries({ queryKey: whatsAppResultsRoot });
+    },
   });
 }
 

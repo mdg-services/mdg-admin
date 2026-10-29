@@ -30,6 +30,7 @@ import {
   assignLeadSchema,
   closeLeadSchema,
   createLeadSchema,
+  leadFromWhatsAppSchema,
   leadNoteSchema,
   logLeadContactSchema,
   presignLeadRecordingSchema,
@@ -66,6 +67,7 @@ import {
   type LeadNote,
   type LeadRecordingFailure,
   type LeadRow,
+  type LeadSignKind,
   type LeadSigns,
   type LeadTimelineItem,
   type LeadVisit,
@@ -99,6 +101,9 @@ import {
   clockWords,
   closeBody,
   closeProblem,
+  addedAsLeadText,
+  canAddChatAsLead,
+  dueReasonWords,
   closedLine,
   closesLead,
   contactBody,
@@ -145,6 +150,7 @@ import {
   noteLine,
   noteProblem,
   originText,
+  resultLeadAction,
   ownerLine,
   parseWhen,
   addLeadBody,
@@ -617,7 +623,8 @@ describe('the lines on a lead row', () => {
   it('says where a lead came from, owner and close in a few words', () => {
     assert.equal(originText({ origin: 'share_link', linkLabel: 'Ramesh ji' }), 'Share link “Ramesh ji”');
     assert.equal(originText({ origin: 'share_link', linkLabel: null }), 'Share link');
-    assert.equal(originText({ origin: 'campaign', linkLabel: null }), 'WhatsApp film invite');
+    assert.equal(originText({ origin: 'campaign', linkLabel: null }), 'WhatsApp campaign');
+    assert.equal(originText({ origin: 'whatsapp_reply', linkLabel: null }), 'Wrote to us on WhatsApp');
     assert.equal(ownerLine({ id: 'u1', name: 'Aryan' }), 'Owner: Aryan');
     assert.equal(ownerLine(null), 'Nobody owns it yet');
     assert.equal(
@@ -676,13 +683,17 @@ describe('what they watched', () => {
     assert.equal(watchLine(watch({ visits: 1 }), false), 'Watched 12:30 of 26:29 · sound on');
     // A call-back from the film page with no visit tied to them is not "watched 0:00".
     assert.equal(
-      watchLine(watch({ visits: 0, bestSeconds: 0 })),
+      watchLine(watch({ visits: 0, bestSeconds: 0 }), true, 'film_callback'),
       'Was on the film page; no visit we can tie to them',
     );
-    // A lead added by hand need never have been on the page at all.
-    assert.equal(watchLine(watch({ visits: 0, bestSeconds: 0 }), true, 'manual'), 'Has not watched the film');
+    // Every other lead (since 29 Oct 2026 one wrote to us or was added by the team) has simply not watched.
+    for (const origin of ['whatsapp_reply', 'campaign', 'manual', 'share_link'] as const) {
+      assert.equal(watchLine(watch({ visits: 0, bestSeconds: 0 }), true, origin), 'Has not watched the film', origin);
+    }
+    assert.equal(watchLine(watch({ visits: 0, bestSeconds: 0 })), 'Has not watched the film');
     // Once they do watch, it reads like anybody else's.
     assert.equal(watchLine(watch(), true, 'manual'), 'Watched 12:30 of 26:29 · sound on');
+    assert.equal(watchLine(watch(), true, 'whatsapp_reply'), 'Watched 12:30 of 26:29 · sound on');
   });
 
   it('draws the bar from the best visit, never past the ends', () => {
@@ -912,6 +923,102 @@ describe('the page numbers', () => {
       steps.map((s) => [s.key, s.count]),
       [['watched', 40], ['contacted', 36], ['spoke', 12], ['registered', 4], ['clients', 2]],
     );
+    // The first step counts every lead that began in the window, not only those who watched.
+    assert.equal(steps[0]?.label, 'New leads');
+  });
+});
+
+describe('why a lead is due', () => {
+  const sign = (kind: LeadSignKind) => ({ at: new Date(0).toISOString(), kind });
+  it('words a new lead by what they did, not as coming back', () => {
+    assert.equal(dueReasonWords({ status: 'new', dueReason: 'they_came_back', lastSign: sign('replied') }), 'they wrote to us');
+    assert.equal(dueReasonWords({ status: 'new', dueReason: 'they_came_back', lastSign: sign('call_me') }), 'they tapped "Call me"');
+    assert.equal(dueReasonWords({ status: 'new', dueReason: 'they_came_back', lastSign: sign('callback') }), 'they asked for a call');
+    // Once somebody has been in touch, a new sign is them coming back.
+    assert.equal(dueReasonWords({ status: 'trying', dueReason: 'they_came_back', lastSign: sign('replied') }), 'they came back');
+    assert.equal(dueReasonWords({ status: 'new', dueReason: 'first_contact', lastSign: null }), 'first call');
+    assert.equal(dueReasonWords({ status: 'new', dueReason: null, lastSign: null }), null);
+  });
+});
+
+describe('Add as lead from WhatsApp', () => {
+  const row = (
+    over: Partial<{
+      person: string;
+      phone: string | null;
+      stopped: boolean;
+      onStopList: boolean;
+      lead: { id: string; ref: string } | null;
+    }> = {},
+  ) => ({
+    person: '919876543210',
+    phone: '919876543210',
+    ...over,
+  });
+
+  it('chooses what a Message results row offers: the lead, the button, or nothing', () => {
+    // Already a lead: the link, whatever else is true of the row.
+    assert.deepEqual(resultLeadAction(row({ lead: { id: 'a'.repeat(24), ref: 'L-0007' } })), {
+      kind: 'link',
+      id: 'a'.repeat(24),
+      ref: 'L-0007',
+    });
+    // A number and no lead: the button, with the inbox's id for the chat.
+    assert.deepEqual(resultLeadAction(row()), { kind: 'add', person: '919876543210' });
+    assert.deepEqual(resultLeadAction(row({ lead: null })), { kind: 'add', person: '919876543210' });
+    // Known only by a username: no number, so nothing to add.
+    assert.deepEqual(resultLeadAction(row({ person: 'user:abc', phone: null })), { kind: 'none' });
+    assert.deepEqual(resultLeadAction(row({ person: 'message:xyz', phone: null, lead: null })), { kind: 'none' });
+    // Said stop: a lead made now would only close as "asked to stop". A lead they already are still links.
+    assert.deepEqual(resultLeadAction(row({ stopped: true })), { kind: 'none' });
+    // On the stop list from another promotion (or by hand): this row says nothing, but still no button.
+    assert.deepEqual(resultLeadAction(row({ stopped: false, onStopList: true })), { kind: 'none' });
+    assert.deepEqual(resultLeadAction(row({ stopped: true, lead: { id: 'b'.repeat(24), ref: 'L-0009' } })), {
+      kind: 'link',
+      id: 'b'.repeat(24),
+      ref: 'L-0009',
+    });
+    // A number the server cannot make a lead of (foreign, landline): nothing, rather than a button that fails.
+    assert.deepEqual(resultLeadAction(row({ person: '447911123456', phone: '447911123456' })), { kind: 'none' });
+    assert.deepEqual(resultLeadAction(row({ person: '911123456789', phone: '911123456789' })), { kind: 'none' });
+  });
+
+  it('offers the inbox button only for a chat that is an Indian mobile, as the server reads one', () => {
+    assert.equal(canAddChatAsLead('919876543210'), true);
+    assert.equal(canAddChatAsLead('9876543210'), true);
+    assert.equal(canAddChatAsLead('916000000000'), true);
+    // Foreign numbers and landlines write to the public number too; the server refuses them.
+    assert.equal(canAddChatAsLead('447911123456'), false);
+    assert.equal(canAddChatAsLead('12025550123'), false);
+    assert.equal(canAddChatAsLead('911123456789'), false);
+    assert.equal(canAddChatAsLead('915123456789'), false);
+    assert.equal(canAddChatAsLead('user:abc'), false);
+    assert.equal(canAddChatAsLead('message:xyz'), false);
+    assert.equal(canAddChatAsLead('98765'), false);
+    assert.equal(canAddChatAsLead('9198765432101234'), false);
+    assert.equal(canAddChatAsLead('+919876543210'), false);
+    assert.equal(canAddChatAsLead(''), false);
+    assert.equal(canAddChatAsLead(null), false);
+    // What the page would send is what the server's schema takes.
+    assert.ok(leadFromWhatsAppSchema.safeParse({ person: '919876543210' }).success);
+    assert.ok(!leadFromWhatsAppSchema.safeParse({ person: 'user:abc' }).success);
+  });
+
+  it('says what was made, or that the number was already a lead', () => {
+    assert.equal(addedAsLeadText('L-0012', false), 'Added as lead L-0012. It is yours.');
+    assert.equal(addedAsLeadText('L-0012', true), 'This number is already lead L-0012.');
+    assert.equal(addedAsLeadText('L-0012', false, 'new'), 'Added as lead L-0012. It is yours.');
+    // Closed by the server the moment it was made: not "yours", and why.
+    assert.equal(
+      addedAsLeadText('L-0012', false, 'client'),
+      'Added as lead L-0012, but it closed at once: this number is already one of our outlets.',
+    );
+    assert.equal(
+      addedAsLeadText('L-0012', false, 'asked_to_stop'),
+      'Added as lead L-0012, but it closed at once: they asked us to stop.',
+    );
+    // An existing lead is just that, whatever its status.
+    assert.equal(addedAsLeadText('L-0012', true, 'client'), 'This number is already lead L-0012.');
   });
 });
 
@@ -1190,10 +1297,10 @@ describe('"How follow-ups work"', () => {
     }
     // The 4 hours are plain hours now, not "working hours": there is nothing to wait out.
     assert.doesNotMatch(text, /working hours/);
-    // The first call keeps to 11:00–19:00 (26 Oct 2026): the evening invites wait for the morning.
+    // The first call keeps to 11:00–19:00 (26 Oct 2026): a lead that comes in during the evening waits for the morning.
     assert.equal(
       rows[0]?.then,
-      '2 hours after we could first reach them, between 11:00 and 19:00. A lead from the evening invites is called at 11:00 the next morning',
+      '2 hours after we could first reach them, between 11:00 and 19:00. A lead that comes in during the evening is called at 11:00 the next morning',
     );
     assert.equal(
       rows.find((r) => r.when.startsWith('Nobody answered'))?.then,
@@ -1764,7 +1871,7 @@ describe('the drawer: the header, "They" and the film bar', () => {
     // Watching is not a way of asking, but it is still the newest thing they did, as the old row said.
     assert.deepEqual(
       theyDid({ signs: signs(), lastSign: watched, lastContact: contact(FRI(9, 0)) }, now),
-      { text: 'Watched the film again · 4 h ago', kind: 'watched', tone: 'info' },
+      { text: 'Watched the film · 4 h ago', kind: 'watched', tone: 'info' },
     );
     // Registering is something they did, but nobody is waiting on it: not amber either.
     const registered = { at: iso(FRI(13, 0)), kind: 'registered' as const };

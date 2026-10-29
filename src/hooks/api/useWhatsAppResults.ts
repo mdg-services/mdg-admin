@@ -4,6 +4,9 @@ import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { api } from '@/lib/api';
 import type { WhatsAppResults } from '@dk/shared';
 
+/** Every send's results, whichever one is open. */
+export const whatsAppResultsRoot = ['whatsapp', 'results'] as const;
+
 /**
  * What happened to the promotions we sent on WhatsApp, for one send or all of
  * them (`whatsapp/results.ts` on the server). Gated on `useIsSuperAdmin()` as

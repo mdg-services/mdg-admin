@@ -57,7 +57,8 @@ export interface NavItem {
  */
 export const NAV_ITEMS: NavItem[] = [
   // Leads sits above everything, by the owner's request (24 Oct 2026): everyone
-  // who started the full film, kept on one list until they say no, ask us to
+  // who wrote to us on WhatsApp, asked for a call or was added by the team,
+  // kept on one list until they say no, ask us to
   // stop or become a client, and chased by the system until one of those
   // happens. Every admin, because the follow-up is the whole team's work and a
   // lead nobody opens a page for goes cold. Carries the "to do" count

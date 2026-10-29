@@ -154,6 +154,31 @@ export const DUE_REASON_LABELS: Record<LeadDueReason, string> = {
   scheduled: 'a time the team chose',
 };
 
+/**
+ * What a brand-new lead did, for the end of its "Next:" line. Nobody "came back"
+ * when nobody has been in touch yet: since 29 Oct 2026 a lead begins by writing
+ * to us, so their first message would otherwise read as a return.
+ */
+const FIRST_SIGN_WORDS: Record<LeadSignKind, string> = {
+  watched: 'they watched the film',
+  replied: 'they wrote to us',
+  call_me: 'they tapped "Call me"',
+  callback: 'they asked for a call',
+  assistant: 'they left their number',
+  registered: 'they registered',
+};
+
+/** Why the next follow-up is due, as the end of a line; `DUE_REASON_LABELS` but for a new lead's first sign. */
+export function dueReasonWords(
+  row: Pick<LeadRow, 'status' | 'dueReason' | 'lastSign'>,
+): string | null {
+  if (!row.dueReason) return null;
+  if (row.dueReason === 'they_came_back' && row.status === 'new' && row.lastSign) {
+    return FIRST_SIGN_WORDS[row.lastSign.kind];
+  }
+  return DUE_REASON_LABELS[row.dueReason];
+}
+
 /** One line under the outcome picker: what choosing it does. */
 export const OUTCOME_HINTS: Record<LeadContactOutcome, string> = {
   interested: 'You spoke and they want to go ahead. The next follow-up comes the next day.',
@@ -396,8 +421,8 @@ export function suggestNextAt(
 export function followUpGuide(): { when: string; then: string }[] {
   const chain = (steps: readonly Step[]) => steps.map((s) => s.words).join(', then ');
   return [
-    // The first call keeps to 11:00–19:00 on the server (owner, 26 Oct 2026): the invites go out
-    // at about 19:00, and a lead who watches that night is called the next morning.
+    // The first call keeps to 11:00–19:00 on the server (owner, 26 Oct 2026): a lead who comes in
+    // during the evening is called the next morning.
     { when: 'A new lead, and nobody has called', then: FIRST_CALL_WORDS },
     { when: 'You spoke and they are interested', then: (AFTER_SPOKE.interested as Step).words },
     { when: 'You spoke and they are thinking it over', then: (AFTER_SPOKE.thinking as Step).words },
@@ -416,7 +441,64 @@ export const WINDOW_WORDS = 'at any hour, day or night';
 
 /** When a new lead's first call falls due, as "How follow-ups work" says it. */
 export const FIRST_CALL_WORDS =
-  '2 hours after we could first reach them, between 11:00 and 19:00. A lead from the evening invites is called at 11:00 the next morning';
+  '2 hours after we could first reach them, between 11:00 and 19:00. A lead that comes in during the evening is called at 11:00 the next morning';
+
+// ── Add as lead (from a WhatsApp campaign) ──────────────────────────────────
+
+/**
+ * What a Message results row offers next to a person: their lead when they
+ * are one, "Add as lead" when they have an Indian mobile to add, and nothing
+ * otherwise — a person known only by a username or by a number that cannot be a
+ * lead, and somebody who said stop (they would only be made a lead closed as
+ * "asked to stop").
+ */
+export type ResultLeadAction =
+  | { kind: 'link'; id: string; ref: string }
+  | { kind: 'add'; person: string }
+  | { kind: 'none' };
+
+export function resultLeadAction(p: {
+  person: string;
+  phone: string | null;
+  stopped?: boolean;
+  onStopList?: boolean;
+  lead?: { id: string; ref: string } | null;
+}): ResultLeadAction {
+  if (p.lead) return { kind: 'link', id: p.lead.id, ref: p.lead.ref };
+  // `stopped` is this row's promotion; `onStopList` is the person, whichever one they stopped.
+  if (p.stopped || p.onStopList) return { kind: 'none' };
+  if (canAddChatAsLead(p.phone)) return { kind: 'add', person: p.phone };
+  return { kind: 'none' };
+}
+
+/**
+ * Whether the inbox's id for a chat can become a lead: an Indian mobile, as the
+ * server reads one (`toWaId`: 91 then ten digits starting 6–9, or the ten
+ * digits alone). A chat known only as `user:…` or `message:…`, a foreign number
+ * and a landline are not.
+ */
+export function canAddChatAsLead(person: string | null | undefined): person is string {
+  return !!person && /^(91)?[6-9]\d{9}$/.test(person);
+}
+
+/**
+ * What the toast says once "Add as lead" has answered. A lead the server closed
+ * the moment it was made — the number is an outlet's, or on the stop list — is
+ * not "yours" to work, and the toast says why.
+ */
+export function addedAsLeadText(ref: string, existed: boolean, status?: LeadStatus): string {
+  if (existed) return `This number is already lead ${ref}.`;
+  if (status === 'client') {
+    return `Added as lead ${ref}, but it closed at once: this number is already one of our outlets.`;
+  }
+  if (status === 'asked_to_stop') {
+    return `Added as lead ${ref}, but it closed at once: they asked us to stop.`;
+  }
+  if (status && isClosed(status)) {
+    return `Added as lead ${ref}, but it closed at once (${LEAD_STATUS_LABELS[status]}).`;
+  }
+  return `Added as lead ${ref}. It is yours.`;
+}
 
 // ── Due, last contact, signs ────────────────────────────────────────────────
 
@@ -653,14 +735,17 @@ export function clockWords(seconds: number): string {
  * "Watched 12:30 of 26:29 · 2 visits · sound on": how far they got, and whether
  * they could hear it. `withVisits` false leaves the count out, for the Leads
  * table, whose next line ("2 visits · last watched 2 h ago") already says it.
- * `origin` tells a lead added by hand, who need never have seen the film, from
- * a call-back that was on the film page.
+ * `origin` tells a call-back that was on the film page from every other lead:
+ * since 29 Oct 2026 a lead is somebody who wrote to us or was added by the
+ * team, so one with no visit simply has not watched the film.
  */
 export function watchLine(w: LeadWatch, withVisits = true, origin?: LeadOrigin): string {
-  if (w.visits === 0 && origin === 'manual') return 'Has not watched the film';
   // A call-back from the film page with no link code: they were on the page, but
   // no visit can be tied to them, so there is nothing to measure.
-  if (w.visits === 0) return 'Was on the film page; no visit we can tie to them';
+  if (w.visits === 0 && origin === 'film_callback') {
+    return 'Was on the film page; no visit we can tie to them';
+  }
+  if (w.visits === 0) return 'Has not watched the film';
   const length = w.durationSeconds > 0 ? ` of ${clockWords(w.durationSeconds)}` : '';
   const parts = [
     w.completed ? 'Watched to the end' : `Watched ${clockWords(w.bestSeconds)}${length}`,
@@ -805,10 +890,14 @@ export interface FunnelStep {
   count: number;
 }
 
-/** Watched, contacted, spoke, registered, became clients: each counts leads that got at least that far. */
+/**
+ * New leads, contacted, spoke, registered, became clients: each counts leads that got at least that far.
+ * The first step is every lead that began in the window, however it began (the
+ * server keeps the key `watched` from when watching the film began a lead).
+ */
 export function funnelSteps(f: LeadFunnel): FunnelStep[] {
   return [
-    { key: 'watched', label: 'Watched', count: f.watched },
+    { key: 'watched', label: 'New leads', count: f.watched },
     { key: 'contacted', label: 'Contacted', count: f.contacted },
     { key: 'spoke', label: 'Spoke', count: f.spoke },
     { key: 'registered', label: 'Registered', count: f.registered },
@@ -880,7 +969,10 @@ export function doNowTone(
  * "follow up as planned", so a scheduled follow-up leaves the reason out.
  */
 export function nextFollowUpLine(
-  row: Pick<LeadRow, 'status' | 'nextDueAt' | 'dueReason' | 'closedAt' | 'closedByName'>,
+  row: Pick<
+    LeadRow,
+    'status' | 'nextDueAt' | 'dueReason' | 'lastSign' | 'closedAt' | 'closedByName'
+  >,
   now: number,
 ): string | null {
   if (isClosed(row.status)) return closedLine(row, now);
@@ -890,7 +982,7 @@ export function nextFollowUpLine(
   if (!row.nextDueAt) return due.text;
   const when = due.tone === 'neutral' ? `Next follow-up: ${due.text}` : due.text;
   const why =
-    row.dueReason && row.dueReason !== 'scheduled' ? ` · ${DUE_REASON_LABELS[row.dueReason]}` : '';
+    row.dueReason && row.dueReason !== 'scheduled' ? ` · ${dueReasonWords(row)}` : '';
   return `${when}${why}`;
 }
 
@@ -900,7 +992,10 @@ export function nextFollowUpLine(
  * them."), and a second line that is a part of it would only say it twice.
  */
 export function doNowDetail(
-  row: Pick<LeadRow, 'status' | 'nextDueAt' | 'dueReason' | 'closedAt' | 'closedByName'>,
+  row: Pick<
+    LeadRow,
+    'status' | 'nextDueAt' | 'dueReason' | 'lastSign' | 'closedAt' | 'closedByName'
+  >,
   nextStep: string,
   now: number,
 ): string | null {

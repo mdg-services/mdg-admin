@@ -537,8 +537,8 @@ export default function App() {
               </RequireSuperAdmin>
             }
           />
-          {/* Everyone who started the full film, and what to do about each one
-              (docs/specs/leads.md). Behind the `lead_new`, `lead_due` and
+          {/* Everyone who wrote to us on WhatsApp, asked for a call or was added by
+              the team, and what to do about each one (docs/specs/leads.md). Behind the `lead_new`, `lead_due` and
               `lead_cold` alerts, whose links open one lead (`/leads?lead=`).
               Every admin, as the API is (`requireRole('admin')`). Keep in step
               with navItems.ts. */}
