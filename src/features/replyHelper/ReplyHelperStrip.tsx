@@ -108,6 +108,7 @@ export function ReplyHelperStrip({ target, onUseDraft }: ReplyHelperStripProps) 
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [instruction, setInstruction] = React.useState('');
   const [askError, setAskError] = React.useState<string | null>(null);
+  const askingRef = React.useRef(false);
 
   const threadQ = useReplyHelperThread(target);
   const askM = useAskReplyHelper(target);
@@ -135,7 +136,10 @@ export function ReplyHelperStrip({ target, onUseDraft }: ReplyHelperStripProps) 
    */
   const send = React.useCallback(
     async (text: string): Promise<boolean> => {
-      if (pending !== null) return false;
+      // `pending` follows the request a render later; the ref closes that gap so a
+      // quick second tap cannot start a second paid ask.
+      if (pending !== null || askingRef.current) return false;
+      askingRef.current = true;
       setAskError(null);
       try {
         await askM.mutateAsync(text);
@@ -150,6 +154,8 @@ export function ReplyHelperStrip({ target, onUseDraft }: ReplyHelperStripProps) 
         if (!('status' in err) || err.status === 0 || (err.status ?? 0) >= 500)
           void threadQ.refetch();
         return false;
+      } finally {
+        askingRef.current = false;
       }
     },
     [askM, pending, threadQ, toast],
@@ -290,12 +296,15 @@ export function ReplyHelperStrip({ target, onUseDraft }: ReplyHelperStripProps) 
           )}
         </button>
         {/* One tap from the closed row: the admin need not open the panel or type
-          anything to get a reply. Hidden while one is being written. */}
-        {canSuggest ? (
+          anything to get a reply. It stays on the row, disabled and spinning, while
+          one is being written: a button that unmounted at the first tap let the
+          toggle slide under a double-click's second tap and close the panel. */}
+        {thread && !notConfigured ? (
           <Button
             size="sm"
             variant="secondary"
             tone="brand"
+            loading={pending !== null}
             onClick={suggestFromRow}
             leftIcon={<Wand2 width={16} height={16} strokeWidth={1.75} />}
             className="shrink-0"
