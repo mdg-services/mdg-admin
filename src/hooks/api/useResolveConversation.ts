@@ -7,9 +7,10 @@ import { conversationKey } from './useConversation';
 
 export interface ResolveConversationVars {
   conversationId: string;
-  serviceId: string;
+  /** All three are optional: with none, the chat closes and no history entry is written. */
+  serviceId?: string;
   serviceName?: string;
-  notes: string;
+  notes?: string;
 }
 
 export function useResolveConversation() {

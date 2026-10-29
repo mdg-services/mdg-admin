@@ -19,38 +19,27 @@ import type { ServicePluginCatalogEntry } from '@dk/shared';
 import { resolveConversationSchema } from '@dk/shared/schemas';
 
 export interface ResolveValues {
-  serviceId: string;
+  serviceId?: string;
   serviceName?: string;
-  notes: string;
+  notes?: string;
 }
 
 /*
- * Sentences for the three fields, in place of the schema's own messages.
+ * Sentences for the boxes, in place of the schema's own messages.
  *
- * The schema lives in the shared package (vendored four times), and its
- * defaults are zod's — "String must contain at least 1 character(s)" under
- * both boxes, which reads as a developer error rather than an instruction. The
- * error's `type` is zod's issue code, so a too-long entry still gets the
- * sentence that is actually true of it.
+ * Every field is optional now (an admin closing a chat that needed nothing done
+ * should not have to invent a service and a note), so the only thing left to
+ * say is that an entry is too long. The schema lives in the shared package
+ * (vendored four times), and zod's own wording reads as a developer error.
  */
 type FieldIssue = { type?: unknown } | undefined;
 
-function serviceIdMessage(e: FieldIssue): string | undefined {
-  return e ? 'Pick the service you provided.' : undefined;
-}
-
 function serviceNameMessage(e: FieldIssue): string | undefined {
-  if (!e) return undefined;
-  return e.type === 'too_big'
-    ? 'Keep the service name under 160 characters.'
-    : 'Name the service you provided.';
+  return e ? 'Keep the service name under 160 characters.' : undefined;
 }
 
 function notesMessage(e: FieldIssue): string | undefined {
-  if (!e) return undefined;
-  return e.type === 'too_big'
-    ? 'Keep the notes under 2,000 characters.'
-    : 'Say in a line what was done for the dealer.';
+  return e ? 'Keep the notes under 2,000 characters.' : undefined;
 }
 
 interface Props {
@@ -79,12 +68,9 @@ export function ResolveConversationDialog({
     formState: { errors },
   } = useForm<ResolveValues>({
     resolver: zodResolver(resolveConversationSchema),
-    // NO `serviceName: ''`. The schema's `serviceName` is optional but, when
-    // present, at least one character — and an empty default is present. The
-    // box is only on screen for "Other", so picking a catalog service and
-    // pressing Resolve failed validation on a field nobody could see: no
-    // request, no message, nothing. Left undefined, and unregistered when the
-    // box goes away (see `register` below), it is only checked when it is shown.
+    // NO `serviceName: ''`. The box is only on screen for "Other"; left
+    // undefined, and unregistered when the box goes away (see `register`
+    // below), it is only sent when it is shown.
     defaultValues: { serviceId: '', notes: '' },
   });
 
@@ -97,13 +83,19 @@ export function ResolveConversationDialog({
 
   const submit = handleSubmit(async (values) => {
     try {
+      // A blank box is left out rather than sent as "". The server reads both
+      // as "not given"; leaving it out keeps the request saying only what the
+      // admin actually filled in.
+      const serviceId = values.serviceId?.trim() || undefined;
+      const serviceName =
+        serviceId === 'other'
+          ? values.serviceName?.trim() || undefined
+          : services.find((s) => s.id === serviceId)?.name;
+      const notes = values.notes?.trim() || undefined;
       await onResolve({
-        serviceId: values.serviceId,
-        serviceName:
-          values.serviceId === 'other'
-            ? values.serviceName?.trim()
-            : services.find((s) => s.id === values.serviceId)?.name,
-        notes: values.notes,
+        ...(serviceId ? { serviceId } : {}),
+        ...(serviceName ? { serviceName } : {}),
+        ...(notes ? { notes } : {}),
       });
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to resolve');
@@ -122,7 +114,7 @@ export function ResolveConversationDialog({
           variant="icon"
         />
       }
-      description="Log the service you provided. This is recorded against the dealer's history."
+      description="Everything here is optional. A service or note you add is recorded against the dealer's history."
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -136,7 +128,7 @@ export function ResolveConversationDialog({
     >
       <form onSubmit={submit} className="grid gap-3" noValidate>
         <div>
-          <Label htmlFor="resolve-service" required>
+          <Label htmlFor="resolve-service">
             Service provided
           </Label>
           {servicesLoading ? (
@@ -144,12 +136,8 @@ export function ResolveConversationDialog({
               <Spinner size={14} /> Loading services…
             </div>
           ) : (
-            <Select
-              id="resolve-service"
-              invalid={!!errors.serviceId}
-              {...register('serviceId')}
-            >
-              <option value="">Select a service…</option>
+            <Select id="resolve-service" {...register('serviceId')}>
+              <option value="">None</option>
               {services.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -158,12 +146,11 @@ export function ResolveConversationDialog({
               <option value="other">Other (specify)</option>
             </Select>
           )}
-          <FieldError message={serviceIdMessage(errors.serviceId)} />
         </div>
 
         {isOther ? (
           <div>
-            <Label htmlFor="resolve-service-name" required>
+            <Label htmlFor="resolve-service-name">
               Service name
             </Label>
             <Input
@@ -179,7 +166,7 @@ export function ResolveConversationDialog({
         ) : null}
 
         <div>
-          <Label htmlFor="resolve-notes" required>
+          <Label htmlFor="resolve-notes">
             Notes
           </Label>
           <Textarea
