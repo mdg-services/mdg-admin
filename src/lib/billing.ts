@@ -193,8 +193,10 @@ export interface BillOutcome {
   whatsapp:
     | { state: 'sent'; text: string }
     | { state: 'by_hand'; text: string; message: string; waLink: string };
-  /** The payment link to copy, when there is one. */
+  /** The link to copy, when there is one. */
   link: string | null;
+  /** The link is the autopay approval (it pays this bill and every month after), not a one-time payment link. */
+  linkIsAutopay: boolean;
 }
 
 export function billOutcome(r: SendSetupBillResult): BillOutcome {
@@ -210,9 +212,10 @@ export function billOutcome(r: SendSetupBillResult): BillOutcome {
       : { state: 'off', text: 'Razorpay is not switched on, so there is no payment link or SMS.' };
   } else {
     const to = [r.link.sentTo.phone, r.link.sentTo.email].filter(Boolean);
+    const what = r.link.autopay ? 'the autopay approval link' : 'the payment link';
     sms =
       to.length > 0
-        ? { state: 'sent', text: `Razorpay sent the link to ${to.join(' and ')}.` }
+        ? { state: 'sent', text: `Razorpay sent ${what} to ${to.join(' and ')}.` }
         : { state: 'not_sent', text: r.linkError ?? 'The link was made but not sent to anyone.' };
   }
 
@@ -221,7 +224,13 @@ export function billOutcome(r: SendSetupBillResult): BillOutcome {
     ? { state: 'sent', text: 'The bill went to the owner on WhatsApp.' }
     : { state: 'by_hand', text: w.reason, message: w.text, waLink: w.waLink };
 
-  return { headline, sms, whatsapp, link: r.link?.url ?? null };
+  return {
+    headline,
+    sms,
+    whatsapp,
+    link: r.link?.url ?? null,
+    linkIsAutopay: r.link?.autopay === true,
+  };
 }
 
 /**

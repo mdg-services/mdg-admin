@@ -30,6 +30,7 @@ import {
   isDay,
   messageLangLabel,
   paiseToRupeesText,
+  parseRupees,
   ymdLabel,
 } from '@/lib/onboarding';
 import {
@@ -119,6 +120,8 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
   }, [dueDays, outlet.payment.dueOn, touched, today]);
 
   const problem = billProblem({ amountText: amount, dueOn }, today);
+  // What was typed, in paise: at the monthly price the bill goes as the autopay approval.
+  const typedPaise = parseRupees(amount);
   const amountBad = touched && amountProblem(amount) !== null;
   const dueBad = touched && (!isDay(dueOn) || dueOn < today);
   const again = outlet.payment.state === 'sent';
@@ -227,9 +230,11 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
           <Callout intent="warning">{FIRST_BILL_AUTOPAY_RESEND_WORDS}</Callout>
         ) : null}
         <p className="text-xs text-text-muted">
-          {config.data?.paymentsConfigured
-            ? 'This raises the bill as a payment, and Razorpay texts the owner a payment link. You then get the WhatsApp message to send (or it goes by itself once the template is approved).'
-            : 'Razorpay is not switched on, so there is no payment link. This raises the bill as a payment and gives you the WhatsApp message to send: add your UPI or bank details to it before you do.'}{' '}
+          {!config.data?.paymentsConfigured
+            ? 'Razorpay is not switched on, so there is no payment link. This raises the bill as a payment and gives you the WhatsApp message to send: add your UPI or bank details to it before you do.'
+            : price && typedPaise !== null && typedPaise !== price
+              ? `${formatPaise(typedPaise)} is not the monthly price (${formatPaise(price)}), and autopay only takes the monthly price, so this bill goes as a one-time payment link. Razorpay texts the owner the link; set up autopay once it is paid. You then get the WhatsApp message to send (or it goes by itself once the template is approved).`
+              : `This asks the owner to approve autopay. Razorpay texts them one approval link: approving it with their UPI PIN pays this ${price ? formatPaise(price) : 'bill'} now and then takes the same every month. There is no separate payment link, so they cannot pay twice. You then get the WhatsApp message to send (or it goes by itself once the template is approved).`}{' '}
           In the dealer&rsquo;s app they see only the amount and the due date, never how to pay.
         </p>
       </form>
@@ -274,7 +279,13 @@ function BillResultDialog({
       <div className="grid gap-3">
         <ForOutlet outlet={outlet} />
         <SmsLine out={out} />
-        {out.link ? <Copyable label="Payment link" value={out.link} mono /> : null}
+        {out.link ? (
+          <Copyable
+            label={out.linkIsAutopay ? 'Autopay approval link' : 'Payment link'}
+            value={out.link}
+            mono
+          />
+        ) : null}
         <WhatsAppPart
           out={out}
           message={message}
