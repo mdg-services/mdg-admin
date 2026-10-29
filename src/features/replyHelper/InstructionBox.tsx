@@ -1,9 +1,10 @@
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Wand2 } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Textarea } from '@/components/ui/Textarea';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { SUGGEST_LABEL } from '@/lib/replyHelper';
 import { REPLY_HELPER_INSTRUCTION_MAX } from '@dk/shared';
 
 /**
@@ -30,10 +31,13 @@ export function InstructionBox({
   busy,
   disabled,
   disabledWords,
+  onSuggest,
 }: {
   value: string;
   onChange: (next: string) => void;
   onAsk: () => void;
+  /** One tap, nothing typed: read the chat and draft what MDG should send next. */
+  onSuggest: () => void;
   /** A request is running for this person: the box is shut until it lands. */
   busy: boolean;
   /** The helper cannot be used at all here (not set up, thread not loaded). */
@@ -54,6 +58,25 @@ export function InstructionBox({
 
   return (
     <div className="grid gap-1.5 border-t border-border bg-surface px-3 py-2">
+      {/* The quick way: no instruction at all. It reads the chat and works out
+          what they are waiting for; the box below is for when the admin wants
+          something particular, or to rework the last drafts ("shorter"). */}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <Button
+          size="sm"
+          variant="secondary"
+          tone="brand"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onSuggest}
+          disabled={shut}
+          leftIcon={<Wand2 width={16} height={16} strokeWidth={1.75} />}
+        >
+          {SUGGEST_LABEL}
+        </Button>
+        <span className="min-w-0 text-xs text-text-subtle">
+          reads the chat and writes the reply — or say what you want below
+        </span>
+      </div>
       <div className="flex items-end gap-2">
         <Textarea
           value={value}

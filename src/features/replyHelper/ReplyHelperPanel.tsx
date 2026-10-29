@@ -46,6 +46,8 @@ export interface ReplyHelperPanelProps {
   instruction: string;
   onInstructionChange: (next: string) => void;
   onAsk: () => void;
+  /** "Suggest a reply": an ask with no instruction. */
+  onSuggest: () => void;
   onRetryTurn: (instruction: string) => void;
   onUse: (text: string) => void;
   onLoadEarlier: () => void;
@@ -68,6 +70,7 @@ export function ReplyHelperPanel({
   instruction,
   onInstructionChange,
   onAsk,
+  onSuggest,
   onRetryTurn,
   onUse,
   onLoadEarlier,
@@ -108,8 +111,12 @@ export function ReplyHelperPanel({
           ) : context ? (
             <>
               <div className="grid gap-0.5">
-                <p className="min-w-0 break-words text-sm font-medium text-text">{context.header}</p>
-                <p className="text-xs text-text-subtle">Drafts are written for: {context.readerWords}</p>
+                <p className="min-w-0 break-words text-sm font-medium text-text">
+                  {context.header}
+                </p>
+                <p className="text-xs text-text-subtle">
+                  Drafts are written for: {context.readerWords}
+                </p>
               </div>
 
               {context.notices.map((n) => (
@@ -143,8 +150,9 @@ export function ReplyHelperPanel({
 
               {turns.length === 0 && !busy ? (
                 <p className="text-sm text-text-muted">
-                  Say what the reply should do and it writes drafts you can read, change and put in
-                  the reply box. Nothing is sent until you press Send there.
+                  Tap Suggest a reply and it reads this chat and writes the reply — or say what the
+                  reply should do. You read, change and put a draft in the reply box; nothing is
+                  sent until you press Send there.
                 </p>
               ) : null}
 
@@ -181,11 +189,10 @@ export function ReplyHelperPanel({
         value={instruction}
         onChange={onInstructionChange}
         onAsk={onAsk}
+        onSuggest={onSuggest}
         busy={busy}
         disabled={!context || notConfigured}
-        disabledWords={
-          notConfigured ? 'The Reply helper is not set up on this server.' : undefined
-        }
+        disabledWords={notConfigured ? 'The Reply helper is not set up on this server.' : undefined}
       />
     </div>
   );

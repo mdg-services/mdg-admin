@@ -39,6 +39,10 @@ import {
   warningWordsFor,
   withEarlier,
   withTurn,
+  askLabel,
+  isSuggestion,
+  SUGGEST_INSTRUCTION,
+  SUGGEST_LABEL,
 } from '../src/lib/replyHelper';
 
 const warn = (kind: ReplyHelperWarning['kind'], severity: 'red' | 'amber', words = kind): ReplyHelperWarning => ({
@@ -414,5 +418,24 @@ describe('words on screen', () => {
     assert.match(askFailureWords({ status: 504 }), /check the thread before asking again/);
     assert.equal(askFailureWords({ status: 422, message: 'Too long' }), 'Too long');
     assert.match(askFailureWords(null), /could not answer/);
+  });
+});
+
+
+describe('Suggest a reply', () => {
+  it('is an ask with no instruction', () => {
+    assert.equal(SUGGEST_INSTRUCTION, '');
+    assert.equal(isSuggestion(SUGGEST_INSTRUCTION), true);
+    assert.equal(isSuggestion('   '), true);
+    assert.equal(isSuggestion('shorter'), false);
+  });
+
+  it('reads as "Suggest a reply" in the bubble, and a typed ask reads as typed', () => {
+    assert.equal(askLabel(''), SUGGEST_LABEL);
+    assert.equal(askLabel('polite Hinglish reply'), 'polite Hinglish reply');
+  });
+
+  it('a typed instruction of spaces is not sent as a typed ask (it would be a suggestion)', () => {
+    assert.equal(sanitiseInstruction('   ', 1000), '');
   });
 });

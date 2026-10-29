@@ -1,6 +1,7 @@
-import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, Sparkles, Wand2 } from 'lucide-react';
 import * as React from 'react';
 
+import { Button } from '@/components/ui/Button';
 import { Drawer } from '@/components/ui/Drawer';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
@@ -17,7 +18,9 @@ import { cn } from '@/lib/cn';
 import {
   DRAFT_PLACED_WORDS,
   DRAFT_SAVED_WORDS,
+  SUGGEST_INSTRUCTION,
   askFailureWords,
+  isSuggestion,
   LOAD_EARLIER_FAILED_WORDS,
   sanitiseInstruction,
 } from '@/lib/replyHelper';
@@ -130,10 +133,9 @@ export function ReplyHelperStrip({ target, onUseDraft }: ReplyHelperStripProps) 
    * words back in the box when it did not: an instruction that took a minute to
    * write is not lost to a network blip.
    */
-  const ask = React.useCallback(
-    async (raw: string): Promise<boolean> => {
-      const text = sanitiseInstruction(raw, REPLY_HELPER_INSTRUCTION_MAX);
-      if (!text || pending !== null) return false;
+  const send = React.useCallback(
+    async (text: string): Promise<boolean> => {
+      if (pending !== null) return false;
       setAskError(null);
       try {
         await askM.mutateAsync(text);
@@ -145,12 +147,40 @@ export function ReplyHelperStrip({ target, onUseDraft }: ReplyHelperStripProps) 
         toast.error(words);
         // A dropped connection may still have an answer coming on the server: read
         // the thread again so it shows up without a second, paid ask.
-        if (!('status' in err) || err.status === 0 || (err.status ?? 0) >= 500) void threadQ.refetch();
+        if (!('status' in err) || err.status === 0 || (err.status ?? 0) >= 500)
+          void threadQ.refetch();
         return false;
       }
     },
     [askM, pending, threadQ, toast],
   );
+
+  /** A typed instruction. Nothing typed is not an ask: that is Suggest a reply. */
+  const ask = React.useCallback(
+    (raw: string): Promise<boolean> => {
+      const text = sanitiseInstruction(raw, REPLY_HELPER_INSTRUCTION_MAX);
+      return text ? send(text) : Promise.resolve(false);
+    },
+    [send],
+  );
+
+  /** "Suggest a reply": no instruction; the server reads the chat. */
+  const suggest = React.useCallback(() => send(SUGGEST_INSTRUCTION), [send]);
+
+  const notConfigured = !!thread?.context.notices.some((n) => n.kind === 'not_configured');
+  const canSuggest = !!thread && !notConfigured && pending === null;
+
+  /** From the collapsed row: open the panel so the drafts land in view, and start. */
+  function suggestFromRow() {
+    if (!canSuggest) return;
+    if (isMd) {
+      setTrayOpen(true);
+      writeOpen(true);
+    } else {
+      setSheetOpen(true);
+    }
+    void suggest();
+  }
 
   function submit() {
     const text = instruction;
@@ -203,7 +233,8 @@ export function ReplyHelperStrip({ target, onUseDraft }: ReplyHelperStripProps) 
       instruction={instruction}
       onInstructionChange={setInstruction}
       onAsk={submit}
-      onRetryTurn={(text) => void ask(text)}
+      onSuggest={() => void suggest()}
+      onRetryTurn={(text) => void (isSuggestion(text) ? suggest() : ask(text))}
       onUse={useDraft}
       onLoadEarlier={loadEarlier}
       loadingEarlier={earlierM.isPending}
@@ -222,31 +253,60 @@ export function ReplyHelperStrip({ target, onUseDraft }: ReplyHelperStripProps) 
         whatsapp ? 'border-[var(--line-border)] bg-[var(--wa-footer)]' : 'border-border bg-surface',
       )}
     >
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={open}
-        className="flex min-h-11 w-full min-w-0 items-center gap-2 px-3 py-2 text-left"
-      >
-        <Sparkles width={14} height={14} strokeWidth={1.75} className="shrink-0 text-text-muted" />
-        <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-text-subtle">
-          Reply helper
-        </span>
-        <span className="min-w-0 flex-1 truncate text-sm text-text-muted">
-          {pending !== null ? 'Writing…' : (thread?.context.header ?? '')}
-        </span>
-        {pending !== null ? <Spinner size={14} className="shrink-0 text-text-muted" /> : null}
-        {open ? (
-          <ChevronDown width={16} height={16} strokeWidth={1.75} className="shrink-0 text-text-muted" />
-        ) : (
-          <ChevronRight width={16} height={16} strokeWidth={1.75} className="shrink-0 text-text-muted" />
-        )}
-      </button>
+      <div className="flex min-w-0 items-center gap-1 pr-2">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 py-2 pl-3 text-left"
+        >
+          <Sparkles
+            width={14}
+            height={14}
+            strokeWidth={1.75}
+            className="shrink-0 text-text-muted"
+          />
+          <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-text-subtle">
+            Reply helper
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm text-text-muted">
+            {pending !== null ? 'Writing…' : (thread?.context.header ?? '')}
+          </span>
+          {pending !== null ? <Spinner size={14} className="shrink-0 text-text-muted" /> : null}
+          {open ? (
+            <ChevronDown
+              width={16}
+              height={16}
+              strokeWidth={1.75}
+              className="shrink-0 text-text-muted"
+            />
+          ) : (
+            <ChevronRight
+              width={16}
+              height={16}
+              strokeWidth={1.75}
+              className="shrink-0 text-text-muted"
+            />
+          )}
+        </button>
+        {/* One tap from the closed row: the admin need not open the panel or type
+          anything to get a reply. Hidden while one is being written. */}
+        {canSuggest ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            tone="brand"
+            onClick={suggestFromRow}
+            leftIcon={<Wand2 width={16} height={16} strokeWidth={1.75} />}
+            className="shrink-0"
+          >
+            Suggest reply
+          </Button>
+        ) : null}
+      </div>
 
       {isMd && trayOpen ? (
-        <div className="border-t border-border bg-surface">
-          {panel('max-h-[min(55vh,520px)]')}
-        </div>
+        <div className="border-t border-border bg-surface">{panel('max-h-[min(55vh,520px)]')}</div>
       ) : null}
 
       {/* Below md: the same body in a bottom sheet. `bodyPadding="none"` so the

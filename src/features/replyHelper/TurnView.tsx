@@ -1,6 +1,8 @@
+import { Sparkles } from 'lucide-react';
+
 import { Callout } from '@/components/ui/Callout';
 import { Spinner } from '@/components/ui/Spinner';
-import { askedByLabel, turnWhen } from '@/lib/replyHelper';
+import { askLabel, askedByLabel, isSuggestion, turnWhen } from '@/lib/replyHelper';
 import type { ReplyHelperChannel, ReplyHelperTurn } from '@dk/shared';
 
 import { DraftCard } from './DraftCard';
@@ -30,12 +32,19 @@ export function AskBubble({
 }) {
   return (
     <div className="ml-auto grid max-w-[88%] justify-items-end gap-0.5">
-      <p className="min-w-0 whitespace-pre-wrap break-words rounded-lg rounded-br-sm bg-brand-soft px-3 py-2 text-sm text-text">
-        {instruction}
+      <p className="flex min-w-0 items-center gap-1.5 whitespace-pre-wrap break-words rounded-lg rounded-br-sm bg-brand-soft px-3 py-2 text-sm text-text">
+        {isSuggestion(instruction) ? (
+          <Sparkles
+            width={14}
+            height={14}
+            strokeWidth={1.75}
+            className="shrink-0 text-brand"
+            aria-hidden
+          />
+        ) : null}
+        {askLabel(instruction)}
       </p>
-      <p className="text-xs text-text-subtle">
-        {[who, when, where].filter(Boolean).join(' · ')}
-      </p>
+      <p className="text-xs text-text-subtle">{[who, when, where].filter(Boolean).join(' · ')}</p>
     </div>
   );
 }
@@ -98,9 +107,10 @@ export function TurnView({
           ) : null}
           {openChannel === 'app' && turn.channel === 'whatsapp' && reply.drafts.length > 0 ? (
             <p className="rounded-md border border-border bg-surface-2 p-2.5 text-sm text-text-muted">
-              {reply.drafts.length === 1 ? 'This draft was' : 'These drafts were'} written for WhatsApp, so{' '}
-              {reply.drafts.length === 1 ? 'it is' : 'they are'} not shown here: a WhatsApp draft can carry the
-              payment link, which never goes in the app chat. Ask again here for an app-chat version.
+              {reply.drafts.length === 1 ? 'This draft was' : 'These drafts were'} written for
+              WhatsApp, so {reply.drafts.length === 1 ? 'it is' : 'they are'} not shown here: a
+              WhatsApp draft can carry the payment link, which never goes in the app chat. Ask again
+              here for an app-chat version.
             </p>
           ) : (
             reply.drafts.map((d, i) => (

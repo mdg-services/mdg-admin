@@ -58,6 +58,25 @@ export function targetQuery(target: ReplyHelperTarget): Record<string, string> {
  * lone half of a surrogate pair is a character the server's own validation
  * would refuse, and the admin would get an error for a sentence that looked fine.
  */
+/**
+ * "Suggest a reply": an ask with NO instruction. The server reads the chat, works
+ * out what the person is waiting for and drafts what MDG should send next, in
+ * their language (ADR 0025). Sent and stored as an empty instruction, so the
+ * thread, the history and a Retry all carry it the same way as a typed ask.
+ */
+export const SUGGEST_INSTRUCTION = '';
+export const SUGGEST_LABEL = 'Suggest a reply';
+
+/** Is this ask a one-tap suggestion rather than a typed instruction? */
+export function isSuggestion(instruction: string): boolean {
+  return instruction.trim() === '';
+}
+
+/** What the admin's bubble says for an ask: their words, or "Suggest a reply". */
+export function askLabel(instruction: string): string {
+  return isSuggestion(instruction) ? SUGGEST_LABEL : instruction;
+}
+
 export function sanitiseInstruction(raw: string, max: number): string {
   let text = raw.replace(/\r\n?/g, '\n').trim();
   if (text.length > max) {
@@ -185,10 +204,18 @@ export function draftSegments(
     let end = Math.min(text.length, Math.ceil(h.end));
     if (end <= start) continue;
     // An edge inside a surrogate pair moves OUT, so the mark takes the whole emoji.
-    if (start > 0 && isLowSurrogate(text.charCodeAt(start)) && isHighSurrogate(text.charCodeAt(start - 1))) {
+    if (
+      start > 0 &&
+      isLowSurrogate(text.charCodeAt(start)) &&
+      isHighSurrogate(text.charCodeAt(start - 1))
+    ) {
       start -= 1;
     }
-    if (end < text.length && isLowSurrogate(text.charCodeAt(end)) && isHighSurrogate(text.charCodeAt(end - 1))) {
+    if (
+      end < text.length &&
+      isLowSurrogate(text.charCodeAt(end)) &&
+      isHighSurrogate(text.charCodeAt(end - 1))
+    ) {
       end += 1;
     }
     ranges.push({ start, end, kind: h.kind });
@@ -259,7 +286,10 @@ export function mergeTurns(
  *
  * `hasMore` follows whichever page reaches furthest back.
  */
-export function mergeThread(prev: ReplyHelperThread | undefined, fresh: ReplyHelperThread): ReplyHelperThread {
+export function mergeThread(
+  prev: ReplyHelperThread | undefined,
+  fresh: ReplyHelperThread,
+): ReplyHelperThread {
   if (!prev || prev.context.login?.userId !== fresh.context.login?.userId) return fresh;
   const turns = mergeTurns(prev.turns, fresh.turns);
   const prevOldest = prev.turns[0];
@@ -297,7 +327,10 @@ export function withTurn(
 }
 
 /** Older turns put in front of the held thread. */
-export function withEarlier(prev: ReplyHelperThread, earlier: ReplyHelperThread): ReplyHelperThread {
+export function withEarlier(
+  prev: ReplyHelperThread,
+  earlier: ReplyHelperThread,
+): ReplyHelperThread {
   // Older turns of a different login's thread are not this thread's history.
   if (prev.context.login?.userId !== earlier.context.login?.userId) return earlier;
   return {
@@ -328,7 +361,20 @@ export function turnWhen(iso: string, now: Date = new Date()): string {
   const days = Math.round((dayStart(now) - dayStart(at)) / 86_400_000);
   if (days === 0) return clock;
   if (days === 1) return `Yesterday ${clock}`;
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
   return `${at.getDate()} ${months[at.getMonth()]}, ${clock}`;
 }
 
@@ -339,8 +385,11 @@ export function turnWhen(iso: string, now: Date = new Date()): string {
  * `REPLY_HELPER_BUSY` is the server refusing a second request for one person
  * while the first still runs: nothing was lost and nothing was paid for twice.
  */
-export function askFailureWords(err: { status?: number; code?: string; message?: string } | null | undefined): string {
-  if (err?.code === 'REPLY_HELPER_BUSY') return 'Already writing a reply for this person — wait for it.';
+export function askFailureWords(
+  err: { status?: number; code?: string; message?: string } | null | undefined,
+): string {
+  if (err?.code === 'REPLY_HELPER_BUSY')
+    return 'Already writing a reply for this person — wait for it.';
   if (err?.status === 0 || err?.code === 'NETWORK_ERROR') {
     // The server may still be writing it, and a second ask pays twice.
     return 'The connection dropped. The answer may still arrive — check the thread before asking again.';
@@ -348,9 +397,11 @@ export function askFailureWords(err: { status?: number; code?: string; message?:
   if (err?.status === 502 || err?.status === 504) {
     return 'The answer took too long to come back. It may still arrive — check the thread before asking again.';
   }
-  if (err?.status === 401 || err?.status === 403) return 'You are not allowed to use the Reply helper here.';
+  if (err?.status === 401 || err?.status === 403)
+    return 'You are not allowed to use the Reply helper here.';
   if (err?.status === 404) return 'This chat could not be found any more.';
-  if (err?.status && err.status >= 500) return 'The Reply helper had a problem on the server. Ask again in a moment.';
+  if (err?.status && err.status >= 500)
+    return 'The Reply helper had a problem on the server. Ask again in a moment.';
   return err?.message?.trim() || 'The Reply helper could not answer. Ask again in a moment.';
 }
 
