@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
+import { ReplyHelperStrip } from '@/features/replyHelper/ReplyHelperStrip';
 import {
   findCachedChat,
   useMarkWhatsAppRead,
@@ -28,6 +29,7 @@ import type {
 
 import { RenameDialog, StageDialog } from './ChatDialogs';
 import { ChatHeader } from './ChatHeader';
+import { insertIntoComposer } from './composerInsert';
 import {
   chatTitle,
   detailIsOnLine,
@@ -494,6 +496,21 @@ export function ChatPane({
         ref={bottomRef}
         className="shrink-0 border-t border-[var(--line-border)] bg-[var(--wa-footer)] pb-[env(safe-area-inset-bottom)]"
       >
+        {/* The Reply helper sits above whatever the footer shows, and is mounted
+            whether or not the box is: the box is absent in six states (loading,
+            sending off, blocked…) and a draft is still worth reading then. "Use
+            this" writes to the chat's saved draft, so a box that opens later
+            shows it. This component is already keyed on the chat, so the
+            helper's typed instruction and its "writing" state never follow the
+            admin to another person. */}
+        <ReplyHelperStrip
+          // The chat's own key (the inbox AND the person), not just the person
+          // `ChatPane` is keyed on: the same person on the other number is a
+          // different chat with its own box, and must not inherit what was typed.
+          key={`${line}:${person}`}
+          target={{ channel: 'whatsapp', line, person }}
+          onUseDraft={(text) => insertIntoComposer(line, person, text)}
+        />
         {configFailed && !config ? (
           <ComposerNotice
             icon={<TriangleAlert width={18} height={18} strokeWidth={1.75} />}

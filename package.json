@@ -24,6 +24,7 @@
     "check:chat-videos": "npx tsx --test scripts/chatGuideVideos.check.ts",
     "check:chat-transcript": "npx tsx --test scripts/chatTranscript.check.ts",
     "check:nav-order": "npx tsx --test scripts/navOrder.check.ts",
+    "check:reply-helper": "npx tsx --test scripts/replyHelper.check.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""

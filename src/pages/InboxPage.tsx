@@ -66,6 +66,7 @@ import { SendGuideVideoDialog } from '@/features/chat/SendGuideVideoDialog';
 import { TicketStrip } from '@/features/chat/TicketStrip';
 import { useConversationSocket } from '@/features/chat/useConversationSocket';
 import { useInboxSocket } from '@/features/chat/useInboxSocket';
+import { ReplyHelperStrip } from '@/features/replyHelper/ReplyHelperStrip';
 import {
   useClearAiGuard,
   useConversationAiTurnsQuery,
@@ -750,6 +751,25 @@ export function InboxPage() {
       });
     },
     [selectedId],
+  );
+  /**
+   * A draft from the Reply helper (ADR 0025), through the SAME request the AI
+   * strip uses — and so under the same guard: the render below hands it to the
+   * box only while `composerInsert.conversationId` is the open conversation.
+   * The id comes from the strip's own conversation, not from `selectedId`, so a
+   * draft is always the one asked about the chat it was made for; it appends to
+   * the box and never sends.
+   */
+  const handleUseReplyDraft = React.useCallback(
+    (conversationId: string, text: string) => {
+      insertSeq.current += 1;
+      setComposerInsert({
+        text,
+        id: String(insertSeq.current),
+        conversationId,
+      });
+    },
+    [],
   );
 
   // Never carry reply/dialog state across threads. The pending composer insert
@@ -1837,6 +1857,20 @@ export function InboxPage() {
                     conversationId={conversation.id}
                     onUseAnswer={handleUseAiAnswer}
                     now={now}
+                  />
+                  {/* The Reply helper: drafts for the admin to read, never a
+                      message. Keyed on the thread so a half-written
+                      instruction and the "writing" state never follow the
+                      admin to another dealer. A resolved chat has a shut box,
+                      so a draft is refused there rather than lost in it. */}
+                  <ReplyHelperStrip
+                    key={`reply-helper:${conversation.id}`}
+                    target={{ channel: 'app', conversationId: conversation.id }}
+                    onUseDraft={(text) => {
+                      if (conversation.status === 'RESOLVED') return 'closed';
+                      handleUseReplyDraft(conversation.id, text);
+                      return 'box';
+                    }}
                   />
                 </div>
                 <Composer

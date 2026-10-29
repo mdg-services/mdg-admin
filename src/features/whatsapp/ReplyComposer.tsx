@@ -5,6 +5,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { useWhatsAppQuickReplies } from '@/hooks/api/useWhatsAppInbox';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
+import { appendToBox } from '@/lib/replyHelper';
 import {
   renderSimpleTemplate,
   type WhatsAppChatDetail,
@@ -14,6 +15,7 @@ import {
   type WhatsAppQuickReply,
 } from '@dk/shared';
 
+import { currentInsertSeq, useComposerInsert, useComposerPresence } from './composerInsert';
 import { getDraft, setDraft } from './drafts';
 import {
   LINK_ROUTE_LINE,
@@ -131,6 +133,33 @@ export function ReplyComposer({
   const ready = typed.length > 0 && !plan.tooLong && link.state !== 'bad' && !linkStopped;
   const repeat = repeatWarning(value, mode);
   const canSend = ready && repeat === null;
+
+  // ── words pushed in from outside: the Reply helper's "Use this" ──
+  // Registered as open, so the helper can say truthfully that its draft went
+  // into a box the admin can see. The sequence number starts from where the chat
+  // already is: an insert made while this box was not mounted is in the saved
+  // draft it started from, and applying it again would put it in twice.
+  useComposerPresence(line, person);
+  const insertRequest = useComposerInsert(line, person);
+  const appliedInsert = React.useRef(currentInsertSeq(line, person));
+  React.useEffect(() => {
+    if (insertRequest.seq <= appliedInsert.current) return;
+    appliedInsert.current = insertRequest.seq;
+    // APPEND, never replace: the admin may be halfway through their own reply.
+    // Through `change`, so it is saved as a draft like anything typed here.
+    change(appendToBox(value, insertRequest.text));
+    const ta = taRef.current;
+    if (ta) {
+      ta.focus();
+      // After the value has painted, or the caret lands at the old end.
+      window.setTimeout(() => {
+        ta.selectionStart = ta.value.length;
+        ta.selectionEnd = ta.value.length;
+      }, 0);
+    }
+    // Only a new request runs this; `value` is read as of that render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insertRequest.seq]);
 
   // ── the box grows with what is typed, up to a few lines ──
   React.useEffect(() => {
