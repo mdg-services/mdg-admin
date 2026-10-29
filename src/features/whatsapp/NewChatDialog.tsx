@@ -21,6 +21,7 @@ import {
   OUT_OF_DATE_WORDS,
   planSend,
   readLink,
+  repeatWarning,
   sendButtonLabel,
   serverSendsFrom,
 } from './format';
@@ -64,6 +65,10 @@ export interface NewChatDialogProps {
  * approved. With one, the message goes in the link template: the same words,
  * and a button that opens the link through our own address, so each tap is
  * counted on the Message results page.
+ *
+ * Words with their own greeting or sign-off stop Send, as in the chat's box:
+ * the template already has both, so a warning offers to take them out, or to
+ * send anyway.
  */
 export function NewChatDialog({ line, open, onClose, config, onStarted }: NewChatDialogProps) {
   const start = useNewWhatsAppChat();
@@ -107,10 +112,11 @@ export function NewChatDialog({ line, open, onClose, config, onStarted }: NewCha
     !sendingOff &&
     !outOfDate &&
     link.state !== 'bad';
+  const repeat = config ? repeatWarning(text, 'template') : null;
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!ready || start.isPending) return;
+  /** `keepRepeats` only from "Send anyway": past the warning, on purpose. */
+  async function submit(keepRepeats: boolean) {
+    if (!ready || start.isPending || (repeat !== null && !keepRepeats)) return;
     setError(null);
     const clientId = (clientIdRef.current ??= newClientId());
     // Where the chat will be, for an unsure answer: the number as the server
@@ -124,6 +130,7 @@ export function NewChatDialog({ line, open, onClose, config, onStarted }: NewCha
         text: text.trim(),
         clientId,
         ...(link.state === 'ok' ? { link: link.target } : {}),
+        ...(keepRepeats ? { keepRepeats: true } : {}),
       });
       onStarted(result.person);
       onClose();
@@ -157,7 +164,7 @@ export function NewChatDialog({ line, open, onClose, config, onStarted }: NewCha
             type="submit"
             form={`${id}-form`}
             data-line={line}
-            disabled={!ready || start.isPending}
+            disabled={!ready || repeat !== null || start.isPending}
             aria-label={sendButtonLabel(line)}
             // The number's colour, not the app's: the button says whose number this leaves from.
             className="wa-line inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[var(--line)] px-4 text-sm font-semibold text-white transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 disabled:opacity-45 md:min-h-9"
@@ -172,7 +179,14 @@ export function NewChatDialog({ line, open, onClose, config, onStarted }: NewCha
         </>
       }
     >
-      <form id={`${id}-form`} onSubmit={(e) => void submit(e)} className="space-y-4">
+      <form
+        id={`${id}-form`}
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit(false);
+        }}
+        className="space-y-4"
+      >
         <div>
           <FromStrip line={line} />
           <p className="mt-1 px-1 text-xs text-text-muted">{NEW_CHAT_WRONG_NUMBER}</p>
@@ -245,6 +259,33 @@ export function NewChatDialog({ line, open, onClose, config, onStarted }: NewCha
             <p className={cn('mt-1 text-right text-xs tabular-nums', plan.tooLong ? 'font-medium text-danger-strong' : 'text-text-subtle')}>
               {plan.used.toLocaleString('en-IN')} / {plan.limit.toLocaleString('en-IN')}
             </p>
+          ) : null}
+          {repeat ? (
+            <div role="alert" className="mt-2">
+              <Callout intent="warning">{repeat.text}</Callout>
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                {repeat.fixed !== null ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setText(repeat.fixed ?? '');
+                      clientIdRef.current = null;
+                    }}
+                  >
+                    {repeat.removeLabel}
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={!ready || start.isPending}
+                  onClick={() => void submit(true)}
+                >
+                  Send anyway
+                </Button>
+              </div>
+            </div>
           ) : null}
         </div>
 

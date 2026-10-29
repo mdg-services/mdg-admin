@@ -15,8 +15,10 @@ import {
   isWhatsAppLine,
   renderLinkTemplate,
   renderSimpleTemplate,
+  templateRepeats,
   toLinkTarget,
   toTemplateParam,
+  withoutTemplateRepeats,
   WHATSAPP_CHAT_FILTERS,
   WHATSAPP_DEFAULT_LINE,
   WHATSAPP_LINE_INFO,
@@ -689,6 +691,59 @@ export function planSend(
   };
 }
 
+/**
+ * The warning over the box when words that go in the template open with a
+ * greeting or close with a sign-off of their own. The template already has
+ * both, so the person would get two: on 29 Oct 2026 a lead got "Namaste,"
+ * twice and "Thank you, Team MDG Services" twice. Null for an ordinary
+ * message, and for words without either.
+ */
+export interface RepeatWarning {
+  text: string;
+  /** The words of the button that takes them out. */
+  removeLabel: string;
+  /** The words without them; null when nothing would be left ("Namaste ji 🙏"). */
+  fixed: string | null;
+}
+
+/** A greeting or sign-off as the warning quotes it: no trailing comma, and short. */
+function quoteTyped(words: string): string {
+  const bare = words.replace(/[\s,.!?।:;~&\-–—]+$/u, '');
+  return bare.length > 40 ? `${bare.slice(0, 39)}…` : bare;
+}
+
+export function repeatWarning(text: string, mode: 'text' | 'template'): RepeatWarning | null {
+  const typed = text.trim();
+  if (mode !== 'template' || !typed) return null;
+  const { greeting, closing } = templateRepeats(typed);
+  if (!greeting && !closing) return null;
+  // Both templates share these words; the simple one's are the ones to quote.
+  const theirs = {
+    greeting: `“${WHATSAPP_SIMPLE_TEMPLATE.greeting}”`,
+    closing: `“${WHATSAPP_SIMPLE_TEMPLATE.closing.replace(/\s*\n\s*/g, ' ')}”`,
+  };
+  const fixed = withoutTemplateRepeats(typed) || null;
+  if (greeting && closing) {
+    return {
+      text: `Your message starts with “${quoteTyped(greeting)}” and ends with “${quoteTyped(closing)}”. The template already adds ${theirs.greeting} and ${theirs.closing}, so they would get both twice.`,
+      removeLabel: 'Remove both',
+      fixed,
+    };
+  }
+  if (greeting) {
+    return {
+      text: `Your message starts with “${quoteTyped(greeting)}”. The template already starts with ${theirs.greeting}, so they would be greeted twice.`,
+      removeLabel: `Remove “${quoteTyped(greeting)}”`,
+      fixed,
+    };
+  }
+  return {
+    text: `Your message ends with “${quoteTyped(closing!)}”. The template already ends with ${theirs.closing}, so they would get two sign-offs.`,
+    removeLabel: 'Remove the sign-off',
+    fixed,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Ticks, failures and what a send says when it goes wrong
 // ─────────────────────────────────────────────────────────────────────────
@@ -873,6 +928,8 @@ export interface PendingMessage {
   mode: 'text' | 'template';
   /** The link it carries, as typed; null without one. With one it is always the link template. */
   link: string | null;
+  /** The admin was warned about the words' own greeting or sign-off and chose to send them as typed. */
+  keepRepeats?: boolean;
   at: string;
   status: 'sending' | 'failed' | 'unknown';
   /** Plain reason, once it failed. */

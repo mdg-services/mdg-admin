@@ -293,7 +293,7 @@ export function ChatPane({
   const [replyTo, setReplyTo] = React.useState<WhatsAppChatMessage | null>(null);
   const [bottomToken, setBottomToken] = React.useState(0);
 
-  const send = (text: string, link: string | null) => {
+  const send = (text: string, link: string | null, keepRepeats: boolean) => {
     if (!detail || !linesAgree) return;
     // Worked out now, not from the minute-old clock: the waiting bubble should
     // look like what the server will send, and a window can close mid-sentence.
@@ -307,6 +307,7 @@ export function ChatPane({
       mode: sendMode,
       replyTo: quoted ? { id: quoted.id, direction: quoted.direction, text: quoted.text, kind: quoted.kind } : null,
       link,
+      keepRepeats,
     });
     setReplyTo(null);
     setBottomToken((n) => n + 1);

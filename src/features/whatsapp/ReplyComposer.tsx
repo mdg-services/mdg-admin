@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, FileText, Link2, MessageCircle, SendHorizontal, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, FileText, Link2, MessageCircle, SendHorizontal, X } from 'lucide-react';
 import * as React from 'react';
 
 import { IconButton } from '@/components/ui/IconButton';
@@ -27,6 +27,7 @@ import {
   planSend,
   quoteWords,
   readLink,
+  repeatWarning,
   sendButtonLabel,
 } from './format';
 import { FromStrip } from './LineMark';
@@ -47,8 +48,12 @@ export interface ReplyComposerProps {
   replyTo: WhatsAppChatMessage | null;
   contactName: string;
   onCancelReply: () => void;
-  /** `link` is the checked address for the button, or null for a message without one. */
-  onSend: (text: string, link: string | null) => void;
+  /**
+   * `link` is the checked address for the button, or null for a message
+   * without one. `keepRepeats`: the admin was warned that the words have their
+   * own greeting or sign-off and chose "Send anyway".
+   */
+  onSend: (text: string, link: string | null, keepRepeats: boolean) => void;
   now: number;
 }
 
@@ -77,6 +82,12 @@ export interface ReplyComposerProps {
  * button that opens the link through our own address, so each tap is counted
  * on the Message results page. The link is not part of the draft — it is
  * cleared when the message goes or the chat changes.
+ *
+ * Words that go in a template and open with their own greeting ("Namaste,") or
+ * close with their own sign-off ("Thank you, Team MDG Services") stop Send: a
+ * warning over the box says the person would get them twice, with one button
+ * that takes them out and one that sends anyway. Collapsed under Preview, the
+ * doubled message went unseen.
  */
 export function ReplyComposer({
   line,
@@ -117,7 +128,9 @@ export function ReplyComposer({
   const typed = value.trim();
   // On the stop list, a template cannot go: the words can still go as an ordinary answer, the link cannot.
   const linkStopped = linked && detail.chat.optedOut;
-  const canSend = typed.length > 0 && !plan.tooLong && link.state !== 'bad' && !linkStopped;
+  const ready = typed.length > 0 && !plan.tooLong && link.state !== 'bad' && !linkStopped;
+  const repeat = repeatWarning(value, mode);
+  const canSend = ready && repeat === null;
 
   // ── the box grows with what is typed, up to a few lines ──
   React.useEffect(() => {
@@ -167,15 +180,22 @@ export function ReplyComposer({
     }
   }
 
-  function submit() {
-    if (!canSend) return;
-    onSend(typed, link.state === 'ok' ? link.target : null);
+  /** `keepRepeats` only from "Send anyway": past the warning, on purpose. */
+  function submit(keepRepeats = false) {
+    if (!ready || (repeat !== null && !keepRepeats)) return;
+    onSend(typed, link.state === 'ok' ? link.target : null, keepRepeats);
     setValue('');
     setDraft(line, person, '');
     setPreviewOpen(false);
     setPickerDismissed(false);
     setLinkOpen(false);
     setLinkValue('');
+  }
+
+  function removeRepeats() {
+    if (!repeat?.fixed) return;
+    change(repeat.fixed);
+    taRef.current?.focus({ preventScroll: true });
   }
 
   function toggleLink() {
@@ -409,6 +429,37 @@ export function ReplyComposer({
         </div>
       ) : null}
 
+      {repeat ? (
+        <div role="alert" className="mx-2 mt-2 rounded-lg border border-warning bg-warning-soft px-3 py-2 md:mx-3">
+          <p className="flex items-start gap-1.5 text-xs text-warning-strong">
+            <AlertTriangle width={14} height={14} strokeWidth={1.75} className="mt-px shrink-0" aria-hidden />
+            <span className="min-w-0 [overflow-wrap:anywhere]">{repeat.text}</span>
+          </p>
+          <div className="-mb-1 mt-0.5 flex flex-wrap items-center gap-x-1 pl-4">
+            {repeat.fixed !== null ? (
+              <button
+                type="button"
+                // The box keeps focus, and a phone keeps its keyboard up.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={removeRepeats}
+                className="inline-flex min-h-11 items-center rounded-md px-2 text-sm font-semibold text-[var(--wa-link)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:min-h-8"
+              >
+                {repeat.removeLabel}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={!ready}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => submit(true)}
+              className="inline-flex min-h-11 items-center rounded-md px-2 text-sm font-medium text-[var(--wa-meta)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-45 md:min-h-8"
+            >
+              Send anyway
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex items-end gap-2 px-2 pb-2 pt-1.5 md:px-3">
         {linkTemplate ? (
           <button
@@ -456,7 +507,7 @@ export function ReplyComposer({
           disabled={!canSend}
           // Keeps the keyboard up on a phone: a press on the button must not take focus from the box.
           onMouseDown={(e) => e.preventDefault()}
-          onClick={submit}
+          onClick={() => submit()}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--line)] text-white transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-45"
         >
           <SendHorizontal width={20} height={20} strokeWidth={2} aria-hidden />

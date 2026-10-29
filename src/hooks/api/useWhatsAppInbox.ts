@@ -298,6 +298,8 @@ export interface SendArgs {
   replyTo: PendingMessage['replyTo'];
   /** An address for the button, as typed; null without one. With one it goes in the link template. */
   link?: string | null;
+  /** The admin was warned about the words' own greeting or sign-off and chose to keep them. */
+  keepRepeats?: boolean;
 }
 
 /**
@@ -324,6 +326,7 @@ async function deliver(qc: QueryClient, p: PendingMessage): Promise<void> {
       clientId: p.clientId,
       replyTo: p.mode === 'text' && !p.link ? (p.replyTo?.id ?? null) : null,
       ...(p.link ? { link: p.link } : {}),
+      ...(p.keepRepeats ? { keepRepeats: true } : {}),
     });
     // The pending bubble is not removed here. The thread drops it the moment the
     // server's copy (same clientId) is in the list, so there is no frame in
@@ -385,6 +388,7 @@ export function useSendWhatsApp(): WhatsAppSender {
         // A link always goes in its template, whatever the window says.
         mode: args.link ? 'template' : args.mode,
         link: args.link ?? null,
+        ...(args.keepRepeats ? { keepRepeats: true } : {}),
         at: new Date().toISOString(),
         status: 'sending',
         error: null,
@@ -422,6 +426,7 @@ export function useSendWhatsApp(): WhatsAppSender {
             mode: next,
             replyTo: current.replyTo,
             link: current.link,
+            keepRepeats: current.keepRepeats === true,
           },
           newClientId(),
         );
