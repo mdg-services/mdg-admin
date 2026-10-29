@@ -21,6 +21,7 @@ import {
   PartyPopper,
   PhoneCall,
   Plug,
+  Repeat,
   ScanLine,
   ScrollText,
   ShieldAlert,
@@ -137,6 +138,12 @@ export const NAV_ITEMS: NavItem[] = [
   // `requireRole('admin')` and raising a payment is everyday account work. Not
   // in `BOTTOM_TAB_ROUTES`, so on a phone it falls into the More sheet.
   { to: '/payments', label: 'Payments', icon: IndianRupee },
+  // Every outlet's autopay in one list: what is on, what waits for the owner to
+  // approve, what is failing, whose owner asked for the first month back, and what
+  // ended. The per-outlet buttons stay on its Info tab. Deliberately NOT
+  // `superAdminOnly` (the API is `requireRole('admin')`), and not in
+  // `BOTTOM_TAB_ROUTES`, so on a phone it falls into the More sheet.
+  { to: '/autopay', label: 'Autopay', icon: Repeat },
   // Every dealer's collected IRAS shift data in one place — an everyday admin
   // surface, so deliberately NOT `superAdminOnly`.
   { to: '/data-vault', label: 'Data Vault', icon: Database },

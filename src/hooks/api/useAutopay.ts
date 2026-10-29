@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { api } from '@/lib/api';
 import type {
   AdminAutopay,
+  AdminAutopayListRow,
   AdminAutopayOverview,
   SendSetupBillResult,
   StartAutopayResult,
@@ -21,6 +22,20 @@ import { paymentsRoot } from './usePayments';
 export const autopayRoot = ['autopay'] as const;
 export const autopayOverviewKey = (dealerId: string | undefined) =>
   ['autopay', 'overview', dealerId] as const;
+
+/**
+ * Every outlet's autopay on one list (`GET /admin/autopay`): the state, the amount,
+ * the next debit, how far each is paid, and the ones waiting or refund-asked.
+ * Any admin. It hangs off the same prefix as the rest, so a change to any autopay
+ * refreshes it; a minute's staleness is fine for a list nobody watches live.
+ */
+export function useAutopayList() {
+  return useQuery({
+    queryKey: [...autopayRoot, 'list'] as const,
+    queryFn: () => api.get<AdminAutopayListRow[]>('/admin/autopay'),
+    staleTime: 30_000,
+  });
+}
 
 /**
  * One outlet's autopay on its Setup card (`GET /admin/autopay/dealers/:dealerId`):

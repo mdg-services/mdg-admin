@@ -216,6 +216,37 @@ describe('the status line', () => {
     ]);
   });
 
+  it('waiting for approval with a special first month: both amounts in one line, never "First debit" alone', () => {
+    assert.deepEqual(
+      statusFacts(
+        { ...base, state: 'setting_up', firstDebitOn: '2026-11-30', upfrontPaise: 100 },
+        TODAY,
+      ),
+      ['₹1 at approval, then ₹3,540 from 30 Nov'],
+    );
+    assert.deepEqual(statusFacts({ ...base, state: 'setting_up', upfrontPaise: 100 }, TODAY), [
+      '₹1 at approval, then ₹3,540 a month',
+    ]);
+    // No special first month: as before.
+    assert.deepEqual(
+      statusFacts(
+        { ...base, state: 'setting_up', firstDebitOn: '2026-11-24', upfrontPaise: null },
+        TODAY,
+      ),
+      ['₹3,540 a month', 'First debit 24 Nov'],
+    );
+  });
+
+  it('running after a special first month: the usual facts', () => {
+    assert.deepEqual(
+      statusFacts(
+        { ...base, state: 'on', nextDebitOn: '2026-11-30', chargedCount: 1, upfrontPaise: 100 },
+        TODAY,
+      ),
+      ['₹3,540 a month', 'Next debit 30 Nov', 'Taken 1 month'],
+    );
+  });
+
   it('off: the amount, and the months only if any were taken', () => {
     assert.deepEqual(statusFacts({ ...base, state: 'off' }, TODAY), ['₹3,540 a month']);
     assert.deepEqual(statusFacts({ ...base, state: 'off', chargedCount: 4 }, TODAY), [

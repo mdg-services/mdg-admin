@@ -149,9 +149,19 @@ export function perMonth(paise: number): string {
  * will be), then how many months have been taken so far.
  */
 export function statusFacts(
-  a: Pick<AdminAutopay, 'state' | 'amountPaise' | 'firstDebitOn' | 'nextDebitOn' | 'chargedCount'>,
+  a: Pick<AdminAutopay, 'state' | 'amountPaise' | 'firstDebitOn' | 'nextDebitOn' | 'chargedCount'> &
+    Partial<Pick<AdminAutopay, 'upfrontPaise'>>,
   today: string,
 ): string[] {
+  // A special first month taken at approval: one line says both amounts, so "First debit
+  // 30 Nov" never stands alone as if the owner paid nothing until then.
+  if (a.state === 'setting_up' && typeof a.upfrontPaise === 'number') {
+    return [
+      a.firstDebitOn
+        ? `${formatPaise(a.upfrontPaise)} at approval, then ${formatPaise(a.amountPaise)} from ${shortDay(a.firstDebitOn, today)}`
+        : `${formatPaise(a.upfrontPaise)} at approval, then ${perMonth(a.amountPaise)}`,
+    ];
+  }
   const facts = [perMonth(a.amountPaise)];
   if (a.state === 'setting_up') {
     facts.push(

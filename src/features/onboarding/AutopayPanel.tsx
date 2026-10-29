@@ -42,6 +42,7 @@ import {
   refundAskedLine,
   setUpAutopayAction,
 } from '@/lib/billingRelease';
+import { upfrontLine } from '@/lib/billingRelease2';
 import { copyText } from '@/lib/clipboard';
 import { istTodayYmd } from '@/lib/format';
 import { istStamp } from '@/lib/intake';
@@ -307,6 +308,9 @@ function CurrentBlock({
 }) {
   const hint = stateHint(current.state);
   const sentTo = current.state === 'setting_up' ? sentToLine(current.sentTo) : null;
+  // A special first month taken at approval: "₹1 first month, then ₹3,540 from 30 Nov".
+  // While the approval waits the status line above already says it ("₹1 at approval, then ...").
+  const upfront = current.state === 'setting_up' ? null : upfrontLine(current, today);
   // When the link stops working: said while it waits, so nobody is left guessing how long it has.
   const expiry = current.state === 'setting_up' ? approvalExpiryLine(current.approvalExpiresAt, Date.now()) : null;
   return (
@@ -314,6 +318,7 @@ function CurrentBlock({
       <p className="select-text text-sm text-text [overflow-wrap:anywhere]">
         {statusFacts(current, today).join(' · ')}
       </p>
+      {upfront ? <p className="select-text text-sm font-medium text-text">{upfront}</p> : null}
 
       {current.state === 'failing' && hint ? <Callout intent="warning">{hint}</Callout> : null}
       {current.state === 'setting_up' && hint ? (

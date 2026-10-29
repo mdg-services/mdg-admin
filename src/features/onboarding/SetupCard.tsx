@@ -1,7 +1,9 @@
 import { Check, Circle } from 'lucide-react';
+import * as React from 'react';
 
 import {
   Badge,
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -10,7 +12,9 @@ import {
   KeyValueList,
   HowThisWorks,
 } from '@/components/ui';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { showsBillingStatus } from '@/lib/billingRelease';
+import { billingEndedLine, canBillAgain } from '@/lib/billingRelease2';
 import { istTodayYmd } from '@/lib/format';
 import { istStamp } from '@/lib/intake';
 import {
@@ -29,7 +33,9 @@ import { GST_STATES, type OutletSetupAdmin } from '@dk/shared';
 
 import { AutopayPanel } from './AutopayPanel';
 import { BillingBlock } from './BillingBlock';
+import { BillingHistory } from './BillingHistory';
 import { billingItems } from './billingItems';
+import { RestartBillingDialog } from './RestartBillingDialog';
 import { SetupFollowUp } from './SetupFollowUp';
 import { SetupWatch } from './SetupWatch';
 import { StageActions } from './StageActions';
@@ -56,6 +62,12 @@ export function SetupCard({
   onGoToTab?: (tab: DealerTabId) => void;
 }) {
   const waiting = waitingLabel(setup.waitingOn);
+  const isSuperAdmin = useIsSuperAdmin();
+  const [restarting, setRestarting] = React.useState(false);
+  // Billing ended after a first-month refund: a super-admin can start it again.
+  // Every admin reads the sentence; only a super-admin gets the button.
+  const endedLine = billingEndedLine(setup, istTodayYmd());
+  const billAgain = canBillAgain(setup, isSuperAdmin);
   const milestones = milestoneRows(setup.milestones, now, setup.doneBy, setup.company);
   return (
     <Card>
@@ -80,6 +92,16 @@ export function SetupCard({
         <SetupWatch setup={setup} now={now} />
         {/* ── billing ── one line on where the money stands, what was sent, and the day-moving buttons */}
         {showsBillingStatus(setup.stage, setup.payment.state) ? <BillingBlock setup={setup} /> : null}
+        {endedLine ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="select-text text-sm text-text-muted">{endedLine}</p>
+            {billAgain ? (
+              <Button size="sm" variant="secondary" onClick={() => setRestarting(true)}>
+                Bill this outlet again…
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
 
         <KeyValueList
           className="select-text"
@@ -142,6 +164,9 @@ export function SetupCard({
         {/* ── autopay ── beside the bill it pays: on or off, what it takes and when, and the call after a stop */}
         <AutopayPanel dealerId={setup.dealerId} code={setup.code} />
 
+        {/* ── billing history ── every bill, send, payment, day moved, autopay step and refund, newest first */}
+        {setup.milestones.billSentAt ? <BillingHistory dealerId={setup.dealerId} /> : null}
+
         <ol aria-label="Milestones" className="grid gap-1.5 border-t border-border pt-3">
           {milestones.map((m) => (
             <li key={m.key} className="flex items-start gap-2 text-sm">
@@ -175,6 +200,7 @@ export function SetupCard({
           ))}
         </ol>
       </CardContent>
+      <RestartBillingDialog outlet={restarting ? setup : null} onClose={() => setRestarting(false)} />
     </Card>
   );
 }

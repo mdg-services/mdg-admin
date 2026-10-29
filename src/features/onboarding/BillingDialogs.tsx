@@ -18,14 +18,26 @@ import { useAutopayOverview } from '@/hooks/api/useAutopay';
 import { usePauseBilling, useSendBill } from '@/hooks/api/useBilling';
 import { useOnboardingConfigQuery } from '@/hooks/api/useOnboarding';
 import { usePaymentQuery } from '@/hooks/api/usePayments';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { FIRST_BILL_AUTOPAY_RESEND_WORDS, firstBillAutopayWaiting } from '@/lib/autopay';
 import { billOutcome, waLinkWithText, type BillOutcome } from '@/lib/billing';
-import { repeatSendWarning, sendBillAction, sendHistoryLine } from '@/lib/billingRelease';
+import { repeatSendWarning, sendHistoryLine } from '@/lib/billingRelease';
+import {
+  LOWER_FIRST_MONTH_REASON_MAX,
+  approvalOutUpfront,
+  lowerFirstMonthBlock,
+  lowerFirstMonthNeeded,
+  lowerFirstMonthReasonProblem,
+  sendBillActionWithUpfront,
+  sendBillBody,
+  sendBillWords,
+  upfrontIsOn,
+  upfrontPlan,
+} from '@/lib/billingRelease2';
 import { copyText } from '@/lib/clipboard';
 import { istTodayYmd } from '@/lib/format';
 import {
   amountProblem,
-  billBody,
   billProblem,
   chosenMessageLang,
   defaultDueOn,
@@ -101,6 +113,8 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
   const bill = usePaymentQuery(outlet.payment.paymentId);
   const amountId = React.useId();
   const dueId = React.useId();
+  const reasonId = React.useId();
+  const isSuperAdmin = useIsSuperAdmin();
   const billed = outlet.payment.amountPaise;
   const [amount, setAmount] = React.useState(() => paiseToRupeesText(billed));
   const [typed, setTyped] = React.useState(false);
@@ -108,6 +122,8 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
     () => outlet.payment.dueOn ?? defaultDueOn(istTodayYmd()),
   );
   const [touched, setTouched] = React.useState(false);
+  // Why the first month is lower than the monthly price (asked only when it is).
+  const [reason, setReason] = React.useState('');
   const [result, setResult] = React.useState<SendSetupBillResult | null>(null);
   // A third send in one day asks once more, on its own step, before it goes.
   const [step, setStep] = React.useState<'form' | 'confirm'>('form');
@@ -135,17 +151,47 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
   const again = outlet.payment.state === 'sent';
   const sends = bill.data?.sends ?? null;
   const repeat = again && sends ? repeatSendWarning(sends, Date.now()) : null;
-  const action = sendBillAction({
-    paymentsOn: !!config.data?.paymentsConfigured,
+  const approvalOut = firstBillAutopayWaiting(autopay.data?.current);
+  const paymentsOn = !!config.data?.paymentsConfigured;
+  const firstBillAutopay = config.data?.firstBillAutopay ?? true;
+  const upfront = upfrontPlan({
+    paymentsOn,
+    firstBillAutopay,
+    switchedOn: upfrontIsOn(config.data, outlet.code),
+    amountPaise: typedPaise,
+    monthlyPricePaise: price ?? null,
+    approvalOut,
+    today,
+  });
+  // A first month below the monthly price needs a reason and a super-admin when it is a new
+  // bill or a change of amount, and when Send bill is about to start an upfront approval (even
+  // for the bill already out). Not for sending the open bill again unchanged, or moving only
+  // its due day, when no new upfront approval would start. The server has the last word.
+  const needsReason = lowerFirstMonthNeeded({
+    amountPaise: typedPaise,
+    monthlyPricePaise: price ?? null,
+    billedPaise: billed,
+    billOpen: again,
+    upfrontStarts: upfront !== null,
+  });
+  const blocked = lowerFirstMonthBlock({
+    needed: needsReason,
+    monthlyPricePaise: price ?? null,
+    isSuperAdmin,
+  });
+  const reasonProblem = lowerFirstMonthReasonProblem({ needed: needsReason, reason });
+  const action = sendBillActionWithUpfront({
+    paymentsOn,
     amountPaise: typedPaise,
     monthlyPricePaise: price ?? null,
     billedPaise: billed,
     billedDueOn: outlet.payment.dueOn,
     dueOn,
     billOpen: again,
-    approvalOut: firstBillAutopayWaiting(autopay.data?.current),
+    approvalOut,
     firstEver: !outlet.milestones.billSentAt,
-    firstBillAutopay: config.data?.firstBillAutopay ?? true,
+    firstBillAutopay,
+    upfront,
   });
   // The same bill going out again (nothing new raised) is the send that can repeat; a new or changed bill is not.
   const isResend = action.resend;
@@ -153,7 +199,7 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
   async function submit() {
     if (send.isPending) return;
     setTouched(true);
-    if (problem) return;
+    if (problem || blocked || reasonProblem) return;
     if (repeat && isResend && step === 'form') {
       setStep('confirm');
       return;
@@ -162,10 +208,12 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
       const r = await send.mutateAsync({
         dealerId: outlet.dealerId,
         // The language that is on screen, as the person saw it.
-        body: billBody({
+        body: sendBillBody({
           amountText: amount,
           dueOn,
           messageLang: chosenMessageLang(pickedLang, outlet.messageLang),
+          reason,
+          reasonNeeded: needsReason,
         }),
       });
       setResult(r);
@@ -219,7 +267,11 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => void submit()} loading={send.isPending}>
+          <Button
+            onClick={() => void submit()}
+            loading={send.isPending}
+            disabled={blocked !== null}
+          >
             {again ? 'Send again' : 'Send bill'}
           </Button>
         </>
@@ -271,6 +323,28 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
           </div>
         </div>
         <FieldError message={touched ? (problem ?? undefined) : undefined} />
+        {/* A lower first month: why, and only a super-admin may. The server checks both. */}
+        {needsReason ? (
+          <div className="grid gap-2">
+            {blocked ? <Callout intent="warning">{blocked}</Callout> : null}
+            <div>
+              <Label htmlFor={reasonId} required>
+                Why a lower first month?
+              </Label>
+              <Textarea
+                id={reasonId}
+                rows={2}
+                value={reason}
+                maxLength={LOWER_FIRST_MONTH_REASON_MAX + 50}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="For example: the owner agreed to try it for ₹1 on the phone, 30 Oct."
+                invalid={touched && !!reasonProblem}
+                disabled={blocked !== null}
+              />
+              <FieldError message={touched ? (reasonProblem ?? undefined) : undefined} />
+            </div>
+          </div>
+        ) : null}
         <MessageLangField
           picked={pickedLang}
           fallback={outlet.messageLang}
@@ -289,12 +363,14 @@ function SendBillForm({ outlet, onClose }: { outlet: OutletSetupAdmin; onClose: 
           <Callout intent="warning">{FIRST_BILL_AUTOPAY_RESEND_WORDS}</Callout>
         ) : null}
         <p className="text-xs text-text-muted">
-          {!config.data?.paymentsConfigured
-            ? 'Razorpay is not switched on, so there is no payment link. This raises the bill as a payment and gives you the WhatsApp message to send: add your UPI or bank details to it before you do.'
-            : price && typedPaise !== null && typedPaise !== price
-              ? `${formatPaise(typedPaise)} is not the monthly price (${formatPaise(price)}), and autopay only takes the monthly price, so this bill goes as a one-time payment link. Razorpay texts the owner the link; set up autopay once it is paid. You then get the WhatsApp message to send (or it goes by itself once the template is approved).`
-              : `This asks the owner to approve autopay: approving it pays this ${price ? formatPaise(price) : 'bill'} now and then takes the same every month. There is no separate payment link, so they cannot pay twice. You then get the WhatsApp message to send (or it goes by itself once the template is approved).`}{' '}
-          In the dealer&rsquo;s app they see only the amount and the due date, never how to pay.
+          {sendBillWords({
+            paymentsOn,
+            monthlyPricePaise: price ?? null,
+            amountPaise: typedPaise,
+            upfront,
+            approvalOut,
+            approvalOutUpfront: approvalOut ? approvalOutUpfront(autopay.data?.current) : null,
+          })}
         </p>
         <DealerReceivesBox action={action} />
       </form>

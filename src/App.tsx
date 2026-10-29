@@ -223,6 +223,13 @@ const PaymentsPage = React.lazy(
     })),
   ),
 );
+const AutopayPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/payments/AutopayPage').then((m) => ({
+      default: m.AutopayPage,
+    })),
+  ),
+);
 const OverviewPage = React.lazy(
   retryImport(() =>
     import('@/pages/OverviewPage').then((m) => ({ default: m.OverviewPage })),
@@ -419,6 +426,18 @@ export default function App() {
             element={
               <LazyPage>
                 <PaymentsPage />
+              </LazyPage>
+            }
+          />
+          {/* Every outlet's autopay on one list (ADR 0022 §13.3), the way /payments
+              lists every bill. Every admin, as the API is (`requireRole('admin')`):
+              the buttons are on each outlet's Info tab and keep their own rules.
+              Keep in step with navItems.ts. */}
+          <Route
+            path="autopay"
+            element={
+              <LazyPage>
+                <AutopayPage />
               </LazyPage>
             }
           />
