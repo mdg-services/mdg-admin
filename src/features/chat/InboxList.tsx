@@ -1,30 +1,28 @@
 import {
   AlertTriangle,
   Check,
-  CheckCircle2,
-  ChevronDown,
   CornerUpRight,
   Flag,
   ShieldAlert,
   Ticket,
   Users,
-  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import * as React from 'react';
 
 import { Badge } from '@/components/ui/Badge';
-import { Menu, MenuItem } from '@/components/ui/Menu';
 import { Skeleton } from '@/components/ui/Skeleton';
-import type { InboxFilter } from '@/hooks/api/useConversations';
+import { chipClass } from '@/features/inbox/chips';
+import { TICKET_CHIPS, type TicketChip } from '@/features/inbox/desk';
 import { cn } from '@/lib/cn';
 import type { Intent } from '@/lib/statusIntent';
 import { aiInboxChip, dealerCodeLabel, ticketFlagLevel } from '@dk/shared';
-import type { AiInboxChip, Conversation, TicketPriority } from '@dk/shared';
+import type { AiInboxChip, Conversation, InboxTab } from '@dk/shared';
 
 /*
- * The conversation list's parts: the view switcher at its top and one row per
- * conversation. The page owns which view is open and which row is selected.
+ * The conversation list's parts: the two tabs at its top and one row per
+ * conversation. The page owns which tab is open and which row is selected; the
+ * rows of the Tickets tab are `features/inbox/TicketRows`.
  */
 
 export function roleLabel(role?: Conversation['memberRole']): string {
@@ -69,25 +67,6 @@ function initials(name: string): string {
 /** Devanagari text is marked Hindi, so the browser picks the right shaping and line height. */
 export function langOf(text: string | undefined | null): 'hi' | undefined {
   return text && /[ऀ-ॿ]/.test(text) ? 'hi' : undefined;
-}
-
-const PRIORITY_INTENT: Record<TicketPriority, Intent> = {
-  urgent: 'danger',
-  high: 'warning',
-  normal: 'neutral',
-  low: 'info',
-};
-
-export const PRIORITY_LABEL: Record<TicketPriority, string> = {
-  urgent: 'Urgent',
-  high: 'High',
-  normal: 'Normal',
-  low: 'Low',
-};
-
-function PriorityPill({ priority }: { priority?: TicketPriority }) {
-  if (!priority || priority === 'normal') return null;
-  return <Badge intent={PRIORITY_INTENT[priority]}>{PRIORITY_LABEL[priority]}</Badge>;
 }
 
 /**
@@ -154,13 +133,13 @@ function AiRowChip({ conversation }: { conversation: Conversation }) {
 /**
  * "This thread has an open ticket": a glyph and a count in words. Not the
  * Waiting flag — that one is a clock on a reply and answering clears it, where
- * this one is cleared only by resolving the ticket.
+ * this one is cleared only by closing the ticket.
  */
 function TicketRowChip({ conversation }: { conversation: Conversation }) {
   const n = conversation.openTicketCount ?? 0;
   if (n <= 0) return null;
   return (
-    <Badge intent="warning" title="An open ticket on this thread. Only resolving it closes it.">
+    <Badge intent="warning" title="An open ticket on this thread. Only closing it ends it.">
       <span className="inline-flex items-center gap-1">
         <Ticket width={11} height={11} strokeWidth={2} aria-hidden />
         {n === 1 ? 'Ticket' : `${n} tickets`}
@@ -173,9 +152,9 @@ function TicketRowChip({ conversation }: { conversation: Conversation }) {
  * One conversation in the list.
  *
  * THREE LINES, EACH WITH ONE JOB: who (name, role, when), what (the outlet and
- * the dealer's own last words), and state (priority, waiting, ticket, AI) on a
- * line of its own only when there is any. The state chips used to share the
- * preview's line, and three chips left the preview "₹8,…".
+ * the dealer's own last words), and state (waiting, ticket, AI) on a line of its
+ * own only when there is any. The state chips used to share the preview's line,
+ * and three chips left the preview "₹8,…".
  *
  * The outlet code rides on the row instead of a sticky header above each
  * outlet's rows: on a busy list half the lines were those headers.
@@ -197,7 +176,6 @@ export const ConversationRow = React.memo(function ConversationRow({
   const group = c.kind === 'manager';
   const preview = c.lastMessagePreview || 'No messages yet';
   const hasChips =
-    (c.priority && c.priority !== 'normal') ||
     c.flagged ||
     ticketFlagLevel(c.awaitingReplySince, now) !== 'none' ||
     (c.openTicketCount ?? 0) > 0 ||
@@ -265,7 +243,6 @@ export const ConversationRow = React.memo(function ConversationRow({
         </span>
         {hasChips ? (
           <span className="mt-1.5 flex flex-wrap items-center gap-1">
-            <PriorityPill priority={c.priority} />
             <TicketFlagBadge conversation={c} now={now} />
             <TicketRowChip conversation={c} />
             <AiRowChip conversation={c} />
@@ -293,58 +270,57 @@ export function ConversationListSkeleton() {
   );
 }
 
-const MORE_ICON: Partial<Record<InboxFilter, LucideIcon>> = {
-  resolved: CheckCircle2,
-  flagged: Flag,
-  tickets: Ticket,
-  ai: Zap,
-  'ai-guard': ShieldAlert,
-};
-
-/** Views whose count is a call to act: a number on "More" when any is non-zero. */
-const ALARM_VIEWS: InboxFilter[] = ['tickets', 'flagged', 'ai-guard'];
-
 /**
- * The list's views: the three the team lives in as a segmented control under
- * the list's heading, and the other five behind "More" beside the heading
- * (`MoreViewsMenu`). They used to be a 224px column of their own beside the
- * list, which at a laptop's width was most of what the open chat lost.
+ * The list's two tabs, as a segmented control under its heading: Tickets (the
+ * work — what needs a person) and All chats (every conversation, to find one by
+ * who it is). They were eight views over three statuses, behind a "More" menu;
+ * with Pick up, Take over and the chat's own Resolve gone there is nothing left
+ * to partition by.
+ *
+ * The number on Tickets is the ones that need a person right now — New, Waiting
+ * or Late — the same number as the Inbox badge in the nav. The shield on All
+ * chats is the AI guard's count, in the warning colour, and only while that tab
+ * is not the one open: the guard is a security observation that no ticket
+ * carries, and with the lenses' menu gone this is the one place the list says
+ * so from the default tab. `children` is the chips row under the tabs, which
+ * belongs to the same block so the two read as one control.
  */
-export function InboxViews({
-  views,
-  primary,
+export function InboxTabs({
   value,
-  counts,
+  needsUs,
+  guard,
   onChange,
+  children,
 }: {
-  views: Array<{ key: InboxFilter; label: string }>;
-  /** The views shown as segments, in order. */
-  primary: InboxFilter[];
-  value: InboxFilter;
-  counts: Partial<Record<InboxFilter, number | undefined>>;
-  onChange: (next: InboxFilter) => void;
+  value: InboxTab;
+  needsUs: number | undefined;
+  guard: number | undefined;
+  onChange: (next: InboxTab) => void;
+  children?: React.ReactNode;
 }) {
-  const label = (k: InboxFilter) => views.find((v) => v.key === k)?.label ?? k;
+  const tabs: Array<{ key: InboxTab; label: string; count?: number; guard?: number }> = [
+    { key: 'tickets', label: 'Tickets', count: needsUs },
+    { key: 'chats', label: 'All chats', guard },
+  ];
   return (
     <div className="border-b border-border px-3 pb-2.5">
       {/* A filter, not a set of tabs over panels: plain toggle buttons. */}
-      <div role="group" aria-label="Inbox views" className="flex gap-0.5 rounded-lg bg-surface-2 p-0.5">
-        {primary.map((k) => {
-          const active = value === k;
-          const count = counts[k];
+      <div role="group" aria-label="Which list" className="flex gap-0.5 rounded-lg bg-surface-2 p-0.5">
+        {tabs.map(({ key, label, count, guard: marked }) => {
+          const active = value === key;
           return (
             <button
-              key={k}
+              key={key}
               type="button"
               aria-pressed={active}
-              onClick={() => onChange(k)}
+              onClick={() => onChange(key)}
               className={cn(
                 // 44px below lg, where the list has the screen and is tapped.
                 'flex h-11 flex-auto items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-medium transition-colors duration-150 lg:h-8',
                 active ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text',
               )}
             >
-              {label(k)}
+              {label}
               {typeof count === 'number' && count > 0 ? (
                 <span
                   className={cn(
@@ -355,90 +331,88 @@ export function InboxViews({
                   {count > 99 ? '99+' : count}
                 </span>
               ) : null}
+              {!active && typeof marked === 'number' && marked > 0 ? (
+                <span
+                  title={`${marked} marked by the AI guard`}
+                  className="inline-flex min-w-[18px] shrink-0 items-center justify-center gap-0.5 rounded-full bg-warning-soft px-1 text-[11px] font-semibold tabular-nums leading-[18px] text-warning-strong"
+                >
+                  <ShieldAlert width={11} height={11} strokeWidth={2} aria-hidden />
+                  {marked > 99 ? '99+' : marked}
+                  <span className="sr-only"> marked by the AI guard</span>
+                </span>
+              ) : null}
             </button>
           );
         })}
       </div>
+      {children}
     </div>
   );
 }
 
 /**
- * The views that are not segments, beside the list's heading. A view in here
- * that is open names itself on the trigger, so the list is never a mystery; one
- * that wants attention (an open ticket, a dropped chat, a guard mark) puts its
- * count on the trigger while shut.
+ * The chips under Tickets: every open ticket, the ones this admin is on, and the
+ * closed ones. A count rides on a chip only once it is known.
  */
-export function MoreViewsMenu({
-  views,
-  primary,
+export function TicketChips({
   value,
   counts,
   onChange,
 }: {
-  views: Array<{ key: InboxFilter; label: string }>;
-  primary: InboxFilter[];
-  value: InboxFilter;
-  counts: Partial<Record<InboxFilter, number | undefined>>;
-  onChange: (next: InboxFilter) => void;
+  value: TicketChip;
+  counts: Partial<Record<TicketChip, number | undefined>>;
+  onChange: (next: TicketChip) => void;
 }) {
-  const more = views.filter((v) => !primary.includes(v.key));
-  const activeMore = more.find((v) => v.key === value);
-  const alarm = ALARM_VIEWS.reduce((n, k) => n + (counts[k] ?? 0), 0);
-  const ActiveIcon = activeMore ? MORE_ICON[activeMore.key] : undefined;
   return (
-    <Menu
-      // The trigger's whole name, since `label` replaces what it shows.
-      label={
-        activeMore
-          ? `View: ${activeMore.label}. More views`
-          : alarm > 0
-            ? `More views, ${alarm} need attention`
-            : 'More views'
-      }
-      title="Views"
-      align="end"
-      // A button like "New" beside it. Its colour is set on the content: a class
-      // on the trigger itself would lose to the variant's own (`cn` is clsx).
-      triggerVariant="secondary"
-      triggerSize="sm"
-      trigger={
-        <span
-          className={cn(
-            'inline-flex items-center gap-1.5',
-            activeMore ? 'text-brand' : 'text-text-muted',
-          )}
-        >
-          {ActiveIcon ? <ActiveIcon width={14} height={14} strokeWidth={1.9} aria-hidden /> : null}
-          {activeMore ? activeMore.label : 'More'}
-          {!activeMore && alarm > 0 ? (
-            <span className="min-w-[18px] rounded-full bg-warning-soft px-1 text-center text-[11px] font-semibold tabular-nums leading-[18px] text-warning-strong">
-              {alarm > 99 ? '99+' : alarm}
-            </span>
-          ) : null}
-          <ChevronDown width={14} height={14} strokeWidth={1.9} aria-hidden />
-        </span>
-      }
-    >
-      {more.map((v) => {
-        const Icon = MORE_ICON[v.key];
-        const count = counts[v.key];
+    <div className="mt-2 flex gap-1.5 overflow-x-auto">
+      {TICKET_CHIPS.map((c) => {
+        const count = counts[c.key];
         return (
-          <MenuItem
-            key={v.key}
-            selected={v.key === value}
-            onSelect={() => onChange(v.key)}
-            icon={Icon ? <Icon width={15} height={15} strokeWidth={1.75} /> : undefined}
+          <button
+            key={c.key}
+            type="button"
+            aria-pressed={value === c.key}
+            onClick={() => onChange(c.key)}
+            className={chipClass(value === c.key)}
           >
-            <span className="flex items-center justify-between gap-3">
-              <span>{v.label}</span>
-              {typeof count === 'number' ? (
-                <span className="tabular-nums text-text-muted">{count}</span>
-              ) : null}
-            </span>
-          </MenuItem>
+            {c.label}
+            {typeof count === 'number' ? <span>· {count}</span> : null}
+          </button>
         );
       })}
-    </Menu>
+    </div>
+  );
+}
+
+/**
+ * The AI guard lens under All chats: the threads where somebody tried to plant a
+ * figure in MDG's mouth or read the system instruction back out. It is a
+ * security observation, not a piece of work, so it is a narrowing of All chats
+ * and not a tab. Drawn only while it has something to show — or is on, so it can
+ * be switched off.
+ */
+export function GuardChips({
+  on,
+  count,
+  onChange,
+}: {
+  on: boolean;
+  count: number | undefined;
+  onChange: (next: boolean) => void;
+}) {
+  if (!on && !(count && count > 0)) return null;
+  return (
+    <div className="mt-2 flex gap-1.5 overflow-x-auto">
+      {/* Not "All chats": that is the tab above, and two buttons of one name
+          read as one. */}
+      <button type="button" aria-pressed={!on} onClick={() => onChange(false)} className={chipClass(!on)}>
+        Every chat
+      </button>
+      <button type="button" aria-pressed={on} onClick={() => onChange(true)} className={chipClass(on)}>
+        <ShieldAlert width={13} height={13} strokeWidth={2} aria-hidden />
+        AI guard
+        {typeof count === 'number' ? <span>· {count}</span> : null}
+      </button>
+    </div>
   );
 }

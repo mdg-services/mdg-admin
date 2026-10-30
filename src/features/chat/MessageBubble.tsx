@@ -352,7 +352,10 @@ export const MessageBubble = React.memo(function MessageBubble({
           {hasBody ? (
             <div
               className={cn(
-                'whitespace-pre-wrap break-words text-[15px] leading-[1.35] [&_a]:text-wa-accent-strong [&_a]:underline',
+                // `anywhere`, not `break-words`: only it lowers the bubble's
+                // minimum width, so a 55-character invoice number wraps inside
+                // the bubble instead of running out of it.
+                'whitespace-pre-wrap [overflow-wrap:anywhere] text-[15px] leading-[1.35] [&_a]:text-wa-accent-strong [&_a]:underline',
                 hasMedia || hasOther ? 'px-[6px] pb-0.5 pt-1' : '',
               )}
             >

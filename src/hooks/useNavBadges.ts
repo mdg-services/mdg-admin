@@ -2,19 +2,23 @@ import { useOpenAlertCount } from './api/useAdminAlerts';
 import { useAiTurnCountsQuery } from './api/useAiTurns';
 import { useBankHolidayPendingQuery } from './api/useBankHolidays';
 import { useNewCallbackCount } from './api/useCallbacks';
-import { useConversations } from './api/useConversations';
 import { useNewEnrolmentCount } from './api/useEnrolments';
 import { useOpenGrievanceCount } from './api/useGrievances';
 import { useLeadsTodoCount } from './api/useLeads';
-import { useOpenTicketCount } from './api/useTickets';
+import { useNeedsUsCount } from './api/useTickets';
 import { useWhatsAppUnreadChats } from './api/useWhatsAppInbox';
 
 /**
- * The count badge each nav destination carries, keyed by its route: unread
- * chats, open tickets, open alerts, AI answers nobody has judged yet,
+ * The count badge each nav destination carries, keyed by its route: tickets that
+ * need us (on the Inbox), open alerts, AI answers nobody has judged yet,
  * unconfirmed national holidays, website grievances nobody has resolved,
  * registrations nobody has dealt with yet (on the Onboarding entry), leads due now or never
  * called, and WhatsApp chats with something unread.
+ *
+ * The Inbox's number is the open tickets that are New, Waiting or Late — the
+ * ones a person has to do something about right now — and not a count of unread
+ * chats: an unread chat that nobody owes an answer to is not a reason to open
+ * the app, and a ticket that is waiting on us is.
  *
  * ONE place, because there were two and they had drifted. The desktop sidebar
  * (`AppShell`) and the phone's tab bar (`MobileTabBar`) each computed their
@@ -31,11 +35,10 @@ import { useWhatsAppUnreadChats } from './api/useWhatsAppInbox';
  * stranger's words and the shell must not fetch those to print a number.
  */
 export function useNavBadges(): Record<string, number> {
-  const mineQ = useConversations('mine');
   const aiCountsQ = useAiTurnCountsQuery();
   const pendingHolidaysQ = useBankHolidayPendingQuery();
   const openAlerts = useOpenAlertCount();
-  const openTickets = useOpenTicketCount();
+  const ticketsNeedingUs = useNeedsUsCount();
   // Grievances are super-admin only, and that hook stays silent for everyone else;
   // registrations are every admin's (any admin approves one). Each asks the server
   // for the counts alone (`limit=0`), not for the list.
@@ -48,8 +51,7 @@ export function useNavBadges(): Record<string, number> {
   // reads. Super-admin only, and silent — no request at all — for everyone else.
   const whatsappUnread = useWhatsAppUnreadChats();
   return {
-    '/inbox': (mineQ.data ?? []).filter((c) => c.unreadByAdmin).length,
-    '/tickets': openTickets,
+    '/inbox': ticketsNeedingUs,
     '/alerts': openAlerts,
     '/ai-answers': aiCountsQ.data?.unreviewed ?? 0,
     '/bank-holidays': pendingHolidaysQ.data?.totalCount ?? 0,

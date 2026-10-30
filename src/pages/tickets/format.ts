@@ -1,12 +1,13 @@
 /**
- * The Tickets page's decisions, kept out of the components so they read as
- * plain rules. This app has no test runner, so the less logic a `.tsx` carries,
- * the less of it can go wrong unseen. Labels and colours that the dealer app
- * shares live in `@dk/shared`'s `ticketView`; only the admin's own wording is
- * here.
+ * The wording around a ticket, kept out of the components so it reads as plain
+ * rules. This app has no test runner, so the less logic a `.tsx` carries, the
+ * less of it can go wrong unseen. Labels and colours that the dealer app shares
+ * live in `@dk/shared`'s `ticketView`; only the admin's own wording is here. What
+ * the inbox's two tabs and the Close sheet DECIDE lives in `features/inbox/desk`,
+ * which the check script can run.
  */
-import { TICKET_NOTE_MAX, promiseActive, promiseTimeText } from '@dk/shared';
-import type { TicketCounts, TicketView } from '@dk/shared';
+import { promiseActive, promiseTimeText } from '@dk/shared';
+import type { TicketView } from '@dk/shared';
 
 /** "Owner" or "Manager" — the two people at an outlet who can raise a ticket. */
 export function askedByRole(t: Pick<TicketView, 'askedBy'>): string {
@@ -24,7 +25,7 @@ export function askedByLabel(t: Pick<TicketView, 'askedBy'>): string {
   return name || role || 'The dealer';
 }
 
-/** The thread a ticket lives in, with the ticket named so it can be picked out. */
+/** The thread a ticket lives in, with the ticket named so it can be picked out (the inbox opens it on its strip). */
 export function ticketThreadHref(t: Pick<TicketView, 'conversationId' | 'id'>): string {
   return `/inbox?c=${t.conversationId}&ticket=${t.id}`;
 }
@@ -73,67 +74,43 @@ export function statusLine(
   return [seen, followUpLabel(t)].filter(Boolean).join(' · ');
 }
 
-/** "Resolved by Asha · 12 Oct, 14:05". */
+/** "Closed by Asha · 12 Oct, 14:05". */
 export function resolvedLine(
   t: Pick<TicketView, 'resolvedByName' | 'resolvedAt'>,
 ): string {
-  const by = t.resolvedByName ? `Resolved by ${t.resolvedByName}` : 'Resolved';
+  const by = t.resolvedByName ? `Closed by ${t.resolvedByName}` : 'Closed';
   const when = whenLabel(t.resolvedAt);
   return when ? `${by} · ${when}` : by;
 }
 
-/** What the urgency button on a row says it will do. */
+/** What the urgency item in a thread's "⋯" menu says it will do. */
 export function urgentActionLabel(t: Pick<TicketView, 'urgent'>): string {
-  return t.urgent ? 'Not urgent' : 'Mark urgent';
-}
-
-/**
- * Why a note cannot be saved yet, or `null` when it can.
- *
- * Judged on the TRIMMED text, because that is what the server measures: a note
- * of spaces is empty, and a thousand characters followed by a trailing space
- * is not too long.
- */
-export function noteProblem(raw: string): string | null {
-  const length = raw.trim().length;
-  if (length === 0) return 'Write what was done before you resolve it.';
-  if (length > TICKET_NOTE_MAX) {
-    return `Keep it under ${TICKET_NOTE_MAX.toLocaleString('en-IN')} characters. It is ${length.toLocaleString('en-IN')} now.`;
-  }
-  return null;
-}
-
-/**
- * The line above the Open list: how much of it nobody has looked at, and how
- * much is time-critical. `null` when there is nothing to add to the tab's own
- * count.
- */
-export function openSummary(counts: TicketCounts | undefined): string | null {
-  if (!counts || counts.open === 0) return null;
-  const parts: string[] = [];
-  if (counts.unseen > 0) parts.push(`${counts.unseen} not opened yet`);
-  if (counts.urgent > 0) parts.push(`${counts.urgent} urgent`);
-  return parts.length > 0 ? parts.join(' · ') : null;
+  return t.urgent ? 'Mark not urgent' : 'Mark urgent';
 }
 
 /**
  * The line on an open ticket that says a person is "on it" — or that the time
- * they promised has gone by. `null` when nobody has put themselves on it (or the
- * ticket is closed: resolving takes the promise off, and a stale one on a
- * resolved row would say something that is no longer true).
+ * they promised has gone by with nothing sent. `null` when nobody has put
+ * themselves on it, when the ticket is closed (closing takes the promise off, and
+ * a stale one on a closed row would say something that is no longer true), and
+ * when the time has passed but a person wrote to the dealer since the promise
+ * was made: the promise was kept, so there is nothing left to warn about.
  *
  * `active` is the one fact the screen needs to choose between a quiet line with
- * "Let AI answer" and a warning with nothing to press: once the time passes the
- * AI is already answering again by itself, so there is nothing left to hand back.
+ * "Let AI handle it" and a warning with nothing to press: once the time passes
+ * the AI is already answering again by itself, so there is nothing left to hand
+ * back, and the person is left to say something to the dealer.
  */
 export function onItLine(
-  t: Pick<TicketView, 'state' | 'promise' | 'ownerName'>,
+  t: Pick<TicketView, 'state' | 'promise' | 'ownerName' | 'lastPersonAt'>,
   now: Date,
 ): { active: boolean; text: string } | null {
   if (t.state !== 'OPEN' || !t.promise) return null;
   const when = promiseTimeText(t.promise.until, 'en', now);
   if (!promiseActive(t.promise.until, now)) {
-    return { active: false, text: `On-it time passed ${when}` };
+    const lastPerson = t.lastPersonAt ? new Date(t.lastPersonAt).getTime() : 0;
+    if (lastPerson > new Date(t.promise.setAt).getTime()) return null;
+    return { active: false, text: `Update was due ${when}, none sent` };
   }
   const who = (t.ownerName ?? t.promise.byName)?.trim();
   return { active: true, text: who ? `On it until ${when} · ${who}` : `On it until ${when}` };

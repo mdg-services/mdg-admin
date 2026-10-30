@@ -77,8 +77,8 @@ Everyday pages (`navItems.ts`, in sidebar order):
 
 | Page | Path | What it is |
 | --- | --- | --- |
-| Inbox | `/inbox` | Every dealer's chats. Reply, ask for a paper or photo, mark it received or send it back. |
-| Tickets | `/tickets` | Dealer questions the AI could not settle. Each stays open until someone resolves it with a note. |
+| Inbox | `/inbox` | Two tabs. **Tickets** (the first): the dealer questions the AI could not settle, and the ones you open by hand, worked from late to replied; each has one Close. **All chats**: every conversation, newest first. Reply, ask for a paper or photo, mark it received or send it back, or say you answered outside the app. |
+| Tickets | `/tickets` | Moved: it is the Inbox's Tickets tab, and this address redirects there. |
 | Alerts | `/alerts` | Everything that needs a person, across every outlet. Each clears itself once fixed. |
 | AI answers | `/ai-answers` | Every answer the AI first line gave a dealer, with a verdict button on each. |
 | Overview | `/overview` | Titled "Today": what needs a person now, and a board of every dealer's day. |

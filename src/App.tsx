@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Route, Routes , Navigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom';
 
 import { AppShell } from '@/components/layout/AppShell';
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
@@ -38,13 +38,6 @@ const ActivityPage = React.lazy(
 const AlertsPage = React.lazy(
   retryImport(() =>
     import('@/pages/alerts/AlertsPage').then((m) => ({ default: m.AlertsPage })),
-  ),
-);
-const TicketsPage = React.lazy(
-  retryImport(() =>
-    import('@/pages/tickets/TicketsPage').then((m) => ({
-      default: m.TicketsPage,
-    })),
   ),
 );
 const AiAnswersPage = React.lazy(
@@ -290,6 +283,16 @@ function LazyPage({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * `/tickets` — the page that became the Inbox's Tickets tab (ADR 0026). Its one
+ * option, `?view=resolved`, was the closed list; that is the Closed chip.
+ */
+function TicketsRedirect() {
+  const [search] = useSearchParams();
+  const lens = search.get('view') === 'resolved' ? 'resolved' : 'tickets';
+  return <Navigate to={`/inbox?lens=${lens}`} replace />;
+}
+
 export default function App() {
   return (
     // The outer boundary: it catches a crash in the shell itself, or in a route
@@ -308,18 +311,10 @@ export default function App() {
         >
           <Route index element={<Navigate to="/inbox" replace />} />
           <Route path="inbox" element={<InboxPage />} />
-          {/* Every question the AI could not settle, held open until a person
-              resolves it with a note. Every admin, not super-admin: the people
-              who answer dealers are the people who close these, and the API
-              behind it is open to any active admin. */}
-          <Route
-            path="tickets"
-            element={
-              <LazyPage>
-                <TicketsPage />
-              </LazyPage>
-            }
-          />
+          {/* The Tickets page is the Inbox's first tab now. The route stays so an
+              old bookmark, a push notification and a link in a message still
+              land: `?view=resolved` was the closed list. */}
+          <Route path="tickets" element={<TicketsRedirect />} />
           {/* Everything that needs a person, and the screen behind every alert
               pushed to an admin's phone. Every admin, not super-admin: the
               server already keeps its own health alerts to super-admins. */}

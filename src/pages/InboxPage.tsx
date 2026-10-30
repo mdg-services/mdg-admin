@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import {
-  CheckCircle2,
+  AlertTriangle,
   ChevronLeft,
   ChevronRight,
   FileText,
+  Flag,
   Info,
   KeyRound,
   MessageSquare,
@@ -12,12 +13,13 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Phone,
+  PhoneCall,
   Plus,
-  RotateCcw,
   ShieldAlert,
   Sparkles,
   Store,
-  UserPlus,
+  Ticket,
+  TicketPlus,
   Video,
   Zap,
 } from 'lucide-react';
@@ -32,23 +34,21 @@ import { ColumnResizer } from '@/components/ui/ColumnResizer';
 import { Drawer } from '@/components/ui/Drawer';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { HowThisWorks } from '@/components/ui/HowThisWorks';
-import { IconButton } from '@/components/ui/IconButton';
-import { Label } from '@/components/ui/Label';
 import { Menu, MenuItem, MenuSeparator } from '@/components/ui/Menu';
-import { Select } from '@/components/ui/Select';
 import { Sheet, SheetItem } from '@/components/ui/Sheet';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { AiFirstLineLog } from '@/features/chat/AiFirstLineStrip';
 import { AiQuietLine } from '@/features/chat/AiQuietLine';
+import { AnsweredOutsideDialog } from '@/features/chat/AnsweredOutsideDialog';
 import { AskPortalLoginDialog } from '@/features/chat/AskPortalLoginDialog';
 import { Composer, type ComposerInsert } from '@/features/chat/Composer';
 import {
   ConversationListSkeleton,
   ConversationRow,
-  InboxViews,
-  MoreViewsMenu,
-  PRIORITY_LABEL,
+  GuardChips,
+  InboxTabs,
+  TicketChips,
   TicketFlagBadge,
   roleLabel,
 } from '@/features/chat/InboxList';
@@ -57,6 +57,7 @@ import { MessageInfoDialog } from '@/features/chat/MessageInfoDialog';
 import { MessageList } from '@/features/chat/MessageList';
 import { NewConversationDialog } from '@/features/chat/NewConversationDialog';
 import { OpenRequestsCard } from '@/features/chat/OpenRequestsCard';
+import { OpenTicketDialog } from '@/features/chat/OpenTicketDialog';
 import { PanelSection } from '@/features/chat/PanelSection';
 import { ReactionsDialog } from '@/features/chat/ReactionsDialog';
 import {
@@ -68,7 +69,6 @@ import {
   replyPreviewText,
   replySenderLabel,
 } from '@/features/chat/replyPreview';
-import { ResolveConversationDialog } from '@/features/chat/ResolveConversationDialog';
 import { SendBackAskDialog } from '@/features/chat/SendBackAskDialog';
 import { SendGuideVideoDialog } from '@/features/chat/SendGuideVideoDialog';
 import {
@@ -81,6 +81,15 @@ import { TicketHistory, TicketStrip } from '@/features/chat/TicketStrip';
 import { useConversationSocket } from '@/features/chat/useConversationSocket';
 import { useInboxSocket } from '@/features/chat/useInboxSocket';
 import {
+  type TicketChip,
+  emptyTickets,
+  inboxStartFor,
+  isKnownLens,
+  openForChip,
+  sortDeskTickets,
+} from '@/features/inbox/desk';
+import { TicketRows } from '@/features/inbox/TicketRows';
+import {
   ReplyHelperPane,
   type ReplyHelperSuggestRequest,
 } from '@/features/replyHelper/ReplyHelperPane';
@@ -88,32 +97,29 @@ import {
   useClearAiGuard,
   useConversationAiTurnsQuery,
 } from '@/hooks/api/useAiTurns';
-import { useAssignConversation } from '@/hooks/api/useAssignConversation';
 import { useDealerOpenRequestsQuery } from '@/hooks/api/useChatAsks';
 import { useConversation } from '@/hooks/api/useConversation';
-import {
-  type InboxFilter,
-  useConversationCounts,
-  useConversations,
-} from '@/hooks/api/useConversations';
+import { useConversationCounts, useConversations } from '@/hooks/api/useConversations';
 import { useMessages } from '@/hooks/api/useMessages';
 import { useReactToMessage } from '@/hooks/api/useReactToMessage';
-import { useReopenConversation } from '@/hooks/api/useReopenConversation';
 import {
   usePendingReplyHelperAsk,
   useReplyHelperThread,
 } from '@/hooks/api/useReplyHelper';
-import { useResolveConversation } from '@/hooks/api/useResolveConversation';
 import { useSendMessage } from '@/hooks/api/useSendMessage';
-import { useServicesQuery } from '@/hooks/api/useServices';
 import { useShareToOutlet } from '@/hooks/api/useShareToOutlet';
-import { useThreadTicketsQuery } from '@/hooks/api/useTickets';
-import { useUpdateTicket } from '@/hooks/api/useUpdateTicket';
+import {
+  useClosedTicketsQuery,
+  useOpenTicketsQuery,
+  useSetTicketUrgent,
+  useThreadTicketsQuery,
+  useTicketCountsQuery,
+} from '@/hooks/api/useTickets';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { usePublishBottomBar } from '@/hooks/usePublishBottomBar';
 import { useSafeBack } from '@/hooks/useSafeBack';
-import { ApiError, api } from '@/lib/api';
+import { api } from '@/lib/api';
 import {
   countRequests,
   mdgRepliedMessageIds,
@@ -132,10 +138,9 @@ import {
   writeListHidden,
   type ColumnPrefs,
 } from '@/lib/columnLayout';
+import { urgentActionLabel } from '@/pages/tickets/format';
 import { useAuthStore } from '@/store/auth';
 import {
-  TICKET_CATEGORIES,
-  TICKET_PRIORITIES,
   aiThreadGuard,
   aiTurnAge,
   dealerCodeLabel,
@@ -147,66 +152,15 @@ import type {
   Conversation,
   Dealer,
   DealerOpenRequest,
+  InboxTab,
   Message,
   ReplyHelperTarget,
   ShareAudience,
-  TicketCategory,
-  TicketPriority,
 } from '@dk/shared';
 
 function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
-
-const FILTERS: Array<{ key: InboxFilter; label: string }> = [
-  { key: 'open', label: 'Unassigned' },
-  { key: 'mine', label: 'Mine' },
-  { key: 'all', label: 'All open' },
-  { key: 'resolved', label: 'Resolved' },
-  // Tickets the 20-minute sweep pulled back out of somebody's hands after they
-  // missed the reply SLA — nobody is assigned to these any more, so nobody is
-  // answering them.
-  //
-  // Everything else for this tab already existed: `flagged` is in `InboxFilter`,
-  // `GET /conversations?status=flagged` answers it, and `useConversationCounts`
-  // already fetches the number into `countMap`. Only the tab was missing, which
-  // meant `inboxLens('flagged')` rejected the value and every `?lens=flagged`
-  // link in the product silently landed on "Mine" instead.
-  { key: 'flagged', label: 'Dropped' },
-  // The threads where the AI gave up on a question and a person has not yet
-  // closed the ticket it raised. A lens like the two below, and for the same
-  // reason nothing moves into it or out of another tab — but it is not a subset
-  // of Unassigned: a ticket stays open however the conversation moves, so a
-  // thread somebody has picked up, answered, even resolved, is still listed
-  // here until its ticket is resolved with a note. Placed before the AI lenses
-  // because it is the one that is somebody's job today; the five tabs before it
-  // keep their positions.
-  { key: 'tickets', label: 'Tickets' },
-  // A LENS OVER "Unassigned", not a fifth pile. Every row here is also in
-  // Unassigned and in All open, and its `status` is the same `OPEN` it always
-  // was — the tab only narrows the same query to the threads the AI first line
-  // has said something on. Deliberately last, so the four tabs the team has used
-  // for a year keep their positions and their muscle memory.
-  { key: 'ai', label: 'AI' },
-  // A SECOND lens, on the same argument as the first: the threads where somebody
-  // tried to plant a figure in MDG's mouth or read the system instruction back
-  // out. Nothing moves into it and nothing leaves another tab to be in it.
-  //
-  // It is NOT the Flagged tab above. Flagged means an assigned ticket missed its
-  // reply SLA and is cleared by pickup, by any admin reply, by resolve and by
-  // reopen — right for an operational alarm, and catastrophic for
-  // a security observation, because it would mean ANSWERING THE DEALER silently
-  // erases the record. This one is cleared by exactly one thing: a super-admin
-  // pressing Clear on the thread.
-  { key: 'ai-guard', label: 'AI guard' },
-];
-
-/**
- * The three views the team lives in, as the list's segmented control; the
- * other five sit behind its "More". They used to be a 224px column of their
- * own, and at a laptop's width that column was most of what the open chat lost.
- */
-const PRIMARY_VIEWS: InboxFilter[] = ['open', 'mine', 'all'];
 
 /**
  * The thread's guard mark, as the banner and the AI log tab's dot show it.
@@ -219,7 +173,10 @@ const PRIMARY_VIEWS: InboxFilter[] = ['open', 'mine', 'all'];
  * again whenever a thread with a hit is opened or catches a new one, so a fresh
  * hit shows the moment the server lists it. A resolved thread is outside the
  * lens altogether, and so is a lens that failed to load: there the turns
- * alone still decide.
+ * alone still decide. For a chat still marked resolved from before the ticket
+ * desk that means Clear removes the mark but the banner stays until the
+ * dealer writes again, which reopens the thread; there is no Reopen button to
+ * do it first. Only the server's list can fix that, not this screen.
  */
 function useThreadGuard(conversation: Conversation | null): AiThreadGuardView | null {
   // The SAME query key the AI log uses, so react-query serves both from one
@@ -394,35 +351,6 @@ function AiGuardBanner({
 }
 
 /**
- * A `?lens=` parameter as a tab, or `null` for anything this build does not
- * recognise.
- *
- * Validated against `FILTERS` rather than cast, because an unknown value would
- * otherwise reach `GET /conversations?status=…` — which does not reject it, it
- * simply matches no branch and returns EVERY conversation. A typo in a pasted
- * link would look like the guard lens holding the whole inbox.
- */
-function inboxLens(value: string | null): InboxFilter | null {
-  const hit = FILTERS.find((f) => f.key === value);
-  return hit ? hit.key : null;
-}
-
-/**
- * Where the conversation stands, in words, on the header's second line. A
- * coloured "Open" pill beside the name used to push the name itself out of a
- * 430px header; the action button beside it (Pick up / Resolve chat / Reopen)
- * already carries the state, so the words here are the quieter half.
- */
-function statusWords(c: Conversation, meId: string): string {
-  if (c.status === 'RESOLVED') return 'Resolved';
-  if (c.status === 'ASSIGNED') {
-    if (c.assignedAdminId && c.assignedAdminId === meId) return 'With you';
-    return c.assignedAdminName ? `With ${c.assignedAdminName}` : 'Picked up';
-  }
-  return 'Not picked up';
-}
-
-/**
  * The outlet behind the chat, in the side panel's Details tab: the code opens
  * the dealer, the number rings it, and the dealer's Daily Sales Report is one
  * tap away.
@@ -515,26 +443,32 @@ export function InboxPage() {
   // Deep-link support: `/inbox?c=<id>` (e.g. from a dealer's members tab) opens
   // that thread. Read the param up front and seed the initial selection from it,
   // so it wins over the auto-select-first effect below (which would otherwise
-  // race it to a different thread when the default list is warm in cache). Also
-  // switch to a filter that shows a freshly started, unassigned chat.
+  // race it to a different thread when the default list is warm in cache).
   const [searchParams, setSearchParams] = useSearchParams();
   const deepLinkId = searchParams.get('c');
 
-  // `/inbox?lens=ai-guard` — the way in from the AI answers page. A thread wins
-  // over a lens: a link to one conversation is always more specific than a link
-  // to a list.
-  const [filter, setFilter] = React.useState<InboxFilter>(
-    deepLinkId ? 'all' : (inboxLens(searchParams.get('lens')) ?? 'mine'),
+  // Which list is showing: the Tickets or the All chats tab, the chip under
+  // Tickets (open, mine, closed) and the AI guard lens under All chats. Seeded
+  // from the link — `?lens=` is any of the old eight tabs, or `ai-guard`, the way
+  // in from the AI answers page — and from the thread and ticket it names, which
+  // win over a lens: a link to one conversation is always more specific than a
+  // link to a list. See `inboxStartFor`.
+  const [view, setView] = React.useState(() =>
+    inboxStartFor(searchParams.get('lens'), {
+      hasThread: !!deepLinkId,
+      hasTicket: !!searchParams.get('ticket'),
+    }),
   );
+  const { tab, chip, aiGuard } = view;
   const [selectedId, setSelectedId] = React.useState<string | null>(deepLinkId);
   // The thread the PAGE opened on its own (the first row, on a desktop), as
   // opposed to one an admin chose. A ticket is stamped "seen" only for a thread
   // somebody opened: the dealer's bubble then says "MDG team is looking at it",
   // and an inbox that merely loaded must not say that on their behalf.
   const [autoPickedId, setAutoPickedId] = React.useState<string | null>(null);
-  // `/inbox?c=<id>&ticket=<id>` — the way in from the Tickets page, an alert or
-  // a Today row. Read off the URL on every render, not copied into state, so a
-  // second link followed while the inbox is already open still lands.
+  // `/inbox?c=<id>&ticket=<id>` — the way in from a closed ticket's row, an
+  // alert or a Today row. Read off the URL on every render, not copied into
+  // state, so a second link followed while the inbox is already open still lands.
   const focusTicketId = searchParams.get('ticket');
   // The side panel as an inline column (≥ 1280px), shown by default; and which
   // of its tabs is up, remembered for this browser.
@@ -552,6 +486,7 @@ export function InboxPage() {
   const [mobileContextOpen, setMobileContextOpen] = React.useState(false);
   const isLg = useMediaQuery('(min-width: 1024px)');
   const isXl = useMediaQuery('(min-width: 1280px)');
+  // The side panel's default width is wider from 2xl (`panelDefault`).
   const is2xl = useMediaQuery('(min-width: 1536px)');
   const toast = useToast();
 
@@ -561,7 +496,7 @@ export function InboxPage() {
   // A link to a list view (`?lens=`, from AI answers or Today) shows the list
   // for that visit even when it was folded: the fold comes back next time.
   const [listHidden, setListHiddenState] = React.useState(
-    () => readListHidden() && (!!deepLinkId || inboxLens(searchParams.get('lens')) === null),
+    () => readListHidden() && (!!deepLinkId || !isKnownLens(searchParams.get('lens'))),
   );
   const setListHidden = React.useCallback((hidden: boolean) => {
     setListHiddenState(hidden);
@@ -604,54 +539,70 @@ export function InboxPage() {
   // below can tell it from a link followed in from elsewhere.
   const openedFromListRef = React.useRef<string | null>(null);
 
-  // Keep the selection in sync with the `?c=` param.
+  // Keep the selection in sync with the `?c=` param, and take a `?lens=` in.
   //  - Desktop (≥ lg): consume a deep link once, seed selection into state, then
   //    strip the param so refresh/back doesn't re-trigger it. Both panes are
-  //    visible so React state is the source of truth.
+  //    visible so React state is the source of truth, and the list moves to the
+  //    tab the link belongs to so the thread's row is in it.
   //  - Mobile (< lg): the URL IS the source of truth. Opening a thread pushes
   //    `?c=<id>` (see `openConversation`) and we never strip it, so Android
   //    hardware-back pops the entry and returns to the list instead of exiting.
+  //    A row tapped in this list keeps the list's tab, so Back lands on the
+  //    same list it was tapped from. A link from anywhere else (a push, an
+  //    alert, a Today row) may name a thread this tab does not hold, so the
+  //    tab moves to the one that does.
+  //
+  // The lens seeded the tab above (and is applied again here for a link followed
+  // while the inbox is already open); strip it, exactly as `?c=` is stripped on
+  // desktop. Left in the URL it would survive every later tab change, so a
+  // refresh — or Android's back key — would drop the operator back into the lens
+  // from wherever they had moved to. One effect, one `setSearchParams`: two
+  // effects each stripping their own param from the same snapshot overwrote each
+  // other, and the second put the first's `c` back.
   React.useEffect(() => {
     const c = searchParams.get('c');
+    const lens = searchParams.get('lens');
+    const next = new URLSearchParams(searchParams);
+    let changed = false;
     if (isLg) {
-      if (!c) return;
-      setAutoPickedId(null);
-      setSelectedId(c);
-      setFilter('all');
-      const next = new URLSearchParams(searchParams);
-      next.delete('c');
-      setSearchParams(next, { replace: true });
+      if (c) {
+        setAutoPickedId(null);
+        setSelectedId(c);
+        next.delete('c');
+        changed = true;
+      }
     } else {
       setSelectedId(c);
-      // A row tapped in this list keeps the list's view, so Back lands on the
-      // same Unassigned or Mine queue. A link from anywhere else (a push, the
-      // Tickets page) may name a thread this view does not hold: All open.
-      if (c && openedFromListRef.current !== c) setFilter('all');
       if (!c) openedFromListRef.current = null;
     }
+    const linked = { hasThread: !!c, hasTicket: !!searchParams.get('ticket') };
+    if (lens) {
+      if (isKnownLens(lens) || c) setView(inboxStartFor(lens, linked));
+      next.delete('lens');
+      changed = true;
+    } else if (c && (isLg || openedFromListRef.current !== c)) {
+      setView(inboxStartFor(null, linked));
+    }
+    if (changed) setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, isLg]);
-
-  // The lens seeded the tab above; strip it, exactly as `?c=` is stripped on
-  // desktop. Left in the URL it would survive every later tab change, so a
-  // refresh — or Android's back key — would drop the operator back into the
-  // guard lens from wherever they had moved to.
-  React.useEffect(() => {
-    if (!searchParams.get('lens')) return;
-    const next = new URLSearchParams(searchParams);
-    next.delete('lens');
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams]);
 
   // Open a conversation. On mobile this pushes `?c=<id>` (a real history entry,
   // so hardware-back returns to the list); on desktop it sets state directly.
+  // `ticketId` names the ticket the row was about — the strip opens it and
+  // rings it, and a closed one is brought forward in Details; it is cleared
+  // when a row opens a thread without one, so an old link's ticket does not
+  // stay marked on every thread opened after it.
   const openConversation = React.useCallback(
-    (id: string) => {
+    (id: string, ticketId?: string) => {
+      const next = new URLSearchParams(searchParams);
+      if (ticketId) next.set('ticket', ticketId);
+      else next.delete('ticket');
       if (isLg) {
         setAutoPickedId(null);
         setSelectedId(id);
+        if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
       } else {
         openedFromListRef.current = id;
-        const next = new URLSearchParams(searchParams);
         next.set('c', id);
         setSearchParams(next);
       }
@@ -674,17 +625,52 @@ export function InboxPage() {
   }, [isLg, backToList]);
 
   function handleStarted(conversationId: string) {
-    setFilter('all');
+    // A chat just started has no ticket; All chats is where it is.
+    setView({ tab: 'chats', chip: 'open', aiGuard: false });
     openConversation(conversationId);
   }
 
-  const conversationsQ = useConversations(filter);
+  // The tabs. Moving between them (or between the chips under Tickets) leaves
+  // the thread that was open: its row may not be in the new list, and on a
+  // desktop the first row of the new one is opened in its place.
+  function showView(next: Partial<typeof view>) {
+    setView((v) => ({ ...v, ...next }));
+    setSelectedId(null);
+  }
+
+  const myName = admin?.name ?? user?.name;
+  const myId = currentUserId || null;
+  // All chats: every conversation, newest message first — or, under the guard
+  // lens, the threads the AI guard marked.
+  const conversationsQ = useConversations(aiGuard ? 'ai-guard' : 'chats', {
+    enabled: tab === 'chats',
+  });
   // Memoised so the `?? []` fallback doesn't re-fire the auto-select effect
   // below with a fresh array identity on every render.
   const conversations = React.useMemo(
     () => conversationsQ.data ?? [],
     [conversationsQ.data],
   );
+  // Tickets: every open ticket is read (the desk sorts them itself), the closed
+  // ones only under the Closed chip.
+  const countsQ = useTicketCountsQuery();
+  const guardCountsQ = useConversationCounts();
+  const openTicketsQ = useOpenTicketsQuery(tab === 'tickets');
+  const closedTicketsQ = useClosedTicketsQuery(tab === 'tickets' && chip === 'closed');
+  const ticketListQ = chip === 'closed' ? closedTicketsQ.query : openTicketsQ.query;
+  const visibleTickets = React.useMemo(
+    () =>
+      chip === 'closed'
+        ? closedTicketsQ.items
+        : openForChip(sortDeskTickets(openTicketsQ.items, new Date(now)), chip, myName, myId),
+    [chip, closedTicketsQ.items, openTicketsQ.items, myName, myId, now],
+  );
+  const chipCounts: Partial<Record<TicketChip, number | undefined>> = {
+    open: openTicketsQ.query.data ? openTicketsQ.items.length : countsQ.data?.open,
+    mine: openTicketsQ.query.data
+      ? openForChip(openTicketsQ.items, 'mine', myName, myId).length
+      : undefined,
+  };
 
   const selectedQ = useConversation(selectedId);
   const conversation = selectedQ.data ?? null;
@@ -842,10 +828,7 @@ export function InboxPage() {
 
   const sendMessage = useSendMessage();
   const shareToOutlet = useShareToOutlet();
-  const assignConv = useAssignConversation();
-  const resolveConv = useResolveConversation();
-  const reopenConv = useReopenConversation();
-  const updateTicket = useUpdateTicket();
+  const setUrgent = useSetTicketUrgent();
   const { mutate: reactToMessage } = useReactToMessage();
 
   // Stable handlers — MessageBubble is memoized, so anything that flows down
@@ -885,37 +868,26 @@ export function InboxPage() {
   }, [replyTo, currentUserId]);
 
   const isAdmin = !!admin;
-  const [resolveOpen, setResolveOpen] = React.useState(false);
   const [askLoginOpen, setAskLoginOpen] = React.useState(false);
   const [videoPickerOpen, setVideoPickerOpen] = React.useState(false);
-  const servicesQ = useServicesQuery();
+  // The two thread actions from the "⋯" menu, each a small dialog for one thread.
+  const [outsideFor, setOutsideFor] = React.useState<string | null>(null);
+  const [openTicketFor, setOpenTicketFor] = React.useState<string | null>(null);
 
-  // One lightweight counts round-trip for the rail badges, instead of four
-  // full decorated list fetches.
-  const countsQ = useConversationCounts();
-  const countMap: Partial<Record<InboxFilter, number | undefined>> = {
-    open: countsQ.data?.open,
-    mine: countsQ.data?.mine,
-    all: countsQ.data?.all,
-    resolved: countsQ.data?.resolved,
-    flagged: countsQ.data?.flagged,
-    ai: countsQ.data?.ai,
-    'ai-guard': countsQ.data?.aiGuard,
-    tickets: countsQ.data?.tickets,
-  };
-
-  // Auto-select first conversation when list loads and nothing selected. Yield
+  // Auto-select the first row when the list loads and nothing is selected. Yield
   // to a pending deep-link so we never override an explicit `?c=` selection.
+  const firstThreadId =
+    tab === 'tickets' ? visibleTickets[0]?.conversationId : conversations[0]?.id;
   React.useEffect(() => {
     // On mobile the list IS the landing view — don't jump into a chat and hide
     // it. Auto-select only on ≥ lg, where the list stays visible beside the thread.
     if (!isLg) return;
     if (searchParams.get('c')) return;
-    if (!selectedId && conversations.length > 0) {
-      setAutoPickedId(conversations[0]!.id);
-      setSelectedId(conversations[0]!.id);
+    if (!selectedId && firstThreadId) {
+      setAutoPickedId(firstThreadId);
+      setSelectedId(firstThreadId);
     }
-  }, [conversations, selectedId, searchParams, isLg]);
+  }, [firstThreadId, selectedId, searchParams, isLg]);
 
   // Close the mobile details slide-over whenever the open conversation changes
   // (via a deep link or a just-created chat), so it never lingers over a
@@ -927,9 +899,11 @@ export function InboxPage() {
   // The list row already carries `dealerId` (it is what groupByDealer keys on),
   // so the dealer fetch can start alongside `/conversations/:id` instead of
   // waiting for it. Falls back to the fetched conversation for a
-  // deep-linked thread that is not in the current filter's page.
+  // deep-linked thread that is not in the current list's page.
   const listedDealerId =
-    conversations.find((c) => c.id === selectedId)?.dealerId ?? null;
+    conversations.find((c) => c.id === selectedId)?.dealerId ??
+    visibleTickets.find((t) => t.conversationId === selectedId)?.dealerId ??
+    null;
   // The detail response stays FIRST: once it lands it is the authority, and a
   // stale list row winning would point the context panel at another dealer's
   // GST and documents for a render.
@@ -1077,73 +1051,6 @@ export function InboxPage() {
     toast.success(describeShareRecipients(outcome.recipients));
   }
 
-  function handlePickUp() {
-    if (!conversation) return;
-    setAutoPickedId(null);
-    assignConv.mutate({ conversationId: conversation.id });
-  }
-  function handleTakeOver() {
-    if (!conversation) return;
-    setAutoPickedId(null);
-    // No admin picker yet — this claims the ticket for the current admin.
-    assignConv.mutate({ conversationId: conversation.id });
-  }
-  function handleReopen() {
-    if (!conversation) return;
-    reopenConv.mutate(conversation.id);
-  }
-
-  /*
-   * The one action the ticket's status calls for, named once so the glyph in
-   * the header and the row in the kebab sheet cannot drift apart.
-   *
-   * Below md this is drawn as a bare 44px square, not the icon-and-word pill it
-   * used to be. That pill was 98px, and with the back chevron (44px) and the
-   * kebab (44px) either side of it the title was left 131px of the 202px
-   * "Shiv Kumar Singh · Owner" needs — so the name truncated mid-word and the
-   * role, which is the half that says WHO you are talking to, never survived at
-   * all. The word is not lost: it is the first row of the sheet the kebab
-   * opens, where it has a whole line to itself.
-   */
-  // Another admin holds the chat: the header and the sheet offer Take over.
-  const takeOverShown =
-    !!conversation &&
-    conversation.status === 'ASSIGNED' &&
-    conversation.assignedAdminId !== currentUserId;
-
-  const statusAction: {
-    label: string;
-    icon: (size: number) => React.ReactNode;
-    variant: 'primary' | 'secondary';
-    pending: boolean;
-    run: () => void;
-  } | null =
-    conversation?.status === 'OPEN'
-      ? {
-          label: 'Pick up',
-          icon: (s) => <UserPlus width={s} height={s} strokeWidth={1.75} />,
-          variant: 'primary',
-          pending: assignConv.isPending,
-          run: handlePickUp,
-        }
-      : conversation?.status === 'ASSIGNED'
-        ? {
-            label: 'Resolve',
-            icon: (s) => <CheckCircle2 width={s} height={s} strokeWidth={1.75} />,
-            variant: 'primary',
-            pending: resolveConv.isPending,
-            run: () => setResolveOpen(true),
-          }
-        : conversation?.status === 'RESOLVED'
-          ? {
-              label: 'Reopen',
-              icon: (s) => <RotateCcw width={s} height={s} strokeWidth={1.75} />,
-              variant: 'secondary',
-              pending: reopenConv.isPending,
-              run: handleReopen,
-            }
-          : null;
-
   /**
    * Bring the side panel forward on a tab: the inline column at ≥ xl, the drawer
    * below it. The header's two glyphs toggle — a second press on the tab that is
@@ -1267,22 +1174,92 @@ export function InboxPage() {
     openPanel('helper');
   }, [selectedId, openPanel]);
   /*
-   * A link to a CLOSED ticket (`&ticket=<id>`) has to land on it, and resolved
+   * A link to a CLOSED ticket (`&ticket=<id>`) has to land on it, and closed
    * tickets live in the Details tab now: bring it forward, once per link. Not
    * remembered as this browser's tab — the admin did not choose it. An open
    * ticket needs nothing: its band is always over the messages.
+   *
+   * The FIRST reading of the ticket decides, and that is the whole point of
+   * remembering the link. A link to an open ticket that the admin then closes
+   * from the band turns it closed on a later read; looked at afresh, that is a
+   * "link to a closed ticket" and threw the panel open over the thread — the
+   * whole screen on a phone — straight after the toast.
    */
   const threadTicketsQ = useThreadTicketsQuery(conversation?.id ?? null);
-  const focusIsResolved = !!(
-    focusTicketId &&
-    threadTicketsQ.data?.some((t) => t.id === focusTicketId && t.state === 'RESOLVED')
-  );
+  const focusState = focusTicketId
+    ? threadTicketsQ.data?.find((t) => t.id === focusTicketId)?.state
+    : undefined;
   const landedTicketRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!focusIsResolved || !focusTicketId || landedTicketRef.current === focusTicketId) return;
+    if (!focusTicketId || !focusState || landedTicketRef.current === focusTicketId) return;
     landedTicketRef.current = focusTicketId;
-    openPanel('details', false);
-  }, [focusIsResolved, focusTicketId, openPanel]);
+    if (focusState === 'RESOLVED') openPanel('details', false);
+  }, [focusState, focusTicketId, openPanel]);
+
+  // The open ticket on this thread, if there is one. The band reads the same
+  // query, so this costs no second request. "Open a ticket" is offered only once
+  // the thread's tickets have been read and none is open: there is one open
+  // ticket per thread, and a menu that offered a second would only be refused.
+  const threadOpenTicket = threadTicketsQ.data?.find((t) => t.state === 'OPEN');
+  const canOpenTicket = threadTicketsQ.data !== undefined && !threadOpenTicket;
+
+  // Marks the open ticket urgent or takes the flag off — the toggle the Tickets
+  // page had, kept in the thread's "⋯" menu because the AI marks a ticket urgent
+  // when it judges it time-critical and a person may disagree either way.
+  function handleToggleUrgent() {
+    if (!threadOpenTicket) return;
+    const t = threadOpenTicket;
+    setUrgent.mutate(
+      { id: t.id, urgent: !t.urgent },
+      {
+        onSuccess: () => toast.success(t.urgent ? 'No longer urgent.' : 'Marked urgent.'),
+        onError: (err) =>
+          toast.error(err instanceof Error && err.message ? err.message : 'That did not go through.'),
+      },
+    );
+  }
+
+  /*
+   * What the "⋯" menu offers on a thread, named once so the desktop menu and the
+   * phone's sheet cannot drift apart. These are the things a person does BESIDE
+   * the conversation: say they answered outside the app, and open a ticket by
+   * hand. (Pick up, Take over, the chat's own Resolve and Reopen are gone — the
+   * work is the ticket, and Close is on its band.)
+   *
+   * Each opens a Dialog, which draws at every width; a control that opened a
+   * `Sheet` would have to hide from md up, as the Sheet does.
+   */
+  const threadActions: Array<{
+    key: string;
+    label: string;
+    icon: (size: number) => React.ReactNode;
+    run: () => void;
+  }> = [];
+  if (conversation) {
+    threadActions.push({
+      key: 'outside',
+      label: 'Answered outside the app',
+      icon: (n) => <PhoneCall width={n} height={n} strokeWidth={1.75} />,
+      run: () => setOutsideFor(conversation.id),
+    });
+    if (canOpenTicket) {
+      threadActions.push({
+        key: 'open-ticket',
+        label: 'Open a ticket',
+        icon: (n) => <TicketPlus width={n} height={n} strokeWidth={1.75} />,
+        run: () => setOpenTicketFor(conversation.id),
+      });
+    }
+    if (threadOpenTicket) {
+      threadActions.push({
+        key: 'urgent',
+        label: urgentActionLabel(threadOpenTicket),
+        // Not the bolt: that is the AI log's, and both are in this menu below xl.
+        icon: (n) => <Flag width={n} height={n} strokeWidth={1.75} />,
+        run: handleToggleUrgent,
+      });
+    }
+  }
 
   // A Suggest press that never reached a pane (the panel was shut before the
   // helper could run it) is dropped, never run later unasked.
@@ -1325,9 +1302,8 @@ export function InboxPage() {
       boxTagsDraft
       active={panelVisible && sideTab === 'helper'}
       onUseDraft={(text) => {
-        // A resolved chat has a shut box, so a draft is refused there rather
-        // than lost in it.
-        if (conversation.status === 'RESOLVED') return 'closed';
+        // The box is never shut, whatever the chat's old status: a dealer can
+        // write again at any time and the answer goes in the same box.
         handleUseReplyDraft(conversation.id, text);
         return 'box';
       }}
@@ -1347,99 +1323,6 @@ export function InboxPage() {
 
   const detailsPane = conversation ? (
     <>
-      {isAdmin ? (
-        // "Conversation", not "Ticket": a ticket is the record the AI raises for
-        // one question (pinned over the messages). This is the whole thread's
-        // priority and category.
-        <PanelSection
-          title="Conversation"
-          action={
-            <HowThisWorks
-              surface="admin-inbox-details"
-              label="Details"
-              variant="icon"
-            />
-          }
-        >
-          <div className="grid grid-cols-2 gap-2.5">
-            <div className="min-w-0">
-              <Label htmlFor="ticket-priority" className="text-xs text-text-muted">
-                Priority
-              </Label>
-              <Select
-                id="ticket-priority"
-                value={conversation.priority ?? 'normal'}
-                disabled={updateTicket.isPending}
-                onChange={(e) =>
-                  updateTicket.mutate(
-                    {
-                      conversationId: conversation.id,
-                      priority: e.target.value as TicketPriority,
-                    },
-                    // The hook applies the change at once and quietly puts the
-                    // old value back if the save fails, so without a word here
-                    // a ticket marked Urgent on a weak link went back to
-                    // Normal behind the admin's back.
-                    {
-                      onError: (err) =>
-                        toast.error(
-                          err instanceof ApiError
-                            ? err.message
-                            : 'Could not save the priority',
-                        ),
-                    },
-                  )
-                }
-              >
-                {TICKET_PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {PRIORITY_LABEL[p]}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="min-w-0">
-              <Label htmlFor="ticket-category" className="text-xs text-text-muted">
-                Category
-              </Label>
-              <Select
-                id="ticket-category"
-                value={conversation.category ?? 'general'}
-                disabled={updateTicket.isPending}
-                onChange={(e) =>
-                  updateTicket.mutate(
-                    {
-                      conversationId: conversation.id,
-                      category: e.target.value as TicketCategory,
-                    },
-                    {
-                      onError: (err) =>
-                        toast.error(
-                          err instanceof ApiError
-                            ? err.message
-                            : 'Could not save the category',
-                        ),
-                    },
-                  )
-                }
-              >
-                {TICKET_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {titleCase(c)}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </div>
-          <p className="mt-2.5 text-xs text-text-muted">
-            {conversation.status === 'RESOLVED'
-              ? 'Resolved'
-              : conversation.assignedAdminName
-                ? `Assigned to ${conversation.assignedAdminName}`
-                : 'Not picked up yet'}
-          </p>
-        </PanelSection>
-      ) : null}
       {/* Above the outlet: it is the one section here an admin acts from. */}
       {dealerId ? (
         <OpenRequestsCard
@@ -1460,10 +1343,19 @@ export function InboxPage() {
         focusTicketId={focusTicketId}
         active={panelVisible && sideTab === 'details'}
         renderSection={(count, list) => (
-          <PanelSection title={`Resolved tickets · ${count}`}>{list}</PanelSection>
+          <PanelSection title={`Closed tickets · ${count}`}>{list}</PanelSection>
         )}
       />
-      <PanelSection title="Outlet">
+      <PanelSection
+        title="Outlet"
+        action={
+          <HowThisWorks
+            surface="admin-inbox-details"
+            label="Details"
+            variant="icon"
+          />
+        }
+      >
         {dealerQ.isLoading ? (
           <div className="flex justify-center py-3">
             <Spinner size={16} />
@@ -1579,12 +1471,15 @@ export function InboxPage() {
       )}
     >
       <h1 className="sr-only">Inbox</h1>
-      {/* Conversation list — full-width below lg, hidden once a chat is open.
+      {/* The list — full-width below lg, hidden once a chat is open.
 
           The panes appear at lg (1024px), not md — the same line the
           JavaScript has always drawn (`isLg` decides URL-driven selection). With
           the panes at md, everything from 768 to 1023px got the app sidebar and
-          the list side by side and left the open thread 48-100px wide. */}
+          the list side by side and left the open thread 48-100px wide.
+
+          Two tabs sit on top of it at every width: Tickets (the work) and All
+          chats (every conversation). */}
       <section
         id={listId}
         aria-label="Conversations"
@@ -1599,21 +1494,13 @@ export function InboxPage() {
           <div className="flex min-w-0 items-center gap-1.5">
             <h2 className="text-base font-semibold text-text">Inbox</h2>
             <HowThisWorks surface="admin-inbox" label="Inbox" variant="icon" />
-            {conversationsQ.isFetching && !conversationsQ.isLoading ? (
+            {(tab === 'tickets'
+              ? ticketListQ.isFetching && !ticketListQ.isLoading
+              : conversationsQ.isFetching && !conversationsQ.isLoading) ? (
               <Spinner size={14} className="text-text-muted" />
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <MoreViewsMenu
-              views={FILTERS}
-              primary={PRIMARY_VIEWS}
-              value={filter}
-              counts={countMap}
-              onChange={(f) => {
-                setFilter(f);
-                setSelectedId(null);
-              }}
-            />
             <Button
               size="sm"
               variant="secondary"
@@ -1624,42 +1511,134 @@ export function InboxPage() {
             </Button>
           </div>
         </div>
-        <InboxViews
-          views={FILTERS}
-          primary={PRIMARY_VIEWS}
-          value={filter}
-          counts={countMap}
-          onChange={(f) => {
-            setFilter(f);
-            setSelectedId(null);
-          }}
-        />
+        {/* The chips under the tabs. Under Tickets: every open ticket, the ones
+            this admin is on, and the closed ones. Under All chats: the AI guard
+            lens, only while it has something to show (or is on, so it can be
+            switched off). 44px below lg, where they are touched. */}
+        <InboxTabs
+          value={tab}
+          needsUs={countsQ.data?.needsUs}
+          guard={guardCountsQ.data?.aiGuard}
+          onChange={(next: InboxTab) => showView({ tab: next, aiGuard: false })}
+        >
+          {tab === 'tickets' ? (
+            <TicketChips value={chip} counts={chipCounts} onChange={(c) => showView({ chip: c })} />
+          ) : (
+            <GuardChips
+              on={aiGuard}
+              count={guardCountsQ.data?.aiGuard}
+              onChange={(on) => showView({ aiGuard: on })}
+            />
+          )}
+        </InboxTabs>
         {/* overscroll-contain: index.css deliberately leaves html/body alone so
             the shell's pull-to-refresh survives, and contains the inner
             scrollers instead — this one was missed, so flicking to the top of
             the list reloaded the page mid-read. */}
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          {conversationsQ.isLoading ? (
+          {tab === 'tickets' ? (
+            ticketListQ.isLoading ? (
+              <ConversationListSkeleton />
+            ) : ticketListQ.isError && !ticketListQ.data ? (
+              // No list at all, as opposed to an empty one. The two must not look
+              // alike: "No open tickets" under a failed request is the one thing
+              // this list cannot say wrongly.
+              <EmptyState
+                icon={<AlertTriangle width={26} height={26} strokeWidth={1.5} />}
+                title="Could not load the tickets"
+                description="This does not mean there are none. Check the connection and try again."
+                cta={
+                  <Button size="sm" variant="secondary" onClick={() => void ticketListQ.refetch()}>
+                    Try again
+                  </Button>
+                }
+              />
+            ) : visibleTickets.length === 0 ? (
+              <EmptyState
+                icon={<Ticket width={26} height={26} strokeWidth={1.5} />}
+                title={emptyTickets(chip).title}
+                description={emptyTickets(chip).description}
+              />
+            ) : (
+              <>
+                <ul>
+                  <TicketRows
+                    tickets={visibleTickets}
+                    now={now}
+                    selectedConversationId={selectedId}
+                    selectedTicketId={focusTicketId}
+                    // Only a closed ticket is named: Details has to land on it. An
+                    // open one is the thread's band already, and naming it would
+                    // open the band whole with a ring round it, over the messages.
+                    onOpen={(t) =>
+                      openConversation(t.conversationId, t.state === 'RESOLVED' ? t.id : undefined)
+                    }
+                  />
+                </ul>
+                {chip === 'closed' && ticketListQ.hasNextPage ? (
+                  <div className="flex justify-center p-3">
+                    <Button
+                      variant="secondary"
+                      loading={ticketListQ.isFetchingNextPage}
+                      onClick={() => void ticketListQ.fetchNextPage()}
+                    >
+                      Show more
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            )
+          ) : conversationsQ.isLoading ? (
             <ConversationListSkeleton />
+          ) : conversationsQ.isError && !conversationsQ.data ? (
+            <EmptyState
+              icon={<AlertTriangle width={26} height={26} strokeWidth={1.5} />}
+              title="Could not load the chats"
+              description="This does not mean there are none. Check the connection and try again."
+              cta={
+                <Button size="sm" variant="secondary" onClick={() => void conversationsQ.refetch()}>
+                  Try again
+                </Button>
+              }
+            />
           ) : conversations.length === 0 ? (
             <EmptyState
               icon={<MessageSquare width={26} height={26} strokeWidth={1.5} />}
               title="All clear"
-              description={`Nothing in ${FILTERS.find((f) => f.key === filter)?.label ?? 'this view'} right now.`}
+              description={
+                aiGuard
+                  ? 'No chat is marked by the AI guard right now.'
+                  : 'No conversations yet.'
+              }
             />
           ) : (
-            <ul>
-              {conversations.map((c) => (
-                <li key={c.id}>
-                  <ConversationRow
-                    conversation={c}
-                    selected={selectedId === c.id}
-                    now={now}
-                    onOpen={openConversation}
-                  />
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul>
+                {conversations.map((c) => (
+                  <li key={c.id}>
+                    <ConversationRow
+                      conversation={c}
+                      selected={selectedId === c.id}
+                      now={now}
+                      onOpen={openConversation}
+                    />
+                  </li>
+                ))}
+              </ul>
+              {/* A chat with no ticket is found only here, so the list goes back
+                  as far as the server has them, a page at a time. */}
+              {conversationsQ.hasNextPage ? (
+                <div className="flex justify-center p-3">
+                  <Button
+                    variant="secondary"
+                    loading={conversationsQ.isFetchingNextPage}
+                    onClick={() => void conversationsQ.fetchNextPage()}
+                  >
+                    Show more
+                  </Button>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </section>
@@ -1822,27 +1801,17 @@ export function InboxPage() {
                       {conversation.kind === 'manager' ? (
                         <span className="hidden shrink-0 lg:inline">· Group chat</span>
                       ) : null}
-                      <span className="lg:min-w-0 lg:truncate">· {statusWords(conversation, currentUserId)}</span>
-                      <span className="ml-0.5 inline-flex shrink-0">
+                      <span className="inline-flex shrink-0">
                         <TicketFlagBadge conversation={conversation} now={now} />
                       </span>
                     </p>
                   </div>
 
-                  {/* Phone: the status action as one glyph, the helper, and a
-                      kebab holding the rest. Four labelled controls took ~232px
-                      of a 360px header and left the member's name ~110px. */}
+                  {/* Phone: the helper as one glyph, and a kebab holding the rest
+                      (the thread's actions, Details, AI log, the portal login
+                      and video). Four labelled controls took ~232px of a 360px
+                      header and left the member's name ~110px. */}
                   <div className="flex shrink-0 items-center md:hidden">
-                    {statusAction ? (
-                      <IconButton
-                        aria-label={statusAction.label}
-                        variant={statusAction.variant}
-                        onClick={statusAction.run}
-                        loading={statusAction.pending}
-                      >
-                        {statusAction.icon(18)}
-                      </IconButton>
-                    ) : null}
                     <button
                       type="button"
                       onClick={() => openPanel('helper')}
@@ -1878,47 +1847,11 @@ export function InboxPage() {
                     </button>
                   </div>
 
-                  {/* Desk: the status action in words, then the panel's tabs as
-                      glyphs, then everything else under one overflow menu. From
-                      md to lg the thread is a 560px column: the status action
-                      is a glyph and Take over moves into the menu, or the desk
-                      row left the name ~95px. */}
+                  {/* Desk: the panel's tabs as glyphs, then everything else under
+                      one overflow menu. From md to lg the thread is a 560px
+                      column, so the menu holds the panel's other two tabs there
+                      or the desk row left the name ~95px. */}
                   <div className="hidden shrink-0 items-center gap-1.5 md:flex">
-                    {takeOverShown && isLg ? (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={handleTakeOver}
-                        loading={assignConv.isPending}
-                      >
-                        Take over
-                      </Button>
-                    ) : null}
-                    {/* Beside Take over the status action is a glyph until 2xl:
-                        both in words took 230px and pushed the dealer's name out
-                        of the header. */}
-                    {statusAction && (!isLg || (takeOverShown && !is2xl)) ? (
-                      <IconButton
-                        size="sm"
-                        aria-label={statusAction.label === 'Resolve' ? 'Resolve chat' : statusAction.label}
-                        title={statusAction.label === 'Resolve' ? 'Resolve chat' : statusAction.label}
-                        variant={statusAction.variant}
-                        onClick={statusAction.run}
-                        loading={statusAction.pending}
-                      >
-                        {statusAction.icon(16)}
-                      </IconButton>
-                    ) : statusAction ? (
-                      <Button
-                        size="sm"
-                        variant={statusAction.variant}
-                        onClick={statusAction.run}
-                        loading={statusAction.pending}
-                        leftIcon={statusAction.icon(14)}
-                      >
-                        {statusAction.label === 'Resolve' ? 'Resolve chat' : statusAction.label}
-                      </Button>
-                    ) : null}
                     {/* The panel's tabs as glyphs, only while the panel is put
                         away: with it open beside the chat its own tabs are right
                         there, and three more glyphs cost the name its room. Below
@@ -1945,61 +1878,65 @@ export function InboxPage() {
                         ) : null}
                       </>
                     ) : null}
-                    {composerActions || !isXl ? (
-                      <Menu
-                        label={
-                          !isXl && requestsToCheck > 0
-                            ? `More actions — ${requestsToCheck} to check`
-                            : 'More actions'
-                        }
-                        title="Actions"
-                        align="end"
-                        trigger={
-                          <span className="relative inline-flex">
-                            <MoreHorizontal width={18} height={18} strokeWidth={1.75} />
-                            {!isXl && requestsToCheck > 0 ? (
-                              <span
-                                aria-hidden
-                                className="absolute -right-2.5 -top-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-strong px-1 text-[10px] font-semibold leading-none text-white"
-                              >
-                                {requestsToCheck}
-                              </span>
-                            ) : null}
-                          </span>
-                        }
-                      >
-                        {!isXl ? (
-                          <>
-                            <MenuItem
-                              icon={<Info width={15} height={15} strokeWidth={1.75} />}
-                              onSelect={() => openPanel('details')}
+                    {/* The thread's own actions come first (answered outside the
+                        app, open a ticket, mark urgent), so this menu is there
+                        at every width; the panel's other two tabs follow below
+                        xl, then the things a thread can send. */}
+                    <Menu
+                      label={
+                        !isXl && requestsToCheck > 0
+                          ? `More actions — ${requestsToCheck} to check`
+                          : 'More actions'
+                      }
+                      title="Actions"
+                      align="end"
+                      trigger={
+                        <span className="relative inline-flex">
+                          <MoreHorizontal width={18} height={18} strokeWidth={1.75} />
+                          {!isXl && requestsToCheck > 0 ? (
+                            <span
+                              aria-hidden
+                              className="absolute -right-2.5 -top-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-strong px-1 text-[10px] font-semibold leading-none text-white"
                             >
-                              {requestsToCheck > 0 ? `Details · ${requestsToCheck} to check` : 'Details'}
-                            </MenuItem>
-                            <MenuItem
-                              icon={<Zap width={15} height={15} strokeWidth={1.75} />}
-                              onSelect={() => openPanel('ai')}
-                            >
-                              AI log
-                            </MenuItem>
-                            {composerActions || (takeOverShown && !isLg) ? <MenuSeparator /> : null}
-                          </>
-                        ) : null}
-                        {takeOverShown && !isLg ? (
+                              {requestsToCheck}
+                            </span>
+                          ) : null}
+                        </span>
+                      }
+                    >
+                      {threadActions.map((a) => (
+                        <MenuItem key={a.key} icon={a.icon(15)} onSelect={a.run}>
+                          {a.label}
+                        </MenuItem>
+                      ))}
+                      {!isXl ? (
+                        <>
+                          <MenuSeparator />
                           <MenuItem
-                            icon={<UserPlus width={15} height={15} strokeWidth={1.75} />}
-                            onSelect={handleTakeOver}
+                            icon={<Info width={15} height={15} strokeWidth={1.75} />}
+                            onSelect={() => openPanel('details')}
                           >
-                            Take over
+                            {requestsToCheck > 0 ? `Details · ${requestsToCheck} to check` : 'Details'}
                           </MenuItem>
-                        ) : null}
-                        {composerActions?.map((a) => (
-                          <MenuItem key={a.id} icon={a.icon} onSelect={a.onSelect}>
-                            {a.label}
+                          <MenuItem
+                            icon={<Zap width={15} height={15} strokeWidth={1.75} />}
+                            onSelect={() => openPanel('ai')}
+                          >
+                            AI log
                           </MenuItem>
-                        ))}
-                      </Menu>
-                    ) : null}
+                        </>
+                      ) : null}
+                      {composerActions ? (
+                        <>
+                          <MenuSeparator />
+                          {composerActions.map((a) => (
+                            <MenuItem key={a.id} icon={a.icon} onSelect={a.onSelect}>
+                              {a.label}
+                            </MenuItem>
+                          ))}
+                        </>
+                      ) : null}
+                    </Menu>
                     <HowThisWorks
                       surface="admin-inbox-thread"
                       label="Conversation"
@@ -2011,12 +1948,12 @@ export function InboxPage() {
                 {/* Pinned over the messages, never between them and the reply
                     box: an open ticket (a dealer waiting on a person) and the
                     guard's mark. One slim line each; the details are a tap
-                    away. Keyed on the thread so a half-written resolution never
-                    follows the admin to another dealer. Both draw nothing on the
-                    threads they have nothing to say about, which is most. Any
-                    other one-line state of the thread belongs in this band too,
-                    never under the messages: that space is the reply box's
-                    alone. */}
+                    away. Keyed on the thread so the line that is opened and
+                    the tickets already stamped never follow the admin to
+                    another dealer. Both draw nothing on the threads they have
+                    nothing to say about, which is most. Any other one-line
+                    state of the thread belongs in this band too, never under
+                    the messages: that space is the reply box's alone. */}
                 {/* One cap for the whole band, so however many of these a thread
                     has at once (a quiet, two tickets, a guard mark) the messages
                     keep most of the column; the band scrolls inside itself, and
@@ -2082,7 +2019,6 @@ export function InboxPage() {
                     recipient={recipient}
                     onSend={handleSend}
                     onShareToOutlet={handleShareToOutlet}
-                    disabled={conversation.status === 'RESOLVED'}
                     replyingTo={composerReply}
                     onCancelReply={handleCancelReply}
                     onSuggest={handleSuggest}
@@ -2168,19 +2104,12 @@ export function InboxPage() {
               onClose={() => setSendBackTarget(null)}
             />
 
-            <ResolveConversationDialog
-              open={resolveOpen}
-              onClose={() => setResolveOpen(false)}
-              services={servicesQ.data ?? []}
-              servicesLoading={servicesQ.isLoading}
-              pending={resolveConv.isPending}
-              onResolve={async (values) => {
-                await resolveConv.mutateAsync({
-                  conversationId: conversation.id,
-                  ...values,
-                });
-                setResolveOpen(false);
-              }}
+            <AnsweredOutsideDialog conversationId={outsideFor} onClose={() => setOutsideFor(null)} />
+
+            <OpenTicketDialog
+              conversationId={openTicketFor}
+              now={now}
+              onClose={() => setOpenTicketFor(null)}
             />
 
             {/* Phone-only overflow actions, out of the thread header. */}
@@ -2198,19 +2127,20 @@ export function InboxPage() {
                 />
               }
             >
-              {/* First, because it is the same control as the glyph in the
-                  header — this row is where that glyph's word went. */}
-              {statusAction ? (
+              {/* First, because they are what a person does beside the
+                  conversation — the same rows the desktop "⋯" menu holds. */}
+              {threadActions.map((a) => (
                 <SheetItem
-                  icon={statusAction.icon(20)}
+                  key={a.key}
+                  icon={a.icon(20)}
                   onClick={() => {
                     setThreadMenuOpen(false);
-                    statusAction.run();
+                    a.run();
                   }}
                 >
-                  {statusAction.label === 'Resolve' ? 'Resolve chat' : statusAction.label}
+                  {a.label}
                 </SheetItem>
-              ) : null}
+              ))}
               <SheetItem
                 icon={<Sparkles width={20} height={20} strokeWidth={1.75} />}
                 onClick={() => {
@@ -2238,8 +2168,9 @@ export function InboxPage() {
               >
                 AI log
               </SheetItem>
-              {/* Also here, not only behind the reply box's "+": a resolved
-                  chat has no box on a phone, and these still need sending. */}
+              {/* Also here, not only behind the reply box's "+": the box is a
+                  tap further down, and these are what a person reaches for
+                  from the header. */}
               {composerActions?.map((a) => (
                 <SheetItem
                   key={a.id}
@@ -2252,17 +2183,6 @@ export function InboxPage() {
                   {a.label}
                 </SheetItem>
               ))}
-              {takeOverShown ? (
-                <SheetItem
-                  icon={<UserPlus width={20} height={20} strokeWidth={1.75} />}
-                  onClick={() => {
-                    setThreadMenuOpen(false);
-                    handleTakeOver();
-                  }}
-                >
-                  Take over
-                </SheetItem>
-              ) : null}
             </Sheet>
           </>
         )}

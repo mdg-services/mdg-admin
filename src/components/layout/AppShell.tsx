@@ -18,8 +18,12 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 
-import { Input, Menu, MenuItem } from '@/components/ui';
+import { Input, Menu, MenuItem, MenuSwitchItem, useToast } from '@/components/ui';
 import { useAlertsLive } from '@/hooks/api/useAdminAlerts';
+import {
+  useAdminNotificationPrefs,
+  useSetAdminNotificationPrefs,
+} from '@/hooks/api/useAdminNotificationPrefs';
 import { useTicketsLive } from '@/hooks/api/useTickets';
 import { useHeldMessagesLive } from '@/hooks/useHeldMessagesLive';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -412,6 +416,13 @@ function AdminMenu({
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  const toast = useToast();
+  const prefsQ = useAdminNotificationPrefs();
+  const setPrefs = useSetAdminNotificationPrefs();
+  // The switch cannot be pressed until the setting has been read: flipping it
+  // before the server has said what it is would save a guess. Until then it
+  // shows the default (on), dimmed.
+  const prefs = prefsQ.data;
 
   return (
     <Menu
@@ -442,6 +453,33 @@ function AdminMenu({
           <p className="break-all text-xs text-text-muted">{email}</p>
         ) : null}
       </div>
+      {/* This admin's own phone. Off stops the buzz for each dealer message;
+          tickets, late tickets and alerts still buzz. Bound to the server, not
+          the browser: the push goes to every phone this admin is signed in on. */}
+      <MenuSwitchItem
+        checked={prefs?.dealerMessagePush ?? true}
+        disabled={!prefs || setPrefs.isPending}
+        hint={
+          prefsQ.isError
+            ? 'Could not load this setting.'
+            : 'Tickets, late tickets and alerts still buzz you.'
+        }
+        onChange={(next) =>
+          setPrefs.mutate(
+            { dealerMessagePush: next },
+            {
+              onError: (err) =>
+                toast.error(
+                  err instanceof Error && err.message
+                    ? err.message
+                    : 'That did not save. Try again.',
+                ),
+            },
+          )
+        }
+      >
+        Buzz me for every dealer message
+      </MenuSwitchItem>
       <MenuItem
         icon={<LogOut width={14} height={14} strokeWidth={1.75} />}
         onSelect={onLogout}

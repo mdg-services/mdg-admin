@@ -28,13 +28,20 @@ export function isReplyAlert(alert: AdminAlert): boolean {
 }
 
 /**
- * A ticket's alert is never what closes the ticket. Hiding it only takes the
+ * A ticket's alert is never what closes the ticket — whether it says the ticket
+ * needs a person, is late, or has been idle for days. Hiding it only takes the
  * row off this list; the ticket stays open, and the dealer's question stays
- * unanswered, until somebody resolves it with a note. The toast says so, because
- * "Hidden" on its own reads as "dealt with".
+ * unanswered, until somebody closes it. The toast says so, because "Hidden" on
+ * its own reads as "dealt with".
  */
+const TICKET_ALERT_KINDS: ReadonlySet<AdminAlertKind> = new Set([
+  'ticket_open',
+  'ticket_late',
+  'ticket_idle',
+]);
+
 export function isTicketAlert(alert: AdminAlert): boolean {
-  return alert.kind === 'ticket_open';
+  return TICKET_ALERT_KINDS.has(alert.kind);
 }
 
 /**
@@ -51,6 +58,9 @@ export function isTicketAlert(alert: AdminAlert): boolean {
  */
 const STILL_STANDING: Partial<Record<AdminAlertKind, string>> = {
   grievance_open: 'Hidden from this list. Grievances stay open until someone resolves them.',
+  // ── the AI ── hiding the alert does not switch it back on.
+  ai_down:
+    'Hidden from this list. Dealer messages keep coming to you as tickets until the AI is switched back on.',
   enrolment_new:
     'Hidden from this list. Registrations stay new until someone marks them as contacted.',
   callback_new: 'Hidden from this list. Call-backs stay new until someone marks them as called.',
@@ -104,7 +114,7 @@ export function hideLabel(alert: AdminAlert): string {
 export function hiddenToast(alert: AdminAlert): string {
   if (isReplyAlert(alert)) return 'Marked as read. Their next message will alert you again.';
   if (isTicketAlert(alert)) {
-    return 'Hidden from this list. The ticket is still open until someone resolves it.';
+    return 'Hidden from this list. The ticket is still open until someone closes it.';
   }
   const standing = STILL_STANDING[alert.kind];
   if (standing) return standing;

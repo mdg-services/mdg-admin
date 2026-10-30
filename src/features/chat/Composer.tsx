@@ -1,4 +1,4 @@
-import { ChevronDown, Mic, Paperclip, Plus, RotateCcw, Send, Sparkles, Trash2, Wand2, X } from 'lucide-react';
+import { ChevronDown, Mic, Paperclip, Plus, Send, Sparkles, Trash2, Wand2, X } from 'lucide-react';
 import * as React from 'react';
 
 
@@ -76,7 +76,6 @@ interface ComposerProps {
     body?: string;
     attachments: Attachment[];
   }) => Promise<void>;
-  disabled?: boolean;
   /** When set, a reply-quote strip shows above the input. */
   replyingTo?: ComposerReplyPreview | null;
   onCancelReply?: () => void;
@@ -145,7 +144,6 @@ const MAX_ROWS_PHONE = 4;
 export function Composer({
   conversationId,
   onSend,
-  disabled,
   replyingTo,
   onCancelReply,
   insert,
@@ -179,12 +177,9 @@ export function Composer({
   // "Suggest" earns its word only where the box is wide enough to keep its own.
   const roomyRow = useMediaQuery('(min-width: 1440px)');
 
-  // A resolved chat disables the composer; say why.
-  const placeholder = disabled
-    ? 'This chat is resolved — reopen to reply.'
-    : recipient
-      ? `Message ${isMd ? recipient : phoneName(recipient)}`
-      : 'Type a message…';
+  const placeholder = recipient
+    ? `Message ${isMd ? recipient : phoneName(recipient)}`
+    : 'Type a message…';
 
   // The box grows with what is in it, the placeholder included: an empty box
   // is measured too, so a sentence-long placeholder is not cut to one line.
@@ -257,7 +252,7 @@ export function Composer({
   }, [insert?.id]);
 
   const hasContent = body.trim().length > 0 || files.length > 0;
-  const busy = sending || disabled;
+  const busy = sending;
   // An emptied box holds no helper draft any more.
   React.useEffect(() => {
     if (!body.trim()) setFromHelper(false);
@@ -551,29 +546,6 @@ export function Composer({
             Send
           </Button>
         </div>
-      ) : disabled && !isMd ? (
-        /*
-         * A resolved chat's only explanation used to be the placeholder, inside
-         * a field about 180px wide at 360px — the admin read "This chat is
-         * resol…" beside a mic that was simply grey. Below md the row is
-         * replaced by the sentence itself, pointing at the Reopen button that
-         * is already in the thread header.
-         */
-        <p className="px-1 py-2 text-sm text-text-muted">
-          This chat is resolved. Tap{' '}
-          {/* Below md the thread header draws Reopen as a bare glyph — its word
-              lives in the kebab sheet — so naming it alone would send the admin
-              hunting for a word that is not on screen. Show the glyph too. */}
-          <RotateCcw
-            width={14}
-            height={14}
-            strokeWidth={1.75}
-            aria-hidden
-            className="inline align-text-bottom text-text"
-          />{' '}
-          <span className="font-medium text-text">Reopen</span> at the top to
-          reply.
-        </p>
       ) : (
         <div className="grid gap-2">
           {/* Whose words these are, until they are sent or the box is emptied:
@@ -669,11 +641,7 @@ export function Composer({
                 // 6px taller than it, which drops it below the buttons beside it.
                 // The placeholder keeps to one line: a long name wrapped it to
                 // four, and the box grew to hold them.
-                className={cn(
-                  'block min-h-11 min-w-0 resize-none md:min-h-[36px]',
-                  !disabled &&
-                    'placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap',
-                )}
+                className="block min-h-11 min-w-0 resize-none placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap md:min-h-[36px]"
               />
             </div>
             {/* The Reply helper's one tap, in the helper's violet: it never sends,
@@ -687,7 +655,6 @@ export function Composer({
                   tone="assist"
                   onClick={onSuggest}
                   loading={suggesting}
-                  disabled={disabled}
                   title="The helper drafts a reply; nothing is sent"
                   leftIcon={<Wand2 width={16} height={16} strokeWidth={1.75} />}
                   className="shrink-0"
@@ -698,7 +665,7 @@ export function Composer({
                 <button
                   type="button"
                   onClick={onSuggest}
-                  disabled={disabled || suggesting}
+                  disabled={suggesting}
                   aria-label="Suggest reply — the helper drafts one, nothing is sent"
                   title="Suggest reply — the helper drafts one; nothing is sent"
                   className={cn(

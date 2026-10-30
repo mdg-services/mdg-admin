@@ -10,15 +10,15 @@ import type { Conversation } from '@dk/shared';
  * the messages, while the AI is holding back on this chat.
  *
  * A person's typed reply starts the quiet (30 minutes, never shortened by a
- * later one) and so does Pick up (an hour), so the admin who just wrote to a
- * dealer can see why the machine is not also answering them, and can hand the
- * chat back with "Let AI answer now" — which also has the AI take up the dealer's
- * message that is waiting, if one is. The server compares the time with the clock,
- * so nothing ends it: this line simply stops being drawn when `now` passes it,
- * and is not drawn at all for a chat with no quiet.
+ * later one) and so does "Answered outside the app", so the admin who just
+ * wrote to a dealer can see why the machine is not also answering them, and can
+ * hand the chat back with "Let AI answer now" — which also has the AI take up
+ * the dealer's message that is waiting, if one is. The server compares the time
+ * with the clock, so nothing ends it: this line simply stops being drawn when
+ * `now` passes it, and is not drawn at all for a chat with no quiet.
  *
- * Whose quiet it is, is the person's name only — a reply and a pick-up read the
- * same here, and the line does not say which.
+ * Whose quiet it is, is the person's name only — a typed reply and "answered
+ * outside" read the same here, and the line does not say which.
  *
  * `now` is the page's one-minute tick, so the line can outlast the quiet by up
  * to a minute. The server is the one that decides whether the AI answers.

@@ -124,7 +124,7 @@ export function Menu({
     () =>
       Array.from(
         panelRef.current?.querySelectorAll<HTMLElement>(
-          '[role="menuitem"]:not([aria-disabled="true"])',
+          '[role="menuitem"]:not([aria-disabled="true"]), [role="menuitemcheckbox"]:not([aria-disabled="true"])',
         ) ?? [],
       ),
     [],
@@ -446,4 +446,70 @@ export function MenuItem({
 
 export function MenuSeparator() {
   return <div role="separator" className="my-1 border-t border-border" />;
+}
+
+export interface MenuSwitchItemProps {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled?: boolean;
+  /** One quiet line under the label — what the switch does, or why it is dead. */
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+}
+
+/**
+ * A switch that lives in a menu: a setting, not an action. Unlike `MenuItem` it
+ * does NOT close the menu when pressed — the admin flips it and sees it flip —
+ * and it is a `menuitemcheckbox` so a screen reader says "on" or "off" rather
+ * than "button". The panel's arrow keys reach it like any other row.
+ *
+ * The label wraps (a setting's name is a sentence, not a verb); the switch keeps
+ * its place at the end of the row.
+ */
+export function MenuSwitchItem({
+  checked,
+  onChange,
+  disabled,
+  hint,
+  children,
+}: MenuSwitchItemProps) {
+  return (
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={checked}
+      tabIndex={-1}
+      aria-disabled={disabled || undefined}
+      onClick={() => {
+        if (disabled) return;
+        onChange(!checked);
+      }}
+      className={cn(
+        'flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors md:min-h-9 md:gap-2.5 md:px-3',
+        'focus-visible:outline-none focus-visible:bg-surface-2',
+        disabled ? 'cursor-not-allowed text-text-subtle' : 'text-text hover:bg-surface-2',
+        !disabled && '[@media(hover:none)]:hover:bg-transparent [@media(hover:none)]:active:bg-surface-2',
+      )}
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block">{children}</span>
+        {hint ? <span className="mt-0.5 block text-xs text-text-subtle">{hint}</span> : null}
+      </span>
+      <span
+        aria-hidden
+        className={cn(
+          'relative h-5 w-9 shrink-0 rounded-full transition-colors',
+          checked ? 'bg-brand' : 'bg-border-strong',
+          disabled && 'opacity-60',
+        )}
+      >
+        <span
+          className={cn(
+            'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-[left]',
+            checked ? 'left-[18px]' : 'left-0.5',
+          )}
+        />
+      </span>
+    </button>
+  );
 }

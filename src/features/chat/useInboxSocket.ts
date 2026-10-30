@@ -24,9 +24,9 @@ export function useInboxSocket() {
 
     const settleTimers = new Set<number>();
 
-    // The list, and the thread if it is open: a colleague's Pick up or "Let AI
-    // answer", or the sweep handing a thread back, changes the "AI quiet until"
-    // line, and nothing else would tell the open thread until a refocus.
+    // The list, and the thread if it is open: a colleague's reply, "Answered
+    // outside the app" or "Let AI answer" changes the "AI quiet until" line, and
+    // nothing else would tell the open thread until a refocus.
     const onUpdated = (payload: { conversation: Conversation }) => {
       qc.invalidateQueries({ queryKey: ['conversations'] });
       if (payload?.conversation?.id) {

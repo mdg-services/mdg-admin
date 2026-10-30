@@ -83,6 +83,7 @@ import {
   resolveReviewFacet,
   type AiReviewFacet,
 } from './format';
+import { GapTickets } from './GapTickets';
 
 /**
  * Every answer the machine has given, across every dealer, newest first — and
@@ -899,6 +900,12 @@ export function AiAnswersPage() {
 
       <div className="mt-3 grid gap-3">
         <DayBand counts={counts} guardThreads={inboxCountsQ.data?.aiGuard} />
+
+        {/* The week's questions the AI had no answer for — the list the briefing
+            is improved from. Above the review list because it is short and is
+            the other half of the same job: whether what the machine said was
+            right (below) and what it could not say at all (here). */}
+        <GapTickets />
 
         {/*
          * `Tabs` and not `SegmentedControl`, and the swap is not cosmetic. The

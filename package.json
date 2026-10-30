@@ -27,6 +27,7 @@
     "check:reply-helper": "npx tsx --test scripts/replyHelper.check.ts",
     "check:column-layout": "npx tsx --test scripts/columnLayout.check.ts",
     "check:signup-origin": "npx tsx --test scripts/signupOrigin.check.ts",
+    "check:inbox-desk": "npx tsx --test scripts/inboxDesk.check.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""

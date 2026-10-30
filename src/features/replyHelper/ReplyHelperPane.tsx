@@ -64,10 +64,11 @@ function subscribeDrafts(listener: () => void): () => void {
 /**
  * Where a draft went when the admin pressed "Put in reply box":
  * `'box'`: into the reply box, which is open; `'saved'`: kept as the chat's
- * draft because the box is not open right now (the box shows it when it opens);
- * `'closed'`: refused, because the chat cannot be written to (a resolved chat).
+ * draft because the box is not open right now (the box shows it when it opens).
+ * No chat is ever shut to a draft: a dealer can write again at any time, and the
+ * answer goes in the same box.
  */
-export type UseDraftResult = 'box' | 'saved' | 'closed';
+export type UseDraftResult = 'box' | 'saved';
 
 /** A "Suggest reply" pressed somewhere else (the reply box's ✨), to run once. */
 export interface ReplyHelperSuggestRequest {
@@ -238,10 +239,6 @@ export function ReplyHelperPane({
 
   function useDraft(text: string) {
     const where = onUseDraft(text);
-    if (where === 'closed') {
-      toast.info('This chat is resolved — reopen it to put a draft in the reply box.');
-      return;
-    }
     // Into a box that marks it itself (the dealer-chat box's violet line and
     // one pulse) no toast: in the corner it would sit over that box's Send. Any
     // other box, and a draft saved for a box that is not open, is still said.
