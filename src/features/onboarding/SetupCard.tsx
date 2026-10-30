@@ -119,14 +119,20 @@ export function SetupCard({
             ...(setup.origin
               ? [{ key: 'signedUp', label: 'Signed up', value: originLabel(setup.origin), block: true }]
               : []),
-            {
-              key: 'uses',
-              label: 'Signs in on',
-              value: setup.lastSignIn
-                ? `${deviceUseLabel(setup.lastSignIn.device)} · last ${istStamp(setup.lastSignIn.at, now)}`
-                : 'Not signed in yet',
-              block: true,
-            },
+            // Only when the server says something about either: a server older than 30 Oct
+            // 2026 sends neither, and "Not signed in yet" would then be wrong for every outlet.
+            ...(setup.origin || setup.lastSignIn
+              ? [
+                  {
+                    key: 'uses',
+                    label: 'Signs in on',
+                    value: setup.lastSignIn
+                      ? `${deviceUseLabel(setup.lastSignIn.device)} · last ${istStamp(setup.lastSignIn.at, now)}`
+                      : 'Not signed in yet',
+                    block: true,
+                  },
+                ]
+              : []),
             // Which oil company: it decides the portal logins below. Every company is named here.
             {
               key: 'company',
