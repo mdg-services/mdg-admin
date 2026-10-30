@@ -1193,6 +1193,9 @@ export function InboxPage() {
         return;
       }
       const list = clampList(px);
+      // Pushed against its stop, nothing moved: keep the width asked for on a
+      // wider screen rather than save the one this screen allows.
+      if (list === widths.list) return settle(columnPrefs);
       settle({ ...columnPrefs, list });
       updateColumnPrefs({ list });
     },
@@ -1206,6 +1209,7 @@ export function InboxPage() {
     live: (px: number) => drawWidth('panel', clampPanel(px)),
     commit: (px: number) => {
       const panel = clampPanel(px);
+      if (panel === widths.panel) return settle(columnPrefs);
       settle({ ...columnPrefs, panel });
       updateColumnPrefs({ panel });
     },

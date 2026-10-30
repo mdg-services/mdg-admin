@@ -5,9 +5,9 @@
  * The admin drags the list's and the panel's edges; the chat takes what is left.
  * What the admin asked for is kept as it was asked (a "preference"), and every
  * render turns it into widths that fit the screen it is on now: the chat never
- * drops below its floor (`CHAT_MIN`, `CHAT_MIN_SOLO`), so a width dragged out on a wide monitor cannot crush
- * the chat when the same browser is later a 1280px laptop. The list gives way
- * first to the chat, then the panel to both.
+ * drops below its floor (`CHAT_MIN`, `CHAT_MIN_SOLO`), so a width dragged out
+ * on a wide monitor cannot crush the chat when the same browser is later a
+ * 1280px laptop. The list gives way first to the chat, then the panel to both.
  *
  * Pure, so the arithmetic is checked on its own (scripts/columnLayout.check.ts).
  */
@@ -23,17 +23,20 @@ export const PANEL_MAX = 560;
 /** The panel's width until the admin drags it: as it was before it could be dragged. */
 export const panelDefault = (is2xl: boolean) => (is2xl ? 360 : 320);
 /**
- * The chat's narrowest beside the panel column: enough for its header to show a
- * usual name in full beside its buttons (a group chat's "Ramesh Yadav  Manager",
- * measured). At most 432, the chat's share at a 1280px laptop with both columns
- * at their defaults, so those defaults never change.
+ * The chat's narrowest beside the panel column: what it had before the columns
+ * could be dragged, at a 1280px laptop with both at their defaults. Its header
+ * was laid out for that width and no narrower: a held chat's Resolve button, a
+ * group chat's role and "Not picked up", a three-word name. So on a laptop that
+ * width stays the chat's, and the list or panel grow only on a wider screen or
+ * with the list folded away.
  */
-export const CHAT_MIN = 410;
+export const CHAT_MIN = 432;
 /**
- * The chat's narrowest with no panel column (1024-1279px, or the panel shut):
- * its header then also carries the Reply helper button that opens the drawer.
+ * The chat's narrowest with no panel column (1024-1279px, or the panel shut),
+ * the same rule: its width at a 1024px screen before, where its header also
+ * carries the Reply helper button that opens the drawer.
  */
-export const CHAT_MIN_SOLO = 464;
+export const CHAT_MIN_SOLO = 496;
 /**
  * A list dragged narrower than this folds away, as the Hide list button does:
  * 80px past its floor, so a short pull does nothing and a firm one folds it.

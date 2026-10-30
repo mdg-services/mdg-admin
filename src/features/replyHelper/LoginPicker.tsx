@@ -62,9 +62,10 @@ export function LoginPicker({
                   <Check width={14} height={14} strokeWidth={1.75} className="shrink-0" />
                 ) : undefined
               }
-              // `!`: Button's own nowrap comes later in the CSS and `cn` does not
-              // merge, so a long login name would push past a phone's edge.
-              className="!whitespace-normal text-left"
+              // `!`: Button's own nowrap and fixed height come later in the CSS
+              // and `cn` does not merge. A long login name wraps rather than
+              // push past a phone's edge, and the button grows to hold it.
+              className="!h-auto !whitespace-normal py-[5px] text-left"
             >
               {loginWords(c)}
             </Button>

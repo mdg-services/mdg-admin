@@ -126,8 +126,8 @@ export function InstructionBox({
             {readerWords ? ` · Drafts for ${readerWords}` : ''}
             {coarse ? null : (
               <>
-                {' · '}
-                <span className="whitespace-nowrap">Enter to ask</span>
+                {' '}
+                <span className="whitespace-nowrap">· Enter to ask</span>
               </>
             )}
           </span>

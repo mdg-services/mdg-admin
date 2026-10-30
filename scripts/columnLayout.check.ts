@@ -53,6 +53,15 @@ describe('columnWidths', () => {
     assert.ok(LAPTOP - w.list - w.panel >= CHAT_MIN);
   });
 
+  it('never leaves the chat narrower than it was before anything could be dragged', () => {
+    // Its header was laid out for these: 432 beside the panel at 1280, 496 at 1024.
+    assert.equal(CHAT_MIN, LAPTOP - LIST_DEFAULT - 320);
+    assert.equal(CHAT_MIN_SOLO, 816 - LIST_DEFAULT);
+    // So on that laptop the list and panel grow only once the list is folded.
+    const folded = columnWidths(LAPTOP, { list: null, panel: 560 }, { ...both, listShown: false });
+    assert.equal(folded.panel, PANEL_MAX);
+  });
+
   it('gives a folded list nothing, and the chat its room', () => {
     const w = columnWidths(LAPTOP, { list: 400, panel: null }, { ...both, listShown: false });
     assert.equal(w.list, 0);
@@ -60,9 +69,9 @@ describe('columnWidths', () => {
   });
 
   it('lets the list take the panel\'s room while the panel is shut', () => {
-    const shut = columnWidths(800, { list: 480, panel: null }, { ...both, panelShown: false });
+    const shut = columnWidths(900, { list: 480, panel: null }, { ...both, panelShown: false });
     assert.equal(shut.panel, 0);
-    assert.equal(shut.list, 800 - CHAT_MIN_SOLO);
+    assert.equal(shut.list, 900 - CHAT_MIN_SOLO);
   });
 
   it('keeps more room for the chat when its header also carries the helper button', () => {
