@@ -62,6 +62,22 @@ const BRAND_TONE_VARIANTS: Partial<Record<Variant, string>> = {
   ghost: `bg-transparent text-brand hover:bg-surface-2 ${TOUCH.clear}`,
 };
 
+/**
+ * The Reply helper's violet, for `tone="assist"` (ADR 0025): every control that
+ * talks to the helper wears it, and nothing that sends to a dealer ever does, so
+ * "Ask" and "Send" can never be mistaken for each other at a glance. A filled
+ * one is the helper's main action ("Put in reply box", "Ask"); the quiet two
+ * are its secondary actions ("Suggest reply").
+ */
+const ASSIST_TONE_VARIANTS: Partial<Record<Variant, string>> = {
+  primary:
+    // `text-inverse`, not white: the dark theme's violet is light (#a78bfa),
+    // and white on it measured 2.7:1.
+    'bg-assist text-text-inverse hover:bg-assist-hover [@media(hover:none)]:hover:bg-assist [@media(hover:none)]:active:bg-assist-hover',
+  secondary: `bg-assist-soft text-assist-strong border border-assist-line hover:bg-assist-line [@media(hover:none)]:hover:bg-assist-soft [@media(hover:none)]:active:bg-assist-line`,
+  ghost: `bg-transparent text-assist-strong hover:bg-assist-soft ${TOUCH.clear}`,
+};
+
 // The `min-h-11` floor (44px) only wins below `md`; `md:min-h-8`/`md:min-h-9`
 // restores the original desktop density so ≥ md looks identical to before.
 // Exported for the same reason as `BUTTON_VARIANTS`: a `Menu` whose trigger is
@@ -96,7 +112,7 @@ export interface ButtonProps
   align?: 'center' | 'start';
   /** `'brand'` paints the label in the brand colour on `ghost` and
    *  `secondary`; ignored on the filled variants. `'default'` is unchanged. */
-  tone?: 'default' | 'brand';
+  tone?: 'default' | 'brand' | 'assist';
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -127,7 +143,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           align === 'start' ? 'justify-start text-left' : 'justify-center',
           'transition-colors disabled:cursor-not-allowed disabled:opacity-70',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
-          (tone === 'brand' ? BRAND_TONE_VARIANTS[variant] : undefined) ??
+          (tone === 'brand'
+            ? BRAND_TONE_VARIANTS[variant]
+            : tone === 'assist'
+              ? ASSIST_TONE_VARIANTS[variant]
+              : undefined) ??
             BUTTON_VARIANTS[variant],
           padding === 'none' ? SIZES_NO_PADDING[size] : BUTTON_SIZES[size],
           className,

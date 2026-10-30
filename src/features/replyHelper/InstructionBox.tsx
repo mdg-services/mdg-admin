@@ -1,17 +1,17 @@
-import { Sparkles, Wand2 } from 'lucide-react';
+import { Lock, Sparkles, Wand2 } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/Button';
-import { Textarea } from '@/components/ui/Textarea';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { SUGGEST_LABEL } from '@/lib/replyHelper';
+import { cn } from '@/lib/cn';
 import { REPLY_HELPER_INSTRUCTION_MAX } from '@dk/shared';
 
 /**
  * Where the admin tells the helper what they want ("he wants the payment link —
  * polite Hinglish reply"). It is NOT the reply box: nothing typed here goes to
- * the dealer, and the button says "Ask", never "Send", so the two are never
- * confused at a glance.
+ * the dealer. It lives in the side panel, wears the helper's violet, says "Ask
+ * the helper…" and its button says "Ask", never "Send" — so the two are never
+ * confused at a glance, and are never beside each other.
  *
  * ENTER. At a desk, Enter asks and Shift+Enter is a new line — the habit of
  * every chat box. On a phone (a coarse pointer) Enter is a new line and the
@@ -21,8 +21,8 @@ import { REPLY_HELPER_INSTRUCTION_MAX } from '@dk/shared';
  * keyboard confirming a word, and treating it as "ask" would fire half an
  * instruction.
  *
- * 16px text below md (`Textarea`'s own rule): lower, and focusing it zooms an
- * iPhone in and nothing zooms back.
+ * 16px text below md: lower, and focusing it zooms an iPhone in and nothing
+ * zooms back.
  */
 export function InstructionBox({
   value,
@@ -48,6 +48,7 @@ export function InstructionBox({
   const shut = busy || !!disabled;
   const typed = value.trim();
   const remaining = REPLY_HELPER_INSTRUCTION_MAX - value.length;
+  const hintId = React.useId();
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key !== 'Enter' || e.shiftKey || coarse) return;
@@ -57,60 +58,65 @@ export function InstructionBox({
   }
 
   return (
-    <div className="grid gap-1.5 border-t border-border bg-surface px-3 py-2">
+    <div className="shrink-0 border-t border-assist-line bg-assist-soft px-3 pt-2.5 pb-[max(env(safe-area-inset-bottom),0.75rem)] md:pb-3">
       {/* The quick way: no instruction at all. It reads the chat and works out
           what they are waiting for; the box below is for when the admin wants
           something particular, or to rework the last drafts ("shorter"). */}
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+      <div className="mb-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <Button
           size="sm"
           variant="secondary"
-          tone="brand"
+          tone="assist"
           onMouseDown={(e) => e.preventDefault()}
           onClick={onSuggest}
           disabled={shut}
-          leftIcon={<Wand2 width={16} height={16} strokeWidth={1.75} />}
+          leftIcon={<Wand2 width={15} height={15} strokeWidth={1.75} />}
         >
-          {SUGGEST_LABEL}
+          Suggest reply
         </Button>
-        <span className="min-w-0 text-xs text-text-subtle">
-          reads the chat and writes the reply — or say what you want below
-        </span>
+        <span className="min-w-0 text-xs text-text-muted">reads the chat and drafts the next reply</span>
       </div>
-      <div className="flex items-end gap-2">
-        <Textarea
+      <div
+        className={cn(
+          'flex items-end gap-1.5 rounded-lg border border-assist-line bg-surface p-1.5 transition-shadow duration-150',
+          'focus-within:border-assist focus-within:shadow-[0_0_0_3px_var(--color-assist-line)]',
+          shut && 'opacity-70',
+        )}
+      >
+        <textarea
           value={value}
           rows={2}
           maxLength={REPLY_HELPER_INSTRUCTION_MAX}
           disabled={shut}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
-          aria-label="What should the reply say?"
+          aria-label="Ask the helper — never sent to the dealer"
+          aria-describedby={hintId}
           placeholder={
-            disabled && disabledWords
-              ? disabledWords
-              : 'e.g. he wants the payment link — polite Hinglish reply'
+            disabled && disabledWords ? disabledWords : 'Ask the helper… e.g. “make it shorter”'
           }
-          className="min-h-11 resize-none"
+          // The focus mark is the box's own violet edge (`focus-within` above).
+          className="block max-h-40 min-h-11 w-full min-w-0 resize-none bg-transparent px-2 py-1.5 text-base leading-5 text-text placeholder:text-text-subtle focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed md:text-sm"
         />
         {/* `onMouseDown` keeps the keyboard up on a phone: a tap that takes
             focus from the box drops it, and the box jumps as it goes. */}
         <Button
+          size="sm"
+          tone="assist"
           onMouseDown={(e) => e.preventDefault()}
           onClick={onAsk}
           disabled={shut || !typed}
           loading={busy}
-          leftIcon={<Sparkles width={16} height={16} strokeWidth={1.75} />}
+          leftIcon={<Sparkles width={15} height={15} strokeWidth={1.75} />}
           className="shrink-0"
         >
           Ask
         </Button>
       </div>
-      <p className="flex flex-wrap justify-between gap-x-3 text-xs text-text-subtle">
-        <span>
-          {coarse
-            ? 'Nothing here is sent to them. Drafts go in the reply box only when you tap Use this.'
-            : 'Enter to ask, Shift+Enter for a new line. Nothing here is sent to them.'}
+      <p id={hintId} className="mt-1.5 flex flex-wrap justify-between gap-x-3 text-xs text-text-muted">
+        <span className="inline-flex items-center gap-1">
+          <Lock width={11} height={11} strokeWidth={2} aria-hidden />
+          {coarse ? 'Only MDG sees this' : 'Only MDG sees this · Enter to ask'}
         </span>
         {remaining <= 200 ? <span className="tabular-nums">{remaining} left</span> : null}
       </p>

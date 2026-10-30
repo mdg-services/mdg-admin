@@ -3,13 +3,13 @@ import { Check } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Callout } from '@/components/ui/Callout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { countRequests, hasAnswerToCheck, isAnswerShown } from '@/lib/chatAsk';
 import { cn } from '@/lib/cn';
 import type { DealerOpenRequest } from '@dk/shared';
 
 import { REQUEST_KIND_ICON, RequestStatusBadge, RequestTitle } from './AskPickerParts';
+import { PanelSection } from './PanelSection';
 
 export interface OpenRequestsCardProps {
   /** The thread being read, so a "Show message" can tell this chat from another. */
@@ -70,20 +70,17 @@ export function OpenRequestsCard({
   const counts = countRequests(list, repliedMessageIds);
 
   return (
-    <Card>
-      <CardHeader
-        align="center"
-        action={
-          counts.total > 0 ? (
-            <Badge intent={counts.toCheck > 0 ? 'warning' : 'neutral'}>
-              {counts.toCheck > 0 ? `${counts.toCheck} to check` : `${counts.total} waiting`}
-            </Badge>
-          ) : null
-        }
-      >
-        <CardTitle className="text-sm">Open requests</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2 text-sm">
+    <PanelSection
+      title="Open requests"
+      bodyClassName="space-y-2"
+      action={
+        counts.total > 0 ? (
+          <Badge intent={counts.toCheck > 0 ? 'warning' : 'neutral'}>
+            {counts.toCheck > 0 ? `${counts.toCheck} to check` : `${counts.total} waiting`}
+          </Badge>
+        ) : null
+      }
+    >
         {loading ? (
           <div className="space-y-2">
             <Skeleton className="h-10 w-full" />
@@ -208,7 +205,6 @@ export function OpenRequestsCard({
             })}
           </ul>
         )}
-      </CardContent>
-    </Card>
+    </PanelSection>
   );
 }

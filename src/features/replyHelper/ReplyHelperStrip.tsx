@@ -1,65 +1,31 @@
-import { ChevronDown, ChevronRight, Sparkles, Wand2 } from 'lucide-react';
+import { ChevronDown, Sparkles, Wand2 } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Drawer } from '@/components/ui/Drawer';
 import { Spinner } from '@/components/ui/Spinner';
-import { useToast } from '@/components/ui/Toast';
-import {
-  useAskReplyHelper,
-  useLoadEarlierReplyHelper,
-  usePendingReplyHelperAsk,
-  usePickReplyHelperLogin,
-  useReplyHelperThread,
-} from '@/hooks/api/useReplyHelper';
+import { usePendingReplyHelperAsk, useReplyHelperThread } from '@/hooks/api/useReplyHelper';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import {
-  DRAFT_PLACED_WORDS,
-  DRAFT_SAVED_WORDS,
-  SUGGEST_INSTRUCTION,
-  askFailureWords,
-  isSuggestion,
-  LOAD_EARLIER_FAILED_WORDS,
-  sanitiseInstruction,
-} from '@/lib/replyHelper';
-import { useAuthStore } from '@/store/auth';
-import { REPLY_HELPER_INSTRUCTION_MAX } from '@dk/shared';
 import type { ReplyHelperTarget } from '@dk/shared';
 
-import { ReplyHelperPanel } from './ReplyHelperPanel';
+import { ReplyHelperPane, type ReplyHelperSuggestRequest, type UseDraftResult } from './ReplyHelperPane';
+
+export type { UseDraftResult } from './ReplyHelperPane';
 
 /**
- * The Reply helper (ADR 0025): a strip above the reply box, in the dealer-chat
- * inbox and in the WhatsApp inbox. ADMIN CHROME, never a message in the thread —
- * the same standing as `AiFirstLineStrip`, and for the same reason: a bubble in
- * a thread is something the DEALER sees.
+ * The Reply helper (ADR 0025) as a slim row above a reply box, for an inbox
+ * whose side panel has no room for it (the WhatsApp inbox). The dealer-chat
+ * inbox gives the helper a tab of its own in the side panel instead.
  *
- * IT DRAFTS AND NEVER SENDS. "Use this" hands the words to the reply box
- * through `onUseDraft` and stops. The admin reads them, changes them and presses
- * Send themselves; nothing in this feature can post to the person.
+ * ADMIN CHROME, never a message: the row names who the helper is writing for,
+ * wears the helper's violet, and opens the same `ReplyHelperPane` the side panel
+ * uses — as a capped tray at md and up, and as a bottom sheet on a phone, where
+ * "Put in reply box" closes the sheet because the box is the next thing needed.
  *
- * KEY IT ON THE OPEN CONVERSATION (`key={conversation.id}` / the chat's own
- * key). The strip holds the half-typed instruction, the "writing" state and the
- * sheet's open flag, and none of that may follow the admin to another person.
- * The thread's content comes from the server per conversation, so nothing
- * crosses even if a key were missed — but a question typed for one dealer left
- * in the box for the next is the leak the key prevents.
- *
- * COLLAPSED BY DEFAULT: one slim row naming who the helper is writing for and
- * which channel, so the admin always knows without opening it. Open or closed is
- * remembered for this browser (one flag, never content) — at md and up, where it
- * is an inline tray. Below md the panel is a bottom sheet, and a sheet that
- * reopened itself on every chat would be a modal in the way of the thread, so
- * the phone never remembers it and always starts closed.
- *
- * ABOVE md, AN INLINE TRAY, NOT A DIALOG. The admin has to keep reading the
- * conversation while asking about it, so the panel sits in the page's flow and
- * is capped (55% of the screen, 520px) with its own scroll. Below md the thread
- * and the box share a short screen already, so tapping the row opens a sheet
- * and "Use this" closes it — the box and the draft in it are the next thing the
- * admin needs to see (`AiFirstLineStrip` folds away below md for the same reason).
+ * KEY IT ON THE OPEN CONVERSATION. The row holds the open/closed state and a
+ * pending one-tap Suggest, and the pane under it holds the half-typed
+ * instruction; none of that may follow the admin to another person.
  */
 
 const OPEN_KEY = 'dk.replyHelper.open';
@@ -81,14 +47,6 @@ function writeOpen(open: boolean): void {
   }
 }
 
-/**
- * Where a draft went when the admin pressed "Use this":
- * `'box'`: into the reply box, which is open; `'saved'`: kept as the chat's
- * draft because the box is not open right now (the box shows it when it opens);
- * `'closed'`: refused, because the chat cannot be written to (a resolved chat).
- */
-export type UseDraftResult = 'box' | 'saved' | 'closed';
-
 export interface ReplyHelperStripProps {
   target: ReplyHelperTarget;
   /**
@@ -100,24 +58,18 @@ export interface ReplyHelperStripProps {
 }
 
 export function ReplyHelperStrip({ target, onUseDraft }: ReplyHelperStripProps) {
-  const toast = useToast();
   const isMd = useMediaQuery('(min-width: 768px)');
-  const meId = useAuthStore((s) => s.user?.id ?? s.admin?.id ?? null);
-
   const [trayOpen, setTrayOpen] = React.useState(readOpen);
   const [sheetOpen, setSheetOpen] = React.useState(false);
-  const [instruction, setInstruction] = React.useState('');
-  const [askError, setAskError] = React.useState<string | null>(null);
-  const askingRef = React.useRef(false);
+  const [suggestRequest, setSuggestRequest] = React.useState<ReplyHelperSuggestRequest | null>(null);
+  const seq = React.useRef(0);
 
   const threadQ = useReplyHelperThread(target);
-  const askM = useAskReplyHelper(target);
-  const earlierM = useLoadEarlierReplyHelper(target);
-  const pickM = usePickReplyHelperLogin(target);
   const pending = usePendingReplyHelperAsk(target);
-
   const thread = threadQ.data;
   const open = isMd ? trayOpen : sheetOpen;
+  const notConfigured = !!thread?.context.notices.some((n) => n.kind === 'not_configured');
+  const canSuggest = !!thread && !notConfigured && pending === null;
 
   function toggle() {
     if (isMd) {
@@ -129,54 +81,7 @@ export function ReplyHelperStrip({ target, onUseDraft }: ReplyHelperStripProps) 
     }
   }
 
-  /**
-   * Ask. Resolves to whether the ask went through, so the caller can put the
-   * words back in the box when it did not: an instruction that took a minute to
-   * write is not lost to a network blip.
-   */
-  const send = React.useCallback(
-    async (text: string): Promise<boolean> => {
-      // `pending` follows the request a render later; the ref closes that gap so a
-      // quick second tap cannot start a second paid ask.
-      if (pending !== null || askingRef.current) return false;
-      askingRef.current = true;
-      setAskError(null);
-      try {
-        await askM.mutateAsync(text);
-        return true;
-      } catch (e) {
-        const err = e instanceof ApiError ? e : { message: (e as Error)?.message };
-        const words = askFailureWords(err);
-        setAskError(words);
-        toast.error(words);
-        // A dropped connection may still have an answer coming on the server: read
-        // the thread again so it shows up without a second, paid ask.
-        if (!('status' in err) || err.status === 0 || (err.status ?? 0) >= 500)
-          void threadQ.refetch();
-        return false;
-      } finally {
-        askingRef.current = false;
-      }
-    },
-    [askM, pending, threadQ, toast],
-  );
-
-  /** A typed instruction. Nothing typed is not an ask: that is Suggest a reply. */
-  const ask = React.useCallback(
-    (raw: string): Promise<boolean> => {
-      const text = sanitiseInstruction(raw, REPLY_HELPER_INSTRUCTION_MAX);
-      return text ? send(text) : Promise.resolve(false);
-    },
-    [send],
-  );
-
-  /** "Suggest a reply": no instruction; the server reads the chat. */
-  const suggest = React.useCallback(() => send(SUGGEST_INSTRUCTION), [send]);
-
-  const notConfigured = !!thread?.context.notices.some((n) => n.kind === 'not_configured');
-  const canSuggest = !!thread && !notConfigured && pending === null;
-
-  /** From the collapsed row: open the panel so the drafts land in view, and start. */
+  /** From the closed row: open the pane so the drafts land in view, and start. */
   function suggestFromRow() {
     if (!canSuggest) return;
     if (isMd) {
@@ -185,128 +90,60 @@ export function ReplyHelperStrip({ target, onUseDraft }: ReplyHelperStripProps) 
     } else {
       setSheetOpen(true);
     }
-    void suggest();
+    seq.current += 1;
+    setSuggestRequest({ id: String(seq.current) });
   }
 
-  function submit() {
-    const text = instruction;
-    if (!sanitiseInstruction(text, REPLY_HELPER_INSTRUCTION_MAX)) return;
-    setInstruction('');
-    void ask(text).then((ok) => {
-      // Put the words back unless the admin has already started something new.
-      if (!ok) setInstruction((now) => (now.trim() ? now : text));
-    });
-  }
+  const handled = React.useCallback(
+    (id: string) => setSuggestRequest((r) => (r?.id === id ? null : r)),
+    [],
+  );
 
-  function useDraft(text: string) {
-    const where = onUseDraft(text);
-    if (where === 'closed') {
-      toast.info('This chat is resolved — reopen it to put a draft in the box.');
-      return;
-    }
-    toast.success(where === 'box' ? DRAFT_PLACED_WORDS : DRAFT_SAVED_WORDS);
-    // Below md, the box is what the admin needs next, and the sheet covers it.
-    if (!isMd) setSheetOpen(false);
-  }
-
-  function loadEarlier() {
-    const oldest = thread?.turns[0];
-    if (!oldest || earlierM.isPending) return;
-    earlierM.mutate(oldest.id, {
-      onError: () => toast.error(LOAD_EARLIER_FAILED_WORDS),
-    });
-  }
-
-  function pickLogin(userId: string | null) {
-    // Only a WhatsApp number can be shared between logins.
-    if (target.channel !== 'whatsapp' || pickM.isPending) return;
-    pickM.mutate(
-      { line: target.line, person: target.person, userId },
-      { onError: (e) => toast.error(askFailureWords(e instanceof ApiError ? e : null)) },
-    );
-  }
-
-  const panel = (className: string) => (
-    <ReplyHelperPanel
+  const pane = (className: string) => (
+    <ReplyHelperPane
       className={className}
-      thread={thread}
-      loading={threadQ.isPending}
-      loadFailed={threadQ.isError}
-      onRetryLoad={() => void threadQ.refetch()}
-      meId={meId}
-      pendingInstruction={pending}
-      askError={askError}
-      instruction={instruction}
-      onInstructionChange={setInstruction}
-      onAsk={submit}
-      onSuggest={() => void suggest()}
-      onRetryTurn={(text) => void (isSuggestion(text) ? suggest() : ask(text))}
-      onUse={useDraft}
-      onLoadEarlier={loadEarlier}
-      loadingEarlier={earlierM.isPending}
-      onPickLogin={pickLogin}
-      pickingLogin={pickM.isPending}
-      openChannel={target.channel}
+      target={target}
+      onUseDraft={onUseDraft}
+      suggestRequest={suggestRequest}
+      onSuggestHandled={handled}
+      onDraftPlaced={isMd ? undefined : () => setSheetOpen(false)}
     />
   );
 
-  const whatsapp = target.channel === 'whatsapp';
-
   return (
-    <div
-      className={cn(
-        'border-t',
-        whatsapp ? 'border-[var(--line-border)] bg-[var(--wa-footer)]' : 'border-border bg-surface',
-      )}
-    >
+    <div className="border-t border-assist-line bg-assist-soft">
       <div className="flex min-w-0 items-center gap-1 pr-2">
         <button
           type="button"
           onClick={toggle}
           aria-expanded={open}
-          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 py-2 pl-3 text-left"
+          className="focus-inset flex min-h-11 min-w-0 flex-1 items-center gap-2 py-2 pl-3 text-left"
         >
-          <Sparkles
-            width={14}
-            height={14}
-            strokeWidth={1.75}
-            className="shrink-0 text-text-muted"
-          />
-          <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-text-subtle">
-            Reply helper
-          </span>
+          <Sparkles width={14} height={14} strokeWidth={2} className="shrink-0 text-assist" aria-hidden />
+          <span className="shrink-0 text-sm font-semibold text-assist-strong">Reply helper</span>
           <span className="min-w-0 flex-1 truncate text-sm text-text-muted">
             {pending !== null ? 'Writing…' : (thread?.context.header ?? '')}
           </span>
-          {pending !== null ? <Spinner size={14} className="shrink-0 text-text-muted" /> : null}
-          {open ? (
-            <ChevronDown
-              width={16}
-              height={16}
-              strokeWidth={1.75}
-              className="shrink-0 text-text-muted"
-            />
-          ) : (
-            <ChevronRight
-              width={16}
-              height={16}
-              strokeWidth={1.75}
-              className="shrink-0 text-text-muted"
-            />
-          )}
+          {pending !== null ? <Spinner size={14} className="shrink-0 text-assist" /> : null}
+          <ChevronDown
+            width={16}
+            height={16}
+            strokeWidth={1.75}
+            aria-hidden
+            className={cn('shrink-0 text-text-muted transition-transform duration-200', open ? 'rotate-180' : '-rotate-90')}
+          />
         </button>
-        {/* One tap from the closed row: the admin need not open the panel or type
-          anything to get a reply. It stays on the row, disabled and spinning, while
-          one is being written: a button that unmounted at the first tap let the
-          toggle slide under a double-click's second tap and close the panel. */}
+        {/* One tap from the closed row. It stays on the row, disabled and
+            spinning, while one is being written: a button that unmounted at the
+            first tap let the toggle slide under a double-click's second tap. */}
         {thread && !notConfigured ? (
           <Button
             size="sm"
             variant="secondary"
-            tone="brand"
+            tone="assist"
             loading={pending !== null}
             onClick={suggestFromRow}
-            leftIcon={<Wand2 width={16} height={16} strokeWidth={1.75} />}
+            leftIcon={<Wand2 width={15} height={15} strokeWidth={1.75} />}
             className="shrink-0"
           >
             Suggest reply
@@ -315,22 +152,20 @@ export function ReplyHelperStrip({ target, onUseDraft }: ReplyHelperStripProps) 
       </div>
 
       {isMd && trayOpen ? (
-        <div className="border-t border-border bg-surface">{panel('max-h-[min(55vh,520px)]')}</div>
+        <div className="border-t border-assist-line">{pane('max-h-[min(55vh,520px)]')}</div>
       ) : null}
 
-      {/* Below md: the same body in a bottom sheet. `bodyPadding="none"` so the
-          thread meets the sheet's edges and the box pins to its bottom; the
-          fixed share of the screen is what lets the thread scroll inside the
-          sheet instead of stretching it. */}
+      {/* Below md: the same pane in a bottom sheet. `bodyPadding="none"` so the
+          thread meets the sheet's edges and the box pins to its bottom. */}
       <Drawer
         open={!isMd && sheetOpen}
         onClose={() => setSheetOpen(false)}
         title="Reply helper"
-        description={thread?.context.header}
+        description="Private to MDG — never sent"
         width="sm"
         bodyPadding="none"
       >
-        {panel('h-[68dvh]')}
+        {pane('h-[72dvh]')}
       </Drawer>
     </div>
   );

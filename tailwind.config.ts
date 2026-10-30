@@ -21,6 +21,15 @@ export default {
           soft: 'var(--color-brand-soft)',
         },
         'focus-ring': 'var(--color-focus-ring)',
+        selected: 'var(--color-selected)',
+        // The Reply helper's colour (values in index.css): private, never sent.
+        assist: {
+          DEFAULT: 'var(--color-assist)',
+          hover: 'var(--color-assist-hover)',
+          soft: 'var(--color-assist-soft)',
+          line: 'var(--color-assist-line)',
+          strong: 'var(--color-assist-strong)',
+        },
         /*
          * `strong` IS THE READABLE FOREGROUND FOR A `soft` BACKGROUND.
          *

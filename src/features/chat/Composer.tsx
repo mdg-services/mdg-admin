@@ -1,4 +1,4 @@
-import { ChevronDown, Mic, Paperclip, RotateCcw, Send, Trash2, X } from 'lucide-react';
+import { ChevronDown, Mic, Paperclip, Plus, RotateCcw, Send, Sparkles, Trash2, Wand2, X } from 'lucide-react';
 import * as React from 'react';
 
 
@@ -6,6 +6,7 @@ import { ShareAudienceNote } from '@/components/share/ShareMenu';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Menu, MenuItem } from '@/components/ui/Menu';
+import { Spinner } from '@/components/ui/Spinner';
 import { Textarea } from '@/components/ui/Textarea';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { usePublishBottomBar } from '@/hooks/usePublishBottomBar';
@@ -61,6 +62,12 @@ export interface ComposerReplyPreview {
 export interface ComposerInsert {
   text: string;
   id: string;
+  /**
+   * `'helper'`: a Reply helper draft. The box then wears the helper's tag until
+   * the message is sent or the box is emptied, so a machine's words are never
+   * sent without the admin having been told whose they are.
+   */
+  source?: 'helper' | 'ai';
 }
 
 interface ComposerProps {
@@ -75,6 +82,21 @@ interface ComposerProps {
   onCancelReply?: () => void;
   /** Text pushed in from outside. See {@link ComposerInsert}. */
   insert?: ComposerInsert | null;
+  /**
+   * Who the box sends to, for its placeholder ("Message Anurag Singh · Owner").
+   * The box that sends must say so: the Reply helper has a box of its own, and
+   * the two must never read as the same thing.
+   */
+  recipient?: string;
+  /** The Reply helper's one tap: read the chat and draft the next reply. */
+  onSuggest?: () => void;
+  /** A suggestion is being written (spinner on the button). */
+  suggesting?: boolean;
+  /**
+   * Other things to send from this chat, behind the "+" beside the box with
+   * "Attach a file" — they all put something in front of the dealer.
+   */
+  moreActions?: Array<{ id: string; label: string; icon: React.ReactNode; onSelect: () => void }>;
   /**
    * Send to the whole outlet instead of this one chat — every owner, the
    * manager, or both. When set, a "Send to" choice sits above the box while
@@ -117,9 +139,17 @@ export function Composer({
   replyingTo,
   onCancelReply,
   insert,
+  recipient,
+  onSuggest,
+  suggesting = false,
+  moreActions,
   onShareToOutlet,
 }: ComposerProps) {
   const [body, setBody] = React.useState('');
+  // A helper draft is in the box: the tag shows until it is sent or emptied.
+  const [fromHelper, setFromHelper] = React.useState(false);
+  // The box's frame, for the one soft pulse when a draft lands in it.
+  const fieldRef = React.useRef<HTMLDivElement>(null);
   const [target, setTarget] = React.useState<SendTarget>('chat');
   const [files, setFiles] = React.useState<StagedFile[]>([]);
   const [sending, setSending] = React.useState(false);
@@ -135,6 +165,8 @@ export function Composer({
   const recorder = useVoiceRecorder();
   const isRecording = recorder.status === 'recording';
   const isMd = useMediaQuery('(min-width: 768px)');
+  // "Suggest" earns its word only where the box is wide enough to keep its own.
+  const roomyRow = useMediaQuery('(min-width: 1440px)');
 
   React.useEffect(() => {
     const ta = textareaRef.current;
@@ -167,6 +199,15 @@ export function Composer({
     const text = insert.text.trim();
     if (!text) return;
     setBody((curr) => (curr.trim() ? `${curr.replace(/\s+$/, '')}\n\n${text}` : text));
+    if (insert.source === 'helper') setFromHelper(true);
+    // Replay the pulse by restarting the class, not by re-keying the box: a new
+    // key would remount the textarea and drop the focus given to it below.
+    const field = fieldRef.current;
+    if (field) {
+      field.classList.remove('draft-landed');
+      void field.offsetWidth;
+      field.classList.add('draft-landed');
+    }
     const ta = textareaRef.current;
     if (ta) {
       ta.focus();
@@ -183,10 +224,15 @@ export function Composer({
   const busy = sending || disabled;
   // A resolved chat disables the composer; say why. On phones drop the desktop
   // keyboard hint (no Cmd/Ctrl; it just truncates in a narrow field).
+  // An emptied box holds no helper draft any more.
+  React.useEffect(() => {
+    if (!body.trim()) setFromHelper(false);
+  }, [body]);
   const placeholder = disabled
     ? 'This chat is resolved — reopen to reply.'
-    : isMd
-      ? 'Type a message... (Cmd/Ctrl+Enter to send)'
+    : recipient
+      ? // A phone's box has room for the name, not the role beside it.
+        `Message ${isMd ? recipient : recipient.split(' · ')[0]}`
       : 'Type a message…';
 
   function pickFiles(list: FileList | null) {
@@ -259,6 +305,7 @@ export function Composer({
         if (s.previewUrl) URL.revokeObjectURL(s.previewUrl);
       });
       setBody('');
+      setFromHelper(false);
       setFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err) {
@@ -500,84 +547,167 @@ export function Composer({
           reply.
         </p>
       ) : (
-        <div className="flex items-end gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={UPLOAD_ACCEPT}
-            multiple
-            hidden
-            onChange={(e) => pickFiles(e.target.files)}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={busy}
-            aria-label="Attach files"
-            className={cn(
-              'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted md:h-9 md:w-9',
-              'hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-60',
-            )}
-          >
-            <Paperclip width={18} height={18} strokeWidth={1.75} />
-          </button>
-          <Textarea
-            ref={textareaRef}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            onKeyDown={onKeyDown}
-            rows={1}
-            placeholder={placeholder}
-            disabled={busy}
-            // The auto-grow effect above writes an inline `height` off
-            // `scrollHeight`, which for one row of `text-base` comes out at
-            // 40px — four short of the floor, in the one row where the attach
-            // and mic buttons beside it are already 44px squares. `min-height`
-            // beats an inline `height`, so the floor holds without fighting the
-            // effect. `md:` restores the 36px the desktop row has always drawn.
-            className="min-h-11 md:min-h-[36px] min-w-0 resize-none"
-          />
-          {hasContent ? (
-            // The word "Send" costs ~84px of a 360px row. With the attach
-            // button and the two gaps that left the field about 192px to type
-            // in — half the screen spent on chrome. Below md the glyph alone
-            // says it, at the same 44px target; the labelled button is still
-            // what a desktop gets.
-            isMd ? (
-              <Button
+        <div className="grid gap-2">
+          {/* Whose words these are, until they are sent or the box is emptied:
+              a machine's draft never leaves without the admin being told. */}
+          {fromHelper ? (
+            <div className="flex items-center gap-2 rounded-md border border-assist-line bg-assist-soft px-2.5 py-1.5 text-xs text-assist-strong">
+              <Sparkles width={13} height={13} strokeWidth={2} className="shrink-0 text-assist" aria-hidden />
+              <span className="min-w-0 flex-1">
+                <span className="font-semibold">Draft from the Reply helper.</span> Read and change it — it
+                goes to {recipient ?? 'them'} only when you press Send.
+              </span>
+              <button
                 type="button"
-                onClick={handleSend}
-                disabled={!hasContent || busy}
-                loading={sending}
-                leftIcon={sending ? null : <Send width={16} height={16} strokeWidth={1.75} />}
+                onClick={() => setFromHelper(false)}
+                aria-label="Hide this note"
+                className="tap-target -my-1 shrink-0 rounded-sm p-1 text-assist-strong hover:bg-assist-line"
               >
-                Send
-              </Button>
+                <X width={13} height={13} strokeWidth={2} />
+              </button>
+            </div>
+          ) : null}
+          <div className="flex items-end gap-1.5 md:gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={UPLOAD_ACCEPT}
+              multiple
+              hidden
+              onChange={(e) => pickFiles(e.target.files)}
+            />
+            {moreActions && moreActions.length > 0 ? (
+              <Menu
+                label="Attach or send"
+                title="Send to this chat"
+                align="start"
+                triggerDisabled={busy}
+                trigger={<Plus width={20} height={20} strokeWidth={1.75} />}
+              >
+                <MenuItem
+                  icon={<Paperclip width={15} height={15} strokeWidth={1.75} />}
+                  onSelect={() => fileInputRef.current?.click()}
+                >
+                  Attach a file
+                </MenuItem>
+                {moreActions.map((a) => (
+                  <MenuItem key={a.id} icon={a.icon} onSelect={a.onSelect}>
+                    {a.label}
+                  </MenuItem>
+                ))}
+              </Menu>
             ) : (
-              <IconButton
-                aria-label="Send"
-                variant="primary"
-                onClick={handleSend}
-                disabled={!hasContent || busy}
-                loading={sending}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={busy}
+                aria-label="Attach files"
+                className={cn(
+                  'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted md:h-9 md:w-9',
+                  'hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-60',
+                )}
               >
-                <Send width={18} height={18} strokeWidth={1.75} />
-              </IconButton>
-            )
-          ) : (
-            <button
-              type="button"
-              onClick={startRecording}
-              disabled={busy}
-              aria-label="Record voice message"
-              className={cn(
-                'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted md:h-9 md:w-9',
-                'hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-60',
-              )}
+                <Paperclip width={18} height={18} strokeWidth={1.75} />
+              </button>
+            )}
+            <div
+              ref={fieldRef}
+              className={cn('min-w-0 flex-1 rounded-md', fromHelper && 'ring-1 ring-assist-line')}
             >
-              <Mic width={18} height={18} strokeWidth={1.75} />
-            </button>
-          )}
+              <Textarea
+                ref={textareaRef}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                onKeyDown={onKeyDown}
+                rows={1}
+                placeholder={placeholder}
+                aria-label={recipient ? `Message to ${recipient}` : 'Message'}
+                aria-keyshortcuts="Control+Enter Meta+Enter"
+                disabled={busy}
+                // The auto-grow effect above writes an inline `height` off
+                // `scrollHeight`, which for one row of `text-base` comes out at
+                // 40px — four short of the floor, in the one row where the attach
+                // and mic buttons beside it are already 44px squares. `min-height`
+                // beats an inline `height`, so the floor holds without fighting the
+                // effect. `md:` restores the 36px the desktop row has always drawn.
+                className="min-h-11 md:min-h-[36px] min-w-0 resize-none"
+              />
+            </div>
+            {/* The Reply helper's one tap, in the helper's violet: it never sends,
+                it writes a draft in the helper's tab for the admin to read. */}
+            {onSuggest ? (
+              roomyRow ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  tone="assist"
+                  onClick={onSuggest}
+                  loading={suggesting}
+                  disabled={disabled}
+                  title="The helper drafts a reply; nothing is sent"
+                  leftIcon={<Wand2 width={16} height={16} strokeWidth={1.75} />}
+                  className="shrink-0"
+                >
+                  Suggest
+                </Button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onSuggest}
+                  disabled={disabled || suggesting}
+                  aria-label="Suggest reply — the helper drafts one, nothing is sent"
+                  title="Suggest reply — the helper drafts one; nothing is sent"
+                  className={cn(
+                    'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-assist-line bg-assist-soft text-assist transition-colors duration-150 md:h-9 md:w-9',
+                    'hover:bg-assist-line disabled:cursor-not-allowed disabled:opacity-60',
+                  )}
+                >
+                  {suggesting ? <Spinner size={16} /> : <Wand2 width={17} height={17} strokeWidth={1.75} />}
+                </button>
+              )
+            ) : null}
+            {hasContent ? (
+              // The word "Send" costs ~84px of a 360px row. Below md the glyph
+              // alone says it, at the same 44px target; the labelled button is
+              // still what a desktop gets.
+              isMd ? (
+                <Button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={!hasContent || busy}
+                  loading={sending}
+                  title="Send (Ctrl+Enter)"
+                  leftIcon={sending ? null : <Send width={16} height={16} strokeWidth={1.75} />}
+                >
+                  Send
+                </Button>
+              ) : (
+                <IconButton
+                  aria-label="Send"
+                  variant="primary"
+                  onClick={handleSend}
+                  disabled={!hasContent || busy}
+                  loading={sending}
+                >
+                  <Send width={18} height={18} strokeWidth={1.75} />
+                </IconButton>
+              )
+            ) : (
+              <button
+                type="button"
+                onClick={startRecording}
+                disabled={busy}
+                aria-label="Record voice message"
+                className={cn(
+                  'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted md:h-9 md:w-9',
+                  'hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-60',
+                )}
+              >
+                <Mic width={18} height={18} strokeWidth={1.75} />
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

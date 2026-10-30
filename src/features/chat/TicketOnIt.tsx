@@ -1,6 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 
-import { Button, Menu, MenuItem, useToast } from '@/components/ui';
+import { Button, Menu, MenuItem, MenuSeparator, useToast } from '@/components/ui';
 import { useClearTicketOnIt, useSetTicketOnIt } from '@/hooks/api/useTickets';
 import { cn } from '@/lib/cn';
 import { onItLine } from '@/pages/tickets/format';
@@ -26,11 +26,35 @@ function failure(e: unknown): string {
  * It does not close the ticket and does not touch the chat's own quiet: it
  * keeps the AI off THIS matter only, and the AI still answers a question about
  * something else.
+ *
+ * While a promise is running the menu also holds "Let AI handle it", first: on
+ * the ticket's slim line in the inbox the line itself has no room for a second
+ * button, and the time and the hand-back are one decision.
  */
-export function TicketOnItMenu({ ticket, now }: { ticket: TicketView; now: number }) {
+export function TicketOnItMenu({
+  ticket,
+  now,
+  compact = false,
+}: {
+  ticket: TicketView;
+  now: number;
+  /** "On it ▾" for the ticket's own slim line, where the summary needs the room. */
+  compact?: boolean;
+}) {
   const toast = useToast();
   const setOnIt = useSetTicketOnIt();
+  const clear = useClearTicketOnIt();
   const nowDate = new Date(now);
+  const running = onItLine(ticket, nowDate)?.active ?? false;
+
+  async function handBack() {
+    try {
+      await clear.mutateAsync(ticket.id);
+      toast.success(`Ticket ${ticketRef(ticket.number)}: the AI is answering about it again.`);
+    } catch (e) {
+      toast.error(failure(e));
+    }
+  }
 
   async function choose(key: ReturnType<typeof onItChoices>[number]['key']) {
     const tappedAt = new Date();
@@ -48,19 +72,28 @@ export function TicketOnItMenu({ ticket, now }: { ticket: TicketView; now: numbe
 
   return (
     <Menu
-      label="On it until"
+      label="On it until — tell the dealer when an update is coming"
       title="On it until"
       align="end"
       triggerVariant="secondary"
       triggerSize="sm"
-      triggerDisabled={setOnIt.isPending}
+      triggerDisabled={setOnIt.isPending || clear.isPending}
       trigger={
         <>
-          <span>On it until</span>
+          <span>{compact ? 'On it' : 'On it until'}</span>
           <ChevronDown width={14} height={14} strokeWidth={1.75} aria-hidden />
         </>
       }
     >
+      {running ? (
+        <>
+          <MenuItem onSelect={() => void handBack()}>
+            <span className="block font-medium text-text">Let AI handle it</span>
+            <span className="block text-xs text-text-muted">Stop the promise; the AI answers about it again</span>
+          </MenuItem>
+          <MenuSeparator />
+        </>
+      ) : null}
       {onItChoices(nowDate).map((c) => (
         <MenuItem key={c.key} onSelect={() => void choose(c.key)}>
           <span className="block font-medium text-text">{c.label}</span>
@@ -85,7 +118,16 @@ export function TicketOnItMenu({ ticket, now }: { ticket: TicketView; now: numbe
  * hand back: the line turns to a warning and has no button, and the person is
  * left to say something to the dealer. Nothing at all when nobody is on it.
  */
-export function TicketOnItLine({ ticket, now }: { ticket: TicketView; now: number }) {
+export function TicketOnItLine({
+  ticket,
+  now,
+  showButton = true,
+}: {
+  ticket: TicketView;
+  now: number;
+  /** False where the "On it ▾" menu beside the line already holds "Let AI handle it". */
+  showButton?: boolean;
+}) {
   const toast = useToast();
   const clear = useClearTicketOnIt();
   const line = onItLine(ticket, new Date(now));
@@ -101,18 +143,18 @@ export function TicketOnItLine({ ticket, now }: { ticket: TicketView; now: numbe
   }
 
   return (
-    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
       <p
         className={cn(
-          'min-w-0 text-sm [overflow-wrap:anywhere]',
-          // The strong shade below md, as the other small warnings here do: the
-          // plain one is too pale for 14px text on a phone in daylight.
-          line.active ? 'text-text-muted' : 'font-medium text-warning-strong md:text-warning',
+          'min-w-0 text-[13px] leading-5 [overflow-wrap:anywhere]',
+          // The strong shade at every width, as the badges now are: the plain
+          // one is too pale for 14px text (3.1:1).
+          line.active ? 'text-text-muted' : 'font-medium text-warning-strong dark:text-amber-300',
         )}
       >
         {line.text}
       </p>
-      {line.active ? (
+      {line.active && showButton ? (
         <Button
           size="sm"
           variant="ghost"

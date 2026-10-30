@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Ticket } from 'lucide-react';
+import { ChevronDown, Ticket } from 'lucide-react';
 import * as React from 'react';
 
 import { Badge, Button } from '@/components/ui';
@@ -6,7 +6,7 @@ import { TicketOnItLine, TicketOnItMenu } from '@/features/chat/TicketOnIt';
 import { ResolveTicketDialog } from '@/features/tickets/ResolveTicketDialog';
 import { useMarkTicketSeen, useThreadTicketsQuery } from '@/hooks/api/useTickets';
 import { cn } from '@/lib/cn';
-import { resolvedLine, statusLine } from '@/pages/tickets/format';
+import { onItLine, resolvedLine, statusLine } from '@/pages/tickets/format';
 import {
   TICKET_TOPIC_LABEL,
   TICKET_TRIGGER_LABEL,
@@ -31,23 +31,26 @@ function useDocumentVisible(): boolean {
 }
 
 /**
- * The questions the AI could not settle on THIS thread, above the composer.
+ * The questions the AI could not settle on THIS thread, pinned at the top of the
+ * messages.
  *
- * An open ticket is shown whole — what it is about, what the dealer asked, how
- * long it has waited — with the one button that closes it. It is deliberately
- * not a bubble in the conversation: a reply typed in the box below does NOT
- * close it, and a strip that sits outside the message list and stays put while
- * the admin types is the plainest way to say so.
+ * ONE SLIM LINE PER OPEN TICKET — its number, what it is about, how long it has
+ * waited and the one button that closes it — with the rest (the topic, why it
+ * was raised, the dealer's own words, who has seen it) a tap away. It used to
+ * sit whole above the composer in a stack with the AI log and the Reply helper,
+ * and at a laptop's height that stack left the messages no room at all. It is
+ * still deliberately not a bubble in the conversation: a reply typed in the box
+ * does NOT close it, and a band that stays put above the messages says so.
  *
  * "On it until ▾" sits beside Resolve: the person who has the ticket tells the
  * dealer when an update is coming, and the AI stays off that matter until then.
- * The line that says so, with "Let AI answer", is drawn under the question. It
- * is a promise, not a lock — anyone can still resolve the ticket, and it ends by
+ * The line that says so, with "Let AI handle it", is drawn under the ticket's
+ * own line, whether or not it is opened — it is the ticket's state. It is a
+ * promise, not a lock: anyone can still resolve the ticket, and it ends by
  * itself when the time passes.
  *
- * Recently resolved tickets are folded away beneath, with the note that closed
- * them. A thread with no tickets gets no strip at all, not an empty one — most
- * threads are that.
+ * Resolved tickets live in the side panel's Details tab (`TicketHistory`). A
+ * thread with no open ticket gets no band at all, not an empty one.
  *
  * LOOKING AT A THREAD IS WHAT STAMPS "SEEN". The dealer's bubble then says "MDG
  * team is looking at it", so the stamp is only worth anything if somebody really
@@ -55,8 +58,9 @@ function useDocumentVisible(): boolean {
  * its own (the first row, auto-selected on a desktop), and a hidden tab never
  * stamps either.
  *
- * The page keys this on the conversation, so a half-written resolution and the
- * list of tickets already stamped both start empty on every thread.
+ * The page keys this on the conversation, so a half-written resolution, an
+ * opened line and the list of tickets already stamped all start empty on every
+ * thread.
  */
 export function TicketStrip({
   conversationId,
@@ -67,7 +71,7 @@ export function TicketStrip({
   conversationId: string;
   /** The page's one-minute tick, so the ages here advance with the inbox's. */
   now: number;
-  /** The ticket a link pointed at (`&ticket=<id>`): highlighted, and its section opened. */
+  /** The ticket a link pointed at (`&ticket=<id>`): opened and highlighted. */
   focusTicketId: string | null;
   /** False when the thread was opened by the page rather than by the admin. */
   stampSeen: boolean;
@@ -76,19 +80,16 @@ export function TicketStrip({
   const markSeen = useMarkTicketSeen();
   const visible = useDocumentVisible();
   const [resolving, setResolving] = React.useState<TicketView | null>(null);
-  const [showResolved, setShowResolved] = React.useState(false);
+  const [expanded, setExpanded] = React.useState<string | null>(focusTicketId);
   const stamped = React.useRef<Set<string>>(new Set());
 
   const tickets = React.useMemo(() => ticketsQ.data ?? [], [ticketsQ.data]);
   const open = tickets.filter((t) => t.state === 'OPEN');
-  const resolved = tickets.filter((t) => t.state === 'RESOLVED');
-  const focusedIsResolved = resolved.some((t) => t.id === focusTicketId);
 
-  // A link to a ticket that is already closed has to land on it, not on a
-  // collapsed "Resolved recently" the admin must know to open.
+  // A second link followed while the thread is already open still lands.
   React.useEffect(() => {
-    if (focusedIsResolved) setShowResolved(true);
-  }, [focusedIsResolved]);
+    if (focusTicketId) setExpanded(focusTicketId);
+  }, [focusTicketId]);
 
   // Stamp every open ticket nobody has looked at yet. Each id is asked for once
   // per visit to the thread; a failed request is forgotten so the next refresh
@@ -107,17 +108,17 @@ export function TicketStrip({
     }
   }, [tickets, stampSeen, visible, stamp]);
 
-  // Bring the ticket a link named into view; the strip scrolls inside its own capped box.
+  // Bring the ticket a link named into view; the band scrolls inside its own capped box.
   React.useEffect(() => {
     if (!focusTicketId) return;
     document.getElementById(`ticket-${focusTicketId}`)?.scrollIntoView({ block: 'nearest' });
-  }, [focusTicketId, tickets.length, showResolved]);
+  }, [focusTicketId, tickets.length]);
 
   // A thread whose tickets could not be read must not look like a thread with
   // none. This is the one place an admin learns a dealer is waiting on a person.
   if (ticketsQ.isError && !ticketsQ.data) {
     return (
-      <div className="flex items-center gap-2 border-t border-border bg-surface px-3 py-2">
+      <div className="flex items-center gap-2 border-b border-border bg-surface px-4 py-2">
         <p className="min-w-0 flex-1 text-sm text-text-muted">
           This thread’s tickets could not be loaded.
         </p>
@@ -133,96 +134,177 @@ export function TicketStrip({
     );
   }
 
-  if (tickets.length === 0) return null;
+  if (open.length === 0) return <ResolveTicketDialog ticket={resolving} onClose={() => setResolving(null)} />;
 
   const nowDate = new Date(now);
 
   return (
-    <div className="border-t border-border bg-surface">
-      {open.map((t) => (
-        <section
-          key={t.id}
-          id={`ticket-${t.id}`}
-          aria-label={`Open ticket ${ticketRef(t.number)}`}
-          className={cn(
-            'min-w-0 border-l-4 px-3 py-2.5 [overflow-wrap:anywhere]',
-            t.urgent ? 'border-danger' : 'border-warning',
-            t.id === focusTicketId && 'bg-brand-soft',
-          )}
-        >
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Ticket width={14} height={14} strokeWidth={2} className="shrink-0 text-text-muted" aria-hidden />
-            <span className="text-sm font-semibold tabular-nums text-text">{ticketRef(t.number)}</span>
-            <Badge>{TICKET_TOPIC_LABEL[t.topic]}</Badge>
-            <Badge intent={ticketTriggerTone(t.trigger)}>{TICKET_TRIGGER_LABEL[t.trigger]}</Badge>
-            {t.urgent ? <Badge intent="danger">Urgent</Badge> : null}
-            <Badge intent={ticketAgeTone(t, nowDate)}>{`Open ${ticketAgeLabel(t.raisedAt, nowDate)}`}</Badge>
-          </div>
-          <p className="mt-1.5 text-sm font-medium text-text">{t.summary}</p>
-          <p className="mt-0.5 line-clamp-2 text-sm text-text-muted" title={t.question}>
-            {t.question}
-          </p>
-          <TicketOnItLine ticket={t} now={now} />
-          {/* Wraps below ~400px: the seen-by text keeps its own line and the two
-              buttons drop beneath it, right-aligned, rather than squeezing it. */}
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-            <p className="min-w-0 text-xs text-text-subtle">{statusLine(t)}</p>
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              <TicketOnItMenu ticket={t} now={now} />
-              <Button size="sm" variant="primary" onClick={() => setResolving(t)}>
-                Resolve
-              </Button>
-            </div>
-          </div>
-        </section>
-      ))}
-
-      {resolved.length > 0 ? (
-        <div className={cn(open.length > 0 && 'border-t border-border')}>
-          <button
-            type="button"
-            onClick={() => setShowResolved((v) => !v)}
-            aria-expanded={showResolved}
-            className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left"
-          >
-            {showResolved ? (
-              <ChevronDown width={16} height={16} strokeWidth={1.75} className="shrink-0 text-text-muted" />
-            ) : (
-              <ChevronRight width={16} height={16} strokeWidth={1.75} className="shrink-0 text-text-muted" />
+    // The page caps the whole pinned band (the AI-quiet line, these, the guard
+    // banner) together, so this block does not scroll on its own.
+    <div className="border-b border-border">
+      {open.map((t) => {
+        const isOpen = expanded === t.id;
+        const detailId = `ticket-detail-${t.id}`;
+        // The summary and the dealer's words are often the same sentence; say it once.
+        const question = t.question.trim();
+        const showQuestion = question !== '' && question !== t.summary.trim();
+        return (
+          <section
+            key={t.id}
+            id={`ticket-${t.id}`}
+            aria-label={`Open ticket ${ticketRef(t.number)}`}
+            className={cn(
+              'min-w-0 border-b border-border last:border-b-0 [overflow-wrap:anywhere]',
+              // `*-soft` is a fixed light shade; on the dark theme it put light
+              // text on a pale band, so dark mode takes a deep tint of the hue.
+              t.urgent ? 'bg-danger-soft/70 dark:bg-danger/15' : 'bg-warning-soft/60 dark:bg-warning/15',
+              t.id === focusTicketId && 'ring-2 ring-inset ring-brand',
             )}
-            <span className="text-xs font-medium uppercase tracking-wide text-text-subtle">
-              Resolved recently
-            </span>
-            <span className="text-xs text-text-subtle">{resolved.length}</span>
-          </button>
-          {showResolved ? (
-            <ul className="grid gap-2 px-3 pb-3">
-              {resolved.map((t) => (
-                <li
-                  key={t.id}
-                  id={`ticket-${t.id}`}
+          >
+            <div className="flex min-h-11 items-center gap-2 pl-2 pr-3">
+              <button
+                type="button"
+                onClick={() => setExpanded(isOpen ? null : t.id)}
+                aria-expanded={isOpen}
+                aria-controls={detailId}
+                className="focus-inset flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left"
+              >
+                <span
                   className={cn(
-                    'min-w-0 rounded-md border border-border p-2 [overflow-wrap:anywhere]',
-                    t.id === focusTicketId ? 'bg-brand-soft' : 'bg-surface-2',
+                    'flex h-6 w-6 shrink-0 items-center justify-center rounded-full',
+                    t.urgent ? 'bg-danger text-white' : 'bg-warning text-white',
+                  )}
+                  aria-hidden
+                >
+                  <Ticket width={13} height={13} strokeWidth={2.25} />
+                </span>
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-text">
+                  {ticketRef(t.number)}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm text-text">{t.summary}</span>
+                <span
+                  className={cn(
+                    'hidden shrink-0 text-xs font-medium tabular-nums sm:inline',
+                    t.urgent ? 'text-danger-strong dark:text-red-300' : 'text-warning-strong dark:text-amber-300',
                   )}
                 >
-                  <p className="text-sm text-text">
-                    <span className="font-semibold tabular-nums">{ticketRef(t.number)}</span>
-                    <span className="text-text-muted"> · </span>
-                    {t.summary}
+                  {ticketAgeLabel(t.raisedAt, nowDate)}
+                </span>
+                <ChevronDown
+                  width={16}
+                  height={16}
+                  strokeWidth={1.75}
+                  aria-hidden
+                  className={cn(
+                    'shrink-0 text-text-muted transition-transform duration-200',
+                    isOpen && 'rotate-180',
+                  )}
+                />
+              </button>
+              <Button size="sm" variant="secondary" onClick={() => setResolving(t)} className="shrink-0">
+                Resolve ticket
+              </Button>
+            </div>
+            {isOpen ? (
+              <div id={detailId} className="-mt-0.5 grid gap-1.5 px-4 pb-2 pl-12">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge>{TICKET_TOPIC_LABEL[t.topic]}</Badge>
+                  <Badge intent={ticketTriggerTone(t.trigger)}>{TICKET_TRIGGER_LABEL[t.trigger]}</Badge>
+                  {t.urgent ? <Badge intent="danger">Urgent</Badge> : null}
+                  <Badge intent={ticketAgeTone(t, nowDate)}>{`Open ${ticketAgeLabel(t.raisedAt, nowDate)}`}</Badge>
+                </div>
+                {showQuestion ? (
+                  <p className="text-sm text-text-muted">
+                    <span className="text-text-subtle">They asked: </span>
+                    {question}
                   </p>
-                  <p className="mt-0.5 text-xs text-text-subtle">{resolvedLine(t)}</p>
-                  {t.resolutionNote ? (
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-text-muted">{t.resolutionNote}</p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
-
+                ) : null}
+                {onItLine(t, nowDate) ? (
+                  <p className="text-xs text-text-muted">{statusLine(t)}</p>
+                ) : null}
+              </div>
+            ) : null}
+            {/* The ticket's state and "On it ▾" on a line of their own, under
+                the summary: "On it until… · Asha" while someone has it (the menu
+                holds "Let AI handle it"), otherwise who has seen it. Beside the
+                summary they left it three letters ("Owne…") on a 432px chat. */}
+            {/* `pt-1.5` below md: two 44px buttons stacked edge to edge read as one target. */}
+            <div className="flex items-center gap-3 pb-2 pl-12 pr-3 pt-1.5 md:pt-0">
+              <div className="min-w-0 flex-1">
+                {onItLine(t, nowDate) ? (
+                  <TicketOnItLine ticket={t} now={now} showButton={false} />
+                ) : (
+                  <p className="truncate text-xs text-text-muted">{statusLine(t)}</p>
+                )}
+              </div>
+              <TicketOnItMenu ticket={t} now={now} compact />
+            </div>
+          </section>
+        );
+      })}
       <ResolveTicketDialog ticket={resolving} onClose={() => setResolving(null)} />
     </div>
+  );
+}
+
+/**
+ * The thread's resolved tickets, newest first, with the note that closed each —
+ * a section of the side panel's Details tab. Nothing at all when there are none.
+ *
+ * A link that names one of these (`&ticket=<id>`) is highlighted here; the page
+ * brings the Details tab forward for it, and `active` (the tab is on screen)
+ * is what lets the scroll land — a hidden pane has nothing to scroll.
+ */
+export function TicketHistory({
+  conversationId,
+  focusTicketId,
+  active,
+  renderSection,
+}: {
+  conversationId: string;
+  focusTicketId: string | null;
+  active: boolean;
+  /** Wraps the list in the panel's section chrome (title + count). */
+  renderSection: (count: number, list: React.ReactNode) => React.ReactNode;
+}) {
+  const ticketsQ = useThreadTicketsQuery(conversationId);
+  const resolved = React.useMemo(
+    () => (ticketsQ.data ?? []).filter((t) => t.state === 'RESOLVED'),
+    [ticketsQ.data],
+  );
+  const focused = resolved.some((t) => t.id === focusTicketId);
+
+  React.useEffect(() => {
+    if (!focused || !active) return;
+    document.getElementById(`ticket-${focusTicketId}`)?.scrollIntoView({ block: 'nearest' });
+  }, [focused, focusTicketId, active]);
+
+  if (resolved.length === 0) return null;
+  return renderSection(
+    resolved.length,
+    <ul className="grid gap-2">
+      {resolved.map((t) => (
+        <li
+          key={t.id}
+          id={`ticket-${t.id}`}
+          className={cn(
+            'min-w-0 rounded-md border border-border px-3 py-2.5 [overflow-wrap:anywhere]',
+            t.id === focusTicketId ? 'bg-brand-soft' : 'bg-surface',
+          )}
+        >
+          <p className="text-sm text-text">
+            <span className="font-semibold tabular-nums">{ticketRef(t.number)}</span>
+            <span className="text-text-subtle"> · </span>
+            {t.summary}
+          </p>
+          <p className="mt-0.5 text-xs text-text-muted">{resolvedLine(t)}</p>
+          {t.resolutionNote ? (
+            <p className="mt-1.5 whitespace-pre-wrap border-t border-border pt-1.5 text-sm text-text-muted">
+              {t.resolutionNote}
+            </p>
+          ) : null}
+        </li>
+      ))}
+    </ul>,
   );
 }

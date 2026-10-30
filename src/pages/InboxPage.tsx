@@ -1,29 +1,23 @@
 import { useQuery } from '@tanstack/react-query';
 import {
-  AlertTriangle,
-  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  CornerUpRight,
   FileText,
-  Flag,
-  Inbox,
   Info,
   KeyRound,
   MessageSquare,
+  MoreHorizontal,
   MoreVertical,
-  PanelRightClose,
-  PanelRightOpen,
   Phone,
   Plus,
   RotateCcw,
   ShieldAlert,
+  Sparkles,
   Store,
-  Ticket,
   UserPlus,
   Video,
-  type LucideIcon,
+  Zap,
 } from 'lucide-react';
 import * as React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -31,26 +25,35 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ActionRow } from '@/components/ui/ActionRow';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Drawer } from '@/components/ui/Drawer';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { HowThisWorks } from '@/components/ui/HowThisWorks';
 import { IconButton } from '@/components/ui/IconButton';
 import { Label } from '@/components/ui/Label';
+import { Menu, MenuItem } from '@/components/ui/Menu';
 import { Select } from '@/components/ui/Select';
 import { Sheet, SheetItem } from '@/components/ui/Sheet';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
-import { AiFirstLineStrip } from '@/features/chat/AiFirstLineStrip';
+import { AiFirstLineLog } from '@/features/chat/AiFirstLineStrip';
 import { AiQuietLine } from '@/features/chat/AiQuietLine';
 import { AskPortalLoginDialog } from '@/features/chat/AskPortalLoginDialog';
 import { Composer, type ComposerInsert } from '@/features/chat/Composer';
+import {
+  ConversationListSkeleton,
+  ConversationRow,
+  InboxViews,
+  MoreViewsMenu,
+  PRIORITY_LABEL,
+  TicketFlagBadge,
+  roleLabel,
+} from '@/features/chat/InboxList';
 import { MediaGalleryCard } from '@/features/chat/MediaGalleryCard';
 import { MessageInfoDialog } from '@/features/chat/MessageInfoDialog';
 import { MessageList } from '@/features/chat/MessageList';
 import { NewConversationDialog } from '@/features/chat/NewConversationDialog';
 import { OpenRequestsCard } from '@/features/chat/OpenRequestsCard';
-import { OutletHelpCard } from '@/features/chat/OutletHelpCard';
+import { PanelSection } from '@/features/chat/PanelSection';
 import { ReactionsDialog } from '@/features/chat/ReactionsDialog';
 import {
   type AskActionTarget,
@@ -64,10 +67,19 @@ import {
 import { ResolveConversationDialog } from '@/features/chat/ResolveConversationDialog';
 import { SendBackAskDialog } from '@/features/chat/SendBackAskDialog';
 import { SendGuideVideoDialog } from '@/features/chat/SendGuideVideoDialog';
-import { TicketStrip } from '@/features/chat/TicketStrip';
+import {
+  readSideTab,
+  type SideTab,
+  ThreadSidePanel,
+  writeSideTab,
+} from '@/features/chat/ThreadSidePanel';
+import { TicketHistory, TicketStrip } from '@/features/chat/TicketStrip';
 import { useConversationSocket } from '@/features/chat/useConversationSocket';
 import { useInboxSocket } from '@/features/chat/useInboxSocket';
-import { ReplyHelperStrip } from '@/features/replyHelper/ReplyHelperStrip';
+import {
+  ReplyHelperPane,
+  type ReplyHelperSuggestRequest,
+} from '@/features/replyHelper/ReplyHelperPane';
 import {
   useClearAiGuard,
   useConversationAiTurnsQuery,
@@ -83,10 +95,15 @@ import {
 import { useMessages } from '@/hooks/api/useMessages';
 import { useReactToMessage } from '@/hooks/api/useReactToMessage';
 import { useReopenConversation } from '@/hooks/api/useReopenConversation';
+import {
+  usePendingReplyHelperAsk,
+  useReplyHelperThread,
+} from '@/hooks/api/useReplyHelper';
 import { useResolveConversation } from '@/hooks/api/useResolveConversation';
 import { useSendMessage } from '@/hooks/api/useSendMessage';
 import { useServicesQuery } from '@/hooks/api/useServices';
 import { useShareToOutlet } from '@/hooks/api/useShareToOutlet';
+import { useThreadTicketsQuery } from '@/hooks/api/useTickets';
 import { useUpdateTicket } from '@/hooks/api/useUpdateTicket';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -100,99 +117,29 @@ import {
   statusByRef,
 } from '@/lib/chatAsk';
 import { cn } from '@/lib/cn';
-import type { Intent } from '@/lib/statusIntent';
 import { useAuthStore } from '@/store/auth';
 import {
   TICKET_CATEGORIES,
   TICKET_PRIORITIES,
-  aiInboxChip,
   aiThreadGuard,
   aiTurnAge,
   dealerCodeLabel,
   describeShareRecipients,
-  ticketFlagLevel,
 } from '@dk/shared';
 import type {
-  AiInboxChip,
   Attachment,
   Conversation,
   Dealer,
   DealerOpenRequest,
   Message,
+  ReplyHelperTarget,
   ShareAudience,
   TicketCategory,
   TicketPriority,
 } from '@dk/shared';
 
-const PRIORITY_INTENT: Record<TicketPriority, Intent> = {
-  urgent: 'danger',
-  high: 'warning',
-  normal: 'neutral',
-  low: 'info',
-};
-
-const PRIORITY_LABEL: Record<TicketPriority, string> = {
-  urgent: 'Urgent',
-  high: 'High',
-  normal: 'Normal',
-  low: 'Low',
-};
-
 function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function roleLabel(role?: Conversation['memberRole']): string {
-  if (role === 'dealer-owner') return 'Owner';
-  if (role === 'dealer-staff') return 'Manager';
-  return '';
-}
-
-/** A short label for a conversation's member, e.g. "Asha · Manager". */
-function memberLabel(c: Conversation): string {
-  const name = c.memberName?.trim();
-  const title = c.memberTitle?.trim() || roleLabel(c.memberRole);
-  if (name && title) return `${name} · ${title}`;
-  if (name) return name;
-  if (title) return title;
-  return 'Member';
-}
-
-interface DealerGroup {
-  dealerId: string;
-  dealerCode: string;
-  items: Conversation[];
-}
-
-/**
- * Group conversations by their organisation so the two (or more) member chats
- * under one dealer sit together. Preserves the incoming order of dealers.
- */
-function groupByDealer(conversations: Conversation[]): DealerGroup[] {
-  const order: string[] = [];
-  const map = new Map<string, DealerGroup>();
-  for (const c of conversations) {
-    const key = c.dealerId;
-    let group = map.get(key);
-    if (!group) {
-      group = {
-        dealerId: key,
-        dealerCode: dealerCodeLabel(c.dealerCode),
-        items: [],
-      };
-      map.set(key, group);
-      order.push(key);
-    }
-    group.items.push(c);
-  }
-  return order.map((k) => map.get(k)!);
-}
-
-function priorityPill(priority?: TicketPriority) {
-  if (!priority || priority === 'normal') return null;
-  return (
-    <Badge intent={PRIORITY_INTENT[priority]}>{PRIORITY_LABEL[priority]}</Badge>
-  );
 }
 
 const FILTERS: Array<{ key: InboxFilter; label: string }> = [
@@ -224,7 +171,7 @@ const FILTERS: Array<{ key: InboxFilter; label: string }> = [
   // was — the tab only narrows the same query to the threads the AI first line
   // has said something on. Deliberately last, so the four tabs the team has used
   // for a year keep their positions and their muscle memory.
-  { key: 'ai', label: '⚡ AI' },
+  { key: 'ai', label: 'AI' },
   // A SECOND lens, on the same argument as the first: the threads where somebody
   // tried to plant a figure in MDG's mouth or read the system instruction back
   // out. Nothing moves into it and nothing leaves another tab to be in it.
@@ -235,8 +182,15 @@ const FILTERS: Array<{ key: InboxFilter; label: string }> = [
   // a security observation, because it would mean ANSWERING THE DEALER silently
   // erases the record. This one is cleared by exactly one thing: a super-admin
   // pressing Clear on the thread.
-  { key: 'ai-guard', label: '🛡 AI guard' },
+  { key: 'ai-guard', label: 'AI guard' },
 ];
+
+/**
+ * The three views the team lives in, as the list's segmented control; the
+ * other five sit behind its "More". They used to be a 224px column of their
+ * own, and at a laptop's width that column was most of what the open chat lost.
+ */
+const PRIMARY_VIEWS: InboxFilter[] = ['open', 'mine', 'all'];
 
 /**
  * The guard banner over the composer: somebody tried, on this thread, to plant a
@@ -290,13 +244,16 @@ function AiGuardBanner({
   const guard = aiThreadGuard(turnsQ.data?.items);
   if (!guard) return null;
   return (
-    <div className="border-t border-border bg-surface px-3 py-2.5">
+    // `danger-soft` is a fixed light shade: on the dark theme it put light text
+    // on a pale band, so dark mode takes a deep tint of the hue instead.
+    <div className="shrink-0 border-b border-danger/20 bg-danger-soft/50 px-4 py-2 dark:bg-danger/15">
       <div className="flex flex-wrap items-start gap-2">
         <ShieldAlert
           width={16}
           height={16}
           strokeWidth={2}
-          className="mt-0.5 shrink-0 text-text-muted"
+          aria-hidden
+          className="mt-0.5 shrink-0 text-danger-strong dark:text-red-300"
         />
         <div className="grid min-w-0 flex-1 gap-1">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -305,19 +262,25 @@ function AiGuardBanner({
                 2d / Jul 01" ladder every other age on the AI surface uses, and
                 it refuses to print a negative one when a phone's clock runs a
                 minute ahead of the server's. */}
-            <span className="text-xs text-text-subtle">
+            <span className="text-xs tabular-nums text-text-muted">
               {aiTurnAge(guard.at, now)}
             </span>
-            {/* Below md the explanation is folded behind this, on the badge's
-                own row. `-my-2.5` keeps the row its 24px while the button
-                keeps a 44px target: a disclosure on a line of its own cost
-                44px of a screen this banner is already short of. */}
+            {/* What tripped it, on the badge's own row: the banner stays one
+                line in the band over the messages. */}
+            {guard.labels.length > 0 ? (
+              <span className="min-w-0 max-w-full truncate text-sm text-text" title={guard.labels.join(', ')}>
+                {guard.labels.join(', ')}
+              </span>
+            ) : null}
+            {/* The explanation is folded behind this, on the badge's own row,
+                at every width. `-my-2.5` keeps the row its 24px while the
+                button keeps a 44px target below md. */}
             <button
               type="button"
               aria-expanded={explainOpen}
               aria-controls={explainId}
               onClick={() => setExplainOpen((v) => !v)}
-              className="-my-2.5 ml-1 flex min-h-11 items-center gap-1 text-xs font-medium text-text-muted md:hidden"
+              className="-my-2.5 ml-1 flex min-h-11 items-center gap-1 text-xs font-medium text-text-muted md:min-h-0"
             >
               <ChevronRight
                 width={14}
@@ -332,18 +295,13 @@ function AiGuardBanner({
               What this means
             </button>
           </div>
-          {guard.labels.length > 0 ? (
-            <p className="line-clamp-2 min-w-0 break-words text-sm text-text md:line-clamp-none">
-              {guard.labels.join(', ')}
-            </p>
-          ) : null}
-          {/* Always shown at md; one tap away below it. The mark is never
-              cleared by replying, so on a phone this banner sat at ~187px over
-              the composer for the whole life of the thread and left the
-              messages a sliver. */}
+
+          {/* One tap away at every width. The mark is never cleared by
+              replying, so the banner stays for the life of the thread: drawn
+              whole, it took ~190px of the band pinned over the messages. */}
           <div
             id={explainId}
-            className={cn(explainOpen ? 'grid' : 'hidden', 'gap-1 md:grid')}
+            className={cn(explainOpen ? 'grid' : 'hidden', 'gap-1')}
           >
             <p className="text-xs text-text-muted">{guard.hint}</p>
             <p className="text-xs text-text-muted">
@@ -370,7 +328,7 @@ function AiGuardBanner({
             Clear
           </Button>
         ) : (
-          <span className="shrink-0 self-center text-xs text-text-subtle">
+          <span className="shrink-0 self-center text-xs text-text-muted">
             A super-admin clears this.
           </span>
         )}
@@ -394,118 +352,24 @@ function inboxLens(value: string | null): InboxFilter | null {
 }
 
 /**
- * What the machine did on this thread, as a chip on the inbox row.
- *
- * SHAPE AND TEXT, never colour alone: each of the three carries its own glyph
- * and its own words, so the row still reads correctly to somebody who cannot
- * tell the amber from the red, and on the greyscale a cheap phone in bright sun
- * effectively is.
- *
- * The chip is an ADDITION to the row and replaces nothing. In particular the
- * preview stays the DEALER'S OWN QUESTION: the backend deliberately never writes
- * `lastMessagePreview` from an AI message, and putting a machine sentence back
- * in the UI would undo that — sixty threads previewing the same warm handoff
- * line turns triage by scanning into triage by opening.
+ * Where the conversation stands, in words, on the header's second line. A
+ * coloured "Open" pill beside the name used to push the name itself out of a
+ * 430px header; the action button beside it (Pick up / Resolve chat / Reopen)
+ * already carries the state, so the words here are the quieter half.
  */
-const AI_CHIP_ICON: Record<AiInboxChip, LucideIcon> = {
-  replied: Check,
-  passed_on: CornerUpRight,
-  questioned: AlertTriangle,
-};
-
-function AiRowChip({ conversation }: { conversation: Conversation }) {
-  const chip = aiInboxChip(conversation.ai);
-  if (!chip) return null;
-  const Icon = AI_CHIP_ICON[chip.chip];
-  return (
-    <Badge intent={chip.tone} title={chip.hint}>
-      <span className="inline-flex items-center gap-0.5">
-        <Icon width={11} height={11} strokeWidth={2} />
-        {chip.label}
-      </span>
-    </Badge>
-  );
-}
-
-/**
- * "This thread has an open ticket", on the inbox row.
- *
- * SHAPE AND TEXT, as the AI chip beside it: a glyph and a count in words. It is
- * an addition and replaces nothing — the row's preview stays the dealer's own
- * question — and it is NOT the Waiting flag: that one is a clock on a reply, and
- * answering the dealer clears it, whereas this one is cleared only by resolving
- * the ticket.
- */
-function TicketRowChip({ conversation }: { conversation: Conversation }) {
-  const n = conversation.openTicketCount ?? 0;
-  if (n <= 0) return null;
-  return (
-    <Badge intent="warning" title="An open ticket on this thread. Only resolving it closes it.">
-      <span className="inline-flex items-center gap-0.5">
-        <Ticket width={11} height={11} strokeWidth={2} />
-        {n === 1 ? 'Ticket' : `${n} tickets`}
-      </span>
-    </Badge>
-  );
-}
-
-function formatRelative(iso?: string): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const diff = Date.now() - d.getTime();
-  const mins = Math.round(diff / 60_000);
-  if (mins < 1) return 'now';
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.round(hours / 24);
-  if (days < 7) return `${days}d`;
-  return d.toLocaleDateString(undefined, { month: 'short', day: '2-digit' });
-}
-
-function statusBadge(status: Conversation['status']) {
-  if (status === 'OPEN') {
-    return <Badge intent="warning">Open</Badge>;
+function statusWords(c: Conversation, meId: string): string {
+  if (c.status === 'RESOLVED') return 'Resolved';
+  if (c.status === 'ASSIGNED') {
+    if (c.assignedAdminId && c.assignedAdminId === meId) return 'With you';
+    return c.assignedAdminName ? `With ${c.assignedAdminName}` : 'Picked up';
   }
-  if (status === 'ASSIGNED') {
-    return <Badge intent="info">Assigned</Badge>;
-  }
-  return <Badge intent="success">Resolved</Badge>;
+  return 'Not picked up';
 }
 
 /**
- * Reply-SLA flag: how long the client has been waiting for a reply. Turns amber
- * at 1.5h and red at 3h so a slipping ticket draws the whole team's attention; a
- * ⚑ also shows when the ticket was auto-returned to the pool for a missed SLA.
- */
-function TicketFlagBadge({
-  conversation,
-  now,
-}: {
-  conversation: Conversation;
-  now: number;
-}) {
-  const level = ticketFlagLevel(conversation.awaitingReplySince, now);
-  if (level === 'none' && !conversation.flagged) return null;
-  const intent: Intent = level === 'urgent' ? 'danger' : 'warning';
-  const label =
-    level === 'none'
-      ? 'Returned'
-      : `Waiting ${formatRelative(conversation.awaitingReplySince ?? undefined)}`;
-  return (
-    <Badge intent={intent}>
-      <span className="inline-flex items-center gap-0.5">
-        <Flag width={11} height={11} strokeWidth={2} />
-        {label}
-      </span>
-    </Badge>
-  );
-}
-
-/**
- * The Details drawer's dealer card on a phone: the code opens the dealer, the
- * number rings it, and the dealer's Daily Sales Report is one tap away.
+ * The outlet behind the chat, in the side panel's Details tab: the code opens
+ * the dealer, the number rings it, and the dealer's Daily Sales Report is one
+ * tap away.
  *
  * Most of what a dealer asks in chat is about their own records ("22 tarikh ka
  * DSR bhejo"), and from a thread there was no way to them: Code and Phone were
@@ -513,24 +377,22 @@ function TicketFlagBadge({
  * `user-select: none`), and sending a report meant backing out, finding the
  * outlet under More, and finding the thread again — about eight taps. Below lg
  * the thread lives in the URL (`?c=<id>`), so Back from any of these returns to
- * it. Phone-only: the md+ card keeps its plain text.
+ * it. Links at every width now: a desk wants the same shortcuts.
  */
-function DealerQuickLinks({ dealer }: { dealer: Dealer }) {
+function OutletFacts({ dealer }: { dealer: Dealer }) {
   const linkClass =
-    'flex min-h-11 items-center gap-2 text-brand underline underline-offset-2';
+    'inline-flex min-h-11 items-center gap-1.5 font-medium text-brand underline-offset-2 hover:underline md:min-h-0';
   return (
-    <>
-      <div>
-        <p className="text-xs text-text-subtle">Code</p>
+    <dl className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2">
+      <dt className="text-xs text-text-muted">Code</dt>
+      <dd className="min-w-0">
         <Link to={`/dealers/${dealer.id}`} className={linkClass}>
-          <Store width={15} height={15} strokeWidth={1.75} aria-hidden />
-          <span className="min-w-0 break-words">
-            {dealer.code ?? '-'} · Open the dealer
-          </span>
+          <Store width={14} height={14} strokeWidth={1.75} aria-hidden />
+          <span className="break-words font-mono">{dealer.code ?? '-'}</span>
         </Link>
-      </div>
-      <div>
-        <p className="text-xs text-text-subtle">Phone</p>
+      </dd>
+      <dt className="text-xs text-text-muted">Phone</dt>
+      <dd className="min-w-0">
         {dealer.phone ? (
           // `select-text` as well as the link: the shell allows long-press Copy
           // only on that class, and a number is as often copied as rung.
@@ -538,22 +400,52 @@ function DealerQuickLinks({ dealer }: { dealer: Dealer }) {
             href={`tel:${dealer.phone.replace(/[^\d+]/g, '')}`}
             className={cn(linkClass, 'select-text tabular-nums')}
           >
-            <Phone width={15} height={15} strokeWidth={1.75} aria-hidden />
+            <Phone width={14} height={14} strokeWidth={1.75} aria-hidden />
             {dealer.phone}
           </a>
         ) : (
-          <p className="text-text">-</p>
+          <span className="text-text-muted">-</span>
         )}
-      </div>
-      <div>
-        <p className="text-xs text-text-subtle">Status</p>
-        <p className="text-text">{dealer.status}</p>
-      </div>
-      <Link to={`/dsr/dealers/${dealer.id}`} className={linkClass}>
-        <FileText width={15} height={15} strokeWidth={1.75} aria-hidden />
-        Daily Sales Report
-      </Link>
-    </>
+      </dd>
+      <dt className="text-xs text-text-muted">Status</dt>
+      <dd className="text-text">{titleCase(dealer.status.toLowerCase())}</dd>
+      <dt className="text-xs text-text-muted">Reports</dt>
+      <dd className="min-w-0">
+        <Link to={`/dsr/dealers/${dealer.id}`} className={linkClass}>
+          <FileText width={14} height={14} strokeWidth={1.75} aria-hidden />
+          Daily Sales Report
+        </Link>
+      </dd>
+    </dl>
+  );
+}
+
+/**
+ * The reply box, with the Reply helper's one-tap Suggest on it. A component of
+ * its own because the helper's hooks need the open conversation, and the page
+ * draws this only when there is one.
+ */
+function ThreadComposer({
+  conversationId,
+  onSuggest,
+  ...rest
+}: Omit<React.ComponentProps<typeof Composer>, 'onSuggest' | 'suggesting'> & {
+  onSuggest: () => void;
+}) {
+  const target = React.useMemo<ReplyHelperTarget>(
+    () => ({ channel: 'app', conversationId }),
+    [conversationId],
+  );
+  const threadQ = useReplyHelperThread(target);
+  const pending = usePendingReplyHelperAsk(target);
+  const notConfigured = !!threadQ.data?.context.notices.some((n) => n.kind === 'not_configured');
+  return (
+    <Composer
+      {...rest}
+      conversationId={conversationId}
+      onSuggest={notConfigured ? undefined : onSuggest}
+      suggesting={pending !== null}
+    />
   );
 }
 
@@ -588,14 +480,22 @@ export function InboxPage() {
   // a Today row. Read off the URL on every render, not copied into state, so a
   // second link followed while the inbox is already open still lands.
   const focusTicketId = searchParams.get('ticket');
+  // The side panel as an inline column (≥ 1280px), shown by default; and which
+  // of its tabs is up, remembered for this browser.
   const [contextOpen, setContextOpen] = React.useState(true);
+  const [sideTab, setSideTabState] = React.useState<SideTab>(readSideTab);
+  const setSideTab = React.useCallback((tab: SideTab) => {
+    setSideTabState(tab);
+    writeSideTab(tab);
+  }, []);
   const [newOpen, setNewOpen] = React.useState(false);
   const [threadMenuOpen, setThreadMenuOpen] = React.useState(false);
-  // Below lg the context panel (ticket controls, dealer, reports) is a slide-over
-  // instead of an inline column, so it stays reachable on phones/tablets.
+  // Below xl the side panel (helper, AI log, details) is a drawer instead of an
+  // inline column: at 1024-1279px an inline 320px column beside the list left
+  // the open chat too narrow to read.
   const [mobileContextOpen, setMobileContextOpen] = React.useState(false);
   const isLg = useMediaQuery('(min-width: 1024px)');
-  const isMd = useMediaQuery('(min-width: 768px)');
+  const isXl = useMediaQuery('(min-width: 1280px)');
   const toast = useToast();
 
   // Ticks once a minute so the reply-SLA flag colours advance on their own,
@@ -768,8 +668,24 @@ export function InboxPage() {
         text,
         id: String(insertSeq.current),
         conversationId,
+        source: 'helper',
       });
     },
+    [],
+  );
+
+  /**
+   * "Suggest reply" pressed on the reply box: the helper's tab comes forward and
+   * the pane runs one suggestion. A REQUEST WITH AN ID carrying its thread, for
+   * the reasons `composerInsert` gives; the pane hands it back once run, so a
+   * remount of the pane cannot pay for it twice.
+   */
+  const [suggestRequest, setSuggestRequest] = React.useState<
+    (ReplyHelperSuggestRequest & { conversationId: string }) | null
+  >(null);
+  const suggestSeq = React.useRef(0);
+  const handleSuggestHandled = React.useCallback(
+    (id: string) => setSuggestRequest((r) => (r?.id === id ? null : r)),
     [],
   );
 
@@ -784,6 +700,7 @@ export function InboxPage() {
     setReceiveTarget(null);
     setSendBackTarget(null);
     setJumpTo(null);
+    setSuggestRequest(null);
   }, [selectedId]);
 
   const infoMessage = infoForId
@@ -901,8 +818,8 @@ export function InboxPage() {
   // (via a deep link or a just-created chat), so it never lingers over a
   // different thread. Safe: opening the panel does not change selectedId.
   React.useEffect(() => {
-    if (!isLg) setMobileContextOpen(false);
-  }, [selectedId, isLg]);
+    if (!isXl) setMobileContextOpen(false);
+  }, [selectedId, isXl]);
 
   // The list row already carries `dealerId` (it is what groupByDealer keys on),
   // so the dealer fetch can start alongside `/conversations/:id` instead of
@@ -917,7 +834,7 @@ export function InboxPage() {
   const dealerQ = useQuery({
     queryKey: ['dealer', dealerId],
     queryFn: () => api.get<Dealer>(`/dealers/${dealerId}`),
-    enabled: !!dealerId && contextOpen,
+    enabled: !!dealerId,
     retry: false,
   });
 
@@ -1118,39 +1035,138 @@ export function InboxPage() {
             }
           : null;
 
-  /*
-   * The details panel's contents, rendered into one of two shells below.
-   *
-   * At ≥ lg it is the inline column it has always been. Below lg it used to be
-   * a bespoke `fixed inset-y-0 right-0` slide-over, and `position: fixed`
-   * resolves against the VIEWPORT rather than against body's
-   * `padding-top: env(safe-area-inset-top)` — so the "Details" heading and its
-   * Close sat under the status bar, the gallery's "View all" landed in the
-   * gesture strip, and there was no scroll lock, no Escape and no grabber. The
-   * shared Drawer carries all of that.
+  /**
+   * Bring the side panel forward on a tab: the inline column at ≥ xl, the drawer
+   * below it. The header's two glyphs toggle — a second press on the tab that is
+   * already up puts the column away.
    */
-  const detailsCards = conversation ? (
+  const panelVisible = isXl ? contextOpen : mobileContextOpen;
+  const openPanel = React.useCallback(
+    (tab: SideTab, remember = true) => {
+      if (remember) setSideTab(tab);
+      else setSideTabState(tab);
+      if (isXl) setContextOpen(true);
+      else setMobileContextOpen(true);
+    },
+    [isXl, setSideTab],
+  );
+  const togglePanel = React.useCallback(
+    (tab: SideTab) => {
+      if (panelVisible && sideTab === tab) {
+        if (isXl) setContextOpen(false);
+        else setMobileContextOpen(false);
+        return;
+      }
+      openPanel(tab);
+    },
+    [panelVisible, sideTab, isXl, openPanel],
+  );
+  const handleSuggest = React.useCallback(() => {
+    if (!selectedId) return;
+    suggestSeq.current += 1;
+    setSuggestRequest({ id: String(suggestSeq.current), conversationId: selectedId });
+    openPanel('helper');
+  }, [selectedId, openPanel]);
+  /*
+   * A link to a CLOSED ticket (`&ticket=<id>`) has to land on it, and resolved
+   * tickets live in the Details tab now: bring it forward, once per link. Not
+   * remembered as this browser's tab — the admin did not choose it. An open
+   * ticket needs nothing: its band is always over the messages.
+   */
+  const threadTicketsQ = useThreadTicketsQuery(conversation?.id ?? null);
+  const focusIsResolved = !!(
+    focusTicketId &&
+    threadTicketsQ.data?.some((t) => t.id === focusTicketId && t.state === 'RESOLVED')
+  );
+  const landedTicketRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!focusIsResolved || !focusTicketId || landedTicketRef.current === focusTicketId) return;
+    landedTicketRef.current = focusTicketId;
+    openPanel('details', false);
+  }, [focusIsResolved, focusTicketId, openPanel]);
+
+  // A Suggest press that never reached a pane (the panel was shut before the
+  // helper could run it) is dropped, never run later unasked.
+  React.useEffect(() => {
+    if (!panelVisible) setSuggestRequest(null);
+  }, [panelVisible]);
+
+  const helperBusy =
+    usePendingReplyHelperAsk({ channel: 'app', conversationId: selectedId ?? '' }) !== null;
+  const guardTurnsQ = useConversationAiTurnsQuery(conversation?.id ?? null);
+  const guarded = !!aiThreadGuard(guardTurnsQ.data?.items);
+
+  const memberName =
+    conversation?.memberName?.trim() || roleLabel(conversation?.memberRole) || 'Member';
+  const memberRole = conversation?.memberName?.trim()
+    ? conversation.memberTitle?.trim() || roleLabel(conversation.memberRole)
+    : '';
+  const recipient = memberRole ? `${memberName} · ${memberRole}` : memberName;
+
+  /*
+   * The side panel's three tabs, rendered into one of two shells below: the
+   * inline column at ≥ xl, the shared Drawer under it. Below xl it used to be a
+   * bespoke `fixed inset-y-0 right-0` slide-over, and `position: fixed` resolves
+   * against the VIEWPORT rather than against body's
+   * `padding-top: env(safe-area-inset-top)` — so the heading and its Close sat
+   * under the status bar. The shared Drawer carries all of that.
+   */
+  const helperPane = conversation ? (
+    <ReplyHelperPane
+      // Keyed on the thread so a half-written instruction and the "writing"
+      // state never follow the admin to another dealer.
+      key={`reply-helper:${conversation.id}`}
+      className="h-full"
+      target={{ channel: 'app', conversationId: conversation.id }}
+      suggestRequest={suggestRequest?.conversationId === conversation.id ? suggestRequest : null}
+      onSuggestHandled={handleSuggestHandled}
+      // Below xl the drawer covers the reply box, which is what comes next.
+      onDraftPlaced={isXl ? undefined : () => setMobileContextOpen(false)}
+      // This reply box marks a helper draft itself; no toast over its Send.
+      boxTagsDraft
+      active={panelVisible && sideTab === 'helper'}
+      onUseDraft={(text) => {
+        // A resolved chat has a shut box, so a draft is refused there rather
+        // than lost in it.
+        if (conversation.status === 'RESOLVED') return 'closed';
+        handleUseReplyDraft(conversation.id, text);
+        return 'box';
+      }}
+    />
+  ) : null;
+
+  const aiPane = conversation ? (
+    <AiFirstLineLog
+      conversationId={conversation.id}
+      now={now}
+      onUseAnswer={(text) => {
+        handleUseAiAnswer(text);
+        if (!isXl) setMobileContextOpen(false);
+      }}
+    />
+  ) : null;
+
+  const detailsPane = conversation ? (
     <>
       {isAdmin ? (
-        <Card>
-          <CardHeader
-            align="center"
-            action={
-              <HowThisWorks
-                surface="admin-inbox-details"
-                label="Details"
-                variant="icon"
-              />
-            }
-          >
-            {/* "Triage", not "Ticket": a ticket is now the record the AI raises
-                for one question (the strip above the composer). This card is
-                the whole conversation's priority and category. */}
-            <CardTitle className="text-sm">Triage</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <Label htmlFor="ticket-priority">Priority</Label>
+        // "Conversation", not "Ticket": a ticket is the record the AI raises for
+        // one question (pinned over the messages). This is the whole thread's
+        // priority and category.
+        <PanelSection
+          title="Conversation"
+          action={
+            <HowThisWorks
+              surface="admin-inbox-details"
+              label="Details"
+              variant="icon"
+            />
+          }
+        >
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="min-w-0">
+              <Label htmlFor="ticket-priority" className="text-xs text-text-muted">
+                Priority
+              </Label>
               <Select
                 id="ticket-priority"
                 value={conversation.priority ?? 'normal'}
@@ -1183,8 +1199,10 @@ export function InboxPage() {
                 ))}
               </Select>
             </div>
-            <div>
-              <Label htmlFor="ticket-category">Category</Label>
+            <div className="min-w-0">
+              <Label htmlFor="ticket-category" className="text-xs text-text-muted">
+                Category
+              </Label>
               <Select
                 id="ticket-category"
                 value={conversation.category ?? 'general'}
@@ -1213,10 +1231,17 @@ export function InboxPage() {
                 ))}
               </Select>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+          <p className="mt-2.5 text-xs text-text-muted">
+            {conversation.status === 'RESOLVED'
+              ? 'Resolved'
+              : conversation.assignedAdminName
+                ? `Assigned to ${conversation.assignedAdminName}`
+                : 'Not picked up yet'}
+          </p>
+        </PanelSection>
       ) : null}
-      {/* Above the Dealer card: it is the one card here an admin acts from. */}
+      {/* Above the outlet: it is the one section here an admin acts from. */}
       {dealerId ? (
         <OpenRequestsCard
           conversationId={conversation.id}
@@ -1231,51 +1256,66 @@ export function InboxPage() {
           onSendBack={handleCardSendBack}
         />
       ) : null}
-      {isAdmin && dealerId ? (
-        <OutletHelpCard
-          onAskLogin={() => setAskLoginOpen(true)}
-          onSendVideo={() => setVideoPickerOpen(true)}
-        />
-      ) : null}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Dealer</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          {dealerQ.isLoading ? (
-            <div className="flex justify-center py-4">
-              <Spinner size={16} />
-            </div>
-          ) : dealerQ.isError || !dealerQ.data ? (
-            <p className="text-xs text-text-muted">
-              Dealer details unavailable.
-            </p>
-          ) : isMd ? (
-            <>
-              <div>
-                <p className="text-xs text-text-subtle">Code</p>
-                <p className="text-text">
-                  {dealerQ.data.code ?? '-'}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-text-subtle">Phone</p>
-                <p className="text-text">{dealerQ.data.phone ?? '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-text-subtle">Status</p>
-                <p className="text-text">{dealerQ.data.status}</p>
-              </div>
-            </>
-          ) : (
-            <DealerQuickLinks dealer={dealerQ.data} />
-          )}
-        </CardContent>
-      </Card>
-
+      <TicketHistory
+        conversationId={conversation.id}
+        focusTicketId={focusTicketId}
+        active={panelVisible && sideTab === 'details'}
+        renderSection={(count, list) => (
+          <PanelSection title={`Resolved tickets · ${count}`}>{list}</PanelSection>
+        )}
+      />
+      <PanelSection title="Outlet">
+        {dealerQ.isLoading ? (
+          <div className="flex justify-center py-3">
+            <Spinner size={16} />
+          </div>
+        ) : dealerQ.isError || !dealerQ.data ? (
+          <p className="text-xs text-text-muted">Dealer details unavailable.</p>
+        ) : (
+          <OutletFacts dealer={dealerQ.data} />
+        )}
+      </PanelSection>
       <MediaGalleryCard conversationId={conversation.id} />
     </>
   ) : null;
+
+  // `onClose` only for the inline column: a drawer has its own Close.
+  const sidePanel = (onClose: (() => void) | undefined, className: string) => (
+    <ThreadSidePanel
+      tab={sideTab}
+      onTab={setSideTab}
+      onClose={onClose}
+      closeLabel="Hide panel"
+      helper={helperPane}
+      ai={aiPane}
+      details={detailsPane}
+      detailsCount={requestsToCheck}
+      aiAlert={guarded}
+      helperBusy={helperBusy}
+      className={className}
+    />
+  );
+
+  // The things a thread can send besides a message, behind the reply box's "+":
+  // each puts something in front of the dealer, so they live by the box that
+  // sends, not in a card of their own.
+  const composerActions =
+    isAdmin && dealerId
+      ? [
+          {
+            id: 'portal-login',
+            label: 'Ask for portal login',
+            icon: <KeyRound width={15} height={15} strokeWidth={1.75} />,
+            onSelect: () => setAskLoginOpen(true),
+          },
+          {
+            id: 'guide-video',
+            label: 'Send a guide video',
+            icon: <Video width={15} height={15} strokeWidth={1.75} />,
+            onSelect: () => setVideoPickerOpen(true),
+          },
+        ]
+      : undefined;
 
   // `main` is padded by `--app-gutter`, and in a thread AppShell adds the
   // bottom safe-area inset to it as well (the tab bar, which normally carries
@@ -1288,95 +1328,83 @@ export function InboxPage() {
   // The two gutters have to be READ, not written as a number: this was `2rem`
   // from when the padding was a flat `p-4`, and `--app-gutter` is 0.75rem on a
   // phone. The page therefore came out 8px TALLER than its scroller, so a list
-  // that fits still had 8px of travel — enough that the "Resolved / + New" bar
-  // and the chip strip jiggled under any scroll gesture, and enough to push the
-  // composer's last pixels into the gesture strip.
+  // that fits still had 8px of travel.
   const threadOpen = searchParams.has('c');
+
+  // The header's panel glyphs: lit while their tab is the one up.
+  const panelGlyph = (tab: SideTab, label: string, icon: React.ReactNode) => {
+    const on = panelVisible && sideTab === tab;
+    return (
+      <button
+        type="button"
+        onClick={() => togglePanel(tab)}
+        aria-pressed={on}
+        aria-label={label}
+        title={label}
+        className={cn(
+          'relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors duration-150',
+          on
+            ? tab === 'helper'
+              ? 'bg-assist-soft text-assist'
+              : 'bg-surface-2 text-text'
+            : 'text-text-muted hover:bg-surface-2 hover:text-text',
+        )}
+      >
+        {icon}
+        {tab === 'details' && requestsToCheck > 0 ? (
+          <span
+            aria-hidden
+            className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-strong px-1 text-[10px] font-semibold leading-none text-white"
+          >
+            {requestsToCheck}
+          </span>
+        ) : null}
+      </button>
+    );
+  };
 
   return (
     <div
       className={cn(
-        '-m-[var(--app-gutter)] flex md:h-full',
+        '-m-[var(--app-gutter)] flex bg-surface',
         threadOpen
           ? 'h-[calc(100%+2*var(--app-gutter)+env(safe-area-inset-bottom))]'
           : 'h-[calc(100%+2*var(--app-gutter))]',
       )}
     >
-      {/* Left rail.
+      <h1 className="sr-only">Inbox</h1>
+      {/* Conversation list — full-width below lg, hidden once a chat is open.
 
-          The three panes appear at lg (1024px), not md — the same line the
-          JavaScript has always drawn (`isLg` decides URL-driven selection and
-          the details Drawer). With the panes at md, everything from 768 to
-          1023px — a phone held sideways in a browser, a portrait tablet — got
-          the app sidebar, this rail and the list side by side and left the
-          open thread 48-100px wide, with a 26px composer. That band is now one
-          pane at a time, as on a phone. At lg and up every `lg:` class here
-          is the `md:` class it replaced, so a desktop is unchanged. */}
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface lg:flex">
-        <div className="flex items-center justify-between gap-2 px-4 py-3">
-          <h2 className="text-sm font-semibold text-text">Inbox</h2>
-          <HowThisWorks surface="admin-inbox" label="Inbox" variant="icon" />
-        </div>
-        <nav className="flex-1 overflow-y-auto px-2 pb-2">
-          <ul className="flex flex-col gap-0.5">
-            {FILTERS.map((f) => {
-              const active = filter === f.key;
-              const count = countMap[f.key];
-              return (
-                <li key={f.key}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFilter(f.key);
-                      setSelectedId(null);
-                    }}
-                    className={cn(
-                      'flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-medium',
-                      active
-                        ? 'bg-brand-soft text-brand'
-                        : 'text-text-muted hover:bg-surface-2 hover:text-text',
-                    )}
-                  >
-                    <span>{f.label}</span>
-                    {typeof count === 'number' ? (
-                      <span
-                        className={cn(
-                          'inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 text-xs',
-                          active
-                            ? 'bg-brand text-text-inverse'
-                            : 'bg-surface-2 text-text-muted',
-                        )}
-                      >
-                        {count}
-                      </span>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-      </aside>
-
-      {/* Conversation list — full-width below lg, hidden once a chat is open */}
+          The panes appear at lg (1024px), not md — the same line the
+          JavaScript has always drawn (`isLg` decides URL-driven selection). With
+          the panes at md, everything from 768 to 1023px got the app sidebar and
+          the list side by side and left the open thread 48-100px wide. */}
       <section
+        aria-label="Conversations"
         className={cn(
-          'w-full shrink-0 flex-col border-r border-border bg-surface lg:flex lg:w-80',
+          'w-full shrink-0 flex-col border-r border-border bg-surface lg:flex lg:w-[320px]',
           selectedId ? 'hidden' : 'flex',
         )}
       >
-        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <h3 className="text-sm font-semibold text-text">
-            {FILTERS.find((f) => f.key === filter)?.label}
-          </h3>
-          <div className="flex items-center gap-2">
-            {conversationsQ.isFetching ? <Spinner size={14} /> : null}
-            {/* The rail carries this at lg; below it the rail is hidden, and
-                without a copy here the Inbox — the most-used screen — was the
-                one place a phone could not reach its guided video. */}
-            <span className="contents lg:hidden">
-              <HowThisWorks surface="admin-inbox" label="Inbox" variant="icon" />
-            </span>
+        <div className="flex items-center justify-between gap-2 px-4 pb-2.5 pt-3">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <h2 className="text-base font-semibold text-text">Inbox</h2>
+            <HowThisWorks surface="admin-inbox" label="Inbox" variant="icon" />
+            {conversationsQ.isFetching && !conversationsQ.isLoading ? (
+              <Spinner size={14} className="text-text-muted" />
+            ) : null}
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <MoreViewsMenu
+              views={FILTERS}
+              primary={PRIMARY_VIEWS}
+              value={filter}
+              counts={countMap}
+              onChange={(f) => {
+                setFilter(f);
+                setSelectedId(null);
+              }}
+            />
             <Button
               size="sm"
               variant="secondary"
@@ -1387,121 +1415,49 @@ export function InboxPage() {
             </Button>
           </div>
         </div>
-        {/* Filter chips (the filter rail is hidden < lg) */}
-        <div className="flex gap-1.5 overflow-x-auto border-b border-border px-3 py-2 lg:hidden">
-          {FILTERS.map((f) => {
-            const active = filter === f.key;
-            const count = countMap[f.key];
-            return (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => {
-                  setFilter(f.key);
-                  setSelectedId(null);
-                }}
-                // 44px at every width they appear: below lg is a phone, a
-                // phone held sideways or a tablet, and all three are touch.
-                className={cn(
-                  'flex min-h-11 shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium',
-                  active
-                    ? 'bg-brand text-text-inverse'
-                    : 'bg-surface-2 text-text-muted',
-                )}
-              >
-                {f.label}
-                {typeof count === 'number' ? <span>· {count}</span> : null}
-              </button>
-            );
-          })}
-        </div>
+        <InboxViews
+          views={FILTERS}
+          primary={PRIMARY_VIEWS}
+          value={filter}
+          counts={countMap}
+          onChange={(f) => {
+            setFilter(f);
+            setSelectedId(null);
+          }}
+        />
         {/* overscroll-contain: index.css deliberately leaves html/body alone so
             the shell's pull-to-refresh survives, and contains the inner
             scrollers instead — this one was missed, so flicking to the top of
             the list reloaded the page mid-read. */}
-        <ul className="flex-1 overflow-y-auto overscroll-contain">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {conversationsQ.isLoading ? (
-            <li className="flex items-center justify-center py-8">
-              <Spinner size={18} />
-            </li>
+            <ConversationListSkeleton />
           ) : conversations.length === 0 ? (
-            <li>
-              <EmptyState
-                icon={<Inbox width={28} height={28} strokeWidth={1.5} />}
-                title="No conversations"
-                description="Nothing in this list right now."
-              />
-            </li>
+            <EmptyState
+              icon={<MessageSquare width={26} height={26} strokeWidth={1.5} />}
+              title="All clear"
+              description={`Nothing in ${FILTERS.find((f) => f.key === filter)?.label ?? 'this view'} right now.`}
+            />
           ) : (
-            groupByDealer(conversations).map((group) => (
-              <li key={group.dealerId}>
-                <div className="sticky top-0 z-[1] bg-surface-2/80 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted backdrop-blur">
-                  <span className="font-mono">{group.dealerCode}</span>
-                </div>
-                <ul>
-                  {group.items.map((c) => (
-                    <li key={c.id}>
-                      <button
-                        type="button"
-                        onClick={() => openConversation(c.id)}
-                        className={cn(
-                          'flex min-h-11 w-full items-start gap-2 border-b border-border px-4 py-3 text-left',
-                          selectedId === c.id
-                            ? 'bg-surface-2'
-                            : 'hover:bg-surface-2/60',
-                        )}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="truncate font-medium text-text">
-                              {memberLabel(c)}
-                            </span>
-                            <span className="shrink-0 text-xs text-text-subtle">
-                              {formatRelative(c.lastMessageAt ?? c.updatedAt)}
-                            </span>
-                          </div>
-                          {/* `flex-wrap`: three badges plus a preview is more
-                              than a 360px row holds, and `Badge` refuses to
-                              shrink (it clips its own label instead), so the
-                              pressure has to go somewhere. Wrapping puts the
-                              preview on its own line rather than cutting the
-                              chip that says the machine got this one wrong.
-
-                              That only happens if the preview has a BASIS to
-                              wrap on. `flex-1` is a 0px basis, which always
-                              "fits", so the preview was squeezed to 10-80px
-                              ("…") beside three badges instead of wrapping.
-                              Below md it asks for 10rem and drops to its own
-                              line when less is left; the 320px desktop list
-                              keeps `flex-1`. */}
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                            {priorityPill(c.priority)}
-                            <TicketFlagBadge conversation={c} now={now} />
-                            <TicketRowChip conversation={c} />
-                            <AiRowChip conversation={c} />
-                            <p className="min-w-0 flex-[1_1_10rem] truncate text-sm text-text-muted md:flex-1">
-                              {c.lastMessagePreview ?? 'No messages yet'}
-                            </p>
-                          </div>
-                        </div>
-                        {c.unreadByAdmin ? (
-                          <span
-                            aria-label="Unread"
-                            className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-brand"
-                          />
-                        ) : null}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            ))
+            <ul>
+              {conversations.map((c) => (
+                <li key={c.id}>
+                  <ConversationRow
+                    conversation={c}
+                    selected={selectedId === c.id}
+                    now={now}
+                    onOpen={openConversation}
+                  />
+                </li>
+              ))}
+            </ul>
           )}
-        </ul>
+        </div>
       </section>
 
       {/* Active chat — the whole width below lg once a conversation is selected */}
       <section
+        aria-label="Conversation"
         className={cn(
           'min-w-0 flex-1 flex-col bg-bg lg:flex',
           selectedId ? 'flex' : 'hidden',
@@ -1515,11 +1471,10 @@ export function InboxPage() {
              * `selectedId` and never off the response: in a thread AppShell
              * hides the tab bar, so until this branch existed a slow link
              * showed a "Select a conversation" card with no way back, and a
-             * failed GET showed it forever. The Android hardware key was the
-             * only escape, and an iPhone has none.
+             * failed GET showed it forever.
              */
             <>
-              <header className="flex items-center gap-2 border-b border-border bg-surface px-3 py-3 md:px-4">
+              <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 md:px-4">
                 <button
                   type="button"
                   onClick={() => {
@@ -1574,221 +1529,195 @@ export function InboxPage() {
             <div className="flex h-full items-center justify-center">
               <EmptyState
                 icon={
-                  <MessageSquare width={36} height={36} strokeWidth={1.5} />
+                  <MessageSquare width={32} height={32} strokeWidth={1.5} />
                 }
-                title="Select a conversation"
-                description="Choose a conversation from the list to view messages."
+                title="Pick a conversation"
+                description="Choose one from the list to read it and reply."
               />
             </div>
           )
         ) : (
           <>
-            <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-3 py-3 md:px-4">
-              <div className="flex min-w-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileContextOpen(false);
-                    closeConversation();
-                  }}
-                  aria-label="Back to conversations"
-                  className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 lg:hidden"
-                >
-                  <ChevronLeft width={20} height={20} strokeWidth={1.75} />
-                </button>
-                <div className="min-w-0">
-                {/* Wraps below md rather than truncating. The cut-off half
-                    was always the role ("· Owner") and the assignee — the two
-                    things that change what the admin writes back — and a
-                    phone has height to spare where it has no width. */}
-                <div className="flex min-w-0 items-center gap-2">
-                  <h2 className="min-w-0 break-words text-base font-semibold text-text md:truncate">
-                    {memberLabel(conversation)}
-                  </h2>
-                  {/* At 360px the right-hand cluster (a status button plus two
-                      44px icons) and the Back chevron already own ~246 of the
-                      336 usable px, so these two badges left the member's name
-                      rendering as "…". The status is on screen anyway — it is
-                      what chooses Pick up / Resolve / Reopen — and the SLA flag
-                      moves to its own line below, where it can wrap. */}
-                  <span className="hidden md:contents">
-                    {statusBadge(conversation.status)}
-                    <TicketFlagBadge conversation={conversation} now={now} />
-                  </span>
-                </div>
-                <p className="break-words text-xs text-text-muted md:truncate">
-                  {dealerCodeLabel(conversation.dealerCode)}
-                  {conversation.assignedAdminName
-                    ? ` · Assigned to ${conversation.assignedAdminName}`
-                    : null}
-                </p>
-                {/* empty:hidden — TicketFlagBadge renders nothing on a ticket
-                    that is not waiting, and an empty flex row would still cost
-                    its margin. */}
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 empty:hidden md:hidden">
-                  <TicketFlagBadge conversation={conversation} now={now} />
-                </div>
-                </div>
-              </div>
-              {/* Mobile action cluster: the status action as one glyph, and a
-                  kebab holding the rest (the same action in words, Details,
-                  Take over). Four controls — back chevron,
-                  status button, Details, kebab — took ~232px of a 360px header
-                  and left the member's name ~110px, so Details moved into the
-                  sheet the kebab already opens and the status pill dropped its
-                  word. */}
-              <div className="flex items-center gap-1 md:hidden">
-                {statusAction ? (
-                  <IconButton
-                    aria-label={statusAction.label}
-                    variant={statusAction.variant}
-                    onClick={statusAction.run}
-                    loading={statusAction.pending}
+            <div className="flex min-h-0 flex-1">
+              <div className="flex min-w-0 flex-1 flex-col">
+                <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-2 md:gap-3 md:px-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileContextOpen(false);
+                      closeConversation();
+                    }}
+                    aria-label="Back to conversations"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 lg:hidden"
                   >
-                    {statusAction.icon(18)}
-                  </IconButton>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setThreadMenuOpen(true)}
-                  aria-label={
-                    requestsToCheck > 0
-                      ? `More actions — ${requestsToCheck} to check`
-                      : 'More actions'
-                  }
-                  aria-expanded={threadMenuOpen}
-                  className="relative flex h-11 w-11 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text"
-                >
-                  <MoreVertical width={18} height={18} strokeWidth={1.75} />
-                  {/* Details is a row in the sheet this opens, and the Open
-                      requests card is inside it: the count is the only sign, from
-                      the thread itself, that a dealer's answer is waiting. */}
-                  {requestsToCheck > 0 ? (
-                    <span
-                      aria-hidden
-                      className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-strong px-1 text-[10px] font-semibold leading-none text-white"
-                    >
-                      {requestsToCheck}
-                    </span>
-                  ) : null}
-                </button>
-              </div>
+                    <ChevronLeft width={20} height={20} strokeWidth={1.75} />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <h2 className="min-w-0 truncate text-[15px] font-semibold leading-5 text-text">
+                        {memberName}
+                      </h2>
+                      {memberRole ? (
+                        <span className="shrink-0 text-sm text-text-muted">{memberRole}</span>
+                      ) : null}
+                    </div>
+                    <p className="flex min-w-0 items-center gap-1.5 text-xs leading-4 text-text-muted">
+                      <Link
+                        to={`/dealers/${conversation.dealerId}`}
+                        className="shrink-0 font-mono font-medium text-text-muted underline-offset-2 hover:text-brand hover:underline"
+                      >
+                        {dealerCodeLabel(conversation.dealerCode)}
+                      </Link>
+                      {conversation.kind === 'manager' ? <span className="shrink-0">· Group chat</span> : null}
+                      <span className="min-w-0 truncate">· {statusWords(conversation, currentUserId)}</span>
+                      <span className="ml-0.5 inline-flex shrink-0">
+                        <TicketFlagBadge conversation={conversation} now={now} />
+                      </span>
+                    </p>
+                  </div>
 
-              {/* Desktop action row: the full inline set (unchanged). */}
-              <div className="hidden flex-wrap items-center justify-end gap-2 md:flex">
-                {conversation.status === 'OPEN' ? (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={handlePickUp}
-                    loading={assignConv.isPending}
-                    leftIcon={
-                      <UserPlus width={14} height={14} strokeWidth={1.75} />
-                    }
-                  >
-                    Pick up
-                  </Button>
-                ) : null}
-                {conversation.status === 'ASSIGNED' ? (
-                  <>
-                    {conversation.assignedAdminId !== currentUserId ? (
+                  {/* Phone: the status action as one glyph, the helper, and a kebab
+                      holding the rest. Four labelled controls took ~232px of a
+                      360px header and left the member's name ~110px. */}
+                  <div className="flex shrink-0 items-center md:hidden">
+                    {statusAction ? (
+                      <IconButton
+                        aria-label={statusAction.label}
+                        variant={statusAction.variant}
+                        onClick={statusAction.run}
+                        loading={statusAction.pending}
+                      >
+                        {statusAction.icon(18)}
+                      </IconButton>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => openPanel('helper')}
+                      aria-label="Reply helper"
+                      className="flex h-11 w-11 items-center justify-center rounded-md text-assist hover:bg-assist-soft"
+                    >
+                      {helperBusy ? (
+                        <Spinner size={16} />
+                      ) : (
+                        <Sparkles width={18} height={18} strokeWidth={1.9} />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setThreadMenuOpen(true)}
+                      aria-label={
+                        requestsToCheck > 0
+                          ? `More actions — ${requestsToCheck} to check`
+                          : 'More actions'
+                      }
+                      aria-expanded={threadMenuOpen}
+                      className="relative flex h-11 w-11 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text"
+                    >
+                      <MoreVertical width={18} height={18} strokeWidth={1.75} />
+                      {requestsToCheck > 0 ? (
+                        <span
+                          aria-hidden
+                          className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-strong px-1 text-[10px] font-semibold leading-none text-white"
+                        >
+                          {requestsToCheck}
+                        </span>
+                      ) : null}
+                    </button>
+                  </div>
+
+                  {/* Desk: the status action in words, then the panel's tabs as
+                      glyphs, then everything else under one overflow menu. */}
+                  <div className="hidden shrink-0 items-center gap-1.5 md:flex">
+                    {conversation.status === 'ASSIGNED' &&
+                    conversation.assignedAdminId !== currentUserId ? (
                       <Button
                         size="sm"
                         variant="secondary"
                         onClick={handleTakeOver}
                         loading={assignConv.isPending}
-                        leftIcon={
-                          <UserPlus width={14} height={14} strokeWidth={1.75} />
-                        }
                       >
                         Take over
                       </Button>
                     ) : null}
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      onClick={() => setResolveOpen(true)}
-                      loading={resolveConv.isPending}
-                      leftIcon={
-                        <CheckCircle2
-                          width={14}
-                          height={14}
-                          strokeWidth={1.75}
-                        />
-                      }
-                    >
-                      Resolve
-                    </Button>
-                  </>
-                ) : null}
-                {conversation.status === 'RESOLVED' ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleReopen}
-                    loading={reopenConv.isPending}
-                    leftIcon={
-                      <RotateCcw width={14} height={14} strokeWidth={1.75} />
-                    }
-                  >
-                    Reopen
-                  </Button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setMobileContextOpen(true)}
-                  aria-label={
-                    requestsToCheck > 0
-                      ? `Show details — ${requestsToCheck} to check`
-                      : 'Show details'
-                  }
-                  className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text lg:hidden"
-                >
-                  <Info width={18} height={18} strokeWidth={1.75} />
-                  {/* The Open requests card is in the Details panel, which a
-                      phone keeps shut: this is the only sign from the thread that
-                      a dealer has sent something MDG has not checked. */}
-                  {requestsToCheck > 0 ? (
-                    <span
-                      aria-hidden
-                      className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-strong px-1 text-[10px] font-semibold leading-none text-white"
-                    >
-                      {requestsToCheck}
-                    </span>
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setContextOpen((v) => !v)}
-                  aria-label={contextOpen ? 'Hide context' : 'Show context'}
-                  className="hidden rounded-md p-1.5 text-text-muted hover:bg-surface-2 hover:text-text lg:inline-flex"
-                >
-                  {contextOpen ? (
-                    <PanelRightClose
-                      width={16}
-                      height={16}
-                      strokeWidth={1.75}
+                    {statusAction ? (
+                      <Button
+                        size="sm"
+                        variant={statusAction.variant}
+                        onClick={statusAction.run}
+                        loading={statusAction.pending}
+                        leftIcon={statusAction.icon(14)}
+                      >
+                        {statusAction.label === 'Resolve' ? 'Resolve chat' : statusAction.label}
+                      </Button>
+                    ) : null}
+                    {/* The panel's tabs as glyphs, only while the panel is put
+                        away: with it open beside the chat its own tabs are right
+                        there, and three more glyphs cost the name its room. */}
+                    {!(isXl && contextOpen) ? (
+                      <>
+                    <span aria-hidden className="mx-0.5 h-5 w-px bg-border" />
+                    {panelGlyph(
+                      'helper',
+                      'Reply helper',
+                      helperBusy ? (
+                        <Spinner size={15} className="text-assist" />
+                      ) : (
+                        <Sparkles width={17} height={17} strokeWidth={1.9} className="text-assist" />
+                      ),
+                    )}
+                    {panelGlyph('ai', 'AI log', <Zap width={17} height={17} strokeWidth={1.75} />)}
+                    {panelGlyph('details', 'Details', <Info width={17} height={17} strokeWidth={1.75} />)}
+                      </>
+                    ) : null}
+                    {composerActions ? (
+                      <Menu
+                        label="More actions"
+                        title="Actions"
+                        align="end"
+                        trigger={<MoreHorizontal width={18} height={18} strokeWidth={1.75} />}
+                      >
+                        {composerActions.map((a) => (
+                          <MenuItem key={a.id} icon={a.icon} onSelect={a.onSelect}>
+                            {a.label}
+                          </MenuItem>
+                        ))}
+                      </Menu>
+                    ) : null}
+                    <HowThisWorks
+                      surface="admin-inbox-thread"
+                      label="Conversation"
+                      variant="icon"
                     />
-                  ) : (
-                    <PanelRightOpen
-                      width={16}
-                      height={16}
-                      strokeWidth={1.75}
-                    />
-                  )}
-                </button>
-                {/* The icon and not the words: this row already carries up to
-                    four controls and the header is tight at 360px. */}
-                <HowThisWorks
-                  surface="admin-inbox-thread"
-                  label="Conversation"
-                  variant="icon"
-                />
-              </div>
-            </header>
+                  </div>
+                </header>
 
-            <div className="flex min-h-0 flex-1">
-              <div className="flex min-w-0 flex-1 flex-col">
+                {/* Pinned over the messages, never between them and the reply
+                    box: an open ticket (a dealer waiting on a person) and the
+                    guard's mark. One slim line each; the details are a tap
+                    away. Keyed on the thread so a half-written resolution never
+                    follows the admin to another dealer. Both draw nothing on the
+                    threads they have nothing to say about, which is most. Any
+                    other one-line state of the thread belongs in this band too,
+                    never under the messages: that space is the reply box's
+                    alone. */}
+                {/* One cap for the whole band, so however many of these a thread
+                    has at once (a quiet, two tickets, a guard mark) the messages
+                    keep most of the column; the band scrolls inside itself, and
+                    the menus in it draw in a portal, so the scroll cannot clip
+                    them. First the AI-quiet line: its "Let AI answer now" must
+                    not sit below this block's fold. */}
+                <div className="max-h-[38dvh] shrink-0 overflow-y-auto overscroll-contain">
+                  <AiQuietLine conversation={conversation} now={now} />
+                  <TicketStrip
+                    key={conversation.id}
+                    conversationId={conversation.id}
+                    now={now}
+                    focusTicketId={focusTicketId}
+                    stampSeen={selectedId !== autoPickedId}
+                  />
+                  <AiGuardBanner conversationId={conversation.id} now={now} />
+                </div>
+
                 <div className="min-h-0 flex-1">
                   {messagesQ.isLoading ? (
                     <div className="flex h-full items-center justify-center">
@@ -1817,122 +1746,59 @@ export function InboxPage() {
                     />
                   )}
                 </div>
-                {/* Above the composer, below the messages: admin chrome that
-                    is deliberately NOT a bubble in the thread — see
-                    `AiFirstLineStrip`. Both of these render nothing at all on
-                    the threads they have nothing to say about, which is most of
-                    them; the guard banner sits ABOVE the strip because it is
-                    the one an admin must not be able to miss while the strip is
-                    collapsed.
 
-                    Below md the two share ONE capped region that scrolls inside
-                    itself. On a 740px phone the banner and an open strip took
-                    ~450px between them and left the messages 52px; with the
-                    keyboard up the composer itself went under the bottom edge.
-                    Capped at 40% of the screen, the messages and the box being
-                    typed in always keep the rest. Both children are blocks with
-                    their own top border.
-
-                    At md it is capped too, at 45% (30 Oct 2026). At 1280x800
-                    the side panel leaves the thread about 240px wide, and the
-                    ticket strip, its "on it" line, the AI-quiet line, the Reply
-                    helper and the composer stacked up until the messages had no
-                    height at all. The menus in here draw in a portal, so the
-                    scroll cannot clip them.
-
-                    The outer block is published as the bottom bar below md, so
-                    a toast clears the guard banner and the strip as well as the
-                    composer. The composer publishes its own height too, but the
-                    tallest bar wins, and a toast that cleared only the composer
-                    landed on the banner's Clear — the button whose failure it was
-                    reporting. A plain block at md. */}
-                <div ref={threadBottomRef}>
-                <div className="max-h-[40dvh] shrink-0 overflow-y-auto overscroll-contain md:max-h-[45dvh]">
-                  {/* First of all, the AI-quiet line: one or two short lines, and
-                      its "Let AI answer now" is the button that must not sit
-                      below the fold of this capped, scrolling block. Nothing at
-                      all once the quiet is past or was never set. */}
-                  <AiQuietLine conversation={conversation} now={now} />
-                  {/* Then, above the guard banner and the AI strip: an open
-                      ticket is a dealer waiting on a person, and a reply typed
-                      in the box below does not close it. Keyed on the thread so
-                      a half-written resolution never follows the admin to
-                      another dealer. Renders nothing on a thread with none. */}
-                  <TicketStrip
+                {/* The reply box, alone under the messages. Published as the
+                    bottom bar below md, so a toast clears it. */}
+                <div ref={threadBottomRef} className="shrink-0">
+                  <ThreadComposer
+                    /*
+                     * KEYED ON THE THREAD, so the draft box empties when the
+                     * admin moves to another conversation. `Composer` owns its
+                     * draft in local state; without a key the same half-typed
+                     * text was reused across threads — and with "Put in reply
+                     * box" that is a leak of one dealer's figures to another.
+                     */
                     key={conversation.id}
                     conversationId={conversation.id}
-                    now={now}
-                    focusTicketId={focusTicketId}
-                    stampSeen={selectedId !== autoPickedId}
+                    recipient={recipient}
+                    onSend={handleSend}
+                    onShareToOutlet={handleShareToOutlet}
+                    disabled={conversation.status === 'RESOLVED'}
+                    replyingTo={composerReply}
+                    onCancelReply={handleCancelReply}
+                    onSuggest={handleSuggest}
+                    moreActions={composerActions}
+                    insert={
+                      composerInsert?.conversationId === conversation.id
+                        ? composerInsert
+                        : null
+                    }
                   />
-                  <AiGuardBanner conversationId={conversation.id} now={now} />
-                  <AiFirstLineStrip
-                    conversationId={conversation.id}
-                    onUseAnswer={handleUseAiAnswer}
-                    now={now}
-                  />
-                  {/* The Reply helper: drafts for the admin to read, never a
-                      message. Keyed on the thread so a half-written
-                      instruction and the "writing" state never follow the
-                      admin to another dealer. A resolved chat has a shut box,
-                      so a draft is refused there rather than lost in it. */}
-                  <ReplyHelperStrip
-                    key={`reply-helper:${conversation.id}`}
-                    target={{ channel: 'app', conversationId: conversation.id }}
-                    onUseDraft={(text) => {
-                      if (conversation.status === 'RESOLVED') return 'closed';
-                      handleUseReplyDraft(conversation.id, text);
-                      return 'box';
-                    }}
-                  />
-                </div>
-                <Composer
-                  /*
-                   * KEYED ON THE THREAD, so the draft box empties when the
-                   * admin moves to another conversation.
-                   *
-                   * `Composer` owns its draft in local state and had no key, so
-                   * the same box — and the same half-typed text — was reused
-                   * across threads. That was already untidy; with "Put in
-                   * composer" it is a leak. An admin who pastes the machine's
-                   * withheld answer about 15E's density, flips to another
-                   * dealer's thread without sending, and types "ok" on top of it
-                   * sends one dealer's figures to another. The remedy is that
-                   * the box belongs to the thread.
-                   */
-                  key={conversation.id}
-                  conversationId={conversation.id}
-                  onSend={handleSend}
-                  onShareToOutlet={handleShareToOutlet}
-                  disabled={conversation.status === 'RESOLVED'}
-                  replyingTo={composerReply}
-                  onCancelReply={handleCancelReply}
-                  insert={
-                    composerInsert?.conversationId === conversation.id
-                      ? composerInsert
-                      : null
-                  }
-                />
                 </div>
               </div>
 
-              {isLg ? (
-                contextOpen ? (
-                  <aside className="w-72 shrink-0 space-y-3 overflow-y-auto overscroll-contain border-l border-border bg-surface p-3">
-                    {detailsCards}
-                  </aside>
-                ) : null
-              ) : (
-                <Drawer
-                  open={mobileContextOpen}
-                  onClose={() => setMobileContextOpen(false)}
-                  title="Details"
-                  width="sm"
+              {isXl && contextOpen ? (
+                <aside
+                  aria-label="Side panel"
+                  className="flex w-[320px] shrink-0 flex-col border-l border-border bg-surface 2xl:w-[360px]"
                 >
-                  <div className="space-y-3">{detailsCards}</div>
-                </Drawer>
-              )}
+                  {sidePanel(() => setContextOpen(false), 'h-full')}
+                </aside>
+              ) : null}
             </div>
+
+            {!isXl ? (
+              <Drawer
+                open={mobileContextOpen}
+                onClose={() => setMobileContextOpen(false)}
+                title={recipient}
+                description={dealerCodeLabel(conversation.dealerCode)}
+                width="sm"
+                bodyPadding="none"
+              >
+                {sidePanel(undefined, 'h-[80dvh] md:h-full')}
+              </Drawer>
+            ) : null}
 
             <ReactionsDialog
               message={reactionsMessage}
@@ -1983,15 +1849,12 @@ export function InboxPage() {
               }}
             />
 
-            {/* Mobile-only overflow actions moved out of the thread header. */}
+            {/* Phone-only overflow actions, out of the thread header. */}
             <Sheet
               open={threadMenuOpen}
               onClose={() => setThreadMenuOpen(false)}
-              // The thread's guided video rides on the sheet's title row. At
-              // md it is in the header's action row; below md the header has
-              // room for only two glyphs beside the name, and a third would
-              // cost the name another line. `HowThisWorks` cannot yet be
-              // opened from a `SheetItem` (it owns its own open state).
+              // The thread's guided video rides on the sheet's title row: below
+              // md the header has room for only three glyphs beside the name.
               title="Actions"
               help={
                 <HowThisWorks
@@ -2011,40 +1874,50 @@ export function InboxPage() {
                     statusAction.run();
                   }}
                 >
-                  {statusAction.label}
+                  {statusAction.label === 'Resolve' ? 'Resolve chat' : statusAction.label}
                 </SheetItem>
               ) : null}
+              <SheetItem
+                icon={<Sparkles width={20} height={20} strokeWidth={1.75} />}
+                onClick={() => {
+                  setThreadMenuOpen(false);
+                  openPanel('helper');
+                }}
+              >
+                Reply helper
+              </SheetItem>
               <SheetItem
                 icon={<Info width={20} height={20} strokeWidth={1.75} />}
                 onClick={() => {
                   setThreadMenuOpen(false);
-                  setMobileContextOpen(true);
+                  openPanel('details');
                 }}
               >
                 {requestsToCheck > 0 ? `Details · ${requestsToCheck} to check` : 'Details'}
               </SheetItem>
-              {isAdmin && dealerId ? (
-                <>
-                  <SheetItem
-                    icon={<KeyRound width={20} height={20} strokeWidth={1.75} />}
-                    onClick={() => {
-                      setThreadMenuOpen(false);
-                      setAskLoginOpen(true);
-                    }}
-                  >
-                    Ask for portal login
-                  </SheetItem>
-                  <SheetItem
-                    icon={<Video width={20} height={20} strokeWidth={1.75} />}
-                    onClick={() => {
-                      setThreadMenuOpen(false);
-                      setVideoPickerOpen(true);
-                    }}
-                  >
-                    Send a video
-                  </SheetItem>
-                </>
-              ) : null}
+              <SheetItem
+                icon={<Zap width={20} height={20} strokeWidth={1.75} />}
+                onClick={() => {
+                  setThreadMenuOpen(false);
+                  openPanel('ai');
+                }}
+              >
+                AI log
+              </SheetItem>
+              {/* Also here, not only behind the reply box's "+": a resolved
+                  chat has no box on a phone, and these still need sending. */}
+              {composerActions?.map((a) => (
+                <SheetItem
+                  key={a.id}
+                  icon={a.id === 'portal-login' ? <KeyRound width={20} height={20} strokeWidth={1.75} /> : <Video width={20} height={20} strokeWidth={1.75} />}
+                  onClick={() => {
+                    setThreadMenuOpen(false);
+                    a.onSelect();
+                  }}
+                >
+                  {a.label}
+                </SheetItem>
+              ))}
               {conversation.status === 'ASSIGNED' &&
               conversation.assignedAdminId !== currentUserId ? (
                 <SheetItem

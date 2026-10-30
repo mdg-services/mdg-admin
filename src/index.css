@@ -20,6 +20,21 @@
 
   --color-focus-ring: #60a5fa;
 
+  /* ---- The Reply helper's own colour (ADR 0025) ---------------------------
+     Violet, used for nothing else in the portal: wherever it shows, the admin
+     is talking to the helper, and nothing there reaches the dealer. The reply
+     box that DOES send stays plain white, so "tinted" means private and "white"
+     means sent. `strong` is the readable foreground on `soft` (8.9:1). */
+  --color-assist: #7c3aed;
+  --color-assist-hover: #6d28d9;
+  --color-assist-soft: #f5f3ff;
+  --color-assist-line: #ddd6fe;
+  --color-assist-strong: #5b21b6;
+
+  /* The open conversation's row in the list: a quiet blue wash, lighter than
+     brand-soft so the unread dot and the chips on it still read. */
+  --color-selected: #eaf1fe;
+
   /* ---- The chat thread, in the dealer app's colours -----------------------
      The inbox draws a thread the way the dealer's app draws it, so an admin
      sees what the dealer sees: the same wallpaper, bubbles, chips and the
@@ -104,6 +119,14 @@
   --color-brand-soft: #1e3a8a;
 
   --color-focus-ring: #60a5fa;
+
+  --color-assist: #a78bfa;
+  --color-assist-hover: #8b5cf6;
+  --color-assist-soft: rgba(124, 58, 237, 0.14);
+  --color-assist-line: #4c1d95;
+  --color-assist-strong: #ddd6fe;
+
+  --color-selected: #172554;
 }
 
 @layer base {
@@ -215,6 +238,12 @@
   *:focus-visible {
     outline: 2px solid var(--color-focus-ring);
     outline-offset: 2px;
+  }
+  /* A full-width bar or row (a tab, a list row, a disclosure that spans its
+     pane): the ring is drawn INSIDE it. Outside, a 2px offset ring overlapped
+     the next band and was cut by the scroller it sits in. */
+  .focus-inset:focus-visible {
+    outline-offset: -2px;
   }
 }
 
@@ -405,4 +434,25 @@
 }
 .message-flash {
   animation: message-flash 2s ease-out;
+}
+
+/* A helper draft just landed in the reply box: one soft violet pulse on the
+   box, so the eye goes to where the words now are. */
+@keyframes draft-landed {
+  from {
+    box-shadow: 0 0 0 3px var(--color-assist-line);
+  }
+  to {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+.draft-landed {
+  animation: draft-landed 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-flash,
+  .draft-landed {
+    animation: none;
+  }
 }

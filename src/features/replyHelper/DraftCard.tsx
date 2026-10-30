@@ -30,7 +30,7 @@ import type { ReplyHelperDraft } from '@dk/shared';
  *
  * THE CHECKS WARN, THEY DO NOT REFUSE (ADR 0025 §6). A draft with a red warning
  * can still be used: the admin may know something the checks cannot, and a
- * person reads every draft. So "Use this" is always there, and the red warning
+ * person reads every draft. So "Put in reply box" is always there, and the red warning
  * sits right above it where it cannot be missed.
  */
 
@@ -87,29 +87,34 @@ export function DraftCard({
   return (
     <div
       className={cn(
-        'grid gap-2 rounded-md border bg-surface p-2.5',
-        red ? 'border-danger' : 'border-border',
+        'grid gap-2.5 rounded-xl border bg-surface p-3 shadow-sm',
+        red ? 'border-danger/60' : 'border-assist-line',
       )}
     >
-      {count > 1 ? (
-        <p className="text-xs font-medium uppercase tracking-wide text-text-subtle">
-          Draft {index + 1} of {count}
-        </p>
-      ) : null}
+      <p className="flex items-center justify-between gap-2 text-xs font-medium">
+        <span className="text-assist-strong">
+          {count > 1 ? `Draft ${index + 1} of ${count}` : 'Draft'}
+        </span>
+        <span className="text-text-muted">Not sent</span>
+      </p>
       <Text draft={draft} />
       {warnings.length > 0 ? (
-        <ul className="grid gap-1" aria-label="Check before sending">
+        <ul className="grid gap-1 border-t border-border pt-2" aria-label="Check before sending">
           {warnings.map((w, i) => {
             const Icon = w.severity === 'red' ? ShieldAlert : AlertTriangle;
             return (
               <li
                 key={`${w.kind}-${i}`}
                 className={cn(
-                  'flex items-start gap-1.5 text-xs',
-                  w.severity === 'red' ? 'font-medium text-danger-strong md:text-danger' : 'text-warning-strong md:text-warning',
+                  'flex items-start gap-1.5 text-xs leading-4',
+                  // The strong shades are made for a light card; the dark theme
+                  // needs the light end of the same hues to be read at all.
+                  w.severity === 'red'
+                    ? 'font-medium text-danger-strong dark:text-red-300'
+                    : 'text-warning-strong dark:text-amber-300',
                 )}
               >
-                <Icon width={14} height={14} strokeWidth={1.75} className="mt-px shrink-0" aria-hidden />
+                <Icon width={14} height={14} strokeWidth={1.75} className="shrink-0" aria-hidden />
                 <span className="min-w-0 break-words">{w.words}</span>
               </li>
             );
@@ -121,11 +126,12 @@ export function DraftCard({
             a tap that steals focus drops the keyboard and the box jumps. */}
         <Button
           size="sm"
+          tone="assist"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => onUse(draft.text)}
           leftIcon={<CornerDownLeft width={14} height={14} strokeWidth={1.75} />}
         >
-          Use this
+          Put in reply box
         </Button>
         <Button
           size="sm"

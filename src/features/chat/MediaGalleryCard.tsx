@@ -2,7 +2,6 @@ import { Download, FileText, Image as ImageIcon, Link2 } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Drawer } from '@/components/ui/Drawer';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { HowThisWorks } from '@/components/ui/HowThisWorks';
@@ -20,6 +19,7 @@ import type {
 } from '@dk/shared';
 
 import { formatBytes } from './AttachmentPreview';
+import { PanelSection } from './PanelSection';
 
 const TAB_ITEMS: Array<{ id: ConversationMediaTab; label: string }> = [
   { id: 'media', label: 'Media' },
@@ -286,11 +286,14 @@ export function MediaGalleryCard({ conversationId }: { conversationId: string })
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Media, links, docs</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <PanelSection
+        title="Media, links, docs"
+        action={
+          <Button size="sm" variant="ghost" tone="brand" onClick={() => setDrawerOpen(true)}>
+            View all
+          </Button>
+        }
+      >
           {stripQ.isLoading ? (
             <div className="flex justify-center py-3">
               <Spinner size={16} />
@@ -310,16 +313,7 @@ export function MediaGalleryCard({ conversationId }: { conversationId: string })
               )}
             </div>
           )}
-          <Button
-            size="sm"
-            variant="secondary"
-            className="mt-3 w-full"
-            onClick={() => setDrawerOpen(true)}
-          >
-            View all
-          </Button>
-        </CardContent>
-      </Card>
+      </PanelSection>
       <MediaGalleryDrawer
         conversationId={conversationId}
         open={drawerOpen}

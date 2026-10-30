@@ -6,8 +6,8 @@ import { promiseActive, promiseTimeText } from '@dk/shared';
 import type { Conversation } from '@dk/shared';
 
 /**
- * "AI quiet until 4:10 pm · Asha" — one slim line above the composer while the AI
- * is holding back on this chat.
+ * "AI quiet until 4:10 pm · Asha" — one slim line, first in the band pinned over
+ * the messages, while the AI is holding back on this chat.
  *
  * A person's typed reply starts the quiet (30 minutes, never shortened by a
  * later one) and so does Pick up (an hour), so the admin who just wrote to a
@@ -43,11 +43,9 @@ export function AiQuietLine({ conversation, now }: { conversation: Conversation;
   }
 
   return (
-    // WRAPS RATHER THAN SQUEEZES. Beside the side panel at 1280px the thread is
-    // about 240px wide, and a row that would not wrap left the words 37px to
-    // share — one per line — while the button kept its width. The button drops
-    // under the words instead, as it does on the ticket's "on it" line.
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-border bg-surface px-3 py-1">
+    // ONE LINE: on a narrow chat the name at the end gives way ("… · Asha Ve…",
+    // whole on hover), never the time and never the button.
+    <div className="flex items-center gap-2 border-b border-border bg-surface-2 py-0.5 pl-4 pr-2">
       <BellOff
         width={14}
         height={14}
@@ -55,7 +53,10 @@ export function AiQuietLine({ conversation, now }: { conversation: Conversation;
         aria-hidden
         className="shrink-0 text-text-muted"
       />
-      <p className="min-w-0 flex-1 basis-40 text-sm text-text-muted [overflow-wrap:anywhere]">
+      <p
+        className="min-w-0 flex-1 truncate text-[13px] text-text-muted"
+        title={who ? `AI quiet until ${when} · ${who}` : `AI quiet until ${when}`}
+      >
         {who ? `AI quiet until ${when} · ${who}` : `AI quiet until ${when}`}
       </p>
       <Button

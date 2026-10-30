@@ -1,18 +1,13 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  CornerDownLeft,
-  ShieldAlert,
-  Zap,
-} from 'lucide-react';
+import { CornerDownLeft, ShieldAlert, Zap } from 'lucide-react';
 import * as React from 'react';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Callout } from '@/components/ui/Callout';
 import { HowThisWorks } from '@/components/ui/HowThisWorks';
 import { InfoBadge } from '@/components/ui/InfoBadge';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { useConversationAiTurnsQuery } from '@/hooks/api/useAiTurns';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
 import {
   AI_HANDOFF_REASON_LABEL,
   AI_INTENT_LABEL,
@@ -29,6 +24,8 @@ import {
   aiWithheldAnswer,
 } from '@dk/shared';
 import type { AiTurn } from '@dk/shared';
+
+import { PanelSection } from './PanelSection';
 
 /**
  * "What the first line did" — ADMIN CHROME, never a message in the thread.
@@ -68,10 +65,8 @@ function Fact({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-0.5 md:grid-cols-[9rem_minmax(0,1fr)] md:gap-2">
-      <dt className="text-xs font-medium uppercase tracking-wide text-text-subtle">
-        {label}
-      </dt>
+    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3">
+      <dt className="pt-px text-xs font-medium leading-5 text-text-muted">{label}</dt>
       <dd className="min-w-0 break-words text-sm text-text">{children}</dd>
     </div>
   );
@@ -107,7 +102,7 @@ function RefusedProse({ turn }: { turn: AiTurn }) {
   if (!refusal) return null;
   return (
     <div className="grid gap-1.5 rounded-md border border-border bg-surface-2 p-2.5">
-      <p className="text-xs font-medium uppercase tracking-wide text-text-subtle">
+      <p className="text-xs font-semibold text-text-muted">
         It wrote this and we refused it
       </p>
       {refusal.prose ? (
@@ -180,8 +175,8 @@ function TurnDetail({
    */
   const asks = aiPlanAsks(turn.plan);
   return (
-    <div className="grid gap-2 border-t border-border px-3 py-2.5">
-      <dl className="grid gap-2">
+    <div className="grid gap-3">
+      <dl className="grid gap-2.5">
         {turn.question ? (
           <Fact label="They asked">
             <span className="text-text-muted">“{turn.question}”</span>
@@ -306,7 +301,7 @@ function TurnDetail({
 
       {withheld ? (
         <div className="grid gap-2 rounded-md border border-border bg-surface-2 p-2.5">
-          <p className="text-xs font-medium uppercase tracking-wide text-text-subtle">
+          <p className="text-xs font-semibold text-text-muted">
             It wrote this and did not send it
           </p>
           <p className="min-w-0 whitespace-pre-wrap break-words text-sm text-text">
@@ -319,7 +314,7 @@ function TurnDetail({
               onClick={() => onUseAnswer(withheld)}
               leftIcon={<CornerDownLeft width={14} height={14} strokeWidth={1.75} />}
             >
-              Put in composer
+              Put in reply box
             </Button>
           </div>
           {/*
@@ -337,154 +332,108 @@ function TurnDetail({
   );
 }
 
-export function AiFirstLineStrip({
+/**
+ * What the AI first line did on this thread — the side panel's "AI log" tab.
+ *
+ * The newest turn in full (what they asked, how it read it, what it looked up,
+ * how it replied, why it stopped, what it cost), then the earlier turns one
+ * line each. It used to be a strip above the composer that opened downward
+ * into the reply area; at a laptop's height an opened strip left the messages
+ * no room, and its 9rem label column printed the answers one word per line.
+ * In the panel it has its own scroll and a full column to itself.
+ *
+ * ADMIN CHROME, NEVER A MESSAGE. Nothing here is something the dealer sees;
+ * "Put in reply box" hands a withheld answer to the reply box and stops.
+ */
+export function AiFirstLineLog({
   conversationId,
   onUseAnswer,
   now,
 }: {
   conversationId: string;
-  /** Push the withheld sentence into the composer's draft. */
+  /** Push the withheld sentence into the reply box's draft. */
   onUseAnswer: (text: string) => void;
   /** The page's one-minute tick, so the ages here advance with the inbox's. */
   now: number;
 }) {
-  const [open, setOpen] = React.useState(false);
   const turnsQ = useConversationAiTurnsQuery(conversationId);
   const turns = turnsQ.data?.items ?? [];
-  const isMd = useMediaQuery('(min-width: 768px)');
 
-  /*
-   * Below md, putting the sentence in the box also folds the panel away. The
-   * panel and the composer share one short screen: left open, the panel kept
-   * its height while the box grew to take the paragraph, and Send ended up
-   * under the bottom edge — exactly when the admin's next move is to read the
-   * draft and send it. The panel is one tap from coming back.
-   */
-  const handleUseAnswer = React.useCallback(
-    (text: string) => {
-      onUseAnswer(text);
-      if (!isMd) setOpen(false);
-    },
-    [onUseAnswer, isMd],
-  );
-
-  // A thread the machine never looked at gets NO strip at all — not an empty
-  // one. Most threads are that, and a permanent "the AI did nothing" row would
-  // be a line of chrome every admin learns to read past.
-  if (turns.length === 0) return null;
+  if (turnsQ.isLoading) {
+    return (
+      <div className="grid gap-2 px-4 py-4" aria-busy>
+        <Skeleton className="h-5 w-2/3" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+    );
+  }
+  if (turnsQ.isError && !turnsQ.data) {
+    return (
+      <div className="px-4 py-4">
+        <Callout intent="warning" onRetry={() => void turnsQ.refetch()}>
+          What the AI did here could not be loaded.
+        </Callout>
+      </div>
+    );
+  }
+  if (turns.length === 0) {
+    return (
+      <div className="grid gap-1 px-4 py-6 text-center">
+        <Zap width={20} height={20} strokeWidth={1.75} className="mx-auto text-text-subtle" aria-hidden />
+        <p className="text-sm font-medium text-text">Nothing from the AI on this chat</p>
+        <p className="text-sm text-text-muted">
+          When the first line answers or stands down here, each turn shows up in this tab.
+        </p>
+      </div>
+    );
+  }
 
   const latest = turns[0]!;
   const earlier = turns.slice(1);
-  const chipIntent = AI_OUTCOME_TONE[latest.outcome];
-  // The mark goes on the COLLAPSED line, not only inside the panel. "Did a model
-  // write this, or did a person write it months ago?" is the first thing an
-  // admin now needs to know about a reply sitting in the thread above, and an
-  // admin who never opens the panel would otherwise never learn it.
-  const production = aiProduction(latest);
 
   return (
-    <div className="border-t border-border bg-surface">
-      {/* The help glyph is a SIBLING of the toggle, not a child: the collapsed
-          line is itself a button, and a button inside a button is not a thing.
-          With no video for this surface `HowThisWorks` renders nothing and the
-          row is exactly the row it has always been. */}
-      <div className="flex items-center">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
-        >
-          <Zap
-            width={14}
-            height={14}
-            strokeWidth={2}
-            className="shrink-0 text-text-muted"
+    <>
+      <PanelSection
+        title="Latest turn"
+        action={
+          <HowThisWorks
+            surface="admin-inbox-ai-first-line-strip"
+            label="What the first line did"
+            variant="icon"
           />
-          <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-text-subtle">
-            First line
-          </span>
-          <Badge intent={chipIntent}>{AI_OUTCOME_LABEL[latest.outcome]}</Badge>
-          {/* The production mark from md up. Below it the row already carries a
-              glyph, a label, an outcome badge, an age and a chevron, and `Badge`
-              refuses to shrink — a fourth pill would push the chevron off a 360px
-              row. The panel carries it at every width. */}
-          {production ? (
-            <span className="hidden md:contents">
-              <Badge intent={production.tone} title={production.hint}>
-                {production.label}
-              </Badge>
-            </span>
-          ) : null}
-          {/* The reason in full on a wide screen; the badge carries it below md,
-              where a fifteen-word sentence would push the chevron off the row. */}
-          <span className="hidden min-w-0 flex-1 truncate text-sm text-text-muted md:block">
-            {latest.reason ? AI_HANDOFF_REASON_LABEL[latest.reason] : ''}
-          </span>
-          <span className="flex-1 md:hidden" />
-          <span className="shrink-0 text-xs text-text-subtle">
-            {aiTurnAge(latest.createdAt, now)}
-          </span>
-          {open ? (
-            <ChevronDown width={16} height={16} strokeWidth={1.75} className="shrink-0 text-text-muted" />
-          ) : (
-            <ChevronRight width={16} height={16} strokeWidth={1.75} className="shrink-0 text-text-muted" />
-          )}
-        </button>
-        <HowThisWorks
-          surface="admin-inbox-ai-first-line-strip"
-          label="What the first line did"
-          variant="icon"
-          className="mr-2 shrink-0"
-        />
-      </div>
-
-      {open ? (
-        <div
-          // Its own scroller, capped. A thread with five turns on it would
-          // otherwise push the composer off a 740px phone screen, and the
-          // composer is the thing the admin came here to use. Below md the cap
-          // is a share of the screen rather than 256px: with the keyboard up a
-          // phone is ~420px tall, and a fixed 256px panel left the message list
-          // a 24px sliver.
-          className="max-h-[30dvh] overflow-y-auto overscroll-contain md:max-h-80"
-        >
-          <TurnDetail turn={latest} now={now} onUseAnswer={handleUseAnswer} />
-          {earlier.length > 0 ? (
-            <div className="border-t border-border px-3 py-2">
-              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-subtle">
-                Earlier turns on this thread
-              </p>
-              {/* `gap-3` below md: each row can carry a tappable production
-                  badge, and at 4px apart one row's tap halo covered the badge
-                  on the row above it. */}
-              <ul className="grid gap-3 md:gap-1">
-                {earlier.map((t) => (
-                  <li
-                    key={t.id}
-                    className="flex flex-wrap items-center gap-1.5 text-sm text-text-muted"
-                  >
-                    <Badge intent={AI_OUTCOME_TONE[t.outcome]}>
-                      {AI_OUTCOME_LABEL[t.outcome]}
-                    </Badge>
-                    <ProductionBadge turn={t} />
-                    <span className="min-w-0 break-words">
-                      {t.reason
-                        ? AI_HANDOFF_REASON_LABEL[t.reason]
-                        : t.intent
-                          ? AI_INTENT_LABEL[t.intent]
-                          : ''}
-                    </span>
-                    <span className="text-xs text-text-subtle">
-                      {aiTurnAge(t.createdAt, now)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+        }
+      >
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          <Badge intent={AI_OUTCOME_TONE[latest.outcome]}>{AI_OUTCOME_LABEL[latest.outcome]}</Badge>
+          <ProductionBadge turn={latest} />
+          <span className="text-xs tabular-nums text-text-muted">{aiTurnAge(latest.createdAt, now)}</span>
         </div>
+        <TurnDetail turn={latest} now={now} onUseAnswer={onUseAnswer} />
+      </PanelSection>
+      {earlier.length > 0 ? (
+        <PanelSection title={`Earlier turns · ${earlier.length}`}>
+          {/* `gap-3` below md: each row can carry a tappable production badge,
+              and at 4px apart one row's tap halo covered the badge above it. */}
+          <ul className="grid gap-3 md:gap-2">
+            {earlier.map((t) => (
+              <li key={t.id} className="flex flex-wrap items-center gap-1.5 text-sm text-text-muted">
+                <Badge intent={AI_OUTCOME_TONE[t.outcome]}>{AI_OUTCOME_LABEL[t.outcome]}</Badge>
+                <ProductionBadge turn={t} />
+                <span className="min-w-0 break-words">
+                  {t.reason
+                    ? AI_HANDOFF_REASON_LABEL[t.reason]
+                    : t.intent
+                      ? AI_INTENT_LABEL[t.intent]
+                      : ''}
+                </span>
+                <span className="ml-auto text-xs tabular-nums text-text-muted">
+                  {aiTurnAge(t.createdAt, now)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </PanelSection>
       ) : null}
-    </div>
+    </>
   );
 }
