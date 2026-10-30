@@ -41,8 +41,10 @@ export function writeSideTab(tab: SideTab): void {
  * height in turn, and the space between the messages and the reply box holds
  * the reply box only.
  *
- * ALL THREE STAY MOUNTED and the inactive ones are hidden, so a half-typed
- * helper instruction or an opened ticket survives a look at another tab.
+ * ALL THREE STAY MOUNTED and the inactive ones are hidden, so an opened ticket
+ * survives a look at another tab. The panel itself unmounts when it is put
+ * away; a half-typed helper instruction survives that too, because the helper
+ * keeps it per chat outside the pane.
  *
  * The same panel is the inline column on a wide screen and the body of a drawer
  * on a narrower one; only the column has a close glyph of its own (`onClose`) —
@@ -197,7 +199,7 @@ export function ThreadSidePanel({
               ? 'hidden'
               : t.id === 'helper'
                 ? 'flex flex-col'
-                : 'overflow-y-auto overscroll-contain',
+                : 'scroll-py-1.5 overflow-y-auto overscroll-contain',
           )}
         >
           {panes[t.id]}

@@ -133,7 +133,7 @@ export function ReplyHelperPanel({
 
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4"
+        className="min-h-0 flex-1 scroll-py-1.5 overflow-y-auto overscroll-contain px-4 py-4"
       >
         <div className="grid gap-4">
           {loading ? (

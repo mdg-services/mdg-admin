@@ -46,9 +46,10 @@ export type InboxFilter =
 export const conversationsKey = (filter: InboxFilter) =>
   ['conversations', { filter }] as const;
 
-export function useConversations(filter: InboxFilter) {
+export function useConversations(filter: InboxFilter, opts: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: conversationsKey(filter),
+    enabled: opts.enabled ?? true,
     queryFn: () =>
       api.get<Conversation[]>('/conversations', { status: filter, limit: 100 }),
     staleTime: 10_000,

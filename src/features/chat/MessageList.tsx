@@ -309,7 +309,7 @@ export function MessageList({
           thread; the pattern stays put while the messages scroll over it. */}
       <div className="relative h-full bg-wa-wallpaper font-chat text-wa-bubble-text">
         <Doodles />
-        <div ref={scrollRef} className="relative z-10 h-full overflow-y-auto overscroll-contain">
+        <div ref={scrollRef} className="relative z-10 h-full scroll-py-1.5 overflow-y-auto overscroll-contain">
           {/* ONE wrapper for everything in the scroller: the stick-to-bottom
               hook watches it, so a picture or a card that fills in after the
               thread opened keeps the newest message in view. */}
@@ -327,8 +327,10 @@ export function MessageList({
               </div>
             ) : null}
             <DealerViewContext.Provider value={dealerView}>{items}</DealerViewContext.Provider>
+            {/* Not on a short screen (the keyboard is up): a 44px pill over a
+                list that tall covered the dealer's last message. */}
             {!hintSeen && ordered.length > 0 ? (
-              <div className="flex justify-center px-3 pt-2 md:hidden">
+              <div className="flex justify-center px-3 pt-2 md:hidden [@media(max-height:640px)]:hidden">
                 <button
                   type="button"
                   onClick={dismissHint}

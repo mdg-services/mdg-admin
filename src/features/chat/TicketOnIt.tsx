@@ -89,7 +89,7 @@ export function TicketOnItMenu({
         <>
           <MenuItem onSelect={() => void handBack()}>
             <span className="block font-medium text-text">Let AI handle it</span>
-            <span className="block text-xs text-text-muted">Stop the promise; the AI answers about it again</span>
+            <span className="block whitespace-normal text-xs text-text-muted">Stop the promise; the AI answers about it again</span>
           </MenuItem>
           <MenuSeparator />
         </>

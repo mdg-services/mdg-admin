@@ -339,7 +339,8 @@ export function InboxViews({
               aria-pressed={active}
               onClick={() => onChange(k)}
               className={cn(
-                'flex h-8 flex-auto items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-medium transition-colors duration-150',
+                // 44px below lg, where the list has the screen and is tapped.
+                'flex h-11 flex-auto items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-medium transition-colors duration-150 lg:h-8',
                 active ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text',
               )}
             >

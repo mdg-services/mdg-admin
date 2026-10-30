@@ -30,7 +30,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { HowThisWorks } from '@/components/ui/HowThisWorks';
 import { IconButton } from '@/components/ui/IconButton';
 import { Label } from '@/components/ui/Label';
-import { Menu, MenuItem } from '@/components/ui/Menu';
+import { Menu, MenuItem, MenuSeparator } from '@/components/ui/Menu';
 import { Select } from '@/components/ui/Select';
 import { Sheet, SheetItem } from '@/components/ui/Sheet';
 import { Spinner } from '@/components/ui/Spinner';
@@ -127,6 +127,7 @@ import {
   describeShareRecipients,
 } from '@dk/shared';
 import type {
+  AiThreadGuardView,
   Attachment,
   Conversation,
   Dealer,
@@ -193,6 +194,38 @@ const FILTERS: Array<{ key: InboxFilter; label: string }> = [
 const PRIMARY_VIEWS: InboxFilter[] = ['open', 'mine', 'all'];
 
 /**
+ * The thread's guard mark, as the banner and the AI log tab's dot show it.
+ *
+ * The turn log says what the guard caught and when, but Clear removes the MARK
+ * (`ai.abuse`, which no payload carries — see the banner's note), not the turn
+ * that recorded it. Read off the turns alone, the banner outlived its own Clear
+ * and a second press was a 400. The guard lens is the server's own list of the
+ * marked threads, so a thread missing from it has been cleared. It is fetched
+ * again whenever a thread with a hit is opened or catches a new one, so a fresh
+ * hit shows the moment the server lists it. A resolved thread is outside the
+ * lens altogether, and so is a lens that failed to load: there the turns
+ * alone still decide.
+ */
+function useThreadGuard(conversation: Conversation | null): AiThreadGuardView | null {
+  // The SAME query key the AI log uses, so react-query serves both from one
+  // cache entry and one request.
+  const turnsQ = useConversationAiTurnsQuery(conversation?.id ?? null);
+  const guard = aiThreadGuard(turnsQ.data?.items);
+  const lens = useConversations('ai-guard', { enabled: !!guard });
+  const hitKey = conversation && guard ? `${conversation.id}|${guard.at}` : null;
+  const { refetch, isFetching } = lens;
+  React.useEffect(() => {
+    if (hitKey && !isFetching) void refetch();
+    // Once per thread and hit, not on every fetch it starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hitKey]);
+  if (!conversation || !guard) return null;
+  if (conversation.status === 'RESOLVED' || lens.isError) return guard;
+  if (!lens.data) return null;
+  return lens.data.some((c) => c.id === conversation.id) ? guard : null;
+}
+
+/**
  * The guard banner over the composer: somebody tried, on this thread, to plant a
  * figure in MDG's mouth or to read the system instruction back out.
  *
@@ -223,25 +256,31 @@ const PRIMARY_VIEWS: InboxFilter[] = ['open', 'mine', 'all'];
  * CLEARING IS SUPER-ADMIN AND IS THE ONLY THING THAT CLEARS IT. Replying does
  * not, resolving does not, reopening does not — which is the entire reason the
  * mark lives on `ai.abuse` and not on `Conversation.flagged`, where answering
- * the dealer would silently erase it.
+ * the dealer would silently erase it. Whether the mark still stands is
+ * `useThreadGuard`'s question, below.
  */
 function AiGuardBanner({
   conversationId,
+  guard,
   now,
 }: {
   conversationId: string;
+  guard: AiThreadGuardView | null;
   /** The page's one-minute tick, so this age advances with every other one. */
   now: number;
 }) {
   const isSuperAdmin = useIsSuperAdmin();
   const clear = useClearAiGuard();
   const toast = useToast();
-  // The SAME query key the strip below uses, so react-query serves both from one
-  // cache entry and one request.
-  const turnsQ = useConversationAiTurnsQuery(conversationId);
   const [explainOpen, setExplainOpen] = React.useState(false);
   const explainId = React.useId();
-  const guard = aiThreadGuard(turnsQ.data?.items);
+  // The band over the messages scrolls inside itself, and an explanation that
+  // opened below its edge read as one cut line. `nearest` moves the band, and
+  // only as far as the text needs.
+  const explainRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (explainOpen) explainRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [explainOpen]);
   if (!guard) return null;
   return (
     // `danger-soft` is a fixed light shade: on the dark theme it put light text
@@ -274,13 +313,14 @@ function AiGuardBanner({
             ) : null}
             {/* The explanation is folded behind this, on the badge's own row,
                 at every width. `-my-2.5` keeps the row its 24px while the
-                button keeps a 44px target below md. */}
+                button keeps a 44px target below md; at md the button is 16px
+                and the margin would pull the opened text up under it. */}
             <button
               type="button"
               aria-expanded={explainOpen}
               aria-controls={explainId}
               onClick={() => setExplainOpen((v) => !v)}
-              className="-my-2.5 ml-1 flex min-h-11 items-center gap-1 text-xs font-medium text-text-muted md:min-h-0"
+              className="-my-2.5 ml-1 flex min-h-11 items-center gap-1 text-xs font-medium text-text-muted md:my-0 md:min-h-0"
             >
               <ChevronRight
                 width={14}
@@ -301,6 +341,7 @@ function AiGuardBanner({
               whole, it took ~190px of the band pinned over the messages. */}
           <div
             id={explainId}
+            ref={explainRef}
             className={cn(explainOpen ? 'grid' : 'hidden', 'gap-1')}
           >
             <p className="text-xs text-text-muted">{guard.hint}</p>
@@ -496,6 +537,7 @@ export function InboxPage() {
   const [mobileContextOpen, setMobileContextOpen] = React.useState(false);
   const isLg = useMediaQuery('(min-width: 1024px)');
   const isXl = useMediaQuery('(min-width: 1280px)');
+  const is2xl = useMediaQuery('(min-width: 1536px)');
   const toast = useToast();
 
   // Ticks once a minute so the reply-SLA flag colours advance on their own,
@@ -505,6 +547,10 @@ export function InboxPage() {
     const t = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(t);
   }, []);
+
+  // The thread the admin opened from this page's own list (phone), so the sync
+  // below can tell it from a link followed in from elsewhere.
+  const openedFromListRef = React.useRef<string | null>(null);
 
   // Keep the selection in sync with the `?c=` param.
   //  - Desktop (≥ lg): consume a deep link once, seed selection into state, then
@@ -525,7 +571,11 @@ export function InboxPage() {
       setSearchParams(next, { replace: true });
     } else {
       setSelectedId(c);
-      if (c) setFilter('all');
+      // A row tapped in this list keeps the list's view, so Back lands on the
+      // same Unassigned or Mine queue. A link from anywhere else (a push, the
+      // Tickets page) may name a thread this view does not hold: All open.
+      if (c && openedFromListRef.current !== c) setFilter('all');
+      if (!c) openedFromListRef.current = null;
     }
   }, [searchParams, setSearchParams, isLg]);
 
@@ -548,6 +598,7 @@ export function InboxPage() {
         setAutoPickedId(null);
         setSelectedId(id);
       } else {
+        openedFromListRef.current = id;
         const next = new URLSearchParams(searchParams);
         next.set('c', id);
         setSearchParams(next);
@@ -1002,6 +1053,12 @@ export function InboxPage() {
    * all. The word is not lost: it is the first row of the sheet the kebab
    * opens, where it has a whole line to itself.
    */
+  // Another admin holds the chat: the header and the sheet offer Take over.
+  const takeOverShown =
+    !!conversation &&
+    conversation.status === 'ASSIGNED' &&
+    conversation.assignedAdminId !== currentUserId;
+
   const statusAction: {
     label: string;
     icon: (size: number) => React.ReactNode;
@@ -1093,8 +1150,8 @@ export function InboxPage() {
 
   const helperBusy =
     usePendingReplyHelperAsk({ channel: 'app', conversationId: selectedId ?? '' }) !== null;
-  const guardTurnsQ = useConversationAiTurnsQuery(conversation?.id ?? null);
-  const guarded = !!aiThreadGuard(guardTurnsQ.data?.items);
+  const threadGuard = useThreadGuard(conversation);
+  const guarded = !!threadGuard;
 
   const memberName =
     conversation?.memberName?.trim() || roleLabel(conversation?.memberRole) || 'Member';
@@ -1540,7 +1597,10 @@ export function InboxPage() {
           <>
             <div className="flex min-h-0 flex-1">
               <div className="flex min-w-0 flex-1 flex-col">
-                <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-2 md:gap-3 md:px-4">
+                {/* Below lg the thread has the screen to itself and its header
+                    grows to fit: a long name or a group chat's status wraps to a
+                    second line rather than being cut to "Not…". */}
+                <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-2 py-1.5 md:gap-3 md:px-4 lg:h-14 lg:py-0">
                   <button
                     type="button"
                     onClick={() => {
@@ -1554,31 +1614,40 @@ export function InboxPage() {
                   </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-1.5">
-                      <h2 className="min-w-0 truncate text-[15px] font-semibold leading-5 text-text">
+                      <h2
+                        className="min-w-0 break-words text-[15px] font-semibold leading-5 text-text lg:truncate"
+                        title={memberName}
+                      >
                         {memberName}
                       </h2>
                       {memberRole ? (
                         <span className="shrink-0 text-sm text-text-muted">{memberRole}</span>
                       ) : null}
                     </div>
-                    <p className="flex min-w-0 items-center gap-1.5 text-xs leading-4 text-text-muted">
+                    <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs leading-4 text-text-muted lg:flex-nowrap">
+                      {/* 44px tall below lg, the header's other targets' size,
+                          with the growth cancelled by the negative margin so the
+                          line keeps its height. */}
                       <Link
                         to={`/dealers/${conversation.dealerId}`}
-                        className="shrink-0 font-mono font-medium text-text-muted underline-offset-2 hover:text-brand hover:underline"
+                        className="-my-3.5 inline-flex min-h-11 shrink-0 items-center font-mono font-medium text-text-muted underline-offset-2 hover:text-brand hover:underline lg:my-0 lg:min-h-0"
                       >
                         {dealerCodeLabel(conversation.dealerCode)}
                       </Link>
-                      {conversation.kind === 'manager' ? <span className="shrink-0">· Group chat</span> : null}
-                      <span className="min-w-0 truncate">· {statusWords(conversation, currentUserId)}</span>
+                      {/* Below lg the role beside the name already says Manager. */}
+                      {conversation.kind === 'manager' ? (
+                        <span className="hidden shrink-0 lg:inline">· Group chat</span>
+                      ) : null}
+                      <span className="lg:min-w-0 lg:truncate">· {statusWords(conversation, currentUserId)}</span>
                       <span className="ml-0.5 inline-flex shrink-0">
                         <TicketFlagBadge conversation={conversation} now={now} />
                       </span>
                     </p>
                   </div>
 
-                  {/* Phone: the status action as one glyph, the helper, and a kebab
-                      holding the rest. Four labelled controls took ~232px of a
-                      360px header and left the member's name ~110px. */}
+                  {/* Phone: the status action as one glyph, the helper, and a
+                      kebab holding the rest. Four labelled controls took ~232px
+                      of a 360px header and left the member's name ~110px. */}
                   <div className="flex shrink-0 items-center md:hidden">
                     {statusAction ? (
                       <IconButton
@@ -1626,10 +1695,12 @@ export function InboxPage() {
                   </div>
 
                   {/* Desk: the status action in words, then the panel's tabs as
-                      glyphs, then everything else under one overflow menu. */}
+                      glyphs, then everything else under one overflow menu. From
+                      md to lg the thread is a 560px column: the status action
+                      is a glyph and Take over moves into the menu, or the desk
+                      row left the name ~95px. */}
                   <div className="hidden shrink-0 items-center gap-1.5 md:flex">
-                    {conversation.status === 'ASSIGNED' &&
-                    conversation.assignedAdminId !== currentUserId ? (
+                    {takeOverShown && isLg ? (
                       <Button
                         size="sm"
                         variant="secondary"
@@ -1639,7 +1710,21 @@ export function InboxPage() {
                         Take over
                       </Button>
                     ) : null}
-                    {statusAction ? (
+                    {/* Beside Take over the status action is a glyph until 2xl:
+                        both in words took 230px and pushed the dealer's name out
+                        of the header. */}
+                    {statusAction && (!isLg || (takeOverShown && !is2xl)) ? (
+                      <IconButton
+                        size="sm"
+                        aria-label={statusAction.label === 'Resolve' ? 'Resolve chat' : statusAction.label}
+                        title={statusAction.label === 'Resolve' ? 'Resolve chat' : statusAction.label}
+                        variant={statusAction.variant}
+                        onClick={statusAction.run}
+                        loading={statusAction.pending}
+                      >
+                        {statusAction.icon(16)}
+                      </IconButton>
+                    ) : statusAction ? (
                       <Button
                         size="sm"
                         variant={statusAction.variant}
@@ -1652,31 +1737,79 @@ export function InboxPage() {
                     ) : null}
                     {/* The panel's tabs as glyphs, only while the panel is put
                         away: with it open beside the chat its own tabs are right
-                        there, and three more glyphs cost the name its room. */}
+                        there, and three more glyphs cost the name its room. Below
+                        xl the panel is a drawer with its own tabs, so the header
+                        keeps the helper's glyph alone and the other two move
+                        into the menu. */}
                     {!(isXl && contextOpen) ? (
                       <>
-                    <span aria-hidden className="mx-0.5 h-5 w-px bg-border" />
-                    {panelGlyph(
-                      'helper',
-                      'Reply helper',
-                      helperBusy ? (
-                        <Spinner size={15} className="text-assist" />
-                      ) : (
-                        <Sparkles width={17} height={17} strokeWidth={1.9} className="text-assist" />
-                      ),
-                    )}
-                    {panelGlyph('ai', 'AI log', <Zap width={17} height={17} strokeWidth={1.75} />)}
-                    {panelGlyph('details', 'Details', <Info width={17} height={17} strokeWidth={1.75} />)}
+                        <span aria-hidden className="mx-0.5 h-5 w-px bg-border" />
+                        {panelGlyph(
+                          'helper',
+                          'Reply helper',
+                          helperBusy ? (
+                            <Spinner size={15} className="text-assist" />
+                          ) : (
+                            <Sparkles width={17} height={17} strokeWidth={1.9} className="text-assist" />
+                          ),
+                        )}
+                        {isXl ? (
+                          <>
+                            {panelGlyph('ai', 'AI log', <Zap width={17} height={17} strokeWidth={1.75} />)}
+                            {panelGlyph('details', 'Details', <Info width={17} height={17} strokeWidth={1.75} />)}
+                          </>
+                        ) : null}
                       </>
                     ) : null}
-                    {composerActions ? (
+                    {composerActions || !isXl ? (
                       <Menu
-                        label="More actions"
+                        label={
+                          !isXl && requestsToCheck > 0
+                            ? `More actions — ${requestsToCheck} to check`
+                            : 'More actions'
+                        }
                         title="Actions"
                         align="end"
-                        trigger={<MoreHorizontal width={18} height={18} strokeWidth={1.75} />}
+                        trigger={
+                          <span className="relative inline-flex">
+                            <MoreHorizontal width={18} height={18} strokeWidth={1.75} />
+                            {!isXl && requestsToCheck > 0 ? (
+                              <span
+                                aria-hidden
+                                className="absolute -right-2.5 -top-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-strong px-1 text-[10px] font-semibold leading-none text-white"
+                              >
+                                {requestsToCheck}
+                              </span>
+                            ) : null}
+                          </span>
+                        }
                       >
-                        {composerActions.map((a) => (
+                        {!isXl ? (
+                          <>
+                            <MenuItem
+                              icon={<Info width={15} height={15} strokeWidth={1.75} />}
+                              onSelect={() => openPanel('details')}
+                            >
+                              {requestsToCheck > 0 ? `Details · ${requestsToCheck} to check` : 'Details'}
+                            </MenuItem>
+                            <MenuItem
+                              icon={<Zap width={15} height={15} strokeWidth={1.75} />}
+                              onSelect={() => openPanel('ai')}
+                            >
+                              AI log
+                            </MenuItem>
+                            {composerActions || (takeOverShown && !isLg) ? <MenuSeparator /> : null}
+                          </>
+                        ) : null}
+                        {takeOverShown && !isLg ? (
+                          <MenuItem
+                            icon={<UserPlus width={15} height={15} strokeWidth={1.75} />}
+                            onSelect={handleTakeOver}
+                          >
+                            Take over
+                          </MenuItem>
+                        ) : null}
+                        {composerActions?.map((a) => (
                           <MenuItem key={a.id} icon={a.icon} onSelect={a.onSelect}>
                             {a.label}
                           </MenuItem>
@@ -1706,7 +1839,9 @@ export function InboxPage() {
                     the menus in it draw in a portal, so the scroll cannot clip
                     them. First the AI-quiet line: its "Let AI answer now" must
                     not sit below this block's fold. */}
-                <div className="max-h-[38dvh] shrink-0 overflow-y-auto overscroll-contain">
+                {/* A short screen — a phone with its keyboard up — gets a lower
+                    cap, or the message being answered scrolls out of sight. */}
+                <div className="max-h-[38dvh] shrink-0 overflow-y-auto overscroll-contain [@media(max-height:640px)]:max-h-[24dvh]">
                   <AiQuietLine conversation={conversation} now={now} />
                   <TicketStrip
                     key={conversation.id}
@@ -1715,7 +1850,7 @@ export function InboxPage() {
                     focusTicketId={focusTicketId}
                     stampSeen={selectedId !== autoPickedId}
                   />
-                  <AiGuardBanner conversationId={conversation.id} now={now} />
+                  <AiGuardBanner conversationId={conversation.id} guard={threadGuard} now={now} />
                 </div>
 
                 <div className="min-h-0 flex-1">
@@ -1918,8 +2053,7 @@ export function InboxPage() {
                   {a.label}
                 </SheetItem>
               ))}
-              {conversation.status === 'ASSIGNED' &&
-              conversation.assignedAdminId !== currentUserId ? (
+              {takeOverShown ? (
                 <SheetItem
                   icon={<UserPlus width={20} height={20} strokeWidth={1.75} />}
                   onClick={() => {

@@ -123,6 +123,16 @@ const TARGET_HINT: Record<SendTarget, string> = {
 };
 
 const LINE_HEIGHT = 20;
+
+/**
+ * The name a phone's box has room for: "Anurag Singh · Owner" becomes "Anurag",
+ * and a first name longer than twelve letters is cut. The full name stays in
+ * the box's label and in the helper-draft note.
+ */
+function phoneName(recipient: string): string {
+  const first = recipient.split(' · ')[0]?.split(' ')[0] ?? recipient;
+  return first.length > 12 ? `${first.slice(0, 12)}…` : first;
+}
 /*
  * How far the box grows before it scrolls inside itself. Four rows below md,
  * not six: a thread on a 740px phone already spends its header, the AI strip
@@ -156,26 +166,52 @@ export function Composer({
   const [error, setError] = React.useState<string | null>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  // Below md this row is the bottom of the screen in a thread, so it publishes
-  // its height and a toast ("Copied", a failed send) sits above it instead of
-  // on top of Send. It grows with the draft, staged files and the reply quote,
-  // and the hook re-measures as it does.
+  // This row is the bottom of the thread, so it publishes its height and a
+  // toast ("Copied", a failed send) sits above it instead of on top of Send. It
+  // grows with the draft, staged files and the reply quote, and the hook
+  // re-measures as it does. At md too: the toast's corner is this row's
+  // right-hand end, where Send is.
   const rootRef = React.useRef<HTMLDivElement>(null);
-  usePublishBottomBar(rootRef);
+  usePublishBottomBar(rootRef, true, true);
   const recorder = useVoiceRecorder();
   const isRecording = recorder.status === 'recording';
   const isMd = useMediaQuery('(min-width: 768px)');
   // "Suggest" earns its word only where the box is wide enough to keep its own.
   const roomyRow = useMediaQuery('(min-width: 1440px)');
 
-  React.useEffect(() => {
+  // A resolved chat disables the composer; say why.
+  const placeholder = disabled
+    ? 'This chat is resolved — reopen to reply.'
+    : recipient
+      ? `Message ${isMd ? recipient : phoneName(recipient)}`
+      : 'Type a message…';
+
+  // The box grows with what is in it, the placeholder included: an empty box
+  // is measured too, so a sentence-long placeholder is not cut to one line.
+  const measure = React.useCallback(() => {
     const ta = textareaRef.current;
     if (!ta) return;
     ta.style.height = 'auto';
     const maxRows = isMd ? MAX_ROWS_MD : MAX_ROWS_PHONE;
     const next = Math.min(ta.scrollHeight, LINE_HEIGHT * maxRows + 16);
     ta.style.height = `${next}px`;
-  }, [body, isMd]);
+  }, [isMd]);
+  React.useEffect(measure, [body, placeholder, measure]);
+  // And again when the box narrows or widens with no change to its text: Send
+  // appearing beside it, the side panel opening. Width only, or the observer
+  // would wake on the height this very measure writes.
+  React.useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta || typeof ResizeObserver === 'undefined') return;
+    let width = ta.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (ta.clientWidth === width) return;
+      width = ta.clientWidth;
+      measure();
+    });
+    ro.observe(ta);
+    return () => ro.disconnect();
+  }, [measure]);
 
   // Starting a reply drops focus straight into the input.
   React.useEffect(() => {
@@ -222,18 +258,10 @@ export function Composer({
 
   const hasContent = body.trim().length > 0 || files.length > 0;
   const busy = sending || disabled;
-  // A resolved chat disables the composer; say why. On phones drop the desktop
-  // keyboard hint (no Cmd/Ctrl; it just truncates in a narrow field).
   // An emptied box holds no helper draft any more.
   React.useEffect(() => {
     if (!body.trim()) setFromHelper(false);
   }, [body]);
-  const placeholder = disabled
-    ? 'This chat is resolved — reopen to reply.'
-    : recipient
-      ? // A phone's box has room for the name, not the role beside it.
-        `Message ${isMd ? recipient : recipient.split(' · ')[0]}`
-      : 'Type a message…';
 
   function pickFiles(list: FileList | null) {
     if (!list) return;
@@ -554,8 +582,15 @@ export function Composer({
             <div className="flex items-center gap-2 rounded-md border border-assist-line bg-assist-soft px-2.5 py-1.5 text-xs text-assist-strong">
               <Sparkles width={13} height={13} strokeWidth={2} className="shrink-0 text-assist" aria-hidden />
               <span className="min-w-0 flex-1">
-                <span className="font-semibold">Draft from the Reply helper.</span> Read and change it — it
-                goes to {recipient ?? 'them'} only when you press Send.
+                <span className="font-semibold">Draft from the Reply helper.</span>{' '}
+                {/* A short screen is a phone with its keyboard up: the safety
+                    half alone, so the messages keep their room. */}
+                <span className="[@media(max-height:640px)]:hidden">
+                  Read and change it — it goes to {recipient ?? 'them'} only when you press Send.
+                </span>
+                <span className="hidden [@media(max-height:640px)]:inline">
+                  Sent only when you press Send.
+                </span>
               </span>
               <button
                 type="button"
@@ -630,7 +665,15 @@ export function Composer({
                 // and mic buttons beside it are already 44px squares. `min-height`
                 // beats an inline `height`, so the floor holds without fighting the
                 // effect. `md:` restores the 36px the desktop row has always drawn.
-                className="min-h-11 md:min-h-[36px] min-w-0 resize-none"
+                // `block`, or the field sits on a text baseline and its frame is
+                // 6px taller than it, which drops it below the buttons beside it.
+                // The placeholder keeps to one line: a long name wrapped it to
+                // four, and the box grew to hold them.
+                className={cn(
+                  'block min-h-11 min-w-0 resize-none md:min-h-[36px]',
+                  !disabled &&
+                    'placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap',
+                )}
               />
             </div>
             {/* The Reply helper's one tap, in the helper's violet: it never sends,

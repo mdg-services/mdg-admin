@@ -30,19 +30,24 @@ function write(): void {
  * importing the other.
  *
  * Below md only, and only while `active`: at md the toast is in the corner and
- * clears nothing. Several bars at once publish the tallest; the variable is
- * removed when the last one unmounts.
+ * clears nothing — except for a bar that passes `atMd`, the inbox reply boxes,
+ * whose right-hand end (Send) IS that corner. Several bars at once publish the
+ * tallest; the variable is removed when the last one unmounts.
  *
  * @example
  * const ref = React.useRef<HTMLDivElement>(null);
  * usePublishBottomBar(ref, !hidden);
  * return <div ref={ref} className="sticky bottom-0">…</div>;
  */
-export function usePublishBottomBar(ref: React.RefObject<HTMLElement | null>, active = true): void {
+export function usePublishBottomBar(
+  ref: React.RefObject<HTMLElement | null>,
+  active = true,
+  atMd = false,
+): void {
   const isMd = useMediaQuery('(min-width: 768px)');
   React.useEffect(() => {
     const el = ref.current;
-    if (!active || isMd || !el) return;
+    if (!active || (isMd && !atMd) || !el) return;
     const key = {};
     const measure = () => {
       heights.set(key, Math.round(el.getBoundingClientRect().height));
@@ -56,5 +61,5 @@ export function usePublishBottomBar(ref: React.RefObject<HTMLElement | null>, ac
       heights.delete(key);
       write();
     };
-  }, [ref, active, isMd]);
+  }, [ref, active, isMd, atMd]);
 }

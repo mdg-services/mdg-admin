@@ -88,6 +88,21 @@ function ProductionBadge({ turn }: { turn: AiTurn }) {
 }
 
 /**
+ * The turn's outcome chip, then its production chip. When the two say the same
+ * words ("Passed to a person" twice side by side) the outcome chip steps aside
+ * and the production chip, which carries the explanation, stays.
+ */
+function TurnChips({ turn }: { turn: AiTurn }) {
+  const same = aiProduction(turn)?.label === AI_OUTCOME_LABEL[turn.outcome];
+  return (
+    <>
+      {same ? null : <Badge intent={AI_OUTCOME_TONE[turn.outcome]}>{AI_OUTCOME_LABEL[turn.outcome]}</Badge>}
+      <ProductionBadge turn={turn} />
+    </>
+  );
+}
+
+/**
  * The sentence the machine composed and we refused, with the rules that refused
  * it.
  *
@@ -404,8 +419,7 @@ export function AiFirstLineLog({
         }
       >
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
-          <Badge intent={AI_OUTCOME_TONE[latest.outcome]}>{AI_OUTCOME_LABEL[latest.outcome]}</Badge>
-          <ProductionBadge turn={latest} />
+          <TurnChips turn={latest} />
           <span className="text-xs tabular-nums text-text-muted">{aiTurnAge(latest.createdAt, now)}</span>
         </div>
         <TurnDetail turn={latest} now={now} onUseAnswer={onUseAnswer} />
@@ -417,8 +431,7 @@ export function AiFirstLineLog({
           <ul className="grid gap-3 md:gap-2">
             {earlier.map((t) => (
               <li key={t.id} className="flex flex-wrap items-center gap-1.5 text-sm text-text-muted">
-                <Badge intent={AI_OUTCOME_TONE[t.outcome]}>{AI_OUTCOME_LABEL[t.outcome]}</Badge>
-                <ProductionBadge turn={t} />
+                <TurnChips turn={t} />
                 <span className="min-w-0 break-words">
                   {t.reason
                     ? AI_HANDOFF_REASON_LABEL[t.reason]

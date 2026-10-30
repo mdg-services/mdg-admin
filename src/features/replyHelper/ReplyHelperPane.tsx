@@ -25,6 +25,43 @@ import type { ReplyHelperTarget } from '@dk/shared';
 import { ReplyHelperPanel } from './ReplyHelperPanel';
 
 /**
+ * The half-typed instruction and the last failure, per chat, outside the pane.
+ *
+ * The pane unmounts whenever the side panel is put away (a drawer closed, Hide
+ * panel), and a sentence the admin had half written went with it. Held here per
+ * chat, it can only ever come back in the chat it was typed for; an entry with
+ * nothing in it is dropped. An ask that fails after the panel was shut still
+ * puts its words back, for the next time the panel opens.
+ */
+interface HelperDraft {
+  text: string;
+  error: string | null;
+}
+const EMPTY_DRAFT: HelperDraft = { text: '', error: null };
+const helperDrafts = new Map<string, HelperDraft>();
+const draftListeners = new Set<() => void>();
+
+function draftKey(target: ReplyHelperTarget): string {
+  return target.channel === 'app'
+    ? `app:${target.conversationId}`
+    : `whatsapp:${target.line}:${target.person}`;
+}
+
+function writeDraft(key: string, patch: Partial<HelperDraft>): void {
+  const next = { ...(helperDrafts.get(key) ?? EMPTY_DRAFT), ...patch };
+  if (!next.text && !next.error) helperDrafts.delete(key);
+  else helperDrafts.set(key, next);
+  draftListeners.forEach((l) => l());
+}
+
+function subscribeDrafts(listener: () => void): () => void {
+  draftListeners.add(listener);
+  return () => {
+    draftListeners.delete(listener);
+  };
+}
+
+/**
  * Where a draft went when the admin pressed "Put in reply box":
  * `'box'`: into the reply box, which is open; `'saved'`: kept as the chat's
  * draft because the box is not open right now (the box shows it when it opens);
@@ -78,11 +115,12 @@ export interface ReplyHelperPaneProps {
  * wrong one would have gone to the dealer. Now the only field under the chat is
  * the one that sends, and this pane wears the helper's violet from top to bottom.
  *
- * KEY IT ON THE OPEN CONVERSATION. The pane holds the half-typed instruction and
- * the last failure, and neither may follow the admin to another person. The
- * thread's content comes from the server per conversation, so nothing crosses
- * even if a key were missed — but a question typed for one dealer left in the
- * box for the next is the leak the key prevents.
+ * KEY IT ON THE OPEN CONVERSATION. The half-typed instruction and the last
+ * failure are held per chat (`helperDrafts`, above), and neither may follow the
+ * admin to another person. The thread's content comes from the server per
+ * conversation, so nothing crosses even if a key were missed — but a question
+ * typed for one dealer left in the box for the next is the leak the key
+ * prevents.
  */
 export function ReplyHelperPane({
   target,
@@ -97,8 +135,18 @@ export function ReplyHelperPane({
   const toast = useToast();
   const meId = useAuthStore((s) => s.user?.id ?? s.admin?.id ?? null);
 
-  const [instruction, setInstruction] = React.useState('');
-  const [askError, setAskError] = React.useState<string | null>(null);
+  const key = draftKey(target);
+  const draft = React.useSyncExternalStore(
+    subscribeDrafts,
+    () => helperDrafts.get(key) ?? EMPTY_DRAFT,
+  );
+  const instruction = draft.text;
+  const askError = draft.error;
+  const setInstruction = React.useCallback((text: string) => writeDraft(key, { text }), [key]);
+  const setAskError = React.useCallback(
+    (error: string | null) => writeDraft(key, { error }),
+    [key],
+  );
   const askingRef = React.useRef(false);
 
   const threadQ = useReplyHelperThread(target);
@@ -138,7 +186,7 @@ export function ReplyHelperPane({
         askingRef.current = false;
       }
     },
-    [askM, pending, threadQ, toast],
+    [askM, pending, threadQ, toast, setAskError],
   );
 
   /** A typed instruction. Nothing typed is not an ask: that is Suggest reply. */
@@ -183,7 +231,8 @@ export function ReplyHelperPane({
     setInstruction('');
     void ask(text).then((ok) => {
       // Put the words back unless the admin has already started something new.
-      if (!ok) setInstruction((now) => (now.trim() ? now : text));
+      // Read from the store, not this render: the pane may be gone by now.
+      if (!ok && !(helperDrafts.get(key)?.text ?? '').trim()) setInstruction(text);
     });
   }
 

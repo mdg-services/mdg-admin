@@ -161,13 +161,18 @@ export function TicketStrip({
               t.id === focusTicketId && 'ring-2 ring-inset ring-brand',
             )}
           >
-            <div className="flex min-h-11 items-center gap-2 pl-2 pr-3">
+            {/* `py-1` below md: the 44px buttons sat flush on the header's
+                border and on the chips under them. */}
+            <div className="flex min-h-11 items-center gap-2 py-1 pl-2 pr-3 md:py-0">
               <button
                 type="button"
                 onClick={() => setExpanded(isOpen ? null : t.id)}
                 aria-expanded={isOpen}
                 aria-controls={detailId}
-                className="focus-inset flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left"
+                className={cn(
+                  'focus-inset flex min-h-11 min-w-0 flex-1 gap-2 rounded-md px-2 text-left',
+                  isOpen ? 'items-start py-2.5' : 'items-center',
+                )}
               >
                 <span
                   className={cn(
@@ -181,7 +186,14 @@ export function TicketStrip({
                 <span className="shrink-0 text-sm font-semibold tabular-nums text-text">
                   {ticketRef(t.number)}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-sm text-text">{t.summary}</span>
+                {/* One line while folded; opened, the whole of it, since it is
+                    the one sentence that says what the dealer is waiting for. */}
+                <span
+                  className={cn('min-w-0 flex-1 text-sm text-text', isOpen ? 'whitespace-normal' : 'truncate')}
+                  title={t.summary}
+                >
+                  {t.summary}
+                </span>
                 <span
                   className={cn(
                     'hidden shrink-0 text-xs font-medium tabular-nums sm:inline',
@@ -206,7 +218,7 @@ export function TicketStrip({
               </Button>
             </div>
             {isOpen ? (
-              <div id={detailId} className="-mt-0.5 grid gap-1.5 px-4 pb-2 pl-12">
+              <div id={detailId} className="grid gap-1.5 px-4 pb-2 pl-12 md:-mt-0.5">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <Badge>{TICKET_TOPIC_LABEL[t.topic]}</Badge>
                   <Badge intent={ticketTriggerTone(t.trigger)}>{TICKET_TRIGGER_LABEL[t.trigger]}</Badge>
