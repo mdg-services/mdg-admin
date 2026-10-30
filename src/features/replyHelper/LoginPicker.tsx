@@ -57,8 +57,14 @@ export function LoginPicker({
               aria-pressed={on}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onPick(c.userId)}
-              leftIcon={on ? <Check width={14} height={14} strokeWidth={1.75} /> : undefined}
-              className="whitespace-normal text-left"
+              leftIcon={
+                on ? (
+                  <Check width={14} height={14} strokeWidth={1.75} className="shrink-0" />
+                ) : undefined
+              }
+              // `!`: Button's own nowrap comes later in the CSS and `cn` does not
+              // merge, so a long login name would push past a phone's edge.
+              className="!whitespace-normal text-left"
             >
               {loginWords(c)}
             </Button>
