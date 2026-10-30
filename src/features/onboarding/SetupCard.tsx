@@ -29,6 +29,7 @@ import {
   welcomeLine,
   type DealerTabId,
 } from '@/lib/onboarding';
+import { deviceUseLabel, originLabel } from '@/lib/signupOrigin';
 import { GST_STATES, type OutletSetupAdmin } from '@dk/shared';
 
 import { AutopayPanel } from './AutopayPanel';
@@ -112,6 +113,18 @@ export function SetupCard({
               value: setup.approvedByName
                 ? `${SOURCE_LABEL[setup.source]} · approved by ${setup.approvedByName}`
                 : SOURCE_LABEL[setup.source],
+              block: true,
+            },
+            // Which form and device they signed up on, and what the owner signs in on now.
+            ...(setup.origin
+              ? [{ key: 'signedUp', label: 'Signed up', value: originLabel(setup.origin), block: true }]
+              : []),
+            {
+              key: 'uses',
+              label: 'Signs in on',
+              value: setup.lastSignIn
+                ? `${deviceUseLabel(setup.lastSignIn.device)} · last ${istStamp(setup.lastSignIn.at, now)}`
+                : 'Not signed in yet',
               block: true,
             },
             // Which oil company: it decides the portal logins below. Every company is named here.

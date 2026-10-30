@@ -139,6 +139,8 @@ function outlet(over: Partial<OutletSetupAdmin> = {}): OutletSetupAdmin {
     code: '15E',
     enrolmentId: 'e1',
     source: 'website',
+    origin: null,
+    lastSignIn: null,
     ownerName: 'Ramesh Kumar',
     mobile: '9876543210',
     stage: 'payment',
@@ -1456,3 +1458,16 @@ describe('a setup from a server that has no company yet', () => {
     assert.deepEqual(readSetup(current), current);
   });
 });
+
+describe('where they signed up, and the device they use', () => {
+  it('an older server, which says nothing of either, reads as nothing known', () => {
+    const { origin: _o, lastSignIn: _l, ...older } = outlet();
+    const read = readSetup(older);
+    assert.equal(read.origin, null);
+    assert.equal(read.lastSignIn, null);
+    // and a current server's are kept as sent
+    const lastSignIn = { device: { kind: 'android' as const, inApp: true }, at: '2026-10-30T12:00:00.000Z' };
+    assert.deepEqual(readSetup(outlet({ lastSignIn })).lastSignIn, lastSignIn);
+  });
+});
+

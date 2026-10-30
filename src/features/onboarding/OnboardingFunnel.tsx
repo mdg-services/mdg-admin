@@ -1,4 +1,5 @@
 import { funnelTiles } from '@/lib/onboarding';
+import { signupMixLines } from '@/lib/signupOrigin';
 import type { OnboardingBoard } from '@dk/shared';
 
 /**
@@ -9,8 +10,15 @@ import type { OnboardingBoard } from '@dk/shared';
  * share beside each is what shows where people drop away. Three to a row on a
  * phone and five from md, so no number is squeezed.
  */
-export function OnboardingFunnel({ funnel }: { funnel: OnboardingBoard['funnel'] }) {
+export function OnboardingFunnel({
+  funnel,
+  signups,
+}: {
+  funnel: OnboardingBoard['funnel'];
+  signups?: OnboardingBoard['signups'];
+}) {
   const tiles = funnelTiles(funnel);
+  const mix = signups ? signupMixLines(signups) : null;
   return (
     <section aria-label="Funnel, last 90 days" className="mb-4">
       <ol className="grid grid-cols-3 gap-2 md:grid-cols-5">
@@ -47,6 +55,15 @@ export function OnboardingFunnel({ funnel }: { funnel: OnboardingBoard['funnel']
           </li>
         ))}
       </ol>
+      {/* Where the registrations came from, the same 90 days: which form, and which device. */}
+      {mix ? (
+        <p className="mt-2 text-xs text-text-subtle">
+          Signed up from: {mix.via}
+          <span aria-hidden> — </span>
+          <span className="sr-only">. Devices: </span>
+          {mix.device}
+        </p>
+      ) : null}
     </section>
   );
 }

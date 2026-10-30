@@ -844,14 +844,17 @@ export function mdgTurnCount(rows: readonly OnboardingBoardRow[]): number {
  */
 export type RawOutletSetup = Omit<
   OutletSetupAdmin,
-  'doneBy' | 'portalsNotNeeded' | 'welcome' | 'company'
+  'doneBy' | 'portalsNotNeeded' | 'welcome' | 'company' | 'origin' | 'lastSignIn'
 > &
-  Partial<Pick<OutletSetupAdmin, 'doneBy' | 'portalsNotNeeded' | 'welcome' | 'company'>>;
+  Partial<
+    Pick<OutletSetupAdmin, 'doneBy' | 'portalsNotNeeded' | 'welcome' | 'company' | 'origin' | 'lastSignIn'>
+  >;
 
 /**
  * The setup with the fields an older server leaves out filled in as "nothing
  * happened": nobody did a step for the dealer, no portal is marked, no welcome was
- * tried, and the outlet is Indian Oil (every outlet was, before the company step).
+ * tried, the outlet is Indian Oil (every outlet was, before the company step), and
+ * nothing is known of the form or device it signed up on.
  * That is also exactly what an outlet from before them has. A current server's body
  * comes back unchanged in content; a company of `null` ("not chosen yet") stays null.
  */
@@ -863,6 +866,9 @@ export function readSetup(raw: RawOutletSetup): OutletSetupAdmin {
     doneBy: { signIn: null, company: null, billing: null, logins: null, ...raw.doneBy },
     portalsNotNeeded: raw.portalsNotNeeded ?? [],
     welcome: raw.welcome ?? { state: null, at: null },
+    // A server older than 30 Oct 2026 says nothing about where they signed up or what they use.
+    origin: raw.origin ?? null,
+    lastSignIn: raw.lastSignIn ?? null,
   };
 }
 

@@ -44,6 +44,7 @@ import {
   type RegistrationRow,
 } from '@/lib/onboarding';
 import { lastCallLine } from '@/lib/onboardingCalls';
+import { deviceUseLabel, originLabel } from '@/lib/signupOrigin';
 import { ageSince } from '@/pages/overview/format';
 import { dealerCodeLabel, type OnboardingBoardRow, type OnboardingBoardView } from '@dk/shared';
 
@@ -183,7 +184,7 @@ export function OnboardingPage() {
         }
       />
 
-      {q.data ? <OnboardingFunnel funnel={q.data.funnel} /> : null}
+      {q.data ? <OnboardingFunnel funnel={q.data.funnel} signups={q.data.signups} /> : null}
       <MonthlyPriceTool />
 
       {view === 'open' && q.data ? (
@@ -312,6 +313,8 @@ function RegistrationCell({ r, now }: { r: RegistrationRow; now: number }) {
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
         <span className="select-text font-medium text-text">{r.name}</span>
         <Badge intent="warning">New registration</Badge>
+        {/* Which form, and on what device: "App · Android". Absent from a backend older than 30 Oct 2026. */}
+        {r.origin ? <Badge>{originLabel(r.origin)}</Badge> : null}
         {r.fromCampaign ? <Badge intent="info">From our campaign</Badge> : null}
         {r.alreadyClient ? (
           <Link to={`/dealers/${r.alreadyClient.dealerId}`}>
@@ -363,6 +366,16 @@ function OutletCell({ row }: { row: Extract<OnboardingBoardRow, { kind: 'outlet'
         <div className="mt-0.5">
           <ContactLinks mobile={o.mobile} />
         </div>
+      ) : null}
+      {o.origin || o.lastSignIn ? (
+        <p className="mt-0.5 text-xs text-text-subtle">
+          {[
+            o.origin ? `Signed up: ${originLabel(o.origin)}` : null,
+            o.lastSignIn ? `Uses: ${deviceUseLabel(o.lastSignIn.device)}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
       ) : null}
       {/* A login the team said this outlet does not need, so a missing one is not a gap. */}
       {o.portalsNotNeeded.length > 0 ? (
