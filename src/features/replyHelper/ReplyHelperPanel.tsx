@@ -12,16 +12,17 @@ import { LoginPicker } from './LoginPicker';
 import { AskBubble, TurnView, WritingBubble } from './TurnView';
 
 /**
- * The helper's working area: who it is writing for, the notices, the thread of
- * asks and drafts, and the box to ask in.
+ * The helper's working area: the notices, the thread of asks and drafts, and
+ * the box to ask in. (Who the drafts are for, and that only MDG sees them, is
+ * said on the line under the box, in InstructionBox.)
  *
- * SHAPE: a band saying who the drafts are for and that this is private, a
- * scrolling thread under it, and the box pinned at the bottom. The box stays put
- * while the thread scrolls, so the admin can keep asking while reading a long
- * answer. The parent decides how tall this is (`className`).
+ * SHAPE: a scrolling thread with the box pinned at the bottom, and no band over
+ * the thread, so the drafts get the height. The box stays put while the thread
+ * scrolls, so the admin can keep asking while reading a long answer. The parent
+ * decides how tall this is (`className`).
  *
- * IT WEARS THE HELPER'S VIOLET THROUGHOUT — the band, the asks, the drafts' edge,
- * the box — and the reply box that sends to the dealer never does. That is the
+ * IT WEARS THE HELPER'S VIOLET THROUGHOUT — the asks, the drafts' edge, the box
+ * — and the reply box that sends to the dealer never does. That is the
  * line between "only MDG sees this" and "the dealer sees this".
  *
  * It holds NO conversation content of its own. Everything shown comes from the

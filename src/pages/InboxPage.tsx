@@ -22,6 +22,7 @@ import {
   Zap,
 } from 'lucide-react';
 import * as React from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { ActionRow } from '@/components/ui/ActionRow';
@@ -557,18 +558,19 @@ export function InboxPage() {
   // From lg the list, the chat and the side panel are columns: the list can be
   // folded away, and the list's and the panel's edges dragged, so the chat and
   // the helper get the room. All of it is remembered in this browser.
-  const [listHidden, setListHiddenState] = React.useState(readListHidden);
+  // A link to a list view (`?lens=`, from AI answers or Today) shows the list
+  // for that visit even when it was folded: the fold comes back next time.
+  const [listHidden, setListHiddenState] = React.useState(
+    () => readListHidden() && (!!deepLinkId || inboxLens(searchParams.get('lens')) === null),
+  );
   const setListHidden = React.useCallback((hidden: boolean) => {
     setListHiddenState(hidden);
     writeListHidden(hidden);
   }, []);
   const [columnPrefs, setColumnPrefsState] = React.useState<ColumnPrefs>(readColumnPrefs);
   const updateColumnPrefs = React.useCallback((patch: Partial<ColumnPrefs>) => {
-    setColumnPrefsState((prev) => {
-      const next = { ...prev, ...patch };
-      writeColumnPrefs(next);
-      return next;
-    });
+    setColumnPrefsState((prev) => ({ ...prev, ...patch }));
+    writeColumnPrefs(patch);
   }, []);
   // The page's own width, which the columns share.
   const rootRef = React.useRef<HTMLDivElement>(null);
@@ -1149,47 +1151,74 @@ export function InboxPage() {
    */
   const panelVisible = isXl ? contextOpen : mobileContextOpen;
 
-  const widths = columnWidths(
-    pageWidth || (typeof window === 'undefined' ? 0 : window.innerWidth),
-    columnPrefs,
-    { listShown: isLg && !listHidden, panelShown: isXl && contextOpen && !!conversation, is2xl },
-  );
+  const layoutWidth = pageWidth || (typeof window === 'undefined' ? 0 : window.innerWidth);
+  const listShown = isLg && !listHidden;
+  const layoutFor = (prefs: ColumnPrefs, list = listShown) =>
+    columnWidths(layoutWidth, prefs, {
+      listShown: list,
+      panelShown: isXl && contextOpen && !!conversation,
+      is2xl,
+    });
+  const widths = layoutFor(columnPrefs);
   const drawWidth = (column: 'list' | 'panel', px: number) => {
     liveWidth.current[column] = px;
     rootRef.current?.style.setProperty(`--inbox-${column}-w`, `${px}px`);
   };
-  // The list: dragged narrower than LIST_FOLD_AT it folds away, as the Hide
-  // list button does; let go there and it stays folded.
+  // A drag is over: draw both columns as the page will now lay them out, here and
+  // not only through the render, because React skips the write when a width
+  // equals the last one IT drew, and the drag has drawn over that since.
+  const settle = (prefs: ColumnPrefs, list = listShown) => {
+    const w = layoutFor(prefs, list);
+    liveWidth.current = {};
+    rootRef.current?.style.setProperty('--inbox-list-w', `${w.list}px`);
+    rootRef.current?.style.setProperty('--inbox-panel-w', `${w.panel}px`);
+  };
   const clampList = (px: number) => Math.min(widths.listMax, Math.max(LIST_MIN, px));
   const clampPanel = (px: number) => Math.min(widths.panelMax, Math.max(PANEL_MIN, px));
+  // The list: dragged narrower than LIST_FOLD_AT it folds away, as the Hide
+  // list button does; let go there and it stays folded. While it is dragged the
+  // panel gives way as it will on release, so the chat never dips under its
+  // floor mid-drag and nothing jumps when the mouse is let go.
   const resizeList = {
-    live: (px: number) => drawWidth('list', px < LIST_FOLD_AT ? 0 : clampList(px)),
+    live: (px: number) => {
+      const folded = px < LIST_FOLD_AT;
+      const w = layoutFor({ ...columnPrefs, list: folded ? columnPrefs.list : clampList(px) }, !folded);
+      drawWidth('list', w.list);
+      drawWidth('panel', w.panel);
+    },
     commit: (px: number) => {
-      liveWidth.current.list = undefined;
       if (px < LIST_FOLD_AT) {
+        settle(columnPrefs, false);
         setListHidden(true);
         return;
       }
-      updateColumnPrefs({ list: clampList(px) });
+      const list = clampList(px);
+      settle({ ...columnPrefs, list });
+      updateColumnPrefs({ list });
     },
+    cancel: () => settle(columnPrefs),
     reset: () => {
-      liveWidth.current.list = undefined;
+      settle({ ...columnPrefs, list: null });
       updateColumnPrefs({ list: null });
     },
   };
   const resizePanel = {
     live: (px: number) => drawWidth('panel', clampPanel(px)),
     commit: (px: number) => {
-      liveWidth.current.panel = undefined;
-      updateColumnPrefs({ panel: clampPanel(px) });
+      const panel = clampPanel(px);
+      settle({ ...columnPrefs, panel });
+      updateColumnPrefs({ panel });
     },
+    cancel: () => settle(columnPrefs),
     reset: () => {
-      liveWidth.current.panel = undefined;
+      settle({ ...columnPrefs, panel: null });
       updateColumnPrefs({ panel: null });
     },
   };
-  // In the chat's header (and in its place while there is no chat): one glyph
-  // that folds the list away and brings it back, always in the same spot.
+  // A narrow tab on the chat's left edge, inside its header's own padding so it
+  // takes nothing from the name: folds the list away and brings it back, in the
+  // same spot either way. It sits over the drag handle (z-40 to its z-30), which
+  // keeps the rest of the edge below the header.
   const listToggle = (
     <button
       type="button"
@@ -1198,12 +1227,12 @@ export function InboxPage() {
       title={listHidden ? 'Show the conversation list' : 'Hide the conversation list'}
       aria-expanded={!listHidden}
       aria-controls={listId}
-      className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-text lg:inline-flex"
+      className="absolute left-0 top-1/2 z-40 hidden h-9 w-4 -translate-y-1/2 items-center justify-center rounded-r-md text-text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-text lg:inline-flex"
     >
       {listHidden ? (
-        <PanelLeftOpen width={18} height={18} strokeWidth={1.75} />
+        <PanelLeftOpen width={14} height={14} strokeWidth={1.75} />
       ) : (
-        <PanelLeftClose width={18} height={18} strokeWidth={1.75} />
+        <PanelLeftClose width={14} height={14} strokeWidth={1.75} />
       )}
     </button>
   );
@@ -1555,8 +1584,9 @@ export function InboxPage() {
       <section
         id={listId}
         aria-label="Conversations"
+        tabIndex={-1}
         className={cn(
-          'w-full shrink-0 flex-col border-r border-border bg-surface lg:w-[var(--inbox-list-w)] lg:overflow-hidden',
+          'w-full shrink-0 flex-col border-r border-border bg-surface outline-none lg:w-[var(--inbox-list-w)] lg:overflow-hidden',
           selectedId ? 'hidden' : 'flex',
           listHidden ? 'lg:hidden' : 'lg:flex',
         )}
@@ -1640,6 +1670,7 @@ export function InboxPage() {
           max={widths.listMax}
           onLive={resizeList.live}
           onCommit={resizeList.commit}
+          onCancel={resizeList.cancel}
           onReset={resizeList.reset}
         />
       ) : null}
@@ -1663,7 +1694,7 @@ export function InboxPage() {
              * failed GET showed it forever.
              */
             <>
-              <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 md:px-4">
+              <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 md:px-4 lg:relative lg:pl-5">
                 <button
                   type="button"
                   onClick={() => {
@@ -1728,7 +1759,12 @@ export function InboxPage() {
                 <Button
                   variant="secondary"
                   className="hidden lg:inline-flex"
-                  onClick={() => setListHidden(false)}
+                  onClick={() => {
+                    // The button goes with the fold: move focus to the list it
+                    // brought back, not to the top of the page.
+                    flushSync(() => setListHidden(false));
+                    document.getElementById(listId)?.focus();
+                  }}
                   leftIcon={<PanelLeftOpen width={16} height={16} strokeWidth={1.75} />}
                 >
                   Show the conversation list
@@ -1743,7 +1779,7 @@ export function InboxPage() {
                 {/* Below lg the thread has the screen to itself and its header
                     grows to fit: a long name or a group chat's status wraps to a
                     second line rather than being cut to "Not…". */}
-                <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-2 py-1.5 md:gap-3 md:px-4 lg:h-14 lg:py-0">
+                <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-2 py-1.5 md:gap-3 md:px-4 lg:relative lg:h-14 lg:py-0 lg:pl-5">
                   <button
                     type="button"
                     onClick={() => {
@@ -2067,6 +2103,7 @@ export function InboxPage() {
                     max={widths.panelMax}
                     onLive={resizePanel.live}
                     onCommit={resizePanel.commit}
+                    onCancel={resizePanel.cancel}
                     onReset={resizePanel.reset}
                   />
                   <aside

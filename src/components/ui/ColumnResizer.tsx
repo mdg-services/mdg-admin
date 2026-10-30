@@ -23,6 +23,11 @@ export interface ColumnResizerProps {
   onLive: (width: number) => void;
   /** The drag, or an arrow key, is done: keep this width. Not clamped either. */
   onCommit: (width: number) => void;
+  /**
+   * A drag that moved but ended with no new width: let go on the pixel it
+   * started from, or the handle went away mid-drag. Put back what was drawn.
+   */
+  onCancel: () => void;
   /** Double-click or Enter: back to the default width. */
   onReset: () => void;
   className?: string;
@@ -49,11 +54,14 @@ export function ColumnResizer({
   max,
   onLive,
   onCommit,
+  onCancel,
   onReset,
   className,
 }: ColumnResizerProps) {
   const [dragging, setDragging] = React.useState(false);
-  const drag = React.useRef<{ x: number; from: number; to: number } | null>(null);
+  const drag = React.useRef<{ x: number; from: number; to: number; moved: boolean } | null>(
+    null,
+  );
   const frame = React.useRef(0);
 
   // While dragging, the whole page shows the resize cursor and no text in the
@@ -70,13 +78,25 @@ export function ColumnResizer({
     };
   }, [dragging]);
 
-  React.useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  // The handle can go away mid-drag (the window narrows under lg, the panel is
+  // shut) and then no pointer-up reaches it: what the drag drew is put back here.
+  const cancelRef = React.useRef(onCancel);
+  cancelRef.current = onCancel;
+  React.useEffect(
+    () => () => {
+      cancelAnimationFrame(frame.current);
+      const d = drag.current;
+      drag.current = null;
+      if (d?.moved) cancelRef.current();
+    },
+    [],
+  );
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { x: e.clientX, from: value, to: value };
+    drag.current = { x: e.clientX, from: value, to: value, moved: false };
     setDragging(true);
   }
 
@@ -84,6 +104,7 @@ export function ColumnResizer({
     const d = drag.current;
     if (!d) return;
     const dx = e.clientX - d.x;
+    d.moved = true;
     d.to = edge === 'right' ? d.from + dx : d.from - dx;
     if (frame.current) return;
     frame.current = requestAnimationFrame(() => {
@@ -100,11 +121,15 @@ export function ColumnResizer({
     frame.current = 0;
     setDragging(false);
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-    // A click with no movement is not a resize.
+    // A click with no movement is not a resize; a drag that came back to where
+    // it started keeps the old width, but what it drew must be undone.
     if (d.to !== d.from) onCommit(d.to);
+    else if (d.moved) onCancel();
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    // Alt+Left is the browser's Back, and Cmd/Ctrl+arrows are the system's own.
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
     const step = e.shiftKey ? 64 : 16;
     const wider = edge === 'right' ? 'ArrowRight' : 'ArrowLeft';
     const narrower = edge === 'right' ? 'ArrowLeft' : 'ArrowRight';

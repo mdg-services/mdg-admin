@@ -13,6 +13,7 @@ import { describe, it } from 'node:test';
 
 import {
   CHAT_MIN,
+  CHAT_MIN_SOLO,
   LIST_DEFAULT,
   LIST_MAX,
   LIST_MIN,
@@ -61,7 +62,14 @@ describe('columnWidths', () => {
   it('lets the list take the panel\'s room while the panel is shut', () => {
     const shut = columnWidths(800, { list: 480, panel: null }, { ...both, panelShown: false });
     assert.equal(shut.panel, 0);
-    assert.equal(shut.list, 800 - CHAT_MIN);
+    assert.equal(shut.list, 800 - CHAT_MIN_SOLO);
+  });
+
+  it('keeps more room for the chat when its header also carries the helper button', () => {
+    // A 1024px screen: the inbox is 816px and the panel is a drawer.
+    const w = columnWidths(816, { list: 480, panel: null }, { ...both, panelShown: false });
+    assert.equal(816 - w.list, CHAT_MIN_SOLO);
+    assert.ok(CHAT_MIN_SOLO > CHAT_MIN);
   });
 
   it('holds every floor at once even when they cannot all fit', () => {
