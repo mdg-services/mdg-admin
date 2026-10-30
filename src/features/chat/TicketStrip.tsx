@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, Ticket } from 'lucide-react';
 import * as React from 'react';
 
 import { Badge, Button } from '@/components/ui';
+import { TicketOnItLine, TicketOnItMenu } from '@/features/chat/TicketOnIt';
 import { ResolveTicketDialog } from '@/features/tickets/ResolveTicketDialog';
 import { useMarkTicketSeen, useThreadTicketsQuery } from '@/hooks/api/useTickets';
 import { cn } from '@/lib/cn';
@@ -37,6 +38,12 @@ function useDocumentVisible(): boolean {
  * not a bubble in the conversation: a reply typed in the box below does NOT
  * close it, and a strip that sits outside the message list and stays put while
  * the admin types is the plainest way to say so.
+ *
+ * "On it until ▾" sits beside Resolve: the person who has the ticket tells the
+ * dealer when an update is coming, and the AI stays off that matter until then.
+ * The line that says so, with "Let AI answer", is drawn under the question. It
+ * is a promise, not a lock — anyone can still resolve the ticket, and it ends by
+ * itself when the time passes.
  *
  * Recently resolved tickets are folded away beneath, with the note that closed
  * them. A thread with no tickets gets no strip at all, not an empty one — most
@@ -155,11 +162,17 @@ export function TicketStrip({
           <p className="mt-0.5 line-clamp-2 text-sm text-text-muted" title={t.question}>
             {t.question}
           </p>
-          <div className="mt-2 flex items-center justify-between gap-3">
+          <TicketOnItLine ticket={t} now={now} />
+          {/* Wraps below ~400px: the seen-by text keeps its own line and the two
+              buttons drop beneath it, right-aligned, rather than squeezing it. */}
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <p className="min-w-0 text-xs text-text-subtle">{statusLine(t)}</p>
-            <Button size="sm" variant="primary" onClick={() => setResolving(t)}>
-              Resolve
-            </Button>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <TicketOnItMenu ticket={t} now={now} />
+              <Button size="sm" variant="primary" onClick={() => setResolving(t)}>
+                Resolve
+              </Button>
+            </div>
           </div>
         </section>
       ))}

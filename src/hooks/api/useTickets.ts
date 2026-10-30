@@ -9,7 +9,12 @@ import * as React from 'react';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
-import type { TicketCounts, TicketState, TicketView } from '@dk/shared';
+import type {
+  TicketCounts,
+  TicketOnItBody,
+  TicketState,
+  TicketView,
+} from '@dk/shared';
 
 /** One page of `GET /tickets`. `nextBefore` is the cursor for the page after it. */
 export interface TicketPage {
@@ -195,6 +200,35 @@ export function useSetTicketUrgent() {
   return useMutation({
     mutationFn: ({ id, urgent }: { id: string; urgent: boolean }) =>
       api.patch<TicketView>(`/tickets/${id}`, { urgent }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
+  });
+}
+
+/**
+ * "On it until…": a person tells the dealer when an update is coming, and the AI
+ * stays off that matter until then. Setting it again replaces the time — a new
+ * time is a new promise. The server refuses a time that is past or more than 72
+ * hours away (400) and a ticket that is already closed (409).
+ *
+ * Only the ticket queries are refreshed: it changes nothing on the inbox rows or
+ * the alerts. Run on SETTLED, so a 409 pulls the strip back to the truth too.
+ */
+export function useSetTicketOnIt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, until }: { id: string; until: Date }) => {
+      const body: TicketOnItBody = { until: until.toISOString() };
+      return api.post<TicketView>(`/tickets/${id}/on-it`, body);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
+  });
+}
+
+/** "Let AI answer": take the promise off. The ticket stays open and keeps its owner. 409 if there is none. */
+export function useClearTicketOnIt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<TicketView>(`/tickets/${id}/on-it`),
     onSettled: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
   });
 }

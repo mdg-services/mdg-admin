@@ -5,7 +5,7 @@
  * shares live in `@dk/shared`'s `ticketView`; only the admin's own wording is
  * here.
  */
-import { TICKET_NOTE_MAX } from '@dk/shared';
+import { TICKET_NOTE_MAX, promiseActive, promiseTimeText } from '@dk/shared';
 import type { TicketCounts, TicketView } from '@dk/shared';
 
 /** "Owner" or "Manager" — the two people at an outlet who can raise a ticket. */
@@ -114,4 +114,27 @@ export function openSummary(counts: TicketCounts | undefined): string | null {
   if (counts.unseen > 0) parts.push(`${counts.unseen} not opened yet`);
   if (counts.urgent > 0) parts.push(`${counts.urgent} urgent`);
   return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+/**
+ * The line on an open ticket that says a person is "on it" — or that the time
+ * they promised has gone by. `null` when nobody has put themselves on it (or the
+ * ticket is closed: resolving takes the promise off, and a stale one on a
+ * resolved row would say something that is no longer true).
+ *
+ * `active` is the one fact the screen needs to choose between a quiet line with
+ * "Let AI answer" and a warning with nothing to press: once the time passes the
+ * AI is already answering again by itself, so there is nothing left to hand back.
+ */
+export function onItLine(
+  t: Pick<TicketView, 'state' | 'promise' | 'ownerName'>,
+  now: Date,
+): { active: boolean; text: string } | null {
+  if (t.state !== 'OPEN' || !t.promise) return null;
+  const when = promiseTimeText(t.promise.until, 'en', now);
+  if (!promiseActive(t.promise.until, now)) {
+    return { active: false, text: `On-it time passed ${when}` };
+  }
+  const who = (t.ownerName ?? t.promise.byName)?.trim();
+  return { active: true, text: who ? `On it until ${when} · ${who}` : `On it until ${when}` };
 }

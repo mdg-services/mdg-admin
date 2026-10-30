@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as React from 'react';
 
 import { chatAskKeys } from '@/hooks/api/useChatAsks';
+import { conversationKey } from '@/hooks/api/useConversation';
 import { movesOpenRequests } from '@/lib/chatAsk';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
@@ -23,8 +24,14 @@ export function useInboxSocket() {
 
     const settleTimers = new Set<number>();
 
-    const onUpdated = (_payload: { conversation: Conversation }) => {
+    // The list, and the thread if it is open: a colleague's Pick up or "Let AI
+    // answer", or the sweep handing a thread back, changes the "AI quiet until"
+    // line, and nothing else would tell the open thread until a refocus.
+    const onUpdated = (payload: { conversation: Conversation }) => {
       qc.invalidateQueries({ queryKey: ['conversations'] });
+      if (payload?.conversation?.id) {
+        qc.invalidateQueries({ queryKey: conversationKey(payload.conversation.id) });
+      }
     };
 
     // Ack delivery (✓✓) for any message arriving while the inbox is open, even

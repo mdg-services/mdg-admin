@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import type { Attachment, Message, MessageReplyContext } from '@dk/shared';
 
+import { conversationKey } from './useConversation';
 import { messagesKey } from './useMessages';
 
 interface SendMessageVars {
@@ -74,6 +75,9 @@ export function useSendMessage() {
       }
     },
     onSuccess: (saved, vars, ctx) => {
+      // The reply started the AI's quiet in this chat; read the thread again so
+      // "AI quiet until …" shows without waiting for the socket's echo.
+      void qc.invalidateQueries({ queryKey: conversationKey(vars.conversationId) });
       const key = messagesKey(vars.conversationId);
       qc.setQueryData<InfiniteData<Message[]>>(key, (curr) => {
         if (!curr) return curr;

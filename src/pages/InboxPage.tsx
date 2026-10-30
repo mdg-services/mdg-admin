@@ -42,6 +42,7 @@ import { Sheet, SheetItem } from '@/components/ui/Sheet';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { AiFirstLineStrip } from '@/features/chat/AiFirstLineStrip';
+import { AiQuietLine } from '@/features/chat/AiQuietLine';
 import { AskPortalLoginDialog } from '@/features/chat/AskPortalLoginDialog';
 import { Composer, type ComposerInsert } from '@/features/chat/Composer';
 import { MediaGalleryCard } from '@/features/chat/MediaGalleryCard';
@@ -1830,7 +1831,14 @@ export function InboxPage() {
                     keyboard up the composer itself went under the bottom edge.
                     Capped at 40% of the screen, the messages and the box being
                     typed in always keep the rest. Both children are blocks with
-                    their own top border, so at md this wrapper is inert.
+                    their own top border.
+
+                    At md it is capped too, at 45% (30 Oct 2026). At 1280x800
+                    the side panel leaves the thread about 240px wide, and the
+                    ticket strip, its "on it" line, the AI-quiet line, the Reply
+                    helper and the composer stacked up until the messages had no
+                    height at all. The menus in here draw in a portal, so the
+                    scroll cannot clip them.
 
                     The outer block is published as the bottom bar below md, so
                     a toast clears the guard banner and the strip as well as the
@@ -1839,8 +1847,13 @@ export function InboxPage() {
                     landed on the banner's Clear — the button whose failure it was
                     reporting. A plain block at md. */}
                 <div ref={threadBottomRef}>
-                <div className="max-h-[40dvh] shrink-0 overflow-y-auto overscroll-contain md:max-h-none md:overflow-visible">
-                  {/* First, above the guard banner and the AI strip: an open
+                <div className="max-h-[40dvh] shrink-0 overflow-y-auto overscroll-contain md:max-h-[45dvh]">
+                  {/* First of all, the AI-quiet line: one or two short lines, and
+                      its "Let AI answer now" is the button that must not sit
+                      below the fold of this capped, scrolling block. Nothing at
+                      all once the quiet is past or was never set. */}
+                  <AiQuietLine conversation={conversation} now={now} />
+                  {/* Then, above the guard banner and the AI strip: an open
                       ticket is a dealer waiting on a person, and a reply typed
                       in the box below does not close it. Keyed on the thread so
                       a half-written resolution never follows the admin to
