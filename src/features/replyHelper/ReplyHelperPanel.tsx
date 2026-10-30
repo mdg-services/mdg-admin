@@ -1,4 +1,4 @@
-import { Lock, Sparkles, Wand2 } from 'lucide-react';
+import { Wand2 } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/Button';
@@ -105,32 +105,11 @@ export function ReplyHelperPanel({
 
   return (
     <div className={cn('flex min-h-0 flex-col bg-surface', className)}>
-      {/* Who the drafts are for, in full (the role is the half that matters and
-          was the half that used to be cut off), and that none of this is sent. */}
-      <div className="shrink-0 border-b border-assist-line bg-assist-soft px-4 py-3">
-        <div className="flex items-start gap-2.5">
-          <span
-            aria-hidden
-            className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-assist text-white"
-          >
-            <Sparkles width={14} height={14} strokeWidth={2} />
-          </span>
-          <div className="min-w-0">
-            <p className="break-words text-[13px] font-semibold leading-5 text-text">
-              {context?.header ?? 'Reply helper'}
-            </p>
-            <p className="mt-0.5 flex items-start gap-1 text-xs leading-4 text-text-muted">
-              <Lock width={12} height={12} strokeWidth={2} className="mt-px shrink-0" aria-hidden />
-              <span>
-                Private to MDG.
-                {context ? ` Drafts are written for ${context.readerWords}.` : ''} Nothing is
-                sent until you press Send in the reply box.
-              </span>
-            </p>
-          </div>
-        </div>
-      </div>
-
+      {/* No banner over the drafts (31 Oct 2026). It said who the chat is with,
+          which the chat's own header already says, and took ~120px of a panel
+          whose whole job is the drafts. What it said that nothing else does —
+          who a draft is written for — is the line under the Ask box; that
+          nothing here is sent is said there and on every draft ("Not sent"). */}
       <div
         ref={scrollRef}
         className="min-h-0 flex-1 scroll-py-1.5 overflow-y-auto overscroll-contain px-4 py-4"
@@ -227,6 +206,7 @@ export function ReplyHelperPanel({
         busy={busy}
         disabled={!context || notConfigured}
         disabledWords={notConfigured ? 'The Reply helper is not set up on this server.' : undefined}
+        readerWords={context?.readerWords}
       />
     </div>
   );

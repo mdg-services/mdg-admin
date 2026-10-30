@@ -9,6 +9,8 @@ import {
   MessageSquare,
   MoreHorizontal,
   MoreVertical,
+  PanelLeftClose,
+  PanelLeftOpen,
   Phone,
   Plus,
   RotateCcw,
@@ -25,6 +27,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ActionRow } from '@/components/ui/ActionRow';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ColumnResizer } from '@/components/ui/ColumnResizer';
 import { Drawer } from '@/components/ui/Drawer';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { HowThisWorks } from '@/components/ui/HowThisWorks';
@@ -117,6 +120,17 @@ import {
   statusByRef,
 } from '@/lib/chatAsk';
 import { cn } from '@/lib/cn';
+import {
+  LIST_FOLD_AT,
+  LIST_MIN,
+  PANEL_MIN,
+  columnWidths,
+  readColumnPrefs,
+  readListHidden,
+  writeColumnPrefs,
+  writeListHidden,
+  type ColumnPrefs,
+} from '@/lib/columnLayout';
 import { useAuthStore } from '@/store/auth';
 import {
   TICKET_CATEGORIES,
@@ -539,6 +553,42 @@ export function InboxPage() {
   const isXl = useMediaQuery('(min-width: 1280px)');
   const is2xl = useMediaQuery('(min-width: 1536px)');
   const toast = useToast();
+
+  // From lg the list, the chat and the side panel are columns: the list can be
+  // folded away, and the list's and the panel's edges dragged, so the chat and
+  // the helper get the room. All of it is remembered in this browser.
+  const [listHidden, setListHiddenState] = React.useState(readListHidden);
+  const setListHidden = React.useCallback((hidden: boolean) => {
+    setListHiddenState(hidden);
+    writeListHidden(hidden);
+  }, []);
+  const [columnPrefs, setColumnPrefsState] = React.useState<ColumnPrefs>(readColumnPrefs);
+  const updateColumnPrefs = React.useCallback((patch: Partial<ColumnPrefs>) => {
+    setColumnPrefsState((prev) => {
+      const next = { ...prev, ...patch };
+      writeColumnPrefs(next);
+      return next;
+    });
+  }, []);
+  // The page's own width, which the columns share.
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  const [pageWidth, setPageWidth] = React.useState(0);
+  React.useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    setPageWidth(el.clientWidth);
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setPageWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // A width being dragged, drawn straight onto the page's CSS variable and NOT
+  // through a render of this page on every frame; kept here too so a render
+  // that lands mid-drag (the minute tick, a new message) draws it, not the old
+  // width.
+  const liveWidth = React.useRef<{ list?: number; panel?: number }>({});
+  const listId = React.useId();
+  const panelId = React.useId();
 
   // Ticks once a minute so the reply-SLA flag colours advance on their own,
   // without waiting for new data to arrive.
@@ -1098,6 +1148,65 @@ export function InboxPage() {
    * already up puts the column away.
    */
   const panelVisible = isXl ? contextOpen : mobileContextOpen;
+
+  const widths = columnWidths(
+    pageWidth || (typeof window === 'undefined' ? 0 : window.innerWidth),
+    columnPrefs,
+    { listShown: isLg && !listHidden, panelShown: isXl && contextOpen && !!conversation, is2xl },
+  );
+  const drawWidth = (column: 'list' | 'panel', px: number) => {
+    liveWidth.current[column] = px;
+    rootRef.current?.style.setProperty(`--inbox-${column}-w`, `${px}px`);
+  };
+  // The list: dragged narrower than LIST_FOLD_AT it folds away, as the Hide
+  // list button does; let go there and it stays folded.
+  const clampList = (px: number) => Math.min(widths.listMax, Math.max(LIST_MIN, px));
+  const clampPanel = (px: number) => Math.min(widths.panelMax, Math.max(PANEL_MIN, px));
+  const resizeList = {
+    live: (px: number) => drawWidth('list', px < LIST_FOLD_AT ? 0 : clampList(px)),
+    commit: (px: number) => {
+      liveWidth.current.list = undefined;
+      if (px < LIST_FOLD_AT) {
+        setListHidden(true);
+        return;
+      }
+      updateColumnPrefs({ list: clampList(px) });
+    },
+    reset: () => {
+      liveWidth.current.list = undefined;
+      updateColumnPrefs({ list: null });
+    },
+  };
+  const resizePanel = {
+    live: (px: number) => drawWidth('panel', clampPanel(px)),
+    commit: (px: number) => {
+      liveWidth.current.panel = undefined;
+      updateColumnPrefs({ panel: clampPanel(px) });
+    },
+    reset: () => {
+      liveWidth.current.panel = undefined;
+      updateColumnPrefs({ panel: null });
+    },
+  };
+  // In the chat's header (and in its place while there is no chat): one glyph
+  // that folds the list away and brings it back, always in the same spot.
+  const listToggle = (
+    <button
+      type="button"
+      onClick={() => setListHidden(!listHidden)}
+      aria-label={listHidden ? 'Show the conversation list' : 'Hide the conversation list'}
+      title={listHidden ? 'Show the conversation list' : 'Hide the conversation list'}
+      aria-expanded={!listHidden}
+      aria-controls={listId}
+      className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-text lg:inline-flex"
+    >
+      {listHidden ? (
+        <PanelLeftOpen width={18} height={18} strokeWidth={1.75} />
+      ) : (
+        <PanelLeftClose width={18} height={18} strokeWidth={1.75} />
+      )}
+    </button>
+  );
   const openPanel = React.useCallback(
     (tab: SideTab, remember = true) => {
       if (remember) setSideTab(tab);
@@ -1422,6 +1531,13 @@ export function InboxPage() {
 
   return (
     <div
+      ref={rootRef}
+      style={
+        {
+          '--inbox-list-w': `${liveWidth.current.list ?? widths.list}px`,
+          '--inbox-panel-w': `${liveWidth.current.panel ?? widths.panel}px`,
+        } as React.CSSProperties
+      }
       className={cn(
         '-m-[var(--app-gutter)] flex bg-surface',
         threadOpen
@@ -1437,10 +1553,12 @@ export function InboxPage() {
           the panes at md, everything from 768 to 1023px got the app sidebar and
           the list side by side and left the open thread 48-100px wide. */}
       <section
+        id={listId}
         aria-label="Conversations"
         className={cn(
-          'w-full shrink-0 flex-col border-r border-border bg-surface lg:flex lg:w-[320px]',
+          'w-full shrink-0 flex-col border-r border-border bg-surface lg:w-[var(--inbox-list-w)] lg:overflow-hidden',
           selectedId ? 'hidden' : 'flex',
+          listHidden ? 'lg:hidden' : 'lg:flex',
         )}
       >
         <div className="flex items-center justify-between gap-2 px-4 pb-2.5 pt-3">
@@ -1512,6 +1630,20 @@ export function InboxPage() {
         </div>
       </section>
 
+      {isLg && !listHidden ? (
+        <ColumnResizer
+          label="Resize the conversation list"
+          controls={listId}
+          edge="right"
+          value={widths.list}
+          min={LIST_MIN}
+          max={widths.listMax}
+          onLive={resizeList.live}
+          onCommit={resizeList.commit}
+          onReset={resizeList.reset}
+        />
+      ) : null}
+
       {/* Active chat — the whole width below lg once a conversation is selected */}
       <section
         aria-label="Conversation"
@@ -1543,6 +1675,7 @@ export function InboxPage() {
                 >
                   <ChevronLeft width={20} height={20} strokeWidth={1.75} />
                 </button>
+                {listToggle}
                 <h2 className="min-w-0 truncate text-base font-semibold text-text">
                   {selectedQ.isError ? 'Conversation' : 'Opening…'}
                 </h2>
@@ -1583,7 +1716,7 @@ export function InboxPage() {
               )}
             </>
           ) : (
-            <div className="flex h-full items-center justify-center">
+            <div className="flex h-full flex-col items-center justify-center">
               <EmptyState
                 icon={
                   <MessageSquare width={32} height={32} strokeWidth={1.5} />
@@ -1591,6 +1724,16 @@ export function InboxPage() {
                 title="Pick a conversation"
                 description="Choose one from the list to read it and reply."
               />
+              {listHidden ? (
+                <Button
+                  variant="secondary"
+                  className="hidden lg:inline-flex"
+                  onClick={() => setListHidden(false)}
+                  leftIcon={<PanelLeftOpen width={16} height={16} strokeWidth={1.75} />}
+                >
+                  Show the conversation list
+                </Button>
+              ) : null}
             </div>
           )
         ) : (
@@ -1612,6 +1755,7 @@ export function InboxPage() {
                   >
                     <ChevronLeft width={20} height={20} strokeWidth={1.75} />
                   </button>
+                  {listToggle}
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-1.5">
                       <h2
@@ -1913,12 +2057,26 @@ export function InboxPage() {
               </div>
 
               {isXl && contextOpen ? (
-                <aside
-                  aria-label="Side panel"
-                  className="flex w-[320px] shrink-0 flex-col border-l border-border bg-surface 2xl:w-[360px]"
-                >
-                  {sidePanel(() => setContextOpen(false), 'h-full')}
-                </aside>
+                <>
+                  <ColumnResizer
+                    label="Resize the side panel"
+                    controls={panelId}
+                    edge="left"
+                    value={widths.panel}
+                    min={PANEL_MIN}
+                    max={widths.panelMax}
+                    onLive={resizePanel.live}
+                    onCommit={resizePanel.commit}
+                    onReset={resizePanel.reset}
+                  />
+                  <aside
+                    id={panelId}
+                    aria-label="Side panel"
+                    className="flex w-[var(--inbox-panel-w)] shrink-0 flex-col border-l border-border bg-surface"
+                  >
+                    {sidePanel(() => setContextOpen(false), 'h-full')}
+                  </aside>
+                </>
               ) : null}
             </div>
 

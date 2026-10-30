@@ -32,6 +32,7 @@ export function InstructionBox({
   disabled,
   disabledWords,
   onSuggest,
+  readerWords,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -43,6 +44,8 @@ export function InstructionBox({
   /** The helper cannot be used at all here (not set up, thread not loaded). */
   disabled?: boolean;
   disabledWords?: string;
+  /** Who a draft is written for: "the owner", "the manager and the owners (group chat)". */
+  readerWords?: string;
 }) {
   const coarse = useMediaQuery('(pointer: coarse)');
   const shut = busy || !!disabled;
@@ -113,10 +116,21 @@ export function InstructionBox({
           Ask
         </Button>
       </div>
+      {/* Who the drafts are for rides on this line: the panel has no banner
+          over its drafts to say it any more. */}
       <p id={hintId} className="mt-1.5 flex flex-wrap justify-between gap-x-3 text-xs text-text-muted">
-        <span className="inline-flex items-center gap-1">
-          <Lock width={11} height={11} strokeWidth={2} aria-hidden />
-          {coarse ? 'Only MDG sees this' : 'Only MDG sees this · Enter to ask'}
+        <span className="inline-flex min-w-0 items-start gap-1">
+          <Lock width={11} height={11} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden />
+          <span>
+            Only MDG sees this
+            {readerWords ? ` · Drafts for ${readerWords}` : ''}
+            {coarse ? null : (
+              <>
+                {' · '}
+                <span className="whitespace-nowrap">Enter to ask</span>
+              </>
+            )}
+          </span>
         </span>
         {remaining <= 200 ? <span className="tabular-nums">{remaining} left</span> : null}
       </p>
