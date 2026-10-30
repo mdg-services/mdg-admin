@@ -18,12 +18,12 @@ import {
 import { currentInsertSeq, useComposerInsert, useComposerPresence } from './composerInsert';
 import { getDraft, setDraft } from './drafts';
 import {
-  LINK_ROUTE_LINE,
   composerPlaceholder,
   composerRouteLine,
   effectiveMode,
   filterQuickReplies,
   isImeKeystroke,
+  linkRouteLine,
   linkLabel,
   pickerQuery,
   planSend,
@@ -121,15 +121,16 @@ export function ReplyComposer({
 
   // The server's word on how it goes, unless the window has run out since it
   // gave it: then the words, the preview and the length limit are the template's.
-  // A link overrides both: it only goes in its own template.
+  // A link goes the same way: in an open window as an ordinary message with
+  // its button (lines kept), otherwise in its own template.
   const linkTemplate = config.linkTemplate;
   const link = linkOpen && linkTemplate ? readLink(linkValue) : ({ state: 'none' } as const);
   const linked = link.state === 'ok';
-  const mode = linked ? 'template' : effectiveMode(detail.chat, detail.reply, now);
+  const mode = effectiveMode(detail.chat, detail.reply, now);
   const plan = planSend(value, mode, config, linked);
   const typed = value.trim();
-  // On the stop list, a template cannot go: the words can still go as an ordinary answer, the link cannot.
-  const linkStopped = linked && detail.chat.optedOut;
+  // On the stop list, a template cannot go. In an open window the words and the link go as an ordinary answer.
+  const linkStopped = linked && mode === 'template' && detail.chat.optedOut;
   const ready = typed.length > 0 && !plan.tooLong && link.state !== 'bad' && !linkStopped;
   const repeat = repeatWarning(value, mode);
   const canSend = ready && repeat === null;
@@ -277,7 +278,8 @@ export function ReplyComposer({
     submit();
   }
 
-  const quoting = mode === 'text' && replyTo !== null;
+  // A message with a link button never quotes: the server sends it without one.
+  const quoting = mode === 'text' && !linked && replyTo !== null;
   const templateButton = linked ? (linkTemplate?.button ?? null) : config.template.button;
   const quoteOurs = replyTo?.direction === 'out';
 
@@ -293,7 +295,7 @@ export function ReplyComposer({
           <FileText width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-warning-strong" aria-hidden />
         )}
         <span className="min-w-0 flex-1 [overflow-wrap:anywhere]" title={linked ? undefined : detail.reply.reason}>
-          {linked ? LINK_ROUTE_LINE : composerRouteLine(detail.chat, detail.reply, now)}
+          {linked ? linkRouteLine(mode) : composerRouteLine(detail.chat, detail.reply, now)}
         </span>
         {mode === 'template' ? (
           <button
@@ -332,12 +334,20 @@ export function ReplyComposer({
               The button opens {linkLabel(link.target)}, through our own address so each tap is counted.
             </p>
           ) : null}
-          {plan.joinsLines ? (
-            <p className="mt-1.5 text-xs text-warning-strong">
-              Line breaks become one paragraph: a template does not allow them.
-            </p>
-          ) : null}
         </div>
+      ) : null}
+
+      {/* Out in the open, not under Preview: on 30 Oct 2026 a message typed
+          line by line reached a lead as one block, and the note saying it
+          would sat in the collapsed preview. */}
+      {plan.joinsLines && typed.length > 0 ? (
+        <p role="status" className="mx-3 mt-1 flex items-start gap-1.5 text-xs text-warning-strong">
+          <AlertTriangle width={14} height={14} strokeWidth={1.75} className="mt-px shrink-0" aria-hidden />
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            Your line breaks will become one paragraph: this goes as a template message, and WhatsApp does not
+            allow line breaks in one. Once they write to us, messages go as typed.
+          </span>
+        </p>
       ) : null}
 
       {quoting && replyTo ? (
@@ -450,7 +460,7 @@ export function ReplyComposer({
             {link.state === 'bad'
               ? 'That is not a web address. Paste the whole link, like https://mdgservices.in/film.'
               : linkStopped
-                ? 'They asked us to stop promotions, and a message with a link always goes as one. Remove the link to answer them.'
+                ? 'They asked us to stop promotions, and this would go as a template message, which cannot go to them. Wait for them to write to us.'
                 : link.state === 'ok'
                   ? `Opens ${linkLabel(link.target)} · we count each tap, and who comes back to it`
                   : 'They get a button that opens it. We count each tap on the Message results page.'}

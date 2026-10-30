@@ -23,6 +23,7 @@ import {
   WHATSAPP_DEFAULT_LINE,
   WHATSAPP_LINE_INFO,
   WHATSAPP_LINES,
+  WHATSAPP_LINK_MESSAGE_MAX_LENGTH,
   WHATSAPP_LINK_TEMPLATE,
   WHATSAPP_SIMPLE_TEMPLATE,
   WHATSAPP_STAGES,
@@ -613,8 +614,16 @@ export function composerRouteLine(
     : 'Goes in the greeting template — window closed';
 }
 
-/** The same slim line when a link has been added: the link always has its own template. */
-export const LINK_ROUTE_LINE = 'With a link · goes in the greeting template with a button, and we count each tap';
+/**
+ * The same slim line when a link has been added. In an open window the link
+ * goes as an ordinary message with its button, lines kept; otherwise in its
+ * own template.
+ */
+export function linkRouteLine(mode: 'text' | 'template'): string {
+  return mode === 'text'
+    ? 'With a link · ordinary message with an Open link button, line breaks kept, and we count each tap'
+    : 'With a link · goes in the greeting template with a button, and we count each tap';
+}
 
 /**
  * What the link box holds, read the way the server will read it: nothing
@@ -648,7 +657,11 @@ export interface SendPlan {
   tooLong: boolean;
   /** Worth drawing: near the limit, so nobody is surprised by a refusal. */
   showCounter: boolean;
-  /** Template only: the typed words had line breaks, which the template turns into one paragraph. */
+  /**
+   * Template only: the typed words had line breaks, which the template turns
+   * into one paragraph. Meta refuses a line break in a template's words; an
+   * ordinary message (with a link or without) keeps them.
+   */
   joinsLines: boolean;
   /** Template only: exactly what the person will receive. */
   preview: string | null;
@@ -663,13 +676,16 @@ export function planSend(
   text: string,
   mode: 'text' | 'template',
   config: Pick<WhatsAppInboxConfig, 'textMaxLength' | 'template'>,
-  /** It goes with a link: the link template, whose words are measured the same way. */
+  /**
+   * It goes with a link: as an ordinary message with a link button, whose words
+   * Meta caps lower, or in the link template, measured as the simple one.
+   */
   linked = false,
 ): SendPlan {
   const typed = text.trim();
   if (mode === 'text') {
     const used = typed.length;
-    const limit = config.textMaxLength;
+    const limit = linked ? WHATSAPP_LINK_MESSAGE_MAX_LENGTH : config.textMaxLength;
     return {
       used,
       limit,
@@ -926,7 +942,10 @@ export interface PendingMessage {
   text: string;
   /** How the server said it would go when this was sent. Decides what the bubble shows. */
   mode: 'text' | 'template';
-  /** The link it carries, as typed; null without one. With one it is always the link template. */
+  /**
+   * The link it carries, as typed; null without one. With one it goes as an
+   * ordinary message with a link button (`mode` text) or in the link template.
+   */
   link: string | null;
   /** The admin was warned about the words' own greeting or sign-off and chose to send them as typed. */
   keepRepeats?: boolean;
@@ -971,16 +990,16 @@ export function pendingAsMessage(
   p: PendingMessage,
   me: { id: string; name: string } | null,
 ): WhatsAppChatMessage {
-  const template = p.mode === 'template' || p.link !== null;
+  const template = p.mode === 'template';
   const linked = p.link !== null;
   return {
     id: `pending:${p.clientId}`,
     direction: 'out',
     at: p.at,
-    kind: template ? 'template' : 'text',
-    text: linked ? renderLinkTemplate(p.text) : template ? renderSimpleTemplate(p.text) : p.text,
+    kind: template ? 'template' : linked ? 'interactive' : 'text',
+    text: !template ? p.text : linked ? renderLinkTemplate(p.text) : renderSimpleTemplate(p.text),
     via: template ? 'template' : 'text',
-    template: linked ? WHATSAPP_LINK_TEMPLATE.name : template ? WHATSAPP_SIMPLE_TEMPLATE.name : null,
+    template: !template ? null : linked ? WHATSAPP_LINK_TEMPLATE.name : WHATSAPP_SIMPLE_TEMPLATE.name,
     buttons: linked
       ? [WHATSAPP_LINK_TEMPLATE.button]
       : template && WHATSAPP_SIMPLE_TEMPLATE.button
@@ -1268,6 +1287,14 @@ export function typedTextOf(m: WhatsAppChatMessage): string | null {
 }
 
 /**
+ * Its button opens a page: the link template's, or the one an ordinary
+ * message with a link carries (`interactive`, the only kind of ours that is).
+ */
+export function opensLink(m: Pick<WhatsAppChatMessage, 'template' | 'kind'>): boolean {
+  return m.template === WHATSAPP_LINK_TEMPLATE.name || m.kind === 'interactive';
+}
+
+/**
  * A failed message of ours the admin can send again: one that came from this
  * inbox. Not one that carried a link — the chat does not hold the address, and
  * sending the words again without it would be a different message.
@@ -1277,7 +1304,7 @@ export function canRetry(m: WhatsAppChatMessage): boolean {
     m.direction === 'out' &&
     m.delivery === 'failed' &&
     m.clientId !== null &&
-    m.template !== WHATSAPP_LINK_TEMPLATE.name &&
+    !opensLink(m) &&
     typedTextOf(m) !== null
   );
 }

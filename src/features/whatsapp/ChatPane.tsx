@@ -299,9 +299,10 @@ export function ChatPane({
     if (!detail || !linesAgree) return;
     // Worked out now, not from the minute-old clock: the waiting bubble should
     // look like what the server will send, and a window can close mid-sentence.
-    // A link always goes in its template.
-    const sendMode = link ? 'template' : effectiveMode(detail.chat, detail.reply, Date.now());
-    const quoted = sendMode === 'text' ? replyTo : null;
+    // A link goes the same way, as an ordinary message with its button or in
+    // its template, and never quotes.
+    const sendMode = effectiveMode(detail.chat, detail.reply, Date.now());
+    const quoted = sendMode === 'text' && !link ? replyTo : null;
     sender.send({
       line,
       person,

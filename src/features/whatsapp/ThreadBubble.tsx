@@ -4,7 +4,7 @@ import * as React from 'react';
 import { cn } from '@/lib/cn';
 import { linkify } from '@/lib/linkify';
 import { useLongPress } from '@/lib/useLongPress';
-import { WHATSAPP_LINK_TEMPLATE, type WhatsAppChatMessage } from '@dk/shared';
+import type { WhatsAppChatMessage } from '@dk/shared';
 
 import type { BubbleAnchor } from './BubbleActions';
 import {
@@ -13,6 +13,7 @@ import {
   firstName,
   isUnreadInbound,
   mediaKindOf,
+  opensLink,
   type PendingMessage,
   quoteWords,
   stopNote,
@@ -285,8 +286,8 @@ export const ThreadBubble = React.memo(function ThreadBubble({
                 key={label}
                 className="flex items-center justify-center gap-1.5 border-t border-black/10 px-3 py-2 text-sm font-medium text-[var(--wa-link)] first:border-t-0"
               >
-                {/* The link template's button opens a page, and WhatsApp draws it so. */}
-                {message.template === WHATSAPP_LINK_TEMPLATE.name ? (
+                {/* A link button opens a page, and WhatsApp draws it so. */}
+                {opensLink(message) ? (
                   <ExternalLink width={14} height={14} strokeWidth={2} aria-hidden />
                 ) : (
                   <CornerUpLeft width={14} height={14} strokeWidth={2} aria-hidden />
