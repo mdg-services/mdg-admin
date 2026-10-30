@@ -9,6 +9,7 @@ import {
   Phone,
   Pin,
   PinOff,
+  Sparkles,
   Tag,
 } from 'lucide-react';
 
@@ -16,6 +17,7 @@ import { BUTTON_VARIANTS } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Menu, MenuItem, MenuSeparator } from '@/components/ui/Menu';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/cn';
 import type { WhatsAppChatSummary, WhatsAppLine, WhatsAppReplyRoute } from '@dk/shared';
 
@@ -44,6 +46,15 @@ export interface ChatHeaderProps {
   onToggleDetails: () => void;
   /** At xl the panel is a column the header toggles; below it, a drawer the header opens. */
   panelIsColumn: boolean;
+  /**
+   * The side panel's Reply helper tab (ADR 0025): open it, or put it away when it
+   * is the tab already up. Not drawn when missing.
+   */
+  onHelper?: () => void;
+  /** The helper tab is the one on screen (lit). */
+  helperOn?: boolean;
+  /** The helper is writing for this chat (spinner). */
+  helperBusy?: boolean;
   onMarkUnread: () => void;
   onTogglePin: () => void;
   onCopyNumber: () => void;
@@ -74,6 +85,9 @@ export function ChatHeader({
   detailsOpen,
   onToggleDetails,
   panelIsColumn,
+  onHelper,
+  helperOn = false,
+  helperBusy = false,
   onMarkUnread,
   onTogglePin,
   onCopyNumber,
@@ -152,6 +166,24 @@ export function ChatHeader({
         >
           <Phone width={18} height={18} strokeWidth={1.75} />
         </a>
+      ) : null}
+
+      {onHelper ? (
+        // The helper's violet, so it never reads as anything that sends.
+        <button
+          type="button"
+          onClick={onHelper}
+          aria-label="Reply helper"
+          title="Reply helper — drafts a reply; nothing is sent"
+          aria-pressed={panelIsColumn ? helperOn : undefined}
+          className={cn(
+            'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-assist transition-colors md:h-9 md:w-9',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+            helperOn ? 'bg-assist-soft' : 'hover:bg-assist-soft',
+          )}
+        >
+          {helperBusy ? <Spinner size={16} /> : <Sparkles width={18} height={18} strokeWidth={1.9} />}
+        </button>
       ) : null}
 
       <IconButton

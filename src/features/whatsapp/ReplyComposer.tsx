@@ -1,7 +1,8 @@
-import { AlertTriangle, ChevronDown, ChevronUp, FileText, Link2, MessageCircle, SendHorizontal, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, FileText, Link2, MessageCircle, SendHorizontal, Sparkles, Wand2, X } from 'lucide-react';
 import * as React from 'react';
 
 import { IconButton } from '@/components/ui/IconButton';
+import { Spinner } from '@/components/ui/Spinner';
 import { useWhatsAppQuickReplies } from '@/hooks/api/useWhatsAppInbox';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
@@ -57,6 +58,10 @@ export interface ReplyComposerProps {
    */
   onSend: (text: string, link: string | null, keepRepeats: boolean) => void;
   now: number;
+  /** The Reply helper's one tap: it drafts in the side panel's Helper tab; it never sends. */
+  onSuggest?: () => void;
+  /** A suggestion is being written (spinner on the button). */
+  suggesting?: boolean;
 }
 
 /**
@@ -101,8 +106,12 @@ export function ReplyComposer({
   onCancelReply,
   onSend,
   now,
+  onSuggest,
+  suggesting = false,
 }: ReplyComposerProps) {
   const [value, setValue] = React.useState(() => getDraft(line, person));
+  // A helper draft is in the box: its tag shows until it is sent or the box is emptied.
+  const [fromHelper, setFromHelper] = React.useState(false);
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [pickerIndex, setPickerIndex] = React.useState(0);
   // Escape closes the picker; it stays closed until the box no longer starts with a slash.
@@ -149,6 +158,8 @@ export function ReplyComposer({
     // APPEND, never replace: the admin may be halfway through their own reply.
     // Through `change`, so it is saved as a draft like anything typed here.
     change(appendToBox(value, insertRequest.text));
+    // Every insert is a Reply helper draft: say whose words they are.
+    setFromHelper(true);
     const ta = taRef.current;
     if (ta) {
       ta.focus();
@@ -191,6 +202,7 @@ export function ReplyComposer({
 
   function change(next: string) {
     setValue(next);
+    if (!next.trim()) setFromHelper(false);
     setDraft(line, person, next);
     setPickerIndex(0);
     if (pickerQuery(next) === null) setPickerDismissed(false);
@@ -215,6 +227,7 @@ export function ReplyComposer({
     if (!ready || (repeat !== null && !keepRepeats)) return;
     onSend(typed, link.state === 'ok' ? link.target : null, keepRepeats);
     setValue('');
+    setFromHelper(false);
     setDraft(line, person, '');
     setPreviewOpen(false);
     setPickerDismissed(false);
@@ -499,6 +512,27 @@ export function ReplyComposer({
         </div>
       ) : null}
 
+      {/* Whose words these are, until they are sent or the box is emptied: a
+          machine's draft never leaves without the admin being told. */}
+      {fromHelper ? (
+        <div className="mx-2 mt-2 flex items-center gap-2 rounded-lg border border-assist-line bg-assist-soft px-2.5 py-1.5 text-xs text-assist-strong md:mx-3">
+          <Sparkles width={13} height={13} strokeWidth={2} className="shrink-0 text-assist" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="font-semibold">Draft from the Reply helper.</span> Read and change it — it goes to{' '}
+            {contactName} only when you press Send.
+          </span>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setFromHelper(false)}
+            aria-label="Hide this note"
+            className="tap-target -my-1 shrink-0 rounded-sm p-1 text-assist-strong hover:bg-assist-line"
+          >
+            <X width={13} height={13} strokeWidth={2} />
+          </button>
+        </div>
+      ) : null}
+
       <div className="flex items-end gap-2 px-2 pb-2 pt-1.5 md:px-3">
         {linkTemplate ? (
           <button
@@ -539,6 +573,21 @@ export function ReplyComposer({
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--line)]',
           )}
         />
+        {/* The Reply helper's one tap, in the helper's violet: it never sends, it
+            writes a draft in the side panel's Helper tab for the admin to read. */}
+        {onSuggest ? (
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onSuggest}
+            disabled={suggesting}
+            aria-label="Suggest reply — the helper drafts one, nothing is sent"
+            title="Suggest reply — the helper drafts one; nothing is sent"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-assist-line bg-assist-soft text-assist transition-colors hover:bg-assist-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-60"
+          >
+            {suggesting ? <Spinner size={16} /> : <Wand2 width={19} height={19} strokeWidth={1.75} aria-hidden />}
+          </button>
+        ) : null}
         <button
           type="button"
           aria-label={sendButtonLabel(line)}

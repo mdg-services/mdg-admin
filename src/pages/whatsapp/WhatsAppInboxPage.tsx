@@ -4,9 +4,20 @@ import { useSearchParams } from 'react-router-dom';
 
 import { Drawer } from '@/components/ui/Drawer';
 import { Spinner } from '@/components/ui/Spinner';
+import {
+  readSideTab,
+  type SideTab,
+  ThreadSidePanel,
+  writeSideTab,
+} from '@/features/chat/ThreadSidePanel';
+import {
+  ReplyHelperPane,
+  type ReplyHelperSuggestRequest,
+} from '@/features/replyHelper/ReplyHelperPane';
 import { ChatList } from '@/features/whatsapp/ChatList';
 import { ChatPane } from '@/features/whatsapp/ChatPane';
-import { DetailsContent, DetailsHeader, DetailsUnavailable } from '@/features/whatsapp/DetailsPanel';
+import { insertIntoComposer } from '@/features/whatsapp/composerInsert';
+import { DetailsContent, DetailsUnavailable } from '@/features/whatsapp/DetailsPanel';
 import {
   emptyPaneWords,
   flattenChats,
@@ -20,6 +31,7 @@ import { LineIcon } from '@/features/whatsapp/LineMark';
 import { NewChatDialog } from '@/features/whatsapp/NewChatDialog';
 import { QuickRepliesDialog } from '@/features/whatsapp/QuickRepliesDialog';
 import { useInboxLine } from '@/features/whatsapp/useInboxLine';
+import { usePendingReplyHelperAsk } from '@/hooks/api/useReplyHelper';
 import {
   useWhatsAppChat,
   useWhatsAppChats,
@@ -34,6 +46,31 @@ import { WHATSAPP_LINES, type WhatsAppChatFilter, type WhatsAppLine } from '@dk/
 import '@/features/whatsapp/whatsapp.css';
 
 const MINUTE_MS = 60_000;
+
+/** The side panel's tabs here: the Reply helper and the person's details. */
+const PANEL_TABS: Array<{ id: SideTab; label?: string }> = [
+  { id: 'helper' },
+  { id: 'details', label: 'Contact info' },
+];
+const TAB_KEY = 'dk.whatsapp.sideTab';
+const OPEN_KEY = 'dk.whatsapp.panelOpen';
+
+// Whether the side column was left open, for this browser only. Storage can be
+// absent or throw; the inbox works the same without it.
+function readPanelOpen(): boolean {
+  try {
+    return window.localStorage.getItem(OPEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+function writePanelOpen(open: boolean): void {
+  try {
+    window.localStorage.setItem(OPEN_KEY, open ? '1' : '0');
+  } catch {
+    // Not remembered; the panel still works for this visit.
+  }
+}
 
 /** The contact panel's content, fetched only while the panel is open. Keyed on the person by its parent. */
 function DetailsHost({ line, person, now }: { line: WhatsAppLine; person: string; now: number }) {
@@ -223,12 +260,108 @@ function Inbox({ line }: { line: WhatsAppLine }) {
     [patchParams],
   );
 
-  const [detailsOpen, setDetailsOpen] = React.useState(false);
-  const toggleDetails = React.useCallback(() => setDetailsOpen((o) => !o), []);
-  // A drawer left open would greet the next chat with the last one's details.
+  /*
+   * The side panel: the Reply helper (ADR 0025) and the contact's details, two
+   * tabs over one column at xl and one drawer below it. The helper used to be a
+   * tray above the reply box, where its own text field read as a second box
+   * that might send; now the only field under the chat is the one that does.
+   * At xl the column remembers being left open; the drawer always starts shut.
+   */
+  const [panelOpen, setPanelOpenState] = React.useState(() => isXl && readPanelOpen());
+  const setPanelOpen = React.useCallback(
+    (open: boolean) => {
+      setPanelOpenState(open);
+      if (isXl) writePanelOpen(open);
+    },
+    [isXl],
+  );
+  const [sideTab, setSideTabState] = React.useState<SideTab>(() =>
+    readSideTab(TAB_KEY, ['helper', 'details']),
+  );
+  const setSideTab = React.useCallback((tab: SideTab) => {
+    setSideTabState(tab);
+    writeSideTab(tab, TAB_KEY);
+  }, []);
+  const openPanel = React.useCallback(
+    (tab: SideTab) => {
+      setSideTab(tab);
+      setPanelOpen(true);
+    },
+    [setSideTab, setPanelOpen],
+  );
+  // The header's two glyphs: a second press on the tab already up puts it away.
+  const togglePanel = React.useCallback(
+    (tab: SideTab) => {
+      if (panelOpen && sideTab === tab) setPanelOpen(false);
+      else openPanel(tab);
+    },
+    [panelOpen, sideTab, setPanelOpen, openPanel],
+  );
+  // A drawer left open would greet the next chat with the last one's panel.
   React.useEffect(() => {
-    if (!isXl) setDetailsOpen(false);
+    if (!isXl) setPanelOpenState(false);
   }, [chat, isXl]);
+
+  /**
+   * "Suggest reply" pressed on the reply box: the helper's tab comes forward and
+   * its pane runs one suggestion. A request with an id, carrying the chat it was
+   * pressed in; the pane hands it back once run, and one that never reached a
+   * pane (the panel shut first, another chat opened) is dropped, never run later.
+   */
+  const [suggestRequest, setSuggestRequest] = React.useState<
+    (ReplyHelperSuggestRequest & { chatKey: string }) | null
+  >(null);
+  const suggestSeq = React.useRef(0);
+  const onSuggest = React.useCallback(() => {
+    if (!chat) return;
+    suggestSeq.current += 1;
+    setSuggestRequest({ id: String(suggestSeq.current), chatKey: `${line}:${chat}` });
+    openPanel('helper');
+  }, [chat, line, openPanel]);
+  const suggestHandled = React.useCallback(
+    (id: string) => setSuggestRequest((r) => (r?.id === id ? null : r)),
+    [],
+  );
+  React.useEffect(() => {
+    setSuggestRequest(null);
+  }, [chat]);
+  React.useEffect(() => {
+    if (!panelOpen) setSuggestRequest(null);
+  }, [panelOpen]);
+  const helperBusy =
+    usePendingReplyHelperAsk({ channel: 'whatsapp', line, person: chat ?? '' }) !== null;
+
+  const chatKey = chat ? `${line}:${chat}` : null;
+  const sidePanel = (onClose: (() => void) | undefined, className: string) =>
+    chat ? (
+      <ThreadSidePanel
+        tabs={PANEL_TABS}
+        tab={sideTab}
+        onTab={setSideTab}
+        onClose={onClose}
+        closeLabel="Hide panel"
+        helperBusy={helperBusy}
+        className={className}
+        helper={
+          <ReplyHelperPane
+            // The chat's own key (the inbox AND the person): the same person on
+            // the other number is a different chat, and must not inherit what
+            // was typed to the helper.
+            key={`reply-helper:${chatKey}`}
+            className="h-full"
+            target={{ channel: 'whatsapp', line, person: chat }}
+            onUseDraft={(text) => insertIntoComposer(line, chat, text)}
+            suggestRequest={suggestRequest?.chatKey === chatKey ? suggestRequest : null}
+            onSuggestHandled={suggestHandled}
+            // Below xl the drawer covers the reply box, which is what comes next.
+            onDraftPlaced={isXl ? undefined : () => setPanelOpen(false)}
+            boxTagsDraft
+            active={panelOpen && sideTab === 'helper'}
+          />
+        }
+        details={<DetailsHost key={chat} line={line} person={chat} now={now} />}
+      />
+    ) : null;
 
   const [newOpen, setNewOpen] = React.useState(false);
   const [quickOpen, setQuickOpen] = React.useState(false);
@@ -303,28 +436,34 @@ function Inbox({ line }: { line: WhatsAppLine }) {
             onRetryConfig={() => void configQ.refetch()}
             onClose={closeChat}
             onOpenOnLine={openOnLine}
-            detailsOpen={detailsOpen}
-            onToggleDetails={toggleDetails}
+            detailsOpen={panelOpen && sideTab === 'details'}
+            onToggleDetails={() => togglePanel('details')}
             panelIsColumn={isXl}
+            onHelper={() => togglePanel('helper')}
+            helperOn={panelOpen && sideTab === 'helper'}
+            onSuggest={onSuggest}
           />
         ) : (
           <EmptyPane line={line} />
         )}
       </section>
 
-      {chat && isXl && detailsOpen ? (
-        <aside
-          aria-label="Contact info"
-          className="flex w-80 shrink-0 flex-col overflow-y-auto overscroll-contain border-l border-border bg-surface"
-        >
-          <DetailsHeader onClose={() => setDetailsOpen(false)} />
-          <DetailsHost key={chat} line={line} person={chat} now={now} />
+      {chat && isXl && panelOpen ? (
+        <aside aria-label="Side panel" className="flex w-80 shrink-0 flex-col border-l border-border bg-surface">
+          {sidePanel(() => setPanelOpen(false), 'h-full')}
         </aside>
       ) : null}
 
       {chat && !isXl ? (
-        <Drawer open={detailsOpen} onClose={() => setDetailsOpen(false)} title="Contact info" width="sm" bodyPadding="none">
-          <DetailsHost key={chat} line={line} person={chat} now={now} />
+        // The drawer brings its own Close, so the panel draws none.
+        <Drawer
+          open={panelOpen}
+          onClose={() => setPanelOpen(false)}
+          title={sideTab === 'helper' ? 'Reply helper' : 'Contact info'}
+          width="sm"
+          bodyPadding="none"
+        >
+          {sidePanel(undefined, 'h-[80dvh] md:h-full')}
         </Drawer>
       ) : null}
 

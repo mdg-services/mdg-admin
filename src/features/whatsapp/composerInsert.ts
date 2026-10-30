@@ -1,12 +1,13 @@
 /**
  * Words pushed INTO a WhatsApp chat's reply box from outside it — today, a draft
- * from the Reply helper's "Use this" (ADR 0025).
+ * from the Reply helper's "Put in reply box" (ADR 0025); the box tags every one
+ * as the helper's.
  *
- * WHY A STORE AND NOT A PROP. The helper's strip lives in `ChatPane`'s footer
- * and the box (`ReplyComposer`) is a sibling that is not even mounted in six
- * states (loading, sending switched off, the chat blocked…). A prop would have
- * to be threaded through those branches and would be lost when the box mounts
- * after the press. A module store keyed by the chat reaches the box whenever it
+ * WHY A STORE AND NOT A PROP. The helper lives in the page's side panel and the
+ * box (`ReplyComposer`) is deep in `ChatPane`, not even mounted in six states
+ * (loading, sending switched off, the chat blocked…). A prop would have to be
+ * threaded through those branches and would be lost when the box mounts after
+ * the press. A module store keyed by the chat reaches the box whenever it
  * is there, and costs the rest of `ChatPane` nothing. It has the shape of
  * `pendingStore.ts` for the same reason: `useSyncExternalStore`, one entry per
  * chat, and a snapshot that is the same object until something changes.
@@ -22,7 +23,7 @@
  * made before the box existed is already in the saved draft (see
  * `insertIntoComposer`), and applying it again would put it in twice.
  *
- * It also records which boxes are mounted, so the strip can tell the admin
+ * It also records which boxes are mounted, so the helper can tell the admin
  * truthfully whether the words went into a box they can see or were saved for
  * the box to show when it opens.
  *

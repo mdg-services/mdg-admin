@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
-import { ReplyHelperStrip } from '@/features/replyHelper/ReplyHelperStrip';
+import { usePendingReplyHelperAsk } from '@/hooks/api/useReplyHelper';
 import {
   findCachedChat,
   useMarkWhatsAppRead,
@@ -29,7 +29,6 @@ import type {
 
 import { RenameDialog, StageDialog } from './ChatDialogs';
 import { ChatHeader } from './ChatHeader';
-import { insertIntoComposer } from './composerInsert';
 import {
   chatTitle,
   detailIsOnLine,
@@ -70,6 +69,13 @@ export interface ChatPaneProps {
   detailsOpen: boolean;
   onToggleDetails: () => void;
   panelIsColumn: boolean;
+  /**
+   * The Reply helper lives in the page's side panel (ADR 0025): bring its tab
+   * forward (or put it away), and run one suggestion from the reply box.
+   */
+  onHelper: () => void;
+  helperOn: boolean;
+  onSuggest: () => void;
 }
 
 /** Slim bar where the box would be, when it cannot be: loading, switched off, not allowed, or not loaded. */
@@ -187,8 +193,12 @@ export function ChatPane({
   detailsOpen,
   onToggleDetails,
   panelIsColumn,
+  onHelper,
+  helperOn,
+  onSuggest,
 }: ChatPaneProps) {
   const qc = useQueryClient();
+  const helperBusy = usePendingReplyHelperAsk({ channel: 'whatsapp', line, person }) !== null;
   const toast = useToast();
   const detailQ = useWhatsAppChat(line, person);
   const messagesQ = useWhatsAppMessages(line, person);
@@ -406,10 +416,11 @@ export function ChatPane({
     else toast.error('Could not copy');
   }
 
-  // Published as the bottom bar below md, so a toast ("Copied", a failed save)
-  // sits above the box instead of on top of Send.
+  // Published as the bottom bar, so a toast ("Copied", a failed save) sits
+  // above the box instead of on top of Send — at md too, where the toast's
+  // corner is this box's right-hand end.
   const bottomRef = React.useRef<HTMLDivElement>(null);
-  usePublishBottomBar(bottomRef);
+  usePublishBottomBar(bottomRef, true, true);
 
   const notFound =
     (detailQ.error instanceof ApiError && detailQ.error.status === 404) ||
@@ -459,6 +470,9 @@ export function ChatPane({
         detailsOpen={detailsOpen}
         onToggleDetails={onToggleDetails}
         panelIsColumn={panelIsColumn}
+        onHelper={onHelper}
+        helperOn={helperOn}
+        helperBusy={helperBusy}
         onMarkUnread={markUnread}
         onTogglePin={togglePin}
         onCopyNumber={() => void copyNumber()}
@@ -497,21 +511,12 @@ export function ChatPane({
         ref={bottomRef}
         className="shrink-0 border-t border-[var(--line-border)] bg-[var(--wa-footer)] pb-[env(safe-area-inset-bottom)]"
       >
-        {/* The Reply helper sits above whatever the footer shows, and is mounted
-            whether or not the box is: the box is absent in six states (loading,
-            sending off, blocked…) and a draft is still worth reading then. "Use
-            this" writes to the chat's saved draft, so a box that opens later
-            shows it. This component is already keyed on the chat, so the
-            helper's typed instruction and its "writing" state never follow the
-            admin to another person. */}
-        <ReplyHelperStrip
-          // The chat's own key (the inbox AND the person), not just the person
-          // `ChatPane` is keyed on: the same person on the other number is a
-          // different chat with its own box, and must not inherit what was typed.
-          key={`${line}:${person}`}
-          target={{ channel: 'whatsapp', line, person }}
-          onUseDraft={(text) => insertIntoComposer(line, person, text)}
-        />
+        {/* Only the box that sends sits here. The Reply helper is a tab of the
+            side panel (the header's violet ✨, or the box's own Suggest): beside
+            this box its own text field read as a second box to the person. It is
+            reachable in the six states where the box is absent too (loading,
+            sending off, blocked…), and "Put in reply box" writes to the chat's
+            saved draft, so a box that opens later shows it. */}
         {configFailed && !config ? (
           <ComposerNotice
             icon={<TriangleAlert width={18} height={18} strokeWidth={1.75} />}
@@ -560,6 +565,8 @@ export function ChatPane({
             onCancelReply={() => setReplyTo(null)}
             onSend={send}
             now={now}
+            onSuggest={onSuggest}
+            suggesting={helperBusy}
           />
         )}
       </div>

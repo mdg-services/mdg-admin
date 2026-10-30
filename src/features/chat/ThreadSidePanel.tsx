@@ -6,7 +6,7 @@ import { cn } from '@/lib/cn';
 
 export type SideTab = 'helper' | 'ai' | 'details';
 
-const TABS: Array<{ id: SideTab; label: string; icon: LucideIcon }> = [
+const ALL_TABS: Array<{ id: SideTab; label: string; icon: LucideIcon }> = [
   { id: 'helper', label: 'Helper', icon: Sparkles },
   { id: 'ai', label: 'AI log', icon: Zap },
   { id: 'details', label: 'Details', icon: Info },
@@ -14,18 +14,21 @@ const TABS: Array<{ id: SideTab; label: string; icon: LucideIcon }> = [
 
 const TAB_KEY = 'dk.inbox.sideTab';
 
-/** The tab this browser last had open. Storage can be absent or throw; the panel works without it. */
-export function readSideTab(): SideTab {
+/**
+ * The tab this browser last had open, among `allowed`. Storage can be absent or
+ * throw; the panel works without it. Each inbox keeps its own `key`.
+ */
+export function readSideTab(key = TAB_KEY, allowed: SideTab[] = ['helper', 'ai', 'details']): SideTab {
   try {
-    const v = window.localStorage.getItem(TAB_KEY);
-    return v === 'helper' || v === 'ai' || v === 'details' ? v : 'helper';
+    const v = window.localStorage.getItem(key) as SideTab | null;
+    return v && allowed.includes(v) ? v : 'helper';
   } catch {
     return 'helper';
   }
 }
-export function writeSideTab(tab: SideTab): void {
+export function writeSideTab(tab: SideTab, key = TAB_KEY): void {
   try {
-    window.localStorage.setItem(TAB_KEY, tab);
+    window.localStorage.setItem(key, tab);
   } catch {
     // Not remembered; the panel still works for this visit.
   }
@@ -46,6 +49,9 @@ export function writeSideTab(tab: SideTab): void {
  * away; a half-typed helper instruction survives that too, because the helper
  * keeps it per chat outside the pane.
  *
+ * `tabs` picks which tabs (and their words) an inbox shows: the dealer chat has
+ * all three; the WhatsApp inbox has the helper and its "Contact info".
+ *
  * The same panel is the inline column on a wide screen and the body of a drawer
  * on a narrower one; only the column has a close glyph of its own (`onClose`) —
  * a drawer carries its own Close.
@@ -56,8 +62,9 @@ export function ThreadSidePanel({
   onClose,
   closeLabel = 'Hide panel',
   helper,
-  ai,
+  ai = null,
   details,
+  tabs: tabsProp,
   detailsCount = 0,
   aiAlert = false,
   helperBusy = false,
@@ -68,8 +75,10 @@ export function ThreadSidePanel({
   onClose?: () => void;
   closeLabel?: string;
   helper: React.ReactNode;
-  ai: React.ReactNode;
+  ai?: React.ReactNode;
   details: React.ReactNode;
+  /** Which tabs, in order, with an optional word of their own. Default: all three. */
+  tabs?: Array<{ id: SideTab; label?: string }>;
   /** Something in Details waits on MDG (a dealer's answer to check). */
   detailsCount?: number;
   /** The AI guard marked this thread: a dot on the AI log tab. */
@@ -79,6 +88,16 @@ export function ThreadSidePanel({
   className?: string;
 }) {
   const baseId = React.useId();
+  const TABS = React.useMemo(
+    () =>
+      tabsProp
+        ? tabsProp.map((t) => {
+            const base = ALL_TABS.find((a) => a.id === t.id)!;
+            return { ...base, label: t.label ?? base.label };
+          })
+        : ALL_TABS,
+    [tabsProp],
+  );
   const tabRefs = React.useRef<Record<SideTab, HTMLButtonElement | null>>({
     helper: null,
     ai: null,
