@@ -33,6 +33,7 @@ import type {
   WhatsAppQuickReply,
   WhatsAppQuickReplyInput,
   WhatsAppSendResult,
+  WhatsAppVideoSendInput,
 } from '@dk/shared';
 
 /**
@@ -457,6 +458,25 @@ export function useNewWhatsAppChat() {
       const person = indianMobile(input.phone);
       if (person) refreshWhatsApp(qc, [person]);
     },
+  });
+}
+
+/**
+ * Send one of MDG's guide videos into a chat, as a WhatsApp video message. The
+ * dialog waits for the answer. As for a new chat, the caller keeps the `clientId`
+ * across presses of Send for the same video, and makes a new one only after a
+ * final refusal (`describeSendError(...).networkLost === false`).
+ *
+ * The chat is asked for again whatever happened: a sent video is a new row, an
+ * unsure one is a row too, and WhatsApp saying the 24 hours are up changes how
+ * the next message goes.
+ */
+export function useSendWhatsAppVideo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ person, ...input }: WhatsAppVideoSendInput & { person: string }) =>
+      api.post<WhatsAppSendResult>(`${BASE}/chats/${enc(person)}/videos`, input),
+    onSettled: (_result, _err, input) => refreshWhatsApp(qc, [input.person]),
   });
 }
 

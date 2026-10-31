@@ -130,13 +130,14 @@ export function videoShape(v: Pick<GuideVideoAdminItem, 'audience'>): 'landscape
 
 /**
  * Can it go into a dealer's app chat, in words, or null when it can. A team video
- * and the WhatsApp-only one never can; anything else waits for its copy in the bucket.
+ * and the WhatsApp-only one never can (the WhatsApp-only one goes from the WhatsApp
+ * inbox); anything else waits for its copy in the bucket.
  */
 export function sendNote(
   v: Pick<GuideVideoAdminItem, 'audience' | 'outsideAppOnly' | 'sendable'>,
 ): string | null {
   if (v.audience === 'admin') return 'For the team only: never sent to a dealer.';
-  if (v.outsideAppOnly) return 'WhatsApp only: never sent inside the app.';
+  if (v.outsideAppOnly) return 'WhatsApp only: send it from the WhatsApp inbox, never inside the app.';
   if (!v.sendable) return 'Not uploaded to the chat library yet, so it cannot be sent into a chat.';
   return null;
 }

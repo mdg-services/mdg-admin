@@ -5,39 +5,54 @@ import type { GuideVideoAdminItem } from '@dk/shared';
 import { searchVideos, type VideoSearchHit } from '../../shared/src/lib/videoSearch';
 
 /**
- * "Send a video": which of MDG's guide videos an admin can drop into a dealer's
- * chat, in what order, and from which chapter.
+ * "Send a video": which of MDG's guide videos an admin can drop into a chat, in
+ * what order, and from which chapter — in a dealer's app chat, or in the WhatsApp
+ * inbox (`channel`).
  *
  * The list is the video library itself (`GET /admin/guide-videos`), not a list
  * kept here — adding a video is a folder and an upload, never an edit in this
  * file. What this decides, kept apart from the screen so it is checkable alone
  * (`scripts/chatGuideVideos.check.ts`):
  *
- *  - WHAT CAN BE SENT. The library holds more than the chat may carry: the team's
- *    own walkthroughs play only in the portal, and the "paying your bill" video
- *    goes on WhatsApp and nowhere else (Google Play forbids anything inside the
- *    app that points at a way to pay). Both are left out of the picker. The server
- *    refuses them too; this keeps the picker honest, so an admin is never offered
- *    a send that cannot happen.
+ *  - WHAT CAN BE SENT. The library holds more than a chat may carry: the team's
+ *    own walkthroughs play only in the portal, and go nowhere. The "paying your
+ *    bill" video goes on WhatsApp and nowhere else (Google Play forbids anything
+ *    inside the app that points at a way to pay), so the app chat's picker leaves
+ *    it out and WhatsApp's lists it. The server refuses the same; this keeps the
+ *    picker honest, so an admin is never offered a send that cannot happen.
  *  - WHAT CAN BE SENT NOW. A video that is not uploaded yet is shown, greyed and
  *    marked, and cannot be picked: seeing that it exists is useful, sending a
- *    broken player is not. The server says which (`sendable`).
- *  - FROM WHERE. A chapter is offered only for a start the library knows.
+ *    broken player is not. The server says which (`sendable`, `whatsappSendable`).
+ *  - FROM WHERE. A chapter is offered only for a start the library knows. On
+ *    WhatsApp the video plays from its start, and the chapter is named under it.
  *  - WHICH SHELF. The app's how-tos, then one video per service, then the public
  *    pump-knowledge explainers. A search flattens the shelves into one ranked list
  *    (`searchVideos`: both languages, romanised Hindi, chapters).
  */
 
-/** A video that may go into a dealer's chat at all. */
-export function isSendable(v: Pick<GuideVideoAdminItem, 'outsideAppOnly' | 'audience'>): boolean {
-  return !v.outsideAppOnly && v.audience !== 'admin';
+/** Where a video is being sent: a dealer's app chat, or a chat in the WhatsApp inbox. */
+export type VideoChannel = 'app' | 'whatsapp';
+
+/** A video that may go into a chat on this channel at all. */
+export function isSendable(
+  v: Pick<GuideVideoAdminItem, 'outsideAppOnly' | 'audience'>,
+  channel: VideoChannel = 'app',
+): boolean {
+  if (v.audience === 'admin') return false;
+  return channel === 'whatsapp' || !v.outsideAppOnly;
 }
 
 /**
- * Can it be sent right now: its copy is in the bucket. An older server that does
- * not say (`sendable` missing) is read by `available`, as before.
+ * Can it be sent right now on this channel: its copy is in the bucket. For the app
+ * chat, an older server that does not say (`sendable` missing) is read by
+ * `available`, as before; for WhatsApp, a server that does not say has no
+ * WhatsApp send, so nothing can be.
  */
-export function canSendNow(v: Pick<GuideVideoAdminItem, 'sendable' | 'available'>): boolean {
+export function canSendNow(
+  v: Pick<GuideVideoAdminItem, 'sendable' | 'available' | 'whatsappSendable'>,
+  channel: VideoChannel = 'app',
+): boolean {
+  if (channel === 'whatsapp') return v.whatsappSendable === true;
   return typeof v.sendable === 'boolean' ? v.sendable : v.available;
 }
 
@@ -63,10 +78,13 @@ export interface VideoChoices {
   explainers: GuideVideoAdminItem[];
 }
 
-/** The library as the picker lists it: sendable videos only, ordered, split into the three groups. */
-export function videoChoices(library: readonly GuideVideoAdminItem[] | undefined): VideoChoices {
+/** The library as the picker lists it: what this channel may carry, ordered, split into the three groups. */
+export function videoChoices(
+  library: readonly GuideVideoAdminItem[] | undefined,
+  channel: VideoChannel = 'app',
+): VideoChoices {
   const list = (library ?? [])
-    .filter(isSendable)
+    .filter((v) => isSendable(v, channel))
     .slice()
     .sort((a, b) => rank(a) - rank(b) || a.title.en.localeCompare(b.title.en));
   const guides = list.filter((v) => v.family !== 'explainer');
@@ -93,8 +111,8 @@ export function searchChoices(
 }
 
 /** The video the picker starts on: the first one that can be sent now. */
-export function defaultVideo(choices: VideoChoices): GuideVideoAdminItem | null {
-  return allChoices(choices).find(canSendNow) ?? null;
+export function defaultVideo(choices: VideoChoices, channel: VideoChannel = 'app'): GuideVideoAdminItem | null {
+  return allChoices(choices).find((v) => canSendNow(v, channel)) ?? null;
 }
 
 /** `m:ss`, for a length or a chapter's start. */
@@ -120,8 +138,8 @@ export function audienceWord(
 }
 
 /** The one line under a title: length, who it is for, and — when it is true — that it is not uploaded yet. */
-export function metaLine(v: GuideVideoAdminItem): string {
-  return [lengthLabel(v.durationMs), audienceWord(v), canSendNow(v) ? '' : 'Not uploaded yet']
+export function metaLine(v: GuideVideoAdminItem, channel: VideoChannel = 'app'): string {
+  return [lengthLabel(v.durationMs), audienceWord(v), canSendNow(v, channel) ? '' : 'Not uploaded yet']
     .filter(Boolean)
     .join(' · ');
 }
@@ -151,8 +169,17 @@ export function startToSend(
 }
 
 /** The toast after a send, naming the video and, when one was picked, the chapter. */
-export function describeVideoSent(v: Pick<GuideVideoAdminItem, 'title' | 'chapters'>, startSec?: number): string {
+export function describeVideoSent(
+  v: Pick<GuideVideoAdminItem, 'title' | 'chapters'>,
+  startSec?: number,
+  channel: VideoChannel = 'app',
+): string {
   const chapter = startSec ? v.chapters.find((c) => c.startSec === startSec) : undefined;
+  if (channel === 'whatsapp') {
+    return chapter
+      ? `Sent “${v.title.en}” on WhatsApp, with “${chapter.label.en}” named under it.`
+      : `Sent “${v.title.en}” on WhatsApp.`;
+  }
   return chapter
     ? `Sent “${v.title.en}” to this chat, from “${chapter.label.en}”.`
     : `Sent “${v.title.en}” to this chat.`;

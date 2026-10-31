@@ -107,6 +107,41 @@ describe('what can be sent into a dealer chat', () => {
   });
 });
 
+describe('what can be sent from the WhatsApp inbox', () => {
+  it('offers the WhatsApp-only video there, and still never a team walkthrough', () => {
+    assert.equal(isSendable(video('paying_bill', { outsideAppOnly: true }), 'whatsapp'), true);
+    assert.equal(isSendable(video('admin_x', { audience: 'admin' }), 'whatsapp'), false);
+    const ids = allChoices(videoChoices(LIBRARY, 'whatsapp')).map((v) => v.id);
+    assert.ok(ids.includes('paying_bill'));
+    assert.ok(!ids.includes('admin_credit_dod'));
+  });
+
+  it('can send now only what the server says can go on WhatsApp; a server that does not say has no WhatsApp send', () => {
+    assert.equal(canSendNow(video('a', { whatsappSendable: true }), 'whatsapp'), true);
+    assert.equal(canSendNow(video('b', { whatsappSendable: false, sendable: true }), 'whatsapp'), false);
+    assert.equal(canSendNow(video('c', { sendable: true }), 'whatsapp'), false);
+    // The app chat goes on reading its own flag.
+    assert.equal(canSendNow(video('d', { whatsappSendable: true, sendable: false })), false);
+  });
+
+  it('starts on the first video WhatsApp can take now', () => {
+    const lib = [
+      video('getting_started', { whatsappSendable: false }),
+      video('app_tour', { whatsappSendable: true }),
+    ];
+    assert.equal(defaultVideo(videoChoices(lib, 'whatsapp'), 'whatsapp')?.id, 'app_tour');
+  });
+
+  it('says it went on WhatsApp, and which chapter its words name', () => {
+    const v = video('papers');
+    assert.equal(describeVideoSent(v, undefined, 'whatsapp'), 'Sent “Title of papers” on WhatsApp.');
+    assert.equal(
+      describeVideoSent(v, 14.2, 'whatsapp'),
+      'Sent “Title of papers” on WhatsApp, with “Next part” named under it.',
+    );
+  });
+});
+
 describe('the words under a video', () => {
   it('says the length, who it is for, and that it is not uploaded — only when true', () => {
     assert.equal(metaLine(video('papers')), '1:35 · Owners and managers');

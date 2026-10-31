@@ -2196,7 +2196,7 @@ export function InboxPage() {
       <SendGuideVideoDialog
         open={videoPickerOpen}
         onClose={() => setVideoPickerOpen(false)}
-        conversationId={conversation?.id}
+        target={{ channel: 'app', conversationId: conversation?.id }}
       />
 
       <NewConversationDialog

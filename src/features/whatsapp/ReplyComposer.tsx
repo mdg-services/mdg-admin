@@ -1,8 +1,10 @@
-import { AlertTriangle, ChevronDown, ChevronUp, FileText, Link2, MessageCircle, SendHorizontal, Sparkles, Wand2, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, FileText, Link2, MessageCircle, Plus, SendHorizontal, Sparkles, Video, Wand2, X } from 'lucide-react';
 import * as React from 'react';
 
 import { IconButton } from '@/components/ui/IconButton';
+import { Menu, MenuItem } from '@/components/ui/Menu';
 import { Spinner } from '@/components/ui/Spinner';
+import { SendGuideVideoDialog } from '@/features/chat/SendGuideVideoDialog';
 import { useWhatsAppQuickReplies } from '@/hooks/api/useWhatsAppInbox';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/cn';
@@ -97,6 +99,11 @@ function fitBox(ta: HTMLTextAreaElement, isMd: boolean): void {
  * on the Message results page. The link is not part of the draft — it is
  * cleared when the message goes or the chat changes.
  *
+ * The "+" beside the box holds what goes besides words, as the app chat's does:
+ * the link, and "Send a video" — one of MDG's guide videos, picked, watched and
+ * sent from its own dialog (`SendGuideVideoDialog`), which says so when the
+ * 24-hour window is closed, since no template carries a video.
+ *
  * Words that go in a template and open with their own greeting ("Namaste,") or
  * close with their own sign-off ("Thank you, Team MDG Services") stop Send: a
  * warning over the box says the person would get them twice, with one button
@@ -126,6 +133,7 @@ export function ReplyComposer({
   const [pickerDismissed, setPickerDismissed] = React.useState(false);
   const [linkOpen, setLinkOpen] = React.useState(false);
   const [linkValue, setLinkValue] = React.useState('');
+  const [videoOpen, setVideoOpen] = React.useState(false);
   const taRef = React.useRef<HTMLTextAreaElement>(null);
   const linkRef = React.useRef<HTMLInputElement>(null);
   const coarse = useMediaQuery('(pointer: coarse)');
@@ -555,24 +563,22 @@ export function ReplyComposer({
       ) : null}
 
       <div className="flex items-end gap-2 px-2 pb-2 pt-1.5 md:px-3">
-        {linkTemplate ? (
-          <button
-            type="button"
-            aria-label={linkOpen ? 'Remove the link' : 'Add a link'}
-            aria-pressed={linkOpen}
-            title={linkOpen ? 'Remove the link' : 'Add a link we can count'}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={toggleLink}
-            className={cn(
-              'flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
-              linkOpen
-                ? 'bg-[var(--wa-green-strong)] text-white'
-                : 'text-[var(--wa-meta)] hover:bg-black/[0.06]',
-            )}
-          >
-            <Link2 width={20} height={20} strokeWidth={2} aria-hidden />
-          </button>
-        ) : null}
+        <Menu
+          label="Add a link or a video"
+          title="Add to this chat"
+          align="start"
+          triggerClassName="shrink-0 rounded-full"
+          trigger={<Plus width={22} height={22} strokeWidth={2} aria-hidden />}
+        >
+          {linkTemplate ? (
+            <MenuItem icon={<Link2 width={15} height={15} strokeWidth={1.75} />} onSelect={toggleLink}>
+              {linkOpen ? 'Remove the link' : 'Add a link we can count'}
+            </MenuItem>
+          ) : null}
+          <MenuItem icon={<Video width={15} height={15} strokeWidth={1.75} />} onSelect={() => setVideoOpen(true)}>
+            Send a video
+          </MenuItem>
+        </Menu>
         <textarea
           ref={taRef}
           value={value}
@@ -639,6 +645,12 @@ export function ReplyComposer({
           {plan.used.toLocaleString('en-IN')} / {plan.limit.toLocaleString('en-IN')}
         </p>
       ) : null}
+
+      <SendGuideVideoDialog
+        open={videoOpen}
+        onClose={() => setVideoOpen(false)}
+        target={{ channel: 'whatsapp', line, person }}
+      />
     </div>
   );
 }

@@ -1,9 +1,13 @@
 import { FileText, ImageOff, MapPin, Play, RotateCw } from 'lucide-react';
 import * as React from 'react';
 
+import { GuideVideoPlayer } from '@/components/ui/GuideVideoPlayer';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
+import { VideoPoster } from '@/components/ui/VideoPoster';
+import { useGuideVideoLibrary } from '@/hooks/api/useGuideVideos';
 import { openWhatsAppMedia, useWhatsAppMedia } from '@/hooks/api/useWhatsAppMedia';
+import { lengthLabel } from '@/lib/chatGuideVideos';
 import { cn } from '@/lib/cn';
 import type { WhatsAppChatMessage } from '@dk/shared';
 
@@ -115,6 +119,50 @@ function ImageMedia({
         <Unavailable state={state} retry={retry} className="h-full w-full" />
       )}
       {overlay}
+    </div>
+  );
+}
+
+/**
+ * One of MDG's guide videos, sent from "Send a video". It went by a link to our
+ * own storage, so Meta holds no file of it to fetch: the picture comes from the
+ * video library, and a tap plays the library's copy here, from the start, as the
+ * person's WhatsApp plays it. The words under it are the bubble's text.
+ */
+function GuideVideoMedia({ video }: { video: NonNullable<WhatsAppChatMessage['guideVideo']> }) {
+  const [ref, seen] = useOnceVisible<HTMLDivElement>();
+  const [playing, setPlaying] = React.useState(false);
+  const library = useGuideVideoLibrary(seen);
+  const item = library.data?.find((v) => v.id === video.id);
+  const title = video.title?.en ?? item?.title.en ?? 'MDG video';
+  return (
+    <div ref={ref} className={cn('grid gap-1', BOX)}>
+      {playing ? (
+        <GuideVideoPlayer
+          id={video.id}
+          startSec={0}
+          title={title}
+          shape="portrait"
+          compact
+          autoPlay
+          poster={item?.posterUrl ?? null}
+          showChapters={false}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setPlaying(true)}
+          aria-label={`Play ${title}`}
+          className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+        >
+          <VideoPoster
+            src={item?.posterUrl ?? null}
+            length={item ? lengthLabel(item.durationMs) : ''}
+            className="aspect-[4/3] w-full rounded-md"
+          />
+        </button>
+      )}
+      <p className="text-xs font-medium text-[var(--wa-meta)] [overflow-wrap:anywhere]">MDG video · {title}</p>
     </div>
   );
 }
@@ -274,14 +322,16 @@ export interface MessageMediaProps {
  * Only what somebody sent us can be fetched (the server serves a file by the id
  * of the message it arrived on), so anything on our own side, a contact card,
  * or a kind this screen does not know is said in plain words rather than left
- * blank. A file Meta has dropped says so, and why — it keeps them about thirty
- * days — rather than showing a broken picture.
+ * blank — except one of MDG's guide videos, which plays from the library. A
+ * file Meta has dropped says so, and why — it keeps them about thirty days —
+ * rather than showing a broken picture.
  */
 export function MessageMedia({ message, kind, overlay, onOpenImage }: MessageMediaProps) {
   const inbound = message.direction === 'in';
   const fetchable = inbound && message.media !== null && ['image', 'sticker', 'audio', 'video', 'document'].includes(kind);
 
   if (kind === 'location') return <LocationMedia message={message} />;
+  if (!inbound && kind === 'video' && message.guideVideo) return <GuideVideoMedia video={message.guideVideo} />;
   if (!fetchable) return <Muted>{unshownWords(message.kind)}</Muted>;
   if (message.media && !message.media.available) {
     return (

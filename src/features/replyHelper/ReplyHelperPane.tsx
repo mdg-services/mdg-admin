@@ -286,7 +286,7 @@ export function ReplyHelperPane({
         onSuggest={() => void suggest()}
         onRetryTurn={(text) => void (isSuggestion(text) ? suggest() : ask(text))}
         onUse={useDraft}
-        onSendVideo={target.channel === 'app' ? (v) => setVideoToSend(v) : undefined}
+        onSendVideo={(v) => setVideoToSend(v)}
         onLoadEarlier={loadEarlier}
         loadingEarlier={earlierM.isPending}
         onPickLogin={pickLogin}
@@ -294,15 +294,17 @@ export function ReplyHelperPane({
         openChannel={target.channel}
         active={active}
       />
-      {target.channel === 'app' ? (
-        <SendGuideVideoDialog
-          open={videoToSend !== null}
-          onClose={() => setVideoToSend(null)}
-          conversationId={target.conversationId}
-          initialVideoId={videoToSend?.id ?? null}
-          initialStartSec={videoToSend?.startSec ?? 0}
-        />
-      ) : null}
+      <SendGuideVideoDialog
+        open={videoToSend !== null}
+        onClose={() => setVideoToSend(null)}
+        target={
+          target.channel === 'app'
+            ? { channel: 'app', conversationId: target.conversationId }
+            : { channel: 'whatsapp', line: target.line, person: target.person }
+        }
+        initialVideoId={videoToSend?.id ?? null}
+        initialStartSec={videoToSend?.startSec ?? 0}
+      />
     </>
   );
 }

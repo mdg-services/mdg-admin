@@ -864,7 +864,7 @@ export function duplicateKindOf(code: string | null, message: string): Duplicate
  * them, so the id is spent. Every other 5xx — a gateway's error page, a crash —
  * is silence about whether the message left.
  */
-const FINAL_SERVER_REFUSALS = new Set(['WHATSAPP_REFUSED', 'WHATSAPP_NOT_CONFIGURED']);
+const FINAL_SERVER_REFUSALS = new Set(['WHATSAPP_REFUSED', 'WHATSAPP_NOT_CONFIGURED', 'VIDEO_STORAGE_FAILED']);
 
 /** Words for a request that failed on the way and may or may not have been acted on. */
 const LOST_ANSWER_WORDS =
