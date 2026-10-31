@@ -16,7 +16,9 @@ import { describe, it } from 'node:test';
 
 import type { GuideVideoAdminItem } from '../shared/src/types/videoLibrary';
 import {
+  allChoices,
   audienceWord,
+  canSendNow,
   chapterChoices,
   clockLabel,
   defaultVideo,
@@ -24,6 +26,7 @@ import {
   isSendable,
   lengthLabel,
   metaLine,
+  searchChoices,
   sendFailureMessage,
   startToSend,
   videoChoices,
@@ -93,7 +96,7 @@ describe('what can be sent into a dealer chat', () => {
   });
 
   it('is empty, not an error, before the library has loaded', () => {
-    assert.deepEqual(videoChoices(undefined), { howTo: [], services: [] });
+    assert.deepEqual(videoChoices(undefined), { howTo: [], services: [], explainers: [] });
     assert.equal(defaultVideo(videoChoices(undefined)), null);
   });
 
@@ -160,5 +163,74 @@ describe('when a send fails', () => {
     assert.equal(sendFailureMessage('VIDEO_NOT_FOR_APP', 'x'), 'That video goes on WhatsApp only, not inside the app.');
     assert.equal(sendFailureMessage('SOMETHING', 'The chat is closed'), 'The chat is closed');
     assert.equal(sendFailureMessage(undefined, undefined), 'Could not send the video');
+  });
+});
+
+describe('the public explainers, search, and what can be sent now', () => {
+  const explainer = (id: string, over: Partial<GuideVideoAdminItem> = {}) =>
+    video(id, { family: 'explainer', ...over });
+
+  it('puts the public explainers on a shelf of their own, after the guides, by title', () => {
+    const lib = [
+      explainer('pk_water_dip', { title: { hi: 'पानी', en: 'The water dip' } }),
+      explainer('pk_dod_clock', { title: { hi: 'घड़ी', en: 'The three-day clock' } }),
+      video('papers'),
+      video('svc_dsr', { service: 'dsr-report' }),
+    ];
+    const c = videoChoices(lib);
+    assert.deepEqual(
+      c.howTo.map((v) => v.id),
+      ['papers'],
+    );
+    assert.deepEqual(
+      c.services.map((v) => v.id),
+      ['svc_dsr'],
+    );
+    assert.deepEqual(
+      c.explainers.map((v) => v.id),
+      ['pk_dod_clock', 'pk_water_dip'],
+    );
+    assert.deepEqual(
+      allChoices(c).map((v) => v.id),
+      ['papers', 'svc_dsr', 'pk_dod_clock', 'pk_water_dip'],
+    );
+    assert.equal(audienceWord(c.explainers[0]!), 'Public explainer');
+  });
+
+  it('can send what the server says it can: an explainer that plays but is not in the bucket cannot be picked', () => {
+    assert.equal(
+      canSendNow(explainer('pk_water_dip', { available: true, sendable: false })),
+      false,
+    );
+    assert.equal(canSendNow(video('papers', { available: true, sendable: true })), true);
+    // An older server says nothing about `sendable`: `available` decides, as before.
+    assert.equal(canSendNow(video('papers', { available: false })), false);
+    const c = videoChoices([
+      explainer('pk_water_dip', { sendable: false }),
+      video('papers', { sendable: true }),
+    ]);
+    assert.equal(defaultVideo(c)?.id, 'papers');
+    assert.match(metaLine(explainer('pk_x', { sendable: false })), /Not uploaded yet/);
+  });
+
+  it('searches every shelf at once, and names the chapter the words are in', () => {
+    const c = videoChoices([
+      video('papers', { title: { hi: 'कागज़', en: 'Your papers' }, aliases: ['licence', 'NOC'] }),
+      explainer('pk_water_dip', {
+        title: { hi: 'पानी का डिप', en: 'The water dip' },
+        chapters: [
+          { startSec: 0, label: { hi: 'शुरू', en: 'Start' }, text: 'शुरू' },
+          { startSec: 9.5, label: { hi: 'पेस्ट', en: 'The paste' }, text: 'पेस्ट' },
+        ],
+      }),
+    ]);
+    assert.deepEqual(
+      searchChoices(c, 'licence').map((h) => h.item.id),
+      ['papers'],
+    );
+    const [hit] = searchChoices(c, 'paste');
+    assert.equal(hit?.item.id, 'pk_water_dip');
+    assert.equal(hit?.chapter?.startSec, 9.5);
+    assert.equal(searchChoices(c, '').length, 2);
   });
 });

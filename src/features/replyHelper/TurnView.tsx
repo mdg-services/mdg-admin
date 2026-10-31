@@ -5,9 +5,10 @@ import { Callout } from '@/components/ui/Callout';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Spinner } from '@/components/ui/Spinner';
 import { askLabel, askedByLabel, isSuggestion, turnWhen } from '@/lib/replyHelper';
-import type { ReplyHelperChannel, ReplyHelperTurn } from '@dk/shared';
+import type { ReplyHelperChannel, ReplyHelperTurn, ReplyHelperVideo } from '@dk/shared';
 
 import { DraftCard } from './DraftCard';
+import { SuggestedVideos } from './SuggestedVideos';
 
 /**
  * One exchange in the helper's thread: what the admin asked, on the right as a
@@ -98,6 +99,7 @@ export function TurnView({
   openChannel,
   busy,
   onUse,
+  onSendVideo,
   onRetry,
 }: {
   turn: ReplyHelperTurn;
@@ -114,6 +116,8 @@ export function TurnView({
   /** A request is running: Retry waits, so it cannot pay for two. */
   busy: boolean;
   onUse: (text: string) => void;
+  /** App chat: open "Send a video" on a suggested video. */
+  onSendVideo?: (video: ReplyHelperVideo) => void;
   onRetry: (instruction: string) => void;
 }) {
   const reply = turn.reply;
@@ -145,6 +149,14 @@ export function TurnView({
               <DraftCard key={d.id} draft={d} index={i} count={reply.drafts.length} onUse={onUse} />
             ))
           )}
+          {reply.videos?.length ? (
+            <SuggestedVideos
+              videos={reply.videos}
+              openChannel={openChannel}
+              onSend={onSendVideo}
+              onAddLink={(link) => onUse(link)}
+            />
+          ) : null}
           {reply.notCovered.length > 0 ? (
             <div className="grid gap-1.5 rounded-lg border border-warning/30 bg-warning-soft/50 p-3 dark:bg-warning/10">
               <p className="flex items-center gap-1.5 text-xs font-semibold text-warning-strong dark:text-amber-300">

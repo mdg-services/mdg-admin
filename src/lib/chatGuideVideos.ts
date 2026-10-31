@@ -1,5 +1,9 @@
 import type { GuideVideoAdminItem } from '@dk/shared';
 
+// By path, not from '@dk/shared': the check script (`tsx --test`) resolves the package to
+// its built copy, which a checkout may not have (`src/lib/onboarding.ts` says the same).
+import { searchVideos, type VideoSearchHit } from '../../shared/src/lib/videoSearch';
+
 /**
  * "Send a video": which of MDG's guide videos an admin can drop into a dealer's
  * chat, in what order, and from which chapter.
@@ -17,13 +21,24 @@ import type { GuideVideoAdminItem } from '@dk/shared';
  *    a send that cannot happen.
  *  - WHAT CAN BE SENT NOW. A video that is not uploaded yet is shown, greyed and
  *    marked, and cannot be picked: seeing that it exists is useful, sending a
- *    broken player is not.
+ *    broken player is not. The server says which (`sendable`).
  *  - FROM WHERE. A chapter is offered only for a start the library knows.
+ *  - WHICH SHELF. The app's how-tos, then one video per service, then the public
+ *    pump-knowledge explainers. A search flattens the shelves into one ranked list
+ *    (`searchVideos`: both languages, romanised Hindi, chapters).
  */
 
 /** A video that may go into a dealer's chat at all. */
 export function isSendable(v: Pick<GuideVideoAdminItem, 'outsideAppOnly' | 'audience'>): boolean {
   return !v.outsideAppOnly && v.audience !== 'admin';
+}
+
+/**
+ * Can it be sent right now: its copy is in the bucket. An older server that does
+ * not say (`sendable` missing) is read by `available`, as before.
+ */
+export function canSendNow(v: Pick<GuideVideoAdminItem, 'sendable' | 'available'>): boolean {
+  return typeof v.sendable === 'boolean' ? v.sendable : v.available;
 }
 
 /**
@@ -44,20 +59,42 @@ export interface VideoChoices {
   howTo: GuideVideoAdminItem[];
   /** One per service: what the service is. */
   services: GuideVideoAdminItem[];
+  /** The public pump-knowledge explainers, by title. */
+  explainers: GuideVideoAdminItem[];
 }
 
-/** The library as the picker lists it: sendable videos only, ordered, split into the two groups. */
+/** The library as the picker lists it: sendable videos only, ordered, split into the three groups. */
 export function videoChoices(library: readonly GuideVideoAdminItem[] | undefined): VideoChoices {
   const list = (library ?? [])
     .filter(isSendable)
     .slice()
     .sort((a, b) => rank(a) - rank(b) || a.title.en.localeCompare(b.title.en));
-  return { howTo: list.filter((v) => v.service === null), services: list.filter((v) => v.service !== null) };
+  const guides = list.filter((v) => v.family !== 'explainer');
+  return {
+    howTo: guides.filter((v) => v.service === null),
+    services: guides.filter((v) => v.service !== null),
+    explainers: list
+      .filter((v) => v.family === 'explainer')
+      .sort((a, b) => a.title.en.localeCompare(b.title.en)),
+  };
+}
+
+/** Every choice, in shelf order. */
+export function allChoices(choices: VideoChoices): GuideVideoAdminItem[] {
+  return [...choices.howTo, ...choices.services, ...choices.explainers];
+}
+
+/** The choices that answer a search, best first, with the chapter the words were found in. */
+export function searchChoices(
+  choices: VideoChoices,
+  query: string,
+): VideoSearchHit<GuideVideoAdminItem>[] {
+  return searchVideos(allChoices(choices), query);
 }
 
 /** The video the picker starts on: the first one that can be sent now. */
 export function defaultVideo(choices: VideoChoices): GuideVideoAdminItem | null {
-  return [...choices.howTo, ...choices.services].find((v) => v.available) ?? null;
+  return allChoices(choices).find(canSendNow) ?? null;
 }
 
 /** `m:ss`, for a length or a chapter's start. */
@@ -73,7 +110,10 @@ export function lengthLabel(durationMs: number | undefined): string {
 }
 
 /** Who a video is for, in a word. */
-export function audienceWord(v: Pick<GuideVideoAdminItem, 'audience'>): string {
+export function audienceWord(
+  v: Pick<GuideVideoAdminItem, 'audience'> & Partial<Pick<GuideVideoAdminItem, 'family'>>,
+): string {
+  if (v.family === 'explainer') return 'Public explainer';
   if (v.audience === 'owner') return 'Owners';
   if (v.audience === 'manager') return 'Managers';
   return 'Owners and managers';
@@ -81,7 +121,9 @@ export function audienceWord(v: Pick<GuideVideoAdminItem, 'audience'>): string {
 
 /** The one line under a title: length, who it is for, and — when it is true — that it is not uploaded yet. */
 export function metaLine(v: GuideVideoAdminItem): string {
-  return [lengthLabel(v.durationMs), audienceWord(v), v.available ? '' : 'Not uploaded yet'].filter(Boolean).join(' · ');
+  return [lengthLabel(v.durationMs), audienceWord(v), canSendNow(v) ? '' : 'Not uploaded yet']
+    .filter(Boolean)
+    .join(' · ');
 }
 
 export interface ChapterChoice {

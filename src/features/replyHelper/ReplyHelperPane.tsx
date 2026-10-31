@@ -20,7 +20,9 @@ import {
 } from '@/lib/replyHelper';
 import { useAuthStore } from '@/store/auth';
 import { REPLY_HELPER_INSTRUCTION_MAX } from '@dk/shared';
-import type { ReplyHelperTarget } from '@dk/shared';
+import type { ReplyHelperTarget, ReplyHelperVideo } from '@dk/shared';
+
+import { SendGuideVideoDialog } from '../chat/SendGuideVideoDialog';
 
 import { ReplyHelperPanel } from './ReplyHelperPanel';
 
@@ -135,6 +137,9 @@ export function ReplyHelperPane({
 }: ReplyHelperPaneProps) {
   const toast = useToast();
   const meId = useAuthStore((s) => s.user?.id ?? s.admin?.id ?? null);
+  // A suggested video the admin chose to send: "Send a video" opens on it, where
+  // they watch it and press Send. App chat only (WhatsApp gets the page link).
+  const [videoToSend, setVideoToSend] = React.useState<ReplyHelperVideo | null>(null);
 
   const key = draftKey(target);
   const draft = React.useSyncExternalStore(
@@ -265,27 +270,39 @@ export function ReplyHelperPane({
   }
 
   return (
-    <ReplyHelperPanel
-      className={className}
-      thread={thread}
-      loading={threadQ.isPending}
-      loadFailed={threadQ.isError}
-      onRetryLoad={() => void threadQ.refetch()}
-      meId={meId}
-      pendingInstruction={pending}
-      askError={askError}
-      instruction={instruction}
-      onInstructionChange={setInstruction}
-      onAsk={submit}
-      onSuggest={() => void suggest()}
-      onRetryTurn={(text) => void (isSuggestion(text) ? suggest() : ask(text))}
-      onUse={useDraft}
-      onLoadEarlier={loadEarlier}
-      loadingEarlier={earlierM.isPending}
-      onPickLogin={pickLogin}
-      pickingLogin={pickM.isPending}
-      openChannel={target.channel}
-      active={active}
-    />
+    <>
+      <ReplyHelperPanel
+        className={className}
+        thread={thread}
+        loading={threadQ.isPending}
+        loadFailed={threadQ.isError}
+        onRetryLoad={() => void threadQ.refetch()}
+        meId={meId}
+        pendingInstruction={pending}
+        askError={askError}
+        instruction={instruction}
+        onInstructionChange={setInstruction}
+        onAsk={submit}
+        onSuggest={() => void suggest()}
+        onRetryTurn={(text) => void (isSuggestion(text) ? suggest() : ask(text))}
+        onUse={useDraft}
+        onSendVideo={target.channel === 'app' ? (v) => setVideoToSend(v) : undefined}
+        onLoadEarlier={loadEarlier}
+        loadingEarlier={earlierM.isPending}
+        onPickLogin={pickLogin}
+        pickingLogin={pickM.isPending}
+        openChannel={target.channel}
+        active={active}
+      />
+      {target.channel === 'app' ? (
+        <SendGuideVideoDialog
+          open={videoToSend !== null}
+          onClose={() => setVideoToSend(null)}
+          conversationId={target.conversationId}
+          initialVideoId={videoToSend?.id ?? null}
+          initialStartSec={videoToSend?.startSec ?? 0}
+        />
+      ) : null}
+    </>
   );
 }

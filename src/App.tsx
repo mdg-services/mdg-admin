@@ -171,6 +171,11 @@ const FilmsPage = React.lazy(
     import('@/pages/FilmsPage').then((m) => ({ default: m.FilmsPage })),
   ),
 );
+const VideoLibraryPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/VideoLibraryPage').then((m) => ({ default: m.VideoLibraryPage })),
+  ),
+);
 const LeadsPage = React.lazy(
   retryImport(() =>
     import('@/pages/leads/LeadsPage').then((m) => ({ default: m.LeadsPage })),
@@ -553,6 +558,17 @@ export default function App() {
             element={
               <LazyPage>
                 <FilmsPage />
+              </LazyPage>
+            }
+          />
+          {/* Every MDG video, searchable: the dealer guides, the public pump
+              explainers and the team's walkthroughs (it replaced the guide
+              website). Every admin, as the API is. Keep in step with navItems.ts. */}
+          <Route
+            path="videos"
+            element={
+              <LazyPage>
+                <VideoLibraryPage />
               </LazyPage>
             }
           />

@@ -189,20 +189,20 @@ describe('resolveRows', () => {
 
   it('shows a video the library does not list at all as not available, rather than hiding it', () => {
     const rows = resolveRows(refsForSurface('admin-dsr-generate'), catalog);
-    assert.equal(rows[0]?.id, 'admin_dsr_receipts');
+    assert.equal(rows[0]?.id, 'admin_hand_entry');
     assert.equal(rows[0]?.available, false);
   });
 
   it('keeps every row tappable with its own title while the library is still loading', () => {
     const rows = resolveRows(refsForSurface('admin-dsr-generate'), undefined);
-    assert.equal(rows[0]?.title, 'Receipts on a Daily Sales Report');
+    assert.equal(rows[0]?.title, 'Adding or correcting a tanker receipt');
     assert.equal(rows[0]?.available, true);
   });
 
   it('a deep link keeps the name of the PART it opens, and its start second', () => {
     const rows = resolveRows(refsForSurface('admin-shift-sheet'), catalog);
-    assert.equal(rows[0]?.title, 'Typing a day in by hand');
-    assert.equal(rows[0]?.at, 81.7);
+    assert.equal(rows[0]?.title, 'Typing a day into the Shift sheet');
+    assert.equal(rows[0]?.at, 39.33);
   });
 
   it('the staff-points set expands from the library by prefix, and is empty before it loads', () => {
@@ -298,12 +298,13 @@ describe(
       ...byTopic.flatMap((t) => [...t.refs]),
     ];
 
-    it('reads the four team videos', () => {
+    it('reads the team videos', () => {
+      // `admin_dsr_receipts` and `admin_manual_shift_data` became `admin_hand_entry` (31 Oct 2026).
       for (const id of [
         'admin_credit_dod',
         'admin_credit_dod_portal',
-        'admin_dsr_receipts',
-        'admin_manual_shift_data',
+        'admin_hand_entry',
+        'admin_onboarding',
       ]) {
         assert.equal(library.get(id)?.audience, 'admin', id);
       }

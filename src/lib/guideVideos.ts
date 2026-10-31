@@ -126,11 +126,17 @@ const CREDIT_DOD: readonly GuideRef[] = [
   video('admin_credit_dod_portal', 'Using it in the admin portal'),
 ];
 
-const DSR: readonly GuideRef[] = [video('admin_dsr_receipts', 'Receipts on a Daily Sales Report')];
-
-const SHIFT_DATA: readonly GuideRef[] = [
-  video('admin_manual_shift_data', 'A day typed in by hand'),
+// One video covers both kinds of hand entry (31 Oct 2026; it replaced the two older
+// walkthroughs). A report screen opens it at the tanker-receipt part.
+const DSR: readonly GuideRef[] = [
+  video('admin_hand_entry', 'Adding or correcting a tanker receipt', {
+    at: 113.29,
+    titleIsPart: true,
+  }),
+  video('admin_hand_entry', 'Typing figures in by hand'),
 ];
+
+const SHIFT_DATA: readonly GuideRef[] = [video('admin_hand_entry', 'Typing figures in by hand')];
 
 /** Running an onboarding, from a registration to a live outlet (the team's walkthrough). */
 const ONBOARDING: readonly GuideRef[] = [video('admin_onboarding', 'Running an onboarding')];
@@ -168,10 +174,13 @@ const BY_SURFACE: Record<string, readonly GuideRef[]> = {
   'admin-dealer-vault-credit-dod': CREDIT_DOD,
   'admin-shift-editor': SHIFT_DATA,
   'admin-shift-data-editor': SHIFT_DATA,
-  // The sheet where the readings are typed: "Three empty tables" is where the
-  // video reaches it. (A chapter start, so the deep link lands on a scene cut.)
+  // The sheet where the readings are typed: "The sheet arrives laid out" is where
+  // the video reaches it. (A chapter start, so the deep link lands on a scene cut.)
   'admin-shift-sheet': [
-    video('admin_manual_shift_data', 'Typing a day in by hand', { at: 81.7, titleIsPart: true }),
+    video('admin_hand_entry', 'Typing a day into the Shift sheet', {
+      at: 39.33,
+      titleIsPart: true,
+    }),
   ],
   'admin-iras-edit-grid': SHIFT_DATA,
   'admin-dsr-report': DSR,
@@ -186,8 +195,11 @@ const BY_SURFACE: Record<string, readonly GuideRef[]> = {
   // The Setup card on a dealer page: the walkthrough from "Ready to start?" on,
   // and the card's own "Do it for the dealer" buttons.
   'admin-dealer-setup': [
-    video('admin_onboarding', 'Starting the services and the watch', { at: 264.42, titleIsPart: true }),
-    video('admin_onboarding', 'Doing a step for the dealer', { at: 194.37, titleIsPart: true }),
+    video('admin_onboarding', 'Starting the services and the watch', {
+      at: 342.05,
+      titleIsPart: true,
+    }),
+    video('admin_onboarding', 'Doing a step for the dealer', { at: 269.75, titleIsPart: true }),
     ...ONBOARDING,
   ],
 };

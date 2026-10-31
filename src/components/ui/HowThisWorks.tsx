@@ -1,5 +1,6 @@
 import { ArrowLeft, ExternalLink, PlayCircle } from 'lucide-react';
 import * as React from 'react';
+import { Link } from 'react-router-dom';
 
 import { useGuideVideoLibrary } from '@/hooks/api/useGuideVideos';
 import { cn } from '@/lib/cn';
@@ -176,11 +177,33 @@ export function HowThisWorks({ surface, label, variant = 'button', className }: 
 
   const body = (() => {
     if (view.kind === 'play') {
-      return <GuideVideoPlayer id={view.id} startSec={view.at} title={view.title} />;
+      const item = library.data?.find((v) => v.id === view.id);
+      return (
+        <GuideVideoPlayer
+          id={view.id}
+          startSec={view.at}
+          title={view.title}
+          shape={item && item.audience !== 'admin' ? 'portrait' : 'landscape'}
+          poster={item?.posterUrl ?? null}
+        />
+      );
     }
     const shown = view.kind === 'library' ? libraryRows(library.data) : rows;
     return (
       <div className="grid gap-2">
+        {view.kind === 'library' ? (
+          <p className="text-sm text-text-muted">
+            To search every video, with pictures and the public explainers, open the{' '}
+            <Link
+              to="/videos"
+              onClick={close}
+              className="font-medium text-brand underline-offset-2 hover:underline"
+            >
+              Video library
+            </Link>
+            .
+          </p>
+        ) : null}
         {library.isError ? (
           <Callout onRetry={() => void library.refetch()}>
             The video list did not load, so lengths and availability are not shown.

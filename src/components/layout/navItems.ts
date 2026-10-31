@@ -18,6 +18,7 @@ import {
   MessageCircle,
   MessageSquare,
   MessageSquareWarning,
+  MonitorPlay,
   PartyPopper,
   PhoneCall,
   Plug,
@@ -86,6 +87,12 @@ export const NAV_ITEMS: NavItem[] = [
   // the open tickets that are New, Waiting or Late (`useNavBadges`) — the Tickets
   // page that sat under it is the first tab now, and `/tickets` redirects here.
   { to: '/inbox', label: 'Inbox', icon: MessageSquare },
+  // Every MDG video, searchable, with pictures: the Hindi guides a dealer gets in
+  // the app, the public pump-knowledge explainers, and the team's walkthroughs of
+  // this portal (31 Oct 2026; it replaced the guide website). Right under Inbox
+  // because it is used while answering a dealer. Every admin. Not in
+  // `BOTTOM_TAB_ROUTES`, so on a phone it is in the More sheet.
+  { to: '/videos', label: 'Video library', icon: MonitorPlay },
   // Everything that needs a person, across every outlet — the list behind
   // every alert pushed to an admin's phone. Second, under Inbox, because the
   // two together are the whole of "what is waiting on me". On a phone it is

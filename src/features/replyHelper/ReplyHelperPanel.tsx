@@ -5,7 +5,12 @@ import { Button } from '@/components/ui/Button';
 import { Callout } from '@/components/ui/Callout';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/lib/cn';
-import type { ReplyHelperChannel, ReplyHelperNotice, ReplyHelperThread } from '@dk/shared';
+import type {
+  ReplyHelperChannel,
+  ReplyHelperNotice,
+  ReplyHelperThread,
+  ReplyHelperVideo,
+} from '@dk/shared';
 
 import { InstructionBox } from './InstructionBox';
 import { LoginPicker } from './LoginPicker';
@@ -55,6 +60,8 @@ export interface ReplyHelperPanelProps {
   onSuggest: () => void;
   onRetryTurn: (instruction: string) => void;
   onUse: (text: string) => void;
+  /** App chat: open "Send a video" on a video the helper suggested. */
+  onSendVideo?: (video: ReplyHelperVideo) => void;
   onLoadEarlier: () => void;
   loadingEarlier: boolean;
   onPickLogin: (userId: string | null) => void;
@@ -80,6 +87,7 @@ export function ReplyHelperPanel({
   onSuggest,
   onRetryTurn,
   onUse,
+  onSendVideo,
   onLoadEarlier,
   loadingEarlier,
   onPickLogin,
@@ -179,6 +187,7 @@ export function ReplyHelperPanel({
                   openChannel={openChannel}
                   busy={busy}
                   onUse={onUse}
+                  onSendVideo={onSendVideo}
                   onRetry={onRetryTurn}
                 />
               ))}

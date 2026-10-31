@@ -18,17 +18,32 @@ import { Skeleton } from './Skeleton';
  * dropped — it asks once more, and after that says so with a button to try again.
  *
  * The video is landscape for the team's walkthroughs and portrait for a dealer's,
- * and is never stretched: the box is 16:9 and the picture sits inside it.
+ * and is never stretched: the box takes the video's shape (16:9, or a phone's 9:16
+ * held to the height of the screen) and the picture sits inside it.
  */
 export function GuideVideoPlayer({
   id,
   startSec,
   title,
+  shape = 'landscape',
+  poster,
+  autoPlay = true,
+  showChapters = true,
+  compact = false,
 }: {
   id: string;
   /** Where to begin, in seconds. 0 for the start. */
   startSec: number;
   title: string;
+  /** The video's shape: the team's walkthroughs are landscape, a dealer's guide is a phone's. */
+  shape?: 'landscape' | 'portrait';
+  /** The picture to show while it loads. */
+  poster?: string | null;
+  autoPlay?: boolean;
+  /** List the chapters under it, to jump between. */
+  showChapters?: boolean;
+  /** In a narrow column: a phone-shaped video takes the column's width, not the screen's height. */
+  compact?: boolean;
 }) {
   const play = useGuideVideoPlay(id, startSec);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
@@ -74,7 +89,14 @@ export function GuideVideoPlayer({
   return (
     <div className="grid gap-3">
       <div
-        className="relative aspect-video w-full overflow-hidden rounded-md bg-black"
+        className={cn(
+          'relative overflow-hidden rounded-md bg-black',
+          shape === 'landscape'
+            ? 'aspect-video w-full'
+            : compact
+              ? 'aspect-[9/16] w-full'
+              : 'mx-auto aspect-[9/16] h-[min(62vh,560px)] max-w-full',
+        )}
         data-testid="guide-video-box"
       >
         {src && !failed ? (
@@ -84,7 +106,8 @@ export function GuideVideoPlayer({
             src={src}
             data-testid="guide-video"
             controls
-            autoPlay
+            autoPlay={autoPlay}
+            poster={poster ?? undefined}
             playsInline
             preload="metadata"
             disablePictureInPicture
@@ -109,7 +132,7 @@ export function GuideVideoPlayer({
         ) : null}
       </div>
 
-      {chapters.length > 1 ? (
+      {showChapters && chapters.length > 1 ? (
         <div>
           <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-subtle">
             In this video
