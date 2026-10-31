@@ -3,8 +3,6 @@ import {
   Copy,
   Info,
   MailOpen,
-  PanelRightClose,
-  PanelRightOpen,
   Pencil,
   Phone,
   Pin,
@@ -68,7 +66,10 @@ export interface ChatHeaderProps {
  *
  * Built from the app's own tokens, laid out as WhatsApp's header is — back
  * arrow, picture, name over a line of status, then icons — and the whole
- * name block is the button that opens the contact panel, as it is there.
+ * name block is the button that opens the contact panel, as it is there. So
+ * there is no separate contact-info icon: the Reply helper button took its
+ * place, and the name keeps the room it had (the chat menu offers Contact info
+ * too, for anyone who looks there).
  *
  * The number the chat is on is shown in that number's colours: as a chip beside
  * the status between md and lg; on a phone — where the name block has room for
@@ -110,6 +111,8 @@ export function ChatHeader({
         type="button"
         onClick={onToggleDetails}
         aria-label={chat ? `${chatTitle(chat)}, contact info` : 'Contact info'}
+        aria-pressed={panelIsColumn ? detailsOpen : undefined}
+        title="Contact info"
         className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-md px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring lg:pl-2"
       >
         {chat ? (
@@ -186,24 +189,11 @@ export function ChatHeader({
         </button>
       ) : null}
 
-      <IconButton
-        aria-label={panelIsColumn ? (detailsOpen ? 'Hide contact info' : 'Show contact info') : 'Contact info'}
-        title="Contact info"
-        aria-pressed={panelIsColumn ? detailsOpen : undefined}
-        onClick={onToggleDetails}
-      >
-        {panelIsColumn ? (
-          detailsOpen ? (
-            <PanelRightClose width={18} height={18} strokeWidth={1.75} />
-          ) : (
-            <PanelRightOpen width={18} height={18} strokeWidth={1.75} />
-          )
-        ) : (
-          <Info width={18} height={18} strokeWidth={1.75} />
-        )}
-      </IconButton>
-
       <Menu label="Chat actions" title="Chat">
+        <MenuItem icon={<Info width={15} height={15} strokeWidth={1.75} />} onSelect={onToggleDetails}>
+          {panelIsColumn && detailsOpen ? 'Hide contact info' : 'Contact info'}
+        </MenuItem>
+        <MenuSeparator />
         <MenuItem icon={<MailOpen width={15} height={15} strokeWidth={1.75} />} onSelect={onMarkUnread} disabled={!chat}>
           Mark as unread
         </MenuItem>

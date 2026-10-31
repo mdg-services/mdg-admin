@@ -17,7 +17,7 @@ import {
 } from '@dk/shared';
 
 import { currentInsertSeq, useComposerInsert, useComposerPresence } from './composerInsert';
-import { getDraft, setDraft } from './drafts';
+import { getDraft, isHelperDraft, markHelperDraft, setDraft } from './drafts';
 import {
   composerPlaceholder,
   composerRouteLine,
@@ -62,6 +62,13 @@ export interface ReplyComposerProps {
   onSuggest?: () => void;
   /** A suggestion is being written (spinner on the button). */
   suggesting?: boolean;
+}
+
+/** Height to fit what the box holds (or its hint, when empty), up to a few lines. */
+function fitBox(ta: HTMLTextAreaElement, isMd: boolean): void {
+  ta.style.height = 'auto';
+  const maxRows = isMd ? MAX_ROWS_MD : MAX_ROWS_PHONE;
+  ta.style.height = `${Math.min(ta.scrollHeight, LINE_HEIGHT * maxRows + BOX_PADDING)}px`;
 }
 
 /**
@@ -110,8 +117,9 @@ export function ReplyComposer({
   suggesting = false,
 }: ReplyComposerProps) {
   const [value, setValue] = React.useState(() => getDraft(line, person));
-  // A helper draft is in the box: its tag shows until it is sent or the box is emptied.
-  const [fromHelper, setFromHelper] = React.useState(false);
+  // A helper draft is in the box: its tag shows until it is sent or the box is
+  // emptied, and comes back with the draft when the chat is opened again.
+  const [fromHelper, setFromHelper] = React.useState(() => isHelperDraft(line, person));
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [pickerIndex, setPickerIndex] = React.useState(0);
   // Escape closes the picker; it stays closed until the box no longer starts with a slash.
@@ -175,12 +183,22 @@ export function ReplyComposer({
 
   // ── the box grows with what is typed, up to a few lines ──
   React.useEffect(() => {
-    const ta = taRef.current;
-    if (!ta) return;
-    ta.style.height = 'auto';
-    const maxRows = isMd ? MAX_ROWS_MD : MAX_ROWS_PHONE;
-    ta.style.height = `${Math.min(ta.scrollHeight, LINE_HEIGHT * maxRows + BOX_PADDING)}px`;
+    if (taRef.current) fitBox(taRef.current, isMd);
   }, [value, isMd]);
+  // …and when it gets narrower (the side panel opening beside the chat), or an
+  // empty box's hint wraps onto a line it has no room for, and is cut in half.
+  React.useEffect(() => {
+    const ta = taRef.current;
+    if (!ta || typeof ResizeObserver === 'undefined') return;
+    let width = ta.offsetWidth;
+    const ro = new ResizeObserver(() => {
+      if (ta.offsetWidth === width) return;
+      width = ta.offsetWidth;
+      fitBox(ta, isMd);
+    });
+    ro.observe(ta);
+    return () => ro.disconnect();
+  }, [isMd]);
 
   // Straight into the box on a desk. Not on a phone: the keyboard would cover the chat that was just opened.
   React.useEffect(() => {
@@ -524,7 +542,10 @@ export function ReplyComposer({
           <button
             type="button"
             onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setFromHelper(false)}
+            onClick={() => {
+              setFromHelper(false);
+              markHelperDraft(line, person, false);
+            }}
             aria-label="Hide this note"
             className="tap-target -my-1 shrink-0 rounded-sm p-1 text-assist-strong hover:bg-assist-line"
           >
@@ -579,11 +600,13 @@ export function ReplyComposer({
           <button
             type="button"
             onMouseDown={(e) => e.preventDefault()}
-            onClick={onSuggest}
-            disabled={suggesting}
+            // aria-disabled, not disabled: a disabled button drops the keyboard's
+            // focus to the page while the helper writes.
+            onClick={suggesting ? undefined : onSuggest}
+            aria-disabled={suggesting || undefined}
             aria-label="Suggest reply — the helper drafts one, nothing is sent"
             title="Suggest reply — the helper drafts one; nothing is sent"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-assist-line bg-assist-soft text-assist transition-colors hover:bg-assist-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-60"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-assist-line bg-assist-soft text-assist transition-colors hover:bg-assist-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring aria-disabled:opacity-60"
           >
             {suggesting ? <Spinner size={16} /> : <Wand2 width={19} height={19} strokeWidth={1.75} aria-hidden />}
           </button>

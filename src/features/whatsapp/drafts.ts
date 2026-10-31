@@ -22,7 +22,8 @@ import { chatKeyOf } from './format';
 const KEY = 'dk.whatsapp.drafts';
 const MAX_DRAFTS = 40;
 
-type Drafts = Record<string, { text: string; at: number }>;
+/** `helper`: the Reply helper wrote (some of) it, so the box keeps saying so. */
+type Drafts = Record<string, { text: string; at: number; helper?: boolean }>;
 
 let cache: Drafts | null = null;
 let timer: number | null = null;
@@ -77,6 +78,24 @@ export function setDraft(line: WhatsAppLine, person: string, text: string): void
   const drafts = load();
   const key = chatKeyOf(line, person);
   if (text.length === 0) delete drafts[key];
-  else drafts[key] = { text, at: Date.now() };
+  else drafts[key] = { text, at: Date.now(), ...(drafts[key]?.helper ? { helper: true } : {}) };
+  schedulePersist();
+}
+
+/**
+ * Whether the saved draft holds a Reply helper draft. Kept with the draft, not
+ * in the box, so the box's "Draft from the Reply helper" note is still there
+ * after the admin leaves the chat and comes back, or reloads. It goes with the
+ * draft: emptied or sent, the flag is gone.
+ */
+export function isHelperDraft(line: WhatsAppLine, person: string): boolean {
+  return load()[chatKeyOf(line, person)]?.helper === true;
+}
+
+export function markHelperDraft(line: WhatsAppLine, person: string, helper: boolean): void {
+  const entry = load()[chatKeyOf(line, person)];
+  if (!entry) return;
+  if (helper) entry.helper = true;
+  else delete entry.helper;
   schedulePersist();
 }

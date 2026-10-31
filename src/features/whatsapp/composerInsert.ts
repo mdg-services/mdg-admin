@@ -35,7 +35,7 @@ import * as React from 'react';
 import { appendToBox } from '@/lib/replyHelper';
 import type { WhatsAppLine } from '@dk/shared';
 
-import { getDraft, setDraft } from './drafts';
+import { getDraft, markHelperDraft, setDraft } from './drafts';
 import { chatKeyOf } from './format';
 
 export interface ComposerInsertRequest {
@@ -75,6 +75,7 @@ export function insertIntoComposer(line: WhatsAppLine, person: string, text: str
   const add = text.trim();
   if (!add) return mounted.has(key) ? 'box' : 'saved';
   setDraft(line, person, appendToBox(getDraft(line, person), add));
+  markHelperDraft(line, person, true);
   byChat.set(key, { seq: (byChat.get(key)?.seq ?? 0) + 1, text: add });
   emit();
   return mounted.has(key) ? 'box' : 'saved';

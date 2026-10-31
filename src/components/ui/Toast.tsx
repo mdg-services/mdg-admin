@@ -111,8 +111,9 @@ function ToastViewport({
     // never clamped it, so the card's left edge sat at −16px and the intent
     // icon was off-screen. Every desktop value is restored at md, where only
     // the inbox reply boxes publish `--bottom-bar-h` (their Send is the
-    // corner this sits in), so everywhere else it is the plain `bottom-4`.
-    <div className="toast-viewport pointer-events-none fixed inset-x-3 bottom-[calc(var(--tab-bar-h,0px)+var(--bottom-bar-h,0px)+max(env(safe-area-inset-bottom),0.5rem)+0.5rem)] z-[var(--z-toast)] flex flex-col gap-2 md:inset-x-auto md:right-4 md:bottom-[calc(var(--bottom-bar-h,0px)+1rem)] md:w-full md:max-w-sm">
+    // corner this sits in) and `--bottom-bar-right` (a side panel to their
+    // right), so everywhere else it is the plain `bottom-4 right-4`.
+    <div className="toast-viewport pointer-events-none fixed inset-x-3 bottom-[calc(var(--tab-bar-h,0px)+var(--bottom-bar-h,0px)+max(env(safe-area-inset-bottom),0.5rem)+0.5rem)] z-[var(--z-toast)] flex flex-col gap-2 md:inset-x-auto md:right-[calc(var(--bottom-bar-right,0px)+1rem)] md:bottom-[calc(var(--bottom-bar-h,0px)+1rem)] md:w-full md:max-w-sm">
       {toasts.map((t) => (
         <div
           key={t.id}
