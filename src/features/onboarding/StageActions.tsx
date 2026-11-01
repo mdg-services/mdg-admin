@@ -40,6 +40,10 @@ export function StageActions({
   layout = 'wrap',
   className,
   onGoToTab,
+  compact = false,
+  alsoShow = [],
+  callFirst = false,
+  withoutPrimary = false,
 }: {
   outlet: OutletSetupAdmin;
   /**
@@ -54,6 +58,24 @@ export function StageActions({
    * Team and Services tabs. Left out on the Onboarding page, where they are links.
    */
   onGoToTab?: (tab: DealerTabId) => void;
+  /**
+   * The Dealers page's Onboarding view: only the stage's primary button (plus
+   * `alsoShow`) and Log call; Do it for the dealer only on a row that has no
+   * primary button (the dealer's move). The rest stay on the outlet's Setup card
+   * and the Onboarding page, so a list of twenty rows is not a wall of buttons.
+   * The forms behind every button stay mounted the same way.
+   */
+  compact?: boolean;
+  /** In `compact`, the other buttons this row's next step needs (Extend at the end of a watch, Close after "not interested"). */
+  alsoShow?: readonly MainActionId[];
+  /** The row's next step is a call: Log call comes first, as the blue button. */
+  callFirst?: boolean;
+  /**
+   * In `compact`, leave the stage's primary button out: the row's next step is done
+   * somewhere else (held messages are checked on the Onboarding page, and "End
+   * watch" beside them would invite ending the watch with messages unread).
+   */
+  withoutPrimary?: boolean;
 }) {
   const toast = useToast();
   const [open, setOpen] = React.useState<MainActionId | null>(null);
@@ -64,7 +86,9 @@ export function StageActions({
   const watch = useChangeWatch();
   const resumeBilling = useResumeBilling();
 
-  const specs = stageActions(outlet);
+  const specs = stageActions(outlet).filter(
+    (a) => !compact || (a.primary && !withoutPrimary) || alsoShow.includes(a.id),
+  );
   const dismiss = () => setOpen(null);
   const label = dealerCodeLabel(outlet.code);
 
@@ -91,6 +115,18 @@ export function StageActions({
 
   if (specs.length === 0 && !canLogCall) return null;
 
+  const logCall = canLogCall ? (
+    <Button
+      key="log-call"
+      size="sm"
+      variant={callFirst ? 'primary' : 'ghost'}
+      onClick={() => setCalling(true)}
+    >
+      Log call…
+    </Button>
+  ) : null;
+  const showDoIt = !compact || !specs.some((a) => a.primary);
+
   return (
     <div className={cn('grid gap-2.5', className)}>
       {specs.length > 0 || canLogCall ? (
@@ -99,26 +135,25 @@ export function StageActions({
           align="start"
           className={layout === 'stack' ? 'flex-col !items-stretch' : undefined}
         >
+          {callFirst ? logCall : null}
           {specs.map((a) => (
             <Button
               key={a.id}
               size="sm"
-              variant={a.primary ? 'primary' : a.id === 'close' ? 'ghost' : 'secondary'}
+              variant={
+                a.primary && !callFirst ? 'primary' : a.id === 'close' ? 'ghost' : 'secondary'
+              }
               onClick={() => setOpen(a.id)}
             >
               {a.label}
             </Button>
           ))}
-          {canLogCall ? (
-            <Button size="sm" variant="ghost" onClick={() => setCalling(true)}>
-              Log call…
-            </Button>
-          ) : null}
+          {callFirst ? null : logCall}
         </ActionRow>
       ) : null}
 
       {/* ── do it for the dealer ── the dealer's own step for the open stage */}
-      <DoItForDealer outlet={outlet} layout={layout} onGoToTab={onGoToTab} />
+      {showDoIt ? <DoItForDealer outlet={outlet} layout={layout} onGoToTab={onGoToTab} /> : null}
 
       <LogCallDialog
         target={

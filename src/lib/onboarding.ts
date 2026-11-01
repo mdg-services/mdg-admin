@@ -29,6 +29,7 @@ import type {
   SetupMilestones,
   SetupPaymentMode,
   SetupPortalNotNeeded,
+  SetupReminderState,
   SetupSource,
   SetupStage,
   SetupWaitingOn,
@@ -844,11 +845,14 @@ export function mdgTurnCount(rows: readonly OnboardingBoardRow[]): number {
  */
 export type RawOutletSetup = Omit<
   OutletSetupAdmin,
-  'doneBy' | 'portalsNotNeeded' | 'welcome' | 'company' | 'origin' | 'lastSignIn'
+  'doneBy' | 'portalsNotNeeded' | 'welcome' | 'company' | 'origin' | 'lastSignIn' | 'reminders'
 > &
   Partial<
     Pick<OutletSetupAdmin, 'doneBy' | 'portalsNotNeeded' | 'welcome' | 'company' | 'origin' | 'lastSignIn'>
-  >;
+  > & {
+    /** `callDueAt` is absent from a server older than 2 Nov 2026. */
+    reminders: Omit<SetupReminderState, 'callDueAt'> & Partial<Pick<SetupReminderState, 'callDueAt'>>;
+  };
 
 /**
  * The setup with the fields an older server leaves out filled in as "nothing
@@ -869,7 +873,12 @@ export function readSetup(raw: RawOutletSetup): OutletSetupAdmin {
     // A server older than 30 Oct 2026 says nothing about where they signed up or what they use.
     origin: raw.origin ?? null,
     lastSignIn: raw.lastSignIn ?? null,
-  };
+    // One older than 2 Nov 2026 does not say when the call falls due: the Dealers page then names no day.
+    // Guarded, so a partial body (a check's fixture) passes through rather than throwing.
+    ...(raw.reminders
+      ? { reminders: { ...raw.reminders, callDueAt: raw.reminders.callDueAt ?? null } }
+      : {}),
+  } as OutletSetupAdmin;
 }
 
 type RawBoardRow =

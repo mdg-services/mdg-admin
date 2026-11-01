@@ -1,4 +1,4 @@
-import { AlertCircle, Building2, Plus, Search } from 'lucide-react';
+import { AlertCircle, Building2, Plus, Search, Star } from 'lucide-react';
 import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -14,6 +14,7 @@ import {
   Input,
   MobileCardList,
   Pagination,
+  SegmentedControl,
   Select,
   Skeleton,
   Table,
@@ -29,10 +30,19 @@ import {
   useDealerServiceSummaryQuery,
   useDealersQuery,
 } from '@/hooks/api/useDealers';
+import { useOnboardingBoardQuery } from '@/hooks/api/useOnboarding';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import {
+  DEALERS_VIEW_STORAGE_KEY,
+  parseDealersView,
+  rosterMatches,
+  rosterRows,
+  type DealersView,
+  type RosterRow,
+} from '@/lib/onboardingNext';
 import {
   dealerCodeLabel,
   ROSTER_SERVICES,
@@ -41,6 +51,7 @@ import {
 } from '@dk/shared';
 
 import { DealerCreateDrawer } from './dealers/DealerCreateDrawer';
+import { OnboardingRoster } from './dealers/OnboardingRoster';
 import {
   ServiceStateChip,
   serviceStateTitle,
@@ -54,6 +65,15 @@ const STATUS_OPTIONS: Array<{ value: '' | DealerStatus; label: string }> = [
 ];
 
 const PAGE_SIZE = 20;
+
+/** The view this browser opens first: the one a person chose, else Services. */
+function readDefaultView(): DealersView {
+  try {
+    return parseDealersView(window.localStorage.getItem(DEALERS_VIEW_STORAGE_KEY)) ?? 'services';
+  } catch {
+    return 'services';
+  }
+}
 
 export function DealersPage() {
   const navigate = useNavigate();
@@ -69,6 +89,55 @@ export function DealersPage() {
   // Held in the URL rather than component state because the list is
   // server-paginated: the flag has to reach the query, not filter the page.
   const showArchived = isSuperAdmin && search.get('archived') === '1';
+
+  // ── the view ── Services (what each outlet's services did today) or Onboarding
+  // (who is still being set up, and what to do next). In the URL once chosen, so
+  // Back and a shared link land on the same one; without it, the person's default.
+  // The default is kept in this browser, as the sidebar order is.
+  const [defaultView, setDefaultView] = React.useState<DealersView>(readDefaultView);
+  const view = parseDealersView(search.get('view')) ?? defaultView;
+
+  // The onboarding board feeds the Onboarding view, the count on its switch and the
+  // "Setting up" tag on the Services rows, so it is read whichever view is open.
+  const board = useOnboardingBoardQuery('open');
+  // "Call on Wed" turns into "Call now" by the clock alone: re-read it every minute.
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(t);
+  }, []);
+  const roster = React.useMemo(() => rosterRows(board.data?.rows ?? [], now), [board.data, now]);
+  const rosterShown = React.useMemo(
+    () => roster.filter((r) => rosterMatches(r.row, searchTerm)),
+    [roster, searchTerm],
+  );
+  const toDoCount = roster.filter((r) => r.next.urgency === 'now').length;
+  const settingUp = React.useMemo(() => {
+    const map = new Map<string, RosterRow>();
+    for (const r of roster) if (r.row.kind === 'outlet') map.set(r.row.outlet.dealerId, r);
+    return map;
+  }, [roster]);
+
+  function setView(next: DealersView) {
+    const params = new URLSearchParams(search);
+    params.set('view', next);
+    params.delete('page');
+    setSearch(params, { replace: true });
+  }
+
+  function makeDefault(next: DealersView) {
+    setDefaultView(next);
+    try {
+      window.localStorage.setItem(DEALERS_VIEW_STORAGE_KEY, next);
+    } catch {
+      // Not remembered: the choice holds until the page is closed.
+    }
+    toast.success(
+      next === 'onboarding'
+        ? 'Dealers now opens on Onboarding for you, in this browser.'
+        : 'Dealers now opens on Services for you, in this browser.',
+    );
+  }
 
   const [searchInput, setSearchInput] = React.useState(searchTerm);
 
@@ -159,6 +228,38 @@ export function DealersPage() {
         }
       />
 
+      {/* ── the view ── which columns the list carries, and which one opens first. */}
+      <div className="mb-3 flex flex-col gap-2 md:mb-4 md:flex-row md:items-center md:justify-between">
+        <SegmentedControl<DealersView>
+          aria-label="What the list shows"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'services', label: 'Services' },
+            {
+              value: 'onboarding',
+              label: toDoCount > 0 ? `Onboarding · ${toDoCount} to do` : 'Onboarding',
+            },
+          ]}
+        />
+        {view === defaultView ? (
+          <span className="flex items-center gap-1.5 text-xs text-text-subtle">
+            <Star width={14} height={14} strokeWidth={1.75} className="fill-current" aria-hidden />
+            Opens first for you
+          </span>
+        ) : (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="self-start md:self-auto"
+            leftIcon={<Star width={14} height={14} strokeWidth={1.75} aria-hidden />}
+            onClick={() => makeDefault(view)}
+          >
+            Open this view first
+          </Button>
+        )}
+      </div>
+
       <Card className="mb-3 md:mb-4">
         <CardContent className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
           <div className="relative flex-1">
@@ -180,9 +281,13 @@ export function DealersPage() {
               type="search"
               aria-label="Search dealers"
               placeholder={
-                isMd
-                  ? 'Search by name, phone, code, GST, PAN'
-                  : 'Name, phone, code, GST, PAN'
+                view === 'onboarding'
+                  ? isMd
+                    ? 'Search by code, owner, phone, SAP code'
+                    : 'Code, owner, phone, SAP code'
+                  : isMd
+                    ? 'Search by name, phone, code, GST, PAN'
+                    : 'Name, phone, code, GST, PAN'
               }
               className="pl-9"
               value={searchInput}
@@ -194,28 +299,33 @@ export function DealersPage() {
               a 740px screen before the first dealer. `md:contents` dissolves
               this wrapper at md, so the desktop filter row is the same flat run
               of three items it has always been. */}
-          <div className="flex items-center gap-3 md:contents">
-            <div className="min-w-0 flex-1 md:w-56 md:flex-none">
-              <Select
-                value={status ?? ''}
-                onChange={(e) => setStatus(e.target.value as DealerStatus | '')}
-              >
-                {STATUS_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
+          {/* The status and deleted filters narrow the server's paged list; the
+              Onboarding view is every outlet still being set up, so they would
+              do nothing there. */}
+          {view === 'services' ? (
+            <div className="flex items-center gap-3 md:contents">
+              <div className="min-w-0 flex-1 md:w-56 md:flex-none">
+                <Select
+                  value={status ?? ''}
+                  onChange={(e) => setStatus(e.target.value as DealerStatus | '')}
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              {isSuperAdmin ? (
+                <Checkbox
+                  label="Show deleted"
+                  labelClassName="shrink-0 text-text-muted"
+                  checked={showArchived}
+                  onChange={(e) => setShowArchived(e.target.checked)}
+                />
+              ) : null}
             </div>
-            {isSuperAdmin ? (
-              <Checkbox
-                label="Show deleted"
-                labelClassName="shrink-0 text-text-muted"
-                checked={showArchived}
-                onChange={(e) => setShowArchived(e.target.checked)}
-              />
-            ) : null}
-          </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -226,7 +336,16 @@ export function DealersPage() {
             stylesheet order — which is how the dealer code ended up 59px from
             the left of a 360px screen. */}
         <CardContent padding="none" className="md:p-4">
-          {isLoading ? (
+          {view === 'onboarding' ? (
+            <OnboardingRoster
+              rows={rosterShown}
+              now={now}
+              loading={board.isPending}
+              failed={board.isError && !board.data}
+              onRetry={() => void board.refetch()}
+              filtered={searchTerm.trim().length > 0}
+            />
+          ) : isLoading ? (
             <ListSkeleton />
           ) : isError ? (
             <EmptyState
@@ -275,7 +394,9 @@ export function DealersPage() {
                             <Badge intent="danger" className="ml-2">
                               Deleted
                             </Badge>
-                          ) : null}
+                          ) : (
+                            <SettingUpBadge item={settingUp.get(d.id)} className="ml-2" />
+                          )}
                         </TD>
                         {ROSTER_SERVICES.map((spec) => {
                           const entry = servicesByDealer
@@ -336,7 +457,9 @@ export function DealersPage() {
                     ),
                     primaryRight: d.archivedAt ? (
                       <Badge intent="danger">Deleted</Badge>
-                    ) : null,
+                    ) : (
+                      <SettingUpBadge item={settingUp.get(d.id)} />
+                    ),
                     // The roster's whole question is "was this done today", and
                     // on a phone the answer used to exist only in the `title` of
                     // a span nested inside the card's own <button> — a tooltip
@@ -411,6 +534,25 @@ export function DealersPage() {
         }}
       />
     </div>
+  );
+}
+
+/**
+ * "Setting up" beside the code of an outlet that is still being onboarded, so a
+ * row of dashes on the Services view says why: its services have not started.
+ * Amber when the next move is MDG's; the tooltip says what it is.
+ */
+function SettingUpBadge({ item, className }: { item: RosterRow | undefined; className?: string }) {
+  if (!item) return null;
+  const { next } = item;
+  return (
+    <Badge
+      intent={next.urgency === 'now' ? 'warning' : 'info'}
+      className={cn('font-sans', className)}
+      title={next.urgency === 'now' ? `To do: ${next.title}` : next.title}
+    >
+      {next.urgency === 'now' ? 'Setting up · to do' : 'Setting up'}
+    </Badge>
   );
 }
 
