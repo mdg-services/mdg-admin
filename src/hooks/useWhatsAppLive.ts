@@ -33,10 +33,14 @@ const TOAST_MS = 8000;
 /**
  * At most one refresh this often. A campaign makes a stream of delivery
  * statuses, one per recipient, and each used to refetch the lists in every open
- * tab. The first event of a quiet spell refreshes at once (a new message shows
- * straight away); the rest of a burst is gathered into one refresh at the end.
+ * tab. The first event of a quiet spell refreshes at once; the rest of a burst is
+ * gathered into one refresh at the end. It was 2.5 s until 1 Nov 2026, when a
+ * send with three tabs open had the server group every message about 75 times a
+ * minute and the database fell behind.
  */
-const REFRESH_THROTTLE_MS = 2500;
+const REFRESH_THROTTLE_MS = 15_000;
+/** Somebody wrote: the lists move this soon at the latest, even in the middle of a campaign. */
+const MESSAGE_REFRESH_MS = 2500;
 
 /**
  * The WhatsApp inbox, alive on every screen — mounted once, in the app shell,
@@ -110,23 +114,41 @@ export function useWhatsAppLive(): void {
     // gathered until the refresh runs, which then happens once for all of them.
     const persons = new Set<string>();
     let timer: number | null = null;
+    let dueAt = 0;
     let lastRun = 0;
     const flush = () => {
+      if (timer !== null) window.clearTimeout(timer);
       timer = null;
       lastRun = Date.now();
       const changed = new Set(persons);
       persons.clear();
       refreshWhatsAppLive(qc, changed, openChat.current);
     };
+    // No sooner than `gap` after the last refresh: at once if that has passed,
+    // else when it does — unless one is already due sooner.
+    const schedule = (gap: number) => {
+      const now = Date.now();
+      const at = lastRun + gap;
+      if (at <= now) {
+        flush();
+        return;
+      }
+      if (timer !== null) {
+        if (dueAt <= at) return;
+        window.clearTimeout(timer);
+      }
+      dueAt = at;
+      timer = window.setTimeout(flush, at - now);
+    };
     const onChanged = (e: WhatsAppChangedEvent) => {
       e.persons.forEach((p) => persons.add(p));
-      if (timer !== null) return;
-      const wait = lastRun + REFRESH_THROTTLE_MS - Date.now();
-      if (wait <= 0) flush();
-      else timer = window.setTimeout(flush, wait);
+      schedule(REFRESH_THROTTLE_MS);
     };
 
     const onIncoming = (e: WhatsAppIncomingEvent) => {
+      // A message, not a tick: the lists (and the chat, if it is the one open) catch up soon.
+      persons.add(e.person);
+      schedule(MESSAGE_REFRESH_MS);
       const visible = document.visibilityState === 'visible';
       // Looking at that very chat on that very number: the message is on
       // screen and is being read. The same person on the other number is not it.

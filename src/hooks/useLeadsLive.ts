@@ -11,9 +11,10 @@ import { leadsRoot } from './api/useLeads';
  * per recipient and each used to mean a refetch of every Leads query that was
  * open; the lists move slowly (the server works the clock out every two
  * minutes), so the first event of a quiet spell refreshes at once and the rest
- * of a burst is gathered into one refresh at the end.
+ * of a burst is gathered into one refresh at the end. 15 s, like the WhatsApp
+ * inbox's, since the send of 1 Nov 2026 (it was 5 s).
  */
-const REFRESH_THROTTLE_MS = 5000;
+const REFRESH_THROTTLE_MS = 15_000;
 
 /**
  * Keep the Leads page, the lead drawer, the nav badge and the WhatsApp inbox's
@@ -49,7 +50,8 @@ export function useLeadsLive(): void {
     const run = () => {
       timer = null;
       lastRun = Date.now();
-      void qc.invalidateQueries({ queryKey: leadsRoot });
+      // A request still on its way finishes rather than being thrown away and asked again.
+      void qc.invalidateQueries({ queryKey: leadsRoot }, { cancelRefetch: false });
     };
     const onChanged = () => {
       if (timer !== null) return;

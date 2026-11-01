@@ -111,13 +111,19 @@ export function refreshWhatsApp(qc: QueryClient, persons: readonly string[] = []
  * it is fetched, which is also what lets an opened chat know that its copy of
  * the thread is old (`openDataSettled`). A campaign sends a status for every
  * recipient: this keeps that from being a request per recipient.
+ *
+ * A request still on its way is left to finish (`cancelRefetch: false`). By
+ * default a refresh throws it away and asks again, so once the server took
+ * longer than the gap between refreshes nothing ever came back, and the server
+ * did every abandoned request's work all the same (1 Nov 2026).
  */
 export function refreshWhatsAppLive(qc: QueryClient, changed: ReadonlySet<string>, open: string | null): void {
-  void qc.invalidateQueries({ queryKey: whatsAppKeys.chats });
-  void qc.invalidateQueries({ queryKey: whatsAppKeys.summary });
+  const letFinish = { cancelRefetch: false } as const;
+  void qc.invalidateQueries({ queryKey: whatsAppKeys.chats }, letFinish);
+  void qc.invalidateQueries({ queryKey: whatsAppKeys.summary }, letFinish);
   if (open && changed.has(open)) {
-    void qc.invalidateQueries(ofPerson('chat', open));
-    void qc.invalidateQueries(ofPerson('messages', open));
+    void qc.invalidateQueries(ofPerson('chat', open), letFinish);
+    void qc.invalidateQueries(ofPerson('messages', open), letFinish);
   }
   if (changed.size === 0) return;
   void qc.invalidateQueries({
