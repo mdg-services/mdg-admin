@@ -630,6 +630,25 @@ export function trackPosition(row: OnboardingBoardRow): { step: number; of: numb
   return { step: i === -1 ? of : i + 1, of };
 }
 
+// ── Their WhatsApp chat ─────────────────────────────────────────────────────
+
+/**
+ * Our WhatsApp inbox at this person's chat, or null for a number WhatsApp could
+ * not have (the server's `toWaId` rule: an Indian mobile, ten digits starting 6–9,
+ * behind an optional 0 / 00 / +91).
+ *
+ * No `line=`, on purpose: the inbox then opens the one of our two numbers they
+ * have the most unread on, else their newest chat there, else the inbox the admin
+ * was last in (`useInboxLine`). An owner being set up may have written to either.
+ */
+export function inboxChatHref(mobile: string | null | undefined): string | null {
+  if (!mobile) return null;
+  let digits = mobile.replace(/\D/g, '').replace(/^0+/, '');
+  if (digits.length === 13 && digits.startsWith('910')) digits = `91${digits.slice(3)}`;
+  if (digits.length === 10) digits = `91${digits}`;
+  return /^91[6-9]\d{9}$/.test(digits) ? `/whatsapp?chat=${digits}` : null;
+}
+
 // ── The view a person opens first ───────────────────────────────────────────
 
 export type DealersView = 'services' | 'onboarding';

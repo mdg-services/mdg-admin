@@ -1,4 +1,4 @@
-import { CheckCircle2, ClipboardList, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, ClipboardList, MessageCircle, TriangleAlert } from 'lucide-react';
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -17,6 +17,7 @@ import {
   type RegistrationRow,
 } from '@/lib/onboarding';
 import {
+  inboxChatHref,
   rosterCounts,
   trackOf,
   trackPosition,
@@ -253,6 +254,7 @@ function OutletCell({ row }: { row: OnboardingBoardRow }) {
         <div className="mt-0.5">
           <ContactLinks mobile={row.mobile} />
         </div>
+        <ChatLink mobile={row.mobile} />
       </div>
     );
   }
@@ -275,7 +277,29 @@ function OutletCell({ row }: { row: OnboardingBoardRow }) {
           <ContactLinks mobile={o.mobile} />
         </div>
       ) : null}
+      <ChatLink mobile={o.mobile} />
     </div>
+  );
+}
+
+/**
+ * "WhatsApp chat": our inbox, open at this person's chat — the one of our two
+ * numbers they last wrote on or have unread on (`inboxChatHref`). Drawn as a
+ * small button, not a plain link: it is the other way to reach them beside the
+ * phone, and the row's whole point is getting in touch. Nothing for a number
+ * WhatsApp could not have.
+ */
+function ChatLink({ mobile }: { mobile: string | null | undefined }) {
+  const href = inboxChatHref(mobile);
+  if (!href) return null;
+  return (
+    <Link
+      to={href}
+      className="mt-1 inline-flex min-h-11 items-center gap-1.5 rounded-md border border-border-strong px-2.5 text-sm font-medium text-text hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:min-h-0 md:py-1"
+    >
+      <MessageCircle width={14} height={14} strokeWidth={1.75} aria-hidden className="shrink-0 text-success" />
+      WhatsApp chat
+    </Link>
   );
 }
 

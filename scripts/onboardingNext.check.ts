@@ -14,6 +14,7 @@ import { describe, it } from 'node:test';
 
 import type { OnboardingBoardRow, OutletSetupAdmin, SetupCall } from '../shared/src/types/outletSetup';
 import {
+  inboxChatHref,
   istYmd,
   nextStepOf,
   outletNextStep,
@@ -455,6 +456,24 @@ describe('the step track', () => {
 
   it('a registration is on the first step', () => {
     assert.deepEqual(trackPosition(registration()), { step: 1, of: 8 });
+  });
+});
+
+describe('their WhatsApp chat', () => {
+  it('opens our inbox at the number as WhatsApp writes it, whatever way it was typed', () => {
+    for (const typed of ['8827912824', '+91 88279 12824', '91-8827912824', '08827912824', '0091 8827912824', '+91 08827912824']) {
+      assert.equal(inboxChatHref(typed), '/whatsapp?chat=918827912824', typed);
+    }
+  });
+
+  it('names no inbox, so the page opens the one they last wrote on', () => {
+    assert.doesNotMatch(inboxChatHref('8827912824') ?? '', /line=/);
+  });
+
+  it('offers nothing for a number WhatsApp could not have', () => {
+    for (const typed of [null, undefined, '', '12345', '5827912824', '+1 415 555 0100', '88279128245']) {
+      assert.equal(inboxChatHref(typed), null, String(typed));
+    }
   });
 });
 
