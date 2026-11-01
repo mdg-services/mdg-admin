@@ -78,7 +78,7 @@ export function heldCountLine(n: number): string | null {
 
 export const CHECKLIST_LABEL: Readonly<Record<SetupChecklistKey, string>> = {
   logins_working: 'Portal logins work',
-  files_received: 'Files received',
+  files_received: 'DSR starting figures set',
   services_attached: 'Services attached',
   kavach_started: 'Kavach started',
   first_run_ok: 'First run went well',

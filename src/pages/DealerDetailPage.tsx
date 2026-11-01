@@ -112,6 +112,13 @@ const DealerServicesTab = React.lazy(
     })),
   ),
 );
+const ServicePackagePanel = React.lazy(
+  retryImport(() =>
+    import('./dealers/ServicePackagePanel').then((m) => ({
+      default: m.ServicePackagePanel,
+    })),
+  ),
+);
 const DealerStaffTab = React.lazy(
   retryImport(() =>
     import('./dealers/DealerStaffTab').then((m) => ({
@@ -231,7 +238,14 @@ const TABS: TabDef[] = [
     id: 'services',
     label: 'Services',
     placement: 'strip',
-    body: (dealer) => <DealerServicesTab dealer={dealer} />,
+    // The standard package first: on a new outlet it is the one button that sets
+    // the whole list below up.
+    body: (dealer) => (
+      <div className="flex flex-col gap-4">
+        <ServicePackagePanel dealer={dealer} />
+        <DealerServicesTab dealer={dealer} />
+      </div>
+    ),
   },
   {
     id: 'kavach',
