@@ -96,7 +96,7 @@ describe('what can be sent into a dealer chat', () => {
   });
 
   it('is empty, not an error, before the library has loaded', () => {
-    assert.deepEqual(videoChoices(undefined), { howTo: [], services: [], explainers: [] });
+    assert.deepEqual(videoChoices(undefined), { howTo: [], services: [], explainers: [], khataKavach: [] });
     assert.equal(defaultVideo(videoChoices(undefined)), null);
   });
 
@@ -230,6 +230,25 @@ describe('the public explainers, search, and what can be sent now', () => {
       ['papers', 'svc_dsr', 'pk_dod_clock', 'pk_water_dip'],
     );
     assert.equal(audienceWord(c.explainers[0]!), 'Public explainer');
+  });
+
+  it('puts a Khata Kavach video on its own shelf, last, never among the Dealer Kavach how-tos', () => {
+    const lib = [
+      video('kk_add_nozzle_man', {
+        family: 'khata_kavach',
+        audience: 'owner',
+        title: { hi: 'खाता कवच: नोज़ल मैन जोड़ो', en: 'Khata Kavach: add a nozzle man' },
+      }),
+      explainer('pk_water_dip', { title: { hi: 'पानी', en: 'The water dip' } }),
+      video('papers'),
+    ];
+    for (const channel of ['app', 'whatsapp'] as const) {
+      const c = videoChoices(lib, channel);
+      assert.deepEqual(c.howTo.map((v) => v.id), ['papers']);
+      assert.deepEqual(c.khataKavach.map((v) => v.id), ['kk_add_nozzle_man']);
+      assert.deepEqual(allChoices(c).map((v) => v.id), ['papers', 'pk_water_dip', 'kk_add_nozzle_man']);
+      assert.equal(audienceWord(c.khataKavach[0]!), 'Khata Kavach app');
+    }
   });
 
   it('can send what the server says it can: an explainer that plays but is not in the bucket cannot be picked', () => {

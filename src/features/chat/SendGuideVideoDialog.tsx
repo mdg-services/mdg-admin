@@ -243,6 +243,7 @@ export function SendGuideVideoDialog({ open, onClose, target, initialVideoId, in
       {shelf('How to use the app', choices.howTo)}
       {shelf('What each service is', choices.services)}
       {shelf('Pump know-how', choices.explainers)}
+      {shelf('Khata Kavach app', choices.khataKavach)}
     </div>
   );
 

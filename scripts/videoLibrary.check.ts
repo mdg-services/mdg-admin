@@ -50,10 +50,15 @@ const LIBRARY: GuideVideoAdminItem[] = [
   video('paying_bill', { outsideAppOnly: true }),
   video('admin_onboarding', { audience: 'admin' }),
   video('pk_water_dip', { family: 'explainer', title: { hi: 'पानी का डिप', en: 'The water dip' } }),
+  video('kk_add_nozzle_man', {
+    family: 'khata_kavach',
+    audience: 'owner',
+    title: { hi: 'खाता कवच: नोज़ल मैन जोड़ो', en: 'Khata Kavach: add a nozzle man' },
+  }),
 ];
 
 describe('the library’s shelves', () => {
-  it('shows the app how-tos, the services, WhatsApp-only, the explainers, then the team’s — each by title', () => {
+  it('shows the app how-tos, the services, WhatsApp-only, the explainers, Khata Kavach, then the team’s — each by title', () => {
     const shelves = libraryShelves(LIBRARY);
     assert.deepEqual(
       shelves.map((s) => [s.key, s.items.map((v) => v.id)]),
@@ -62,6 +67,7 @@ describe('the library’s shelves', () => {
         ['services', ['svc_dsr']],
         ['whatsapp', ['paying_bill']],
         ['explainer', ['pk_water_dip']],
+        ['khataKavach', ['kk_add_nozzle_man']],
         ['team', ['admin_onboarding']],
       ],
     );
@@ -82,6 +88,8 @@ describe('the filter chips', () => {
       filterLibrary(LIBRARY, f).map((v) => v.id);
     assert.deepEqual(ids('team'), ['admin_onboarding']);
     assert.deepEqual(ids('explainer'), ['pk_water_dip']);
+    assert.deepEqual(ids('khata_kavach'), ['kk_add_nozzle_man']);
+    // A Khata Kavach video is not a Dealer Kavach guide, though it is for owners.
     assert.deepEqual(ids('dealer'), ['papers', 'app_tour', 'svc_dsr', 'paying_bill']);
     assert.equal(ids('all').length, LIBRARY.length);
     assert.equal(isLibraryFilter('team'), true);
@@ -101,6 +109,7 @@ describe('the filter chips', () => {
 describe('the words on a card', () => {
   it('says who it is for, and the shape of its picture', () => {
     assert.equal(libraryTag(video('pk', { family: 'explainer' })), 'Public · anyone');
+    assert.equal(libraryTag(video('kk', { family: 'khata_kavach', audience: 'owner' })), 'Khata Kavach');
     assert.equal(libraryTag(video('a', { audience: 'admin' })), 'Team');
     assert.equal(libraryTag(video('b', { outsideAppOnly: true })), 'WhatsApp only');
     assert.equal(libraryTag(video('c', { audience: 'owner' })), 'Owners');

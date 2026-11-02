@@ -6,8 +6,9 @@ import { searchVideos, type VideoSearchHit } from '../../shared/src/lib/videoSea
 
 /**
  * The Video library page: every video MDG has, in one place — the team's own
- * walkthroughs, the guides a dealer gets in the app, and the public pump-knowledge
- * explainers from mdgservices.in/videos. It replaced the separate guide website.
+ * walkthroughs, the guides a dealer gets in the app, the public pump-knowledge
+ * explainers from mdgservices.in/videos, and the Khata Kavach app's how-to videos.
+ * It replaced the separate guide website.
  *
  * What this decides, kept apart from the screen so it is checkable alone
  * (`scripts/videoLibrary.check.ts`):
@@ -18,7 +19,7 @@ import { searchVideos, type VideoSearchHit } from '../../shared/src/lib/videoSea
  * Hindi, every chapter's voice line.
  */
 
-export const LIBRARY_FILTERS = ['all', 'dealer', 'team', 'explainer'] as const;
+export const LIBRARY_FILTERS = ['all', 'dealer', 'team', 'explainer', 'khata_kavach'] as const;
 export type LibraryFilter = (typeof LIBRARY_FILTERS)[number];
 
 export const LIBRARY_FILTER_LABELS: Record<LibraryFilter, string> = {
@@ -26,15 +27,16 @@ export const LIBRARY_FILTER_LABELS: Record<LibraryFilter, string> = {
   dealer: 'For dealers',
   team: 'For the team',
   explainer: 'Pump know-how',
+  khata_kavach: 'Khata Kavach',
 };
 
 export function isLibraryFilter(v: string | null | undefined): v is LibraryFilter {
   return (LIBRARY_FILTERS as readonly string[]).includes(v ?? '');
 }
 
-/** Is this one of MDG's own dealer guides (not a team video, not a public explainer)? */
+/** Is this one of MDG's own Dealer Kavach guides (not a team video, a public explainer or a Khata Kavach video)? */
 export function isDealerGuide(v: Pick<GuideVideoAdminItem, 'family' | 'audience'>): boolean {
-  return v.family !== 'explainer' && v.audience !== 'admin';
+  return (v.family ?? 'guide') === 'guide' && v.audience !== 'admin';
 }
 
 /** The videos a filter chip keeps. */
@@ -44,12 +46,13 @@ export function filterLibrary<T extends Pick<GuideVideoAdminItem, 'family' | 'au
 ): T[] {
   if (filter === 'team') return items.filter((v) => v.audience === 'admin');
   if (filter === 'explainer') return items.filter((v) => v.family === 'explainer');
+  if (filter === 'khata_kavach') return items.filter((v) => v.family === 'khata_kavach');
   if (filter === 'dealer') return items.filter(isDealerGuide);
   return [...items];
 }
 
 export interface LibraryShelf {
-  key: 'howTo' | 'services' | 'whatsapp' | 'team' | 'explainer';
+  key: 'howTo' | 'services' | 'whatsapp' | 'team' | 'explainer' | 'khataKavach';
   title: string;
   blurb: string;
   items: GuideVideoAdminItem[];
@@ -58,8 +61,8 @@ export interface LibraryShelf {
 /**
  * The library as shelves, when nothing is typed: how to use the app first (what
  * the team sends most), then the services, the WhatsApp-only video, the public
- * explainers, and the team's own walkthroughs last. Each shelf by title. An empty
- * shelf is left out.
+ * explainers, the Khata Kavach app's videos, and the team's own walkthroughs last.
+ * Each shelf by title. An empty shelf is left out.
  */
 export function libraryShelves(items: readonly GuideVideoAdminItem[]): LibraryShelf[] {
   const byTitle = (a: GuideVideoAdminItem, b: GuideVideoAdminItem) =>
@@ -93,6 +96,13 @@ export function libraryShelves(items: readonly GuideVideoAdminItem[]): LibrarySh
       items: items.filter((v) => v.family === 'explainer').sort(byTitle),
     },
     {
+      key: 'khataKavach',
+      title: 'Khata Kavach app',
+      blurb:
+        'Hindi how-to videos for the Khata Kavach Pump app, MDG’s second product. Send them by hand: Dealer Kavach never offers them itself.',
+      items: items.filter((v) => v.family === 'khata_kavach').sort(byTitle),
+    },
+    {
       key: 'team',
       title: 'For the team',
       blurb: 'Walkthroughs of the admin portal. Never sent to a dealer.',
@@ -116,6 +126,7 @@ export function libraryTag(
   v: Pick<GuideVideoAdminItem, 'family' | 'audience' | 'outsideAppOnly'>,
 ): string {
   if (v.family === 'explainer') return 'Public · anyone';
+  if (v.family === 'khata_kavach') return 'Khata Kavach';
   if (v.audience === 'admin') return 'Team';
   if (v.outsideAppOnly) return 'WhatsApp only';
   if (v.audience === 'owner') return 'Owners';

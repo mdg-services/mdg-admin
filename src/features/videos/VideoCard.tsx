@@ -45,9 +45,12 @@ export function VideoCard({
             intent={
               video.family === 'explainer'
                 ? 'info'
-                : video.audience === 'admin'
-                  ? 'neutral'
-                  : 'success'
+                : // Amber: another app, so it is never sent as a Dealer Kavach guide by mistake.
+                  video.family === 'khata_kavach'
+                  ? 'warning'
+                  : video.audience === 'admin'
+                    ? 'neutral'
+                    : 'success'
             }
           >
             {libraryTag(video)}

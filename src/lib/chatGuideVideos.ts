@@ -26,7 +26,9 @@ import { searchVideos, type VideoSearchHit } from '../../shared/src/lib/videoSea
  *  - FROM WHERE. A chapter is offered only for a start the library knows. On
  *    WhatsApp the video plays from its start, and the chapter is named under it.
  *  - WHICH SHELF. The app's how-tos, then one video per service, then the public
- *    pump-knowledge explainers. A search flattens the shelves into one ranked list
+ *    pump-knowledge explainers, then the Khata Kavach app's videos (another app: a
+ *    shelf of their own, so one is never sent for Dealer Kavach by mistake). A
+ *    search flattens the shelves into one ranked list
  *    (`searchVideos`: both languages, romanised Hindi, chapters).
  */
 
@@ -76,9 +78,11 @@ export interface VideoChoices {
   services: GuideVideoAdminItem[];
   /** The public pump-knowledge explainers, by title. */
   explainers: GuideVideoAdminItem[];
+  /** The Khata Kavach app's videos, by title. */
+  khataKavach: GuideVideoAdminItem[];
 }
 
-/** The library as the picker lists it: what this channel may carry, ordered, split into the three groups. */
+/** The library as the picker lists it: what this channel may carry, ordered, split into the four groups. */
 export function videoChoices(
   library: readonly GuideVideoAdminItem[] | undefined,
   channel: VideoChannel = 'app',
@@ -87,19 +91,19 @@ export function videoChoices(
     .filter((v) => isSendable(v, channel))
     .slice()
     .sort((a, b) => rank(a) - rank(b) || a.title.en.localeCompare(b.title.en));
-  const guides = list.filter((v) => v.family !== 'explainer');
+  const guides = list.filter((v) => (v.family ?? 'guide') === 'guide');
+  const byTitle = (a: GuideVideoAdminItem, b: GuideVideoAdminItem) => a.title.en.localeCompare(b.title.en);
   return {
     howTo: guides.filter((v) => v.service === null),
     services: guides.filter((v) => v.service !== null),
-    explainers: list
-      .filter((v) => v.family === 'explainer')
-      .sort((a, b) => a.title.en.localeCompare(b.title.en)),
+    explainers: list.filter((v) => v.family === 'explainer').sort(byTitle),
+    khataKavach: list.filter((v) => v.family === 'khata_kavach').sort(byTitle),
   };
 }
 
 /** Every choice, in shelf order. */
 export function allChoices(choices: VideoChoices): GuideVideoAdminItem[] {
-  return [...choices.howTo, ...choices.services, ...choices.explainers];
+  return [...choices.howTo, ...choices.services, ...choices.explainers, ...choices.khataKavach];
 }
 
 /** The choices that answer a search, best first, with the chapter the words were found in. */
@@ -132,6 +136,7 @@ export function audienceWord(
   v: Pick<GuideVideoAdminItem, 'audience'> & Partial<Pick<GuideVideoAdminItem, 'family'>>,
 ): string {
   if (v.family === 'explainer') return 'Public explainer';
+  if (v.family === 'khata_kavach') return 'Khata Kavach app';
   if (v.audience === 'owner') return 'Owners';
   if (v.audience === 'manager') return 'Managers';
   return 'Owners and managers';
