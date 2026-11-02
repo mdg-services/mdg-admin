@@ -18,6 +18,8 @@ import type {
 } from '@dk/shared';
 import type { CalibrationClaimActionInput } from '@dk/shared/schemas';
 
+import { LIVE_CAPTCHA_KEY } from './useLiveCaptchaPrompts';
+
 /**
  * The calibration claim's endpoints, mounted at `/api/v1/calibration-claim`.
  *
@@ -42,6 +44,7 @@ export const calibrationClaimKeys = {
   files: (claimId: string | undefined, slot: string | undefined) =>
     ['calibrationClaim', 'files', claimId, slot] as const,
   claimFiles: (claimId: string) => ['calibrationClaim', 'files', claimId] as const,
+  live: LIVE_CAPTCHA_KEY,
 };
 
 /**
@@ -264,6 +267,7 @@ export function useAnswerLiveCaptcha(dealerId: string) {
       api.post<{ ok: true }>(`/calibration-claim/live/${sessionId}`, { answer }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: calibrationClaimKeys.overview(dealerId) });
+      void qc.invalidateQueries({ queryKey: calibrationClaimKeys.live });
     },
   });
 }

@@ -51,6 +51,14 @@ export interface DialogProps {
    */
   animateIn?: boolean;
   /**
+   * Whether a tap on the dimmed backdrop closes it. True everywhere but a dialog
+   * that opens by itself rather than from a tap: the picture-code pop-up comes up
+   * while the admin is busy elsewhere, and their next stray tap would otherwise
+   * close it before it was read. The X, Escape and the dialog's own buttons
+   * still close it.
+   */
+  dismissOnBackdrop?: boolean;
+  /**
    * `'none'` removes the body's own `p-4`. For a body that IS a full-bleed
    * thing — a card stack, a table, a report frame — which should meet the
    * panel's edges rather than lose 32px of a 328px sheet to a gutter it did not
@@ -96,6 +104,7 @@ export function Dialog({
   footerBelow = 'stack',
   size = 'md',
   animateIn = true,
+  dismissOnBackdrop = true,
   bodyPadding = 'default',
 }: DialogProps) {
   const titleId = React.useId();
@@ -116,7 +125,7 @@ export function Dialog({
         // mousedown only after the tap resolves, so a dismissing tap used to
         // land ~300ms late — long enough to read as an unresponsive backdrop.
         onPointerDown={(e) => {
-          if (e.target === e.currentTarget) onClose();
+          if (dismissOnBackdrop && e.target === e.currentTarget) onClose();
         }}
       >
         <div

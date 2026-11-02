@@ -40,6 +40,7 @@ import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/store/auth';
 
 import { ErrorBoundary } from './ErrorBoundary';
+import { LiveCaptchaPrompts } from './LiveCaptchaPrompts';
 import { MobileTabBar } from './MobileTabBar';
 import { NAV_ITEMS, type NavItem } from './navItems';
 import { moveItem } from './navOrder';
@@ -322,6 +323,9 @@ export function AppShell() {
             />
           </div>
         </header>
+        {/* A picture code the robot is waiting on: a pop-up for the admin it is
+            put to, a banner under the header for everyone else, on every screen. */}
+        <LiveCaptchaPrompts />
         {/* `data-app-scroller` is how `useBodyScrollLock` finds the thing that
             actually scrolls — it is this element, not the body, so the usual
             `body { overflow: hidden }` recipe is a no-op here. On a drill-in

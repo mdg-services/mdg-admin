@@ -27,6 +27,7 @@ import type {
   ClaimCheck,
   ClaimDocumentView,
   ClaimPlan,
+  LiveCaptchaPrompt,
 } from '../shared/src/types/calibrationClaim';
 import { describeRunFailure } from '../src/lib/runFailure';
 import {
@@ -65,6 +66,12 @@ import {
   upsertClaim,
   valueRows,
 } from '../src/pages/dealers/vault/calibrationClaim/format';
+import {
+  liveBannerWords,
+  livePromptPlan,
+  livePromptWords,
+  timeLeftWords,
+} from '../src/pages/dealers/vault/calibrationClaim/livePrompt';
 
 const plan = (over: Partial<ClaimPlan> = {}): ClaimPlan => ({
   financialYear: '2026-27',
@@ -1112,6 +1119,73 @@ describe('why a run failed, in plain words', () => {
   it('leaves a code nobody knows to the generic notice', () => {
     assert.equal(copy('SOMETHING_NEW').known, false);
     assert.equal(describeRunFailure({}).known, false);
+  });
+});
+
+describe('a picture code waiting for an admin, on every screen', () => {
+  const NOW = Date.parse('2026-11-02T17:09:30Z');
+  const prompt = (over: Partial<LiveCaptchaPrompt> = {}): LiveCaptchaPrompt => ({
+    sessionId: 's1',
+    claimId: 'c1',
+    imageUrl: 'https://signed.example/p.png',
+    expiresAt: '2026-11-02T17:12:08Z',
+    dealerId: 'd1',
+    dealerCode: '1E',
+    financialYear: '2026-27',
+    askedOf: { id: 'asha', name: 'Asha' },
+    ...over,
+  });
+
+  it('pops up for the admin it is put to, and is a banner for everyone else', () => {
+    const p = prompt();
+    assert.deepEqual(livePromptPlan([p], 'asha', new Set(), NOW), { popUp: p, banners: [] });
+    assert.deepEqual(livePromptPlan([p], 'ravi', new Set(), NOW), { popUp: null, banners: [p] });
+  });
+
+  it('pops up for everyone when it is put to nobody in particular', () => {
+    const p = prompt({ askedOf: null });
+    assert.equal(livePromptPlan([p], 'ravi', new Set(), NOW).popUp, p);
+  });
+
+  it('turns into a banner after Later, and goes once the site stops waiting', () => {
+    const p = prompt();
+    assert.deepEqual(livePromptPlan([p], 'asha', new Set(['s1']), NOW), { popUp: null, banners: [p] });
+    assert.deepEqual(livePromptPlan([p], 'asha', new Set(), Date.parse('2026-11-02T17:12:09Z')), {
+      popUp: null,
+      banners: [],
+    });
+  });
+
+  it('pops up one at a time and keeps the rest in the banner', () => {
+    const a = prompt({ sessionId: 'a' });
+    const b = prompt({ sessionId: 'b', dealerCode: '2E' });
+    assert.deepEqual(livePromptPlan([a, b], 'asha', new Set(), NOW), { popUp: a, banners: [b] });
+  });
+
+  it('counts down in minutes and seconds, and never below zero', () => {
+    assert.equal(timeLeftWords('2026-11-02T17:12:08Z', NOW), '2:38');
+    assert.equal(timeLeftWords('2026-11-02T17:12:08Z', Date.parse('2026-11-02T17:13:00Z')), '0:00');
+  });
+
+  it('says which outlet, which claim, and why it came to this admin', () => {
+    const w = livePromptWords(prompt(), 'asha');
+    assert.equal(w.title, 'Type the picture code for 1E');
+    assert.equal(w.subtitle, 'Calibration claim · FY 2026-27 · eMaaptaul sign-in');
+    assert.match(w.why, /could not read the picture code/);
+    assert.match(w.whose, /you were the last to act on this claim/);
+    assert.match(livePromptWords(prompt(), 'ravi').whose, /put to Asha first; anyone at MDG can type it/);
+    assert.equal(livePromptWords(prompt({ askedOf: null }), 'ravi').whose, 'Anyone at MDG can type it.');
+  });
+
+  it('puts the outlet, the year, the time left and who it was put to on the banner', () => {
+    assert.equal(
+      liveBannerWords(prompt(), 'ravi', NOW),
+      '1E needs a picture code typed for its calibration claim, FY 2026-27. 2:38 left. Put to Asha first.',
+    );
+    assert.equal(
+      liveBannerWords(prompt({ dealerCode: null, financialYear: null, askedOf: null }), 'ravi', NOW),
+      'this outlet needs a picture code typed for its calibration claim. 2:38 left.',
+    );
   });
 });
 
