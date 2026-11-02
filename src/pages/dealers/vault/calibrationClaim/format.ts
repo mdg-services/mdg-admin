@@ -618,7 +618,41 @@ const FIXES_BY_CODE: Readonly<Record<string, BlockerFix[]>> = {
   signed_letter_unreadable: ['upload'],
   sdms_credentials_missing: ['retry'],
   sdms_password_refused: ['retry'],
+  // An eMaaptaul visit that stopped part-way: Retry runs the same step again. These
+  // names carry "LOGIN" or "ACCOUNT", so the guess below would ask the owner for a
+  // login that is saved and fine (1E, 2 Nov: "Press Retry" and no Retry button).
+  browser_launch_failed: ['retry'],
+  site_unreachable: ['retry', 'upload'],
+  login_captcha_unsolved: ['retry', 'upload'],
+  login_no_response: ['retry', 'upload'],
+  certificate_download_failed: ['retry', 'upload'],
+  account_cooldown: ['retry'],
+  // The owner has to give the login again, or reset it, from the chat box.
+  wemmis_login_refused: ['ask_login', 'upload'],
+  wemmis_login_rejected: ['ask_login', 'upload'],
+  login_refused_unclear: ['ask_login', 'upload'],
+  account_locked: ['ask_login', 'upload'],
+  reset_not_saved: ['ask_login', 'upload'],
+  reset_session_missing: ['ask_login', 'upload'],
+  reset_failed: ['ask_login', 'upload'],
+  reset_no_user_chosen: ['ask_login', 'upload'],
+  mobile_not_registered: ['ask_login', 'upload'],
+  otp_not_sent: ['ask_login', 'upload'],
+  otp_timeout: ['ask_login', 'upload'],
+  otp_rejected: ['ask_login', 'upload'],
+  no_vendor_ids: ['ask_login', 'upload'],
+  // eMaaptaul cannot give the papers, so they come by hand.
+  receipts_page_not_found: ['upload'],
+  receipt_not_found: ['upload', 'ask_documents'],
+  // SDMS
+  du_table_unreadable: ['retry'],
+  formation_rows_mismatch: ['portal_check'],
+  validation_rejected: ['corrections'],
+  upload_rejected: ['upload', 'retry'],
 };
+
+/** The sentence asks for Retry: "Press Retry", "then press Retry", "or press Retry". */
+const SAYS_RETRY = /\bpress Retry\b/i;
 
 /**
  * The one or two buttons that fix what is holding a claim up, best first.
@@ -628,14 +662,29 @@ const FIXES_BY_CODE: Readonly<Record<string, BlockerFix[]>> = {
  * the claim is stuck. Anything not recognised gets "Try again" — which the
  * server accepts for whatever step stopped — so a new code never leaves an
  * admin with no button.
+ *
+ * The admin reads the sentence before the buttons, so a sentence that says
+ * "Press Retry" always has a Retry button, first, whatever was picked for its
+ * code. It then drops "Fetch papers now" (the same step again, under another
+ * name) and "Ask the owner for the login" (which the sentence did not ask for).
  */
 export function blockerFixes(
   claim: Pick<CalibrationClaimView, 'stage' | 'blocker' | 'checks'>,
   wemmisSaved: boolean,
 ): BlockerFix[] {
-  const code = claim.blocker?.code ?? '';
-  const known = FIXES_BY_CODE[code];
-  if (known) return known;
+  const code = (claim.blocker?.code ?? '').toLowerCase();
+  const fixes = FIXES_BY_CODE[code] ?? guessFixes(claim, code, wemmisSaved);
+  if (!SAYS_RETRY.test(claim.blocker?.message ?? '') || fixes.includes('retry')) return fixes;
+  const other = fixes.find((f) => f !== 'fetch' && f !== 'ask_login');
+  return other ? ['retry', other] : ['retry'];
+}
+
+/** For a code the table above does not know: chosen from where the claim is stuck. */
+function guessFixes(
+  claim: Pick<CalibrationClaimView, 'stage' | 'checks'>,
+  code: string,
+  wemmisSaved: boolean,
+): BlockerFix[] {
   switch (claim.stage) {
     case 'documents':
       if (LOGIN_CODE.test(code) || !wemmisSaved) return ['ask_login', 'upload'];

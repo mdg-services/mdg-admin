@@ -741,10 +741,52 @@ describe('what fixes a blocker', () => {
   });
 
   it('with a login saved, a stopped fetch is fetched again or uploaded', () => {
-    assert.deepEqual(blockerFixes(stuck('documents', 'SITE_UNREACHABLE'), true), [
-      'fetch',
+    assert.deepEqual(blockerFixes(stuck('documents', 'papers_stuck'), true), ['fetch', 'upload']);
+  });
+
+  it('a picture code nobody typed in time offers Retry, not the owner login box (1E, 2 Nov)', () => {
+    const c = {
+      stage: 'documents' as const,
+      blocker: {
+        code: 'login_captcha_unsolved',
+        message:
+          'The picture code on the eMaaptaul login could not be read, and nobody typed it in time. Press Retry and, when the picture code appears in this pane, type it.',
+        at: '2026-11-02T17:07:16.832Z',
+      },
+      checks: [],
+    };
+    assert.deepEqual(blockerFixes(c, true), ['retry', 'upload']);
+    assert.deepEqual(blockerFixes(c, false), ['retry', 'upload']);
+  });
+
+  it('a sentence that says "Press Retry" always gets Retry first, whatever its code', () => {
+    const says = (stage: CalibrationClaimStage, code: string) => ({
+      stage,
+      blocker: { code, message: 'The portal run stopped. Press Retry in a few minutes.', at: 'x' },
+      checks: [],
+    });
+    // The papers step would have offered "Fetch papers now": the same step under another name.
+    assert.deepEqual(blockerFixes(says('documents', 'something_new'), true), ['retry', 'upload']);
+    // A name with LOGIN in it would have asked the owner for a login nobody asked for.
+    assert.deepEqual(blockerFixes(says('documents', 'login_slow_today'), true), [
+      'retry',
       'upload',
     ]);
+    // A review-stage name with DU_ in it would have offered only Corrections.
+    assert.deepEqual(blockerFixes(says('review', 'du_table_unreadable'), true), ['retry']);
+    assert.deepEqual(blockerFixes(says('review', 'du_rows_odd'), true), ['retry', 'corrections']);
+    // One that already offers Retry keeps its own order.
+    assert.deepEqual(blockerFixes(says('documents', 'multiple_receipts_upload'), true), [
+      'upload',
+      'retry',
+    ]);
+  });
+
+  it('reads the server code in either case', () => {
+    assert.deepEqual(
+      blockerFixes(stuck('documents', 'LOGIN_CAPTCHA_UNSOLVED'), true),
+      blockerFixes(stuck('documents', 'login_captcha_unsolved'), true),
+    );
   });
 
   it('a review with a failed block offers corrections and a second look at IndianOil', () => {
@@ -757,7 +799,7 @@ describe('what fixes a blocker', () => {
 
   it('anything else gets "try again", never nothing, and never more than two buttons', () => {
     assert.deepEqual(blockerFixes(stuck('filing', 'WHATEVER'), true), ['retry']);
-    assert.deepEqual(blockerFixes(stuck('filing', 'CLAIM_ALREADY_EXISTS'), true), [
+    assert.deepEqual(blockerFixes(stuck('filing', 'DRAFT_ALREADY_THERE'), true), [
       'portal_check',
       'retry',
     ]);
