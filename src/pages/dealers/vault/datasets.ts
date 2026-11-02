@@ -4,6 +4,7 @@ import {
   Database,
   Droplets,
   FileBarChart2,
+  FileCheck2,
   Fuel,
   Gauge,
   ReceiptText,
@@ -16,6 +17,7 @@ import { DealerDataVaultTab } from '../DealerDataVaultTab';
 import { DealerDsrTab } from '../DealerDsrTab';
 import { DealerLedgerWatchPane } from '../DealerLedgerWatchPane';
 
+import { DealerCalibrationClaimPane } from './DealerCalibrationClaimPane';
 import { DealerInspectionPane } from './DealerInspectionPane';
 import { DealerLoadPlannerPane } from './DealerLoadPlannerPane';
 import { DealerPadLedgerPane } from './DealerPadLedgerPane';
@@ -131,6 +133,15 @@ const REGISTRY = [
     Icon: Fuel,
     requiresService: 'load-planner',
     Pane: DealerLoadPlannerPane,
+  },
+  {
+    id: 'calibration-claim',
+    label: 'Calibration claim',
+    description:
+      'The yearly calibration subsidy IndianOil pays per nozzle: the papers, the checks, the owner’s signed letter, and the claim as it is filed.',
+    Icon: FileCheck2,
+    requiresService: 'calibration-claim',
+    Pane: DealerCalibrationClaimPane,
   },
 ] as const satisfies readonly DealerVaultDataset[];
 

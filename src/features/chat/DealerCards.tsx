@@ -147,16 +147,21 @@ export function AskFooterPreview({
   lang: DealerLang;
 }) {
   if (phase === 'none') return null;
+  const signLetter = ask.variant === 'sign-letter';
   if (phase === 'sent') {
     return (
-      <p className="mt-1.5 flex items-center gap-1.5 px-0.5 text-[13px] text-wa-meta">
-        <Clock width={14} strokeWidth={2} className="shrink-0" aria-hidden />
-        {dealerWord(lang, 'askSent')}
-      </p>
+      <>
+        <p className="mt-1.5 flex items-center gap-1.5 px-0.5 text-[13px] text-wa-meta">
+          <Clock width={14} strokeWidth={2} className="shrink-0" aria-hidden />
+          {dealerWord(lang, 'askSent')}
+        </p>
+        {signLetter ? <AdminCaption>{SIGN_LETTER_CAPTION}</AdminCaption> : null}
+      </>
     );
   }
   return (
     <div title={PREVIEW_TITLE} className="mt-1.5 flex flex-col gap-1.5">
+      {signLetter ? <SignLetterSteps lang={lang} /> : null}
       <FakeButton className={PRIMARY_BUTTON}>
         <Camera width={18} strokeWidth={2} className="shrink-0" aria-hidden />
         {dealerWord(lang, 'askSendPhoto')}
@@ -164,6 +169,99 @@ export function AskFooterPreview({
       <FakeButton className={SECONDARY_BUTTON}>
         {dealerWord(lang, ask.acceptsFile ? 'askChooseFile' : 'askChooseGallery')}
       </FakeButton>
+      {signLetter ? <AdminCaption>{SIGN_LETTER_CAPTION}</AdminCaption> : null}
+    </div>
+  );
+}
+
+// ── The calibration claim's two cards (ADR 0029) ───────────────────────────
+
+/**
+ * A line for the ADMIN, under a card whose look alone does not say what it is.
+ * Everything else in this file is a picture of the dealer's screen; this one line
+ * is the inbox naming it, in English, so a thread reads "login box sent" rather
+ * than an unlabelled form. The dealer never sees it.
+ */
+function AdminCaption({ children }: { children: React.ReactNode }) {
+  return <p className="px-0.5 text-[12px] italic leading-snug text-wa-meta">{children}</p>;
+}
+
+const SIGN_LETTER_CAPTION = 'Signed letter requested';
+const WEMMIS_LOGIN_CAPTION = 'eMaaptaul login box sent';
+
+/**
+ * The few strings these two cards add. Kept here, in the file that draws them,
+ * rather than in `dealerView.ts`'s table: they are the app's wording for one
+ * service and nothing else in the thread uses them.
+ */
+const CALIBRATION_WORDS = {
+  wemmisTitle: { en: 'eMaaptaul login', hi: 'eMaaptaul लॉगिन' },
+  wemmisForgot: { en: 'Forgot password?', hi: 'पासवर्ड भूल गए?' },
+  letterStep1: { en: 'Download the letter', hi: 'पत्र डाउनलोड करें' },
+  letterStep2: {
+    en: 'Print it, then sign and stamp it',
+    hi: 'प्रिंट निकालें, फिर साइन और मोहर लगाएँ',
+  },
+  letterStep3: { en: 'Send back a photo or scan of it', hi: 'उसकी फ़ोटो या स्कैन वापस भेजें' },
+} as const satisfies Record<string, Record<DealerLang, string>>;
+
+function SignLetterSteps({ lang }: { lang: DealerLang }) {
+  const steps = ['letterStep1', 'letterStep2', 'letterStep3'] as const;
+  return (
+    <ol data-sign-letter className="flex flex-col gap-1 rounded-md bg-wa-row-active px-2.5 py-2">
+      {steps.map((key, i) => (
+        <li key={key} className="flex gap-2 text-[14px] leading-snug">
+          <span className="shrink-0 font-medium text-wa-meta">{i + 1}.</span>
+          <span className="min-w-0 break-words">{CALIBRATION_WORDS[key][lang]}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
+ * The eMaaptaul login box (`message.wemmisLogin`): user ID and password, or
+ * "Forgot password?", which resets it with a one-time code sent to the registered
+ * mobile. Drawn empty — what the owner types goes to the outlet's record and is
+ * never a message. A manager sees only that the owner fills it.
+ */
+export function WemmisLoginPreview({ canEdit, lang }: { canEdit: boolean; lang: DealerLang }) {
+  return (
+    <div data-wemmis-login title={PREVIEW_TITLE} className="mt-1 flex flex-col gap-1.5">
+      <div className="rounded-md bg-wa-row-active px-2.5 py-2">
+        <p className="flex min-w-0 items-center gap-1.5 break-words text-[14px] font-medium leading-snug">
+          <Lock width={14} strokeWidth={2} className="shrink-0 text-wa-meta" aria-hidden />
+          {CALIBRATION_WORDS.wemmisTitle[lang]}
+        </p>
+        {canEdit ? (
+          <div className="mt-2 flex flex-col gap-2">
+            <FieldPreview label={dealerWord(lang, 'portalUserId')} />
+            <div>
+              <span className="mb-0.5 block text-[12px] leading-tight text-wa-meta">
+                {dealerWord(lang, 'portalPassword')}
+              </span>
+              <span className={cn(FIELD_BOX, 'relative pr-11')}>
+                <span className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center text-wa-meta">
+                  <Eye width={18} strokeWidth={1.75} aria-hidden />
+                </span>
+              </span>
+            </div>
+            <FakeButton className={cn(PRIMARY_BUTTON, 'opacity-60')}>
+              <Lock width={16} strokeWidth={2} className="shrink-0" aria-hidden />
+              {dealerWord(lang, 'portalSave')}
+            </FakeButton>
+            <FakeButton className={LINK_BUTTON}>{CALIBRATION_WORDS.wemmisForgot[lang]}</FakeButton>
+            <p className="text-[12px] leading-snug text-wa-meta">
+              {dealerWord(lang, 'portalKeptSafe')}
+            </p>
+          </div>
+        ) : (
+          <p className="mt-1 text-[13px] leading-snug text-wa-meta">
+            {dealerWord(lang, 'portalOwnerFills')}
+          </p>
+        )}
+      </div>
+      <AdminCaption>{WEMMIS_LOGIN_CAPTION}</AdminCaption>
     </div>
   );
 }

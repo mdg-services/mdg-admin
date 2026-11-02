@@ -14,6 +14,7 @@ import {
   DealerViewContext,
   PortalLoginPreview,
   SetupCardPreview,
+  WemmisLoginPreview,
   isRetiredSetupCard,
   setupCardHasBody,
   type AskPreviewPhase,
@@ -184,10 +185,12 @@ export const MessageBubble = React.memo(function MessageBubble({
 
   const ask = message.ask;
   const portalLogin = message.portalLogin;
+  const wemmisLogin = message.wemmisLogin;
   const setupCard = message.setupCard;
   const hasSetupBody = !!setupCard && setupCardHasBody(setupCard.card);
   // A request, a login box, a setup card or a video is as wide as a picture, as in the app.
-  const wide = hasMedia || videos.length > 0 || !!ask || !!portalLogin || hasSetupBody;
+  const wide =
+    hasMedia || videos.length > 0 || !!ask || !!portalLogin || !!wemmisLogin || hasSetupBody;
 
   // "Instant reply" under a machine-written answer — the dealer sees it; never on a handoff.
   const showAiBadge = !!message.ai && message.ai.kind !== 'handoff';
@@ -196,7 +199,8 @@ export const MessageBubble = React.memo(function MessageBubble({
   // picture when it is a bare picture; on a line of its own when the bubble ends
   // in something with no last line of text (a voice note, a document, a card).
   const metaInFlow =
-    !timeOnPicture && (showAiBadge || !hasBody || !!ask || !!portalLogin || hasSetupBody);
+    !timeOnPicture &&
+    (showAiBadge || !hasBody || !!ask || !!portalLogin || !!wemmisLogin || hasSetupBody);
   // Ticks on MY messages only. Every admin who opens a thread is stamped into
   // readBy/deliveredTo, so on a teammate's reply (or the first line's) blue
   // ticks would only mean "an admin looked", never that the dealer read it.
@@ -381,6 +385,8 @@ export const MessageBubble = React.memo(function MessageBubble({
               lang={lang}
             />
           ) : null}
+
+          {wemmisLogin ? <WemmisLoginPreview canEdit={view.canEdit} lang={lang} /> : null}
 
           {setupCard ? (
             <SetupCardPreview
