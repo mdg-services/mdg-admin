@@ -47,13 +47,14 @@ import {
 import { useServicesQuery } from '@/hooks/api/useServices';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, istTodayYmd } from '@/lib/format';
 import { retryImport } from '@/lib/retryImport';
 import type { Dealer, DealerService } from '@dk/shared';
 import type { UpdateDealerServiceInput } from '@dk/shared/schemas';
 
 import { INSPECTION_SERVICE_ID, IRAS_SERVICE_ID } from './schedulePicker';
 import { CADENCE_LABELS, describeSchedule } from './serviceSchedule';
+import { claimRunNowWords } from './vault/calibrationClaim/format';
 
 /**
  * Both config dialogs arrive on demand, and only once one is actually opened.
@@ -161,10 +162,20 @@ export function DealerServicesTab({ dealer }: Props) {
     return new Date(svc.lastRunAt) < startOfToday;
   }
 
+  // The pressed row's button only, while its request is on the way: a double
+  // click no longer sends two runs.
+  const sendingRunNow = (ds: DealerService) =>
+    runNow.isPending && runNow.variables?.dsId === ds.id;
+
   async function onRunNow(ds: DealerService) {
     try {
       await runNow.mutateAsync({ dsId: ds.id });
-      toast.success('Run enqueued');
+      if (ds.serviceId === 'calibration-claim') {
+        const words = claimRunNowWords(istTodayYmd());
+        toast.success(words.title, { description: words.description });
+      } else {
+        toast.success('Run enqueued');
+      }
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Run failed';
       toast.error(msg);
@@ -352,6 +363,7 @@ export function DealerServicesTab({ dealer }: Props) {
                       <Button
                         variant="secondary"
                         size="sm"
+                        loading={sendingRunNow(ds)}
                         onClick={() => onRunNow(ds)}
                         leftIcon={
                           <RefreshCw
@@ -460,6 +472,7 @@ export function DealerServicesTab({ dealer }: Props) {
                   <Button
                     variant="secondary"
                     size="sm"
+                    loading={sendingRunNow(ds)}
                     leftIcon={
                       <RefreshCw width={14} height={14} strokeWidth={1.75} />
                     }

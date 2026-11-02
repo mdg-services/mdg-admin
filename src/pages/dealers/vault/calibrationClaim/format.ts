@@ -159,6 +159,21 @@ export function fyOptionLabel(fy: string, current: string): string {
   return `FY ${fy} · ${span}${fy === current ? ' · this year' : ''}`;
 }
 
+/**
+ * What the Services tab says after Run now on the claim service. The generic "Run
+ * enqueued" told an admin nothing, and a Run now on an outlet with no open claim
+ * starts one (the server's own rule), so the words say which year, that a year
+ * with a claim already is refused, and where the claim is followed. Shown when the
+ * run is accepted, before its outcome, so it says what it will try.
+ */
+export function claimRunNowWords(todayYmd: string): { title: string; description: string } {
+  const fy = currentFinancialYear(todayYmd);
+  return {
+    title: 'Run started',
+    description: `If the outlet has a claim open, this does its next step. If not, it starts the claim for FY ${fy}, unless that year already has one; the run then says why. Follow it in the Data Vault tab, under Calibration claim.`,
+  };
+}
+
 /** The year the start form opens on: the current one when it is on offer, else the newest. */
 export function defaultStartYear(years: readonly string[], current: string): string {
   return years.includes(current) ? current : (years[0] ?? '');

@@ -41,6 +41,7 @@ import {
   buildUnitRows,
   claimGates,
   claimPollInterval,
+  claimRunNowWords,
   claimUploadProblem,
   correctionFormFrom,
   correctionPayload,
@@ -315,6 +316,15 @@ describe('financial years', () => {
     assert.equal(defaultStartYear(['2026-27', '2025-26'], '2026-27'), '2026-27');
     assert.equal(defaultStartYear(['2025-26', '2024-25'], '2026-27'), '2025-26');
     assert.equal(defaultStartYear([], '2026-27'), '');
+  });
+
+  it('says after Run now which year it would start and where to follow it', () => {
+    const words = claimRunNowWords('2026-11-02');
+    assert.equal(words.title, 'Run started');
+    assert.match(words.description, /starts the claim for FY 2026-27, unless that year already has one/);
+    assert.match(words.description, /Data Vault tab, under Calibration claim/);
+    assert.match(claimRunNowWords('2027-03-31').description, /FY 2026-27/);
+    assert.match(claimRunNowWords('2027-04-01').description, /FY 2027-28/);
   });
 
   it('labels a year with its months and marks this one', () => {
@@ -1082,6 +1092,21 @@ describe('why a run failed, in plain words', () => {
     assert.match(hint, /account is locked/);
     assert.match(hint, /words MDG could not read/);
     assert.match(hint, /stopped rather than try again/);
+  });
+
+  it('shows the server’s reason when Run now could not start this year’s claim', () => {
+    const c = describeRunFailure({
+      failureCode: 'CLAIM_NOT_STARTED',
+      error: {
+        message:
+          'The claim could not be started — This outlet already has a calibration claim for 2026-27 (finalized). Open it from the list. A cancelled claim can be started again.',
+      },
+    } as Parameters<typeof describeRunFailure>[0]);
+    assert.equal(c.known, true);
+    assert.equal(c.title, 'The claim could not be started');
+    assert.match(c.hint, /^This outlet already has a calibration claim for 2026-27/);
+    // With no reason from the server, it still says where an admin starts one by hand.
+    assert.match(copy('CLAIM_NOT_STARTED').hint, /Data Vault tab, choose Calibration claim/);
   });
 
   it('leaves a code nobody knows to the generic notice', () => {

@@ -108,6 +108,14 @@ const CODE_COPY: Record<string, Omit<RunFailureCopy, 'known'>> = {
     title: 'The picture code on the eMaaptaul sign-in could not be read.',
     hint: 'Try again. If a person is asked to type the code, it shows at the top of the Calibration claim pane.',
   },
+  // A plain Run now on an outlet with no open claim starts this year's; this is
+  // when it cannot. The server's message opens with this title (no full stop, as
+  // INSUFFICIENT_DATA's does), so the hint shown is its reason: the year already
+  // has a claim, the service is paused, the outlet is not with IndianOil.
+  CLAIM_NOT_STARTED: {
+    title: 'The claim could not be started',
+    hint: 'Open the Data Vault tab, choose Calibration claim, and start the claim for the year you need there.',
+  },
   ACCOUNT_LOCKED: {
     title: 'The eMaaptaul account is locked.',
     hint:
