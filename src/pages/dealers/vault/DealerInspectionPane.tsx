@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
+import { RunPlaceButton } from '@/components/RunPlaceButton';
 import {
   Badge,
   Button,
@@ -43,7 +44,7 @@ import {
   type InspectionReportItem,
   type InspectionReportSection,
   type InspectionReportSummary,
-} from '@dk/shared';
+ type BrowserPlace } from '@dk/shared';
 
 import type { DealerVaultPaneProps } from './types';
 
@@ -90,8 +91,8 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
     detail: InspectionReportDetail;
   } | null>(null);
 
-  function runCapture() {
-    collect.mutate(undefined, {
+  function runCapture(browserOn: BrowserPlace = 'server') {
+    collect.mutate(browserOn === 'laptop' ? { browserOn } : undefined, {
       onSuccess: () =>
         toast.success(
           'Capture queued — the portal takes about a minute. This section refreshes when it lands.',
@@ -104,15 +105,16 @@ export function DealerInspectionPane({ dealer }: DealerVaultPaneProps) {
   }
 
   const captureButton = (
-    <Button
+    <RunPlaceButton
+      serviceId="inspection-reports"
       variant="secondary"
       size="sm"
       loading={collect.isPending}
       leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
-      onClick={runCapture}
+      onRun={runCapture}
     >
       Capture now
-    </Button>
+    </RunPlaceButton>
   );
 
   if (summaryQ.isLoading) {

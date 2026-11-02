@@ -12,6 +12,7 @@ import {
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { RunPlaceButton } from '@/components/RunPlaceButton';
 import {
   Badge,
   Button,
@@ -507,15 +508,17 @@ function CollectButton({
   const pending = collect.isPending;
 
   return (
-    <Button
+    // The row under it opens the day; a press here, or on its menu, must not.
+    <span onClick={(e) => e.stopPropagation()}>
+    <RunPlaceButton
+      serviceId="iras-shift-data"
       variant="secondary"
       size="sm"
       loading={pending}
       leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
-      onClick={(e) => {
-        e.stopPropagation();
+      onRun={(browserOn) => {
         collect.mutate(
-          { dealerId, businessDate },
+          { dealerId, businessDate, browserOn },
           {
             onSuccess: () =>
               toast.success(
@@ -532,7 +535,8 @@ function CollectButton({
       }}
     >
       {label}
-    </Button>
+    </RunPlaceButton>
+    </span>
   );
 }
 

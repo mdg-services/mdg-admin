@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { InspectionReportSummary } from '@dk/shared';
+import type { InspectionReportSummary , BrowserPlace } from '@dk/shared';
 
 /**
  * A dealer's Inspection Reports summary — the latest few reports plus how many
@@ -28,9 +28,10 @@ export function useInspectionSummary(dealerId: string | undefined) {
 export function useCollectInspection(dealerId: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () =>
+    mutationFn: (input?: { browserOn?: BrowserPlace }) =>
       api.post<{ runId: string }>(
         `/inspection-reports/dealers/${dealerId}/generate`,
+        input?.browserOn === 'laptop' ? { browserOn: 'laptop' } : {},
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['inspectionSummary', dealerId] });

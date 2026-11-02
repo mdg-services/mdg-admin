@@ -286,6 +286,9 @@ function RunDetail({
         <Field label="Started" value={formatDateTime(run.startedAt)} />
         <Field label="Finished" value={formatDateTime(run.finishedAt)} />
         <Field label="Duration" value={formatDuration(run.durationMs)} />
+        {run.browserOn === 'laptop' ? (
+          <Field label="Browser" value="On a super-admin's laptop, through the laptop bridge" />
+        ) : null}
         {run.trigger === 'backfill' ? (
           <Field
             label="Started by"

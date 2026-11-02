@@ -1,6 +1,7 @@
+import { RunPlaceButton } from '@/components/RunPlaceButton';
 import { ActionRow, Button, Callout } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
-import type { CalibrationClaimView } from '@dk/shared';
+import type { BrowserPlace, CalibrationClaimView } from '@dk/shared';
 
 import {
   BLOCKER_FIX_LABEL,
@@ -9,6 +10,9 @@ import {
   blockerFixes,
   gateForFix,
 } from './format';
+
+/** The fixes that queue a step on a portal, and so can run on the laptop. */
+const PORTAL_FIXES: readonly BlockerFix[] = ['retry', 'fetch', 'portal_check'];
 
 /**
  * Why the claim has stopped, in the server's own words, with the one or two
@@ -30,7 +34,7 @@ export function ClaimBlocker({
   gates: ClaimGates;
   /** True while the action behind this fix is in flight. */
   busy: (fix: BlockerFix) => boolean;
-  onFix: (fix: BlockerFix) => void;
+  onFix: (fix: BlockerFix, browserOn?: BrowserPlace) => void;
 }) {
   const blocker = claim.blocker;
   if (!blocker) return null;
@@ -53,18 +57,33 @@ export function ClaimBlocker({
           {fixes
             .map((fix, i) => ({ fix, primary: i === 0 }))
             .reverse()
-            .map(({ fix, primary }) => (
-              <Button
-                key={fix}
-                variant={primary ? 'primary' : 'secondary'}
-                size="sm"
-                loading={busy(fix)}
-                disabled={!gateForFix(gates, fix).ok}
-                onClick={() => onFix(fix)}
-              >
-                {BLOCKER_FIX_LABEL[fix]}
-              </Button>
-            ))}
+            .map(({ fix, primary }) =>
+              // The three that run a portal step take a "where" (ADR 0030).
+              PORTAL_FIXES.includes(fix) ? (
+                <RunPlaceButton
+                  key={fix}
+                  serviceId="calibration-claim"
+                  variant={primary ? 'primary' : 'secondary'}
+                  size="sm"
+                  loading={busy(fix)}
+                  disabled={!gateForFix(gates, fix).ok}
+                  onRun={(browserOn) => onFix(fix, browserOn)}
+                >
+                  {BLOCKER_FIX_LABEL[fix]}
+                </RunPlaceButton>
+              ) : (
+                <Button
+                  key={fix}
+                  variant={primary ? 'primary' : 'secondary'}
+                  size="sm"
+                  loading={busy(fix)}
+                  disabled={!gateForFix(gates, fix).ok}
+                  onClick={() => onFix(fix)}
+                >
+                  {BLOCKER_FIX_LABEL[fix]}
+                </Button>
+              ),
+            )}
         </ActionRow>
       ) : null}
       {reasons.map((r) => (

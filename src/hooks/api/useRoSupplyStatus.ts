@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { RoSupplyStatusSummary } from '@dk/shared';
+import type { RoSupplyStatusSummary , BrowserPlace } from '@dk/shared';
 
 /**
  * One prefix for everything this pane caches, so a finished check can clear all
@@ -43,8 +43,11 @@ export function useRoSupplyStatus(dealerId: string | undefined) {
  */
 export function useCollectRoSupplyStatus(dealerId: string | undefined) {
   return useMutation({
-    mutationFn: () =>
-      api.post<{ runId: string }>(`/ro-supply-status/dealers/${dealerId}/collect`),
+    mutationFn: (input?: { browserOn?: BrowserPlace }) =>
+      api.post<{ runId: string }>(
+        `/ro-supply-status/dealers/${dealerId}/collect`,
+        input?.browserOn === 'laptop' ? { browserOn: 'laptop' } : {},
+      ),
   });
 }
 

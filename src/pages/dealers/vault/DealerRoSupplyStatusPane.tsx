@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
+import { RunPlaceButton } from '@/components/RunPlaceButton';
 import {
   Badge,
   Button,
@@ -42,7 +43,7 @@ import {
   roSupplyConditionCopy,
   roSupplyHeadlineLabel,
   type RoComplianceRow,
-} from '@dk/shared';
+ type BrowserPlace } from '@dk/shared';
 
 import { useRoSupplyRunWatcher } from './roSupply/useRoSupplyRunWatcher';
 import type { DealerVaultPaneProps } from './types';
@@ -72,8 +73,8 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
   const runWatch = useRoSupplyRunWatcher(dealer.id);
   const busy = collect.isPending || runWatch.busy;
 
-  function runCapture() {
-    collect.mutate(undefined, {
+  function runCapture(browserOn: BrowserPlace = 'server') {
+    collect.mutate(browserOn === 'laptop' ? { browserOn } : undefined, {
       onSuccess: (res) => {
         runWatch.watch(res.runId);
         toast.success('Checking — the portal takes about a minute. This section will refresh.');
@@ -120,15 +121,16 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
   );
 
   const captureButton = (
-    <Button
+    <RunPlaceButton
+      serviceId="ro-supply-status"
       variant="secondary"
       size="sm"
       loading={busy}
       leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
-      onClick={runCapture}
+      onRun={runCapture}
     >
       Check now
-    </Button>
+    </RunPlaceButton>
   );
 
   if (summaryQ.isLoading) {

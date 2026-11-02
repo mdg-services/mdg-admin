@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 
 
 
+import { RunPlaceButton } from '@/components/RunPlaceButton';
 import {
   Badge,
   Button,
@@ -57,7 +58,7 @@ import {
   irasDayNeedsAttention,
   type Dealer,
   type IrasDayStateRow,
-} from '@dk/shared';
+ type BrowserPlace } from '@dk/shared';
 
 import { SnapshotDetail } from '../dataVault/SnapshotDetail';
 
@@ -168,9 +169,9 @@ export function DealerDataVaultTab({ dealer }: Props) {
       (s) => s.serviceId === PIPELINE_SERVICE_ID && s.status === 'ACTIVE',
     );
 
-  function runCollection() {
+  function runCollection(browserOn: BrowserPlace = 'server') {
     collect.mutate(
-      { dealerId: dealer.id, ...(backDate ? { businessDate: backDate } : {}) },
+      { dealerId: dealer.id, ...(backDate ? { businessDate: backDate } : {}), browserOn },
       {
         onSuccess: (data) => {
           setCollectRunId(data.runId);
@@ -250,16 +251,17 @@ export function DealerDataVaultTab({ dealer }: Props) {
         )}
       </Button>
       {canCollect ? (
-        <Button
+        <RunPlaceButton
+          serviceId={PIPELINE_SERVICE_ID}
           variant="secondary"
           size="sm"
           loading={collecting}
           disabled={!dateValid}
           leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
-          onClick={runCollection}
+          onRun={runCollection}
         >
           {backDate ? 'Collect' : 'Collect now'}
-        </Button>
+        </RunPlaceButton>
       ) : null}
     </div>
   );

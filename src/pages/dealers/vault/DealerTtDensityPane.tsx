@@ -1,6 +1,7 @@
 import { AlertCircle, DownloadCloud, Gauge, ImageOff, Plug, Truck } from 'lucide-react';
 import * as React from 'react';
 
+import { RunPlaceButton } from '@/components/RunPlaceButton';
 import {
   ActionRow,
   Badge,
@@ -31,7 +32,7 @@ import {
   TT_REGISTER_ADMIN_BACKDATE_DAYS,
   dealerCodeLabel,
   type TtInvoiceSummary,
-} from '@dk/shared';
+ type BrowserPlace } from '@dk/shared';
 
 import { DayMarkCalendar } from './ttDensity/DayMarkCalendar';
 import { DensityHero } from './ttDensity/DensityHero';
@@ -132,8 +133,8 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
     return out;
   }, [daysQ.data]);
 
-  function runFetch() {
-    collect.mutate(undefined, {
+  function runFetch(browserOn: BrowserPlace = 'server') {
+    collect.mutate(browserOn === 'laptop' ? { browserOn } : undefined, {
       onSuccess: (res) => {
         runWatch.watch(res.runId);
         toast.success(
@@ -174,16 +175,17 @@ export function DealerTtDensityPane({ dealer }: DealerVaultPaneProps) {
   }
 
   const fetchButton = (
-    <Button
+    <RunPlaceButton
+      serviceId="tt-density"
       variant="secondary"
       size="sm"
       loading={fetching}
       leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
-      onClick={runFetch}
+      onRun={runFetch}
       className="w-full sm:w-auto"
     >
       Fetch invoices now
-    </Button>
+    </RunPlaceButton>
   );
 
   const readOnlyNotice = (

@@ -11,7 +11,7 @@ import type {
   IrasDayStateRow,
   IrasDayStatesPage,
   IrasSnapshotStatus,
-} from '@dk/shared';
+ BrowserPlace } from '@dk/shared';
 
 
 /* ─────────────────────────────── Wire shapes ────────────────────────────── */
@@ -64,6 +64,8 @@ export interface IrasCollectVars {
   dealerId: string;
   /** `YYYY-MM-DD`. Omit to let the API pick today (IST). */
   businessDate?: string;
+  /** On the super-admin's laptop instead of the server (ADR 0030). */
+  browserOn?: BrowserPlace;
 }
 
 /* ─────────────────────────────── Query keys ─────────────────────────────── */
@@ -157,11 +159,11 @@ export function useDealerLatestIrasSnapshot(dealerId: string | undefined) {
 export function useCollectIrasData() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ dealerId, businessDate }: IrasCollectVars) =>
-      api.post<IrasCollectAccepted>(
-        `/iras-data/dealers/${dealerId}/collect`,
-        businessDate ? { businessDate } : {},
-      ),
+    mutationFn: ({ dealerId, businessDate, browserOn }: IrasCollectVars) =>
+      api.post<IrasCollectAccepted>(`/iras-data/dealers/${dealerId}/collect`, {
+        ...(businessDate ? { businessDate } : {}),
+        ...(browserOn === 'laptop' ? { browserOn } : {}),
+      }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: irasDataKeys.all });
     },

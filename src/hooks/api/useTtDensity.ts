@@ -7,7 +7,7 @@ import type {
   TtInvoiceSummary,
   TtRegisterDaySummary,
   TtSignedFileUrls,
-} from '@dk/shared';
+ BrowserPlace } from '@dk/shared';
 
 /**
  * Every TT Density request the admin makes.
@@ -246,7 +246,7 @@ export function useUploadTtRegisterPhoto(dealerId: string | undefined) {
 export function useCollectTtDensity(dealerId: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input?: { lookbackDays?: number }) =>
+    mutationFn: (input?: { lookbackDays?: number; browserOn?: BrowserPlace }) =>
       api.post<{ runId: string }>(
         `/tt-density/dealers/${dealerId}/collect`,
         input ?? {},

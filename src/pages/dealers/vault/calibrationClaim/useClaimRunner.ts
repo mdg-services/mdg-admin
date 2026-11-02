@@ -1,6 +1,7 @@
 import { useToast } from '@/components/ui';
 import { useCalibrationClaimAction } from '@/hooks/api/useCalibrationClaim';
 import { ApiError } from '@/lib/api';
+import type { BrowserPlace } from '@dk/shared';
 import type { CalibrationClaimActionInput } from '@dk/shared/schemas';
 
 /**
@@ -26,6 +27,8 @@ export interface ClaimRunner {
     successText: string,
     onDone?: () => void,
     onRefused?: () => void,
+    /** On the super-admin's laptop (ADR 0030): the step this press queues opens there. */
+    browserOn?: BrowserPlace,
   ) => void;
   /** True while an action of this type is in flight; with no type, while any is. */
   busy: (type?: CalibrationClaimActionInput['type']) => boolean;
@@ -36,12 +39,16 @@ export function useClaimRunner(dealerId: string): ClaimRunner {
   const mutation = useCalibrationClaimAction(dealerId);
 
   return {
-    run(claimId, action, successText, onDone, onRefused) {
+    run(claimId, action, successText, onDone, onRefused, browserOn = 'server') {
       mutation.mutate(
-        { claimId, action },
+        { claimId, action, browserOn },
         {
           onSuccess: () => {
-            toast.success(successText);
+            toast.success(
+              browserOn === 'laptop'
+                ? `${successText} The window opens on your laptop.`
+                : successText,
+            );
             onDone?.();
           },
           onError: (err) => {

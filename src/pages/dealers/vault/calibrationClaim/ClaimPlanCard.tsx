@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { RunPlaceButton } from '@/components/RunPlaceButton';
 import {
   ActionRow,
   Badge,
@@ -14,7 +15,7 @@ import {
   KeyValueList,
 } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
-import type { CalibrationClaimView, ClaimPlan } from '@dk/shared';
+import type { CalibrationClaimView, ClaimPlan, BrowserPlace } from '@dk/shared';
 
 import { ApproveDialog } from './ClaimDialogs';
 import { NO_VALUE, type ClaimGates, approveAction, planSummary, signedLetterIn } from './format';
@@ -43,8 +44,9 @@ export function ClaimPlanCard({
   autoFinalize: boolean;
 }) {
   const [approving, setApproving] = React.useState(false);
-  const [filing, setFiling] = React.useState(false);
-  const [finalizing, setFinalizing] = React.useState(false);
+  // Open while the admin confirms; holds where the robot's browser opens (ADR 0030).
+  const [filing, setFiling] = React.useState<BrowserPlace | null>(null);
+  const [finalizing, setFinalizing] = React.useState<BrowserPlace | null>(null);
   // The plan, and its fingerprint, as they were when the Approve box was opened. The
   // box lists this snapshot and the press sends its fingerprint, so figures that move
   // while the box is open (a new look at IndianOil, another admin's correction) are
@@ -141,26 +143,28 @@ export function ClaimPlanCard({
             so on a phone it is the button on top, under the thumb. */}
         <ActionRow below="stack" align="start">
           {showFinalize ? (
-            <Button
+            <RunPlaceButton
+              serviceId="calibration-claim"
               variant="secondary"
               size="sm"
               loading={runner.busy('finalize')}
               disabled={!gates.finalize.ok || anyBusy}
-              onClick={() => setFinalizing(true)}
+              onRun={setFinalizing}
             >
               Finalize now
-            </Button>
+            </RunPlaceButton>
           ) : null}
           {showFile ? (
-            <Button
+            <RunPlaceButton
+              serviceId="calibration-claim"
               variant="secondary"
               size="sm"
               loading={runner.busy('file')}
               disabled={!gates.file.ok || anyBusy}
-              onClick={() => setFiling(true)}
+              onRun={setFiling}
             >
               File now
-            </Button>
+            </RunPlaceButton>
           ) : null}
           {!approval ? (
             <Button
@@ -229,34 +233,46 @@ export function ClaimPlanCard({
       ) : null}
 
       <ConfirmDialog
-        open={filing}
-        onCancel={() => setFiling(false)}
+        open={filing !== null}
+        onCancel={() => setFiling(null)}
         onConfirm={() =>
-          runner.run(claim.id, { type: 'file' }, 'Filing has started.', () => setFiling(false))
+          runner.run(
+            claim.id,
+            { type: 'file' },
+            'Filing has started.',
+            () => setFiling(null),
+            undefined,
+            filing ?? 'server',
+          )
         }
         title="File this claim now?"
         confirmLabel="File now"
         loading={runner.busy('file')}
-        description={
+        description={`${
           approval?.finalize
             ? 'The robot signs in to IndianOil, types the approved claim and presses Finalize. Finalize cannot be undone.'
             : 'The robot signs in to IndianOil and types the approved claim, then stops before Finalize.'
-        }
+        }${filing === 'laptop' ? ' It does this in a window on your laptop.' : ''}`}
       />
 
       <ConfirmDialog
-        open={finalizing}
-        onCancel={() => setFinalizing(false)}
+        open={finalizing !== null}
+        onCancel={() => setFinalizing(null)}
         onConfirm={() =>
-          runner.run(claim.id, { type: 'finalize' }, 'Finalizing has started.', () =>
-            setFinalizing(false),
+          runner.run(
+            claim.id,
+            { type: 'finalize' },
+            'Finalizing has started.',
+            () => setFinalizing(null),
+            undefined,
+            finalizing ?? 'server',
           )
         }
         title="Finalize this claim?"
         confirmLabel="Finalize"
         confirmVariant="danger"
         loading={runner.busy('finalize')}
-        description="The robot reopens the saved claim on IndianOil and presses Finalize. The claim is then submitted, and this cannot be undone."
+        description={`The robot reopens the saved claim on IndianOil and presses Finalize. The claim is then submitted, and this cannot be undone.${finalizing === 'laptop' ? ' It does this in a window on your laptop.' : ''}`}
       />
     </Card>
   );

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
+import { RunPlaceButton, runStartedWords } from '@/components/RunPlaceButton';
 import {
   Badge,
   Button,
@@ -49,7 +50,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, istTodayYmd } from '@/lib/format';
 import { retryImport } from '@/lib/retryImport';
-import type { Dealer, DealerService } from '@dk/shared';
+import type { Dealer, DealerService , BrowserPlace } from '@dk/shared';
 import type { UpdateDealerServiceInput } from '@dk/shared/schemas';
 
 import { INSPECTION_SERVICE_ID, IRAS_SERVICE_ID } from './schedulePicker';
@@ -167,14 +168,16 @@ export function DealerServicesTab({ dealer }: Props) {
   const sendingRunNow = (ds: DealerService) =>
     runNow.isPending && runNow.variables?.dsId === ds.id;
 
-  async function onRunNow(ds: DealerService) {
+  async function onRunNow(ds: DealerService, browserOn: BrowserPlace = 'server') {
     try {
-      await runNow.mutateAsync({ dsId: ds.id });
+      await runNow.mutateAsync({ dsId: ds.id, body: browserOn === 'laptop' ? { browserOn } : {} });
       if (ds.serviceId === 'calibration-claim') {
         const words = claimRunNowWords(istTodayYmd());
-        toast.success(words.title, { description: words.description });
+        toast.success(words.title, {
+          description: browserOn === 'laptop' ? `${words.description} It opens on your laptop.` : words.description,
+        });
       } else {
-        toast.success('Run enqueued');
+        toast.success(browserOn === 'laptop' ? runStartedWords('laptop') : 'Run enqueued');
       }
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Run failed';
@@ -360,11 +363,12 @@ export function DealerServicesTab({ dealer }: Props) {
                   </TD>
                   <TD>
                     <div className="flex items-center justify-end gap-1">
-                      <Button
+                      <RunPlaceButton
+                        serviceId={ds.serviceId}
                         variant="secondary"
                         size="sm"
                         loading={sendingRunNow(ds)}
-                        onClick={() => onRunNow(ds)}
+                        onRun={(browserOn) => onRunNow(ds, browserOn)}
                         leftIcon={
                           <RefreshCw
                             width={14}
@@ -374,7 +378,7 @@ export function DealerServicesTab({ dealer }: Props) {
                         }
                       >
                         Run now
-                      </Button>
+                      </RunPlaceButton>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -469,17 +473,18 @@ export function DealerServicesTab({ dealer }: Props) {
               actionsLayout: 'wrap',
               actions: (
                 <>
-                  <Button
+                  <RunPlaceButton
+                    serviceId={ds.serviceId}
                     variant="secondary"
                     size="sm"
                     loading={sendingRunNow(ds)}
                     leftIcon={
                       <RefreshCw width={14} height={14} strokeWidth={1.75} />
                     }
-                    onClick={() => onRunNow(ds)}
+                    onRun={(browserOn) => onRunNow(ds, browserOn)}
                   >
                     Run now
-                  </Button>
+                  </RunPlaceButton>
                   <Menu
                     label={`More actions for ${serviceName(ds)}`}
                     title={serviceName(ds)}

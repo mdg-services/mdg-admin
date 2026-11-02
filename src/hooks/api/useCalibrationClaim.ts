@@ -15,6 +15,7 @@ import type {
   ClaimUploadSlot,
   PresignUploadResponse,
   WemmisLoginStatus,
+  BrowserPlace,
 } from '@dk/shared';
 import type { CalibrationClaimActionInput } from '@dk/shared/schemas';
 
@@ -84,6 +85,8 @@ export function useStartCalibrationClaim(dealerId: string) {
 export interface ClaimActionVars {
   claimId: string;
   action: CalibrationClaimActionInput;
+  /** The portal step this press queues opens its browser on the super-admin's laptop (ADR 0030). */
+  browserOn?: BrowserPlace;
 }
 
 /**
@@ -100,8 +103,11 @@ export interface ClaimActionVars {
 export function useCalibrationClaimAction(dealerId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ claimId, action }: ClaimActionVars) =>
-      api.post<CalibrationClaimView>(`/calibration-claim/claims/${claimId}/action`, action),
+    mutationFn: ({ claimId, action, browserOn }: ClaimActionVars) =>
+      api.post<CalibrationClaimView>(`/calibration-claim/claims/${claimId}/action`, {
+        ...action,
+        ...(browserOn === 'laptop' ? { browserOn } : {}),
+      }),
     onSuccess: (view) => cacheClaim(qc, dealerId, view),
     onError: () => {
       void qc.invalidateQueries({ queryKey: calibrationClaimKeys.overview(dealerId) });

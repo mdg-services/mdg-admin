@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
+import { RunPlaceButton } from '@/components/RunPlaceButton';
 import {
   Badge,
   Button,
@@ -44,7 +45,7 @@ import { api, ApiError } from '@/lib/api';
 import { formatDateTime, formatDmy, inrFormat } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
 import type { CreditDodQuota, CreditDodSnapshotRecord } from '@/types/creditDod';
-import type { Dealer, ServiceRun } from '@dk/shared';
+import type { Dealer, ServiceRun , BrowserPlace } from '@dk/shared';
 
 import { CreditDodReportCard } from './CreditDodReportCard';
 
@@ -192,7 +193,7 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
 
   const busy = runNow.isPending || activeRunId !== null;
 
-  async function generate(asOf?: string) {
+  async function generate(asOf?: string, browserOn: BrowserPlace = 'server') {
     if (!creditDodDs) {
       toast.error('Attach the Credit & DOD service to this dealer first.');
       return;
@@ -200,7 +201,10 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
     try {
       const { runId } = await runNow.mutateAsync({
         dsId: creditDodDs.id,
-        body: asOf ? { configOverride: { asOf } } : {},
+        body: {
+          ...(asOf ? { configOverride: { asOf } } : {}),
+          ...(browserOn === 'laptop' ? { browserOn } : {}),
+        },
       });
       setActiveRunId(runId);
       void qc.invalidateQueries({ queryKey: ['creditDodQuota', dealerId] });
@@ -218,7 +222,7 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
     }
   }
 
-  function generateBackdated() {
+  function generateBackdated(browserOn: BrowserPlace = 'server') {
     if (!date) {
       toast.error('Pick a date to generate the report for.');
       return;
@@ -227,7 +231,7 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
       toast.error('Pick a date in the past (or today).');
       return;
     }
-    void generate(isoToDmy(date));
+    void generate(isoToDmy(date), browserOn);
   }
 
   return (
@@ -273,14 +277,15 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
               Pulls everything new from the portal, updates the maintained
               ledger, and produces today&apos;s card.
             </p>
-            <Button
+            <RunPlaceButton
+              serviceId="credit-dod-monitoring"
               className="w-full md:w-auto"
-              onClick={() => void generate()}
+              onRun={(browserOn) => void generate(undefined, browserOn)}
               loading={busy}
               disabled={!creditDodDs || outOfQuota}
             >
               Generate now
-            </Button>
+            </RunPlaceButton>
           </div>
         ) : (
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -306,14 +311,15 @@ function GenerateCard({ dealerId }: { dealerId: string }) {
                   className="w-full md:w-44"
                 />
               </div>
-              <Button
+              <RunPlaceButton
+                serviceId="credit-dod-monitoring"
                 className="w-full md:w-auto"
-                onClick={generateBackdated}
+                onRun={generateBackdated}
                 loading={busy}
                 disabled={!creditDodDs || outOfQuota}
               >
                 Generate
-              </Button>
+              </RunPlaceButton>
             </div>
           </div>
         )}

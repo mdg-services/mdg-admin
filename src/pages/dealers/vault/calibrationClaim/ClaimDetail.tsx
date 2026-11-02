@@ -16,6 +16,7 @@ import type {
   CalibrationClaimView,
   ClaimCheck,
   ClaimDocumentSlot,
+  BrowserPlace,
 } from '@dk/shared';
 import type { CalibrationClaimActionInput } from '@dk/shared/schemas';
 
@@ -94,12 +95,26 @@ export function ClaimDetail({
   const wemmisSaved = overview.wemmis.status === 'saved';
   const closeDialog = () => setDialog(null);
 
-  function onFix(fix: BlockerFix) {
+  function onFix(fix: BlockerFix, browserOn: BrowserPlace = 'server') {
     switch (fix) {
       case 'retry':
-        return runner.run(claim.id, { type: 'retry' }, 'Trying that step again.');
+        return runner.run(
+          claim.id,
+          { type: 'retry' },
+          'Trying that step again.',
+          undefined,
+          undefined,
+          browserOn,
+        );
       case 'fetch':
-        return runner.run(claim.id, { type: 'fetch_documents' }, 'Fetching the papers.');
+        return runner.run(
+          claim.id,
+          { type: 'fetch_documents' },
+          'Fetching the papers.',
+          undefined,
+          undefined,
+          browserOn,
+        );
       case 'ask_login':
         return runner.run(
           claim.id,
@@ -113,7 +128,14 @@ export function ClaimDetail({
           'The owner has been asked to send the certificate and the receipt.',
         );
       case 'portal_check':
-        return runner.run(claim.id, { type: 'portal_check' }, 'Checking SDMS again.');
+        return runner.run(
+          claim.id,
+          { type: 'portal_check' },
+          'Checking SDMS again.',
+          undefined,
+          undefined,
+          browserOn,
+        );
       case 'upload':
         return setDialog('upload');
       case 'corrections':
@@ -142,11 +164,25 @@ export function ClaimDetail({
               ) : null}
               <ClaimMoreMenu
                 gates={gates}
-                onFetch={() =>
-                  runner.run(claim.id, { type: 'fetch_documents' }, 'Fetching the papers.')
+                onFetch={(browserOn) =>
+                  runner.run(
+                    claim.id,
+                    { type: 'fetch_documents' },
+                    'Fetching the papers.',
+                    undefined,
+                    undefined,
+                    browserOn,
+                  )
                 }
-                onCheck={() =>
-                  runner.run(claim.id, { type: 'portal_check' }, 'Checking SDMS again.')
+                onCheck={(browserOn) =>
+                  runner.run(
+                    claim.id,
+                    { type: 'portal_check' },
+                    'Checking SDMS again.',
+                    undefined,
+                    undefined,
+                    browserOn,
+                  )
                 }
                 onResend={() => setDialog('resend')}
                 onRemind={() =>

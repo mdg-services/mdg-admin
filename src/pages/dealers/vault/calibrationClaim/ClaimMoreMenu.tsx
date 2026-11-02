@@ -1,6 +1,9 @@
-import { Ban, BellRing, CheckSquare, FileDown, RefreshCw, ScanSearch } from 'lucide-react';
+import { Ban, BellRing, CheckSquare, FileDown, Laptop, RefreshCw, ScanSearch } from 'lucide-react';
 
 import { Menu, MenuItem, MenuSeparator } from '@/components/ui';
+import { useLaptopBridge } from '@/hooks/api/useLaptopBridge';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import type { BrowserPlace } from '@dk/shared';
 
 import type { ClaimGates } from './format';
 
@@ -22,26 +25,57 @@ export function ClaimMoreMenu({
   onCancel,
 }: {
   gates: ClaimGates;
-  onFetch: () => void;
-  onCheck: () => void;
+  onFetch: (browserOn: BrowserPlace) => void;
+  onCheck: (browserOn: BrowserPlace) => void;
   onResend: () => void;
   onRemind: () => void;
   onMarkFiled: () => void;
   onCancel: () => void;
 }) {
+  // A super-admin can send the two portal steps to their own laptop (ADR 0030).
+  const isSuperAdmin = useIsSuperAdmin();
+  const bridge = useLaptopBridge(isSuperAdmin);
+  const laptop = isSuperAdmin
+    ? bridge.data?.up
+      ? null
+      : (bridge.data?.reason ?? 'The laptop bridge is not running.')
+    : undefined;
   const icon = { width: 15, height: 15, strokeWidth: 1.75 } as const;
   return (
     <Menu label="More actions for this claim" title="This claim">
       <MenuItem
         icon={<FileDown {...icon} />}
         disabled={!gates.fetchDocuments.ok}
-        onSelect={onFetch}
+        onSelect={() => onFetch('server')}
       >
         Fetch papers now
       </MenuItem>
-      <MenuItem icon={<ScanSearch {...icon} />} disabled={!gates.portalCheck.ok} onSelect={onCheck}>
+      <MenuItem
+        icon={<ScanSearch {...icon} />}
+        disabled={!gates.portalCheck.ok}
+        onSelect={() => onCheck('server')}
+      >
         Check SDMS again
       </MenuItem>
+      {laptop !== undefined ? (
+        <>
+          <MenuItem
+            icon={<Laptop {...icon} />}
+            disabled={!gates.fetchDocuments.ok || laptop !== null}
+            onSelect={() => onFetch('laptop')}
+          >
+            <span className="block">Fetch papers on my laptop</span>
+            {laptop ? <span className="block text-xs text-text-subtle">{laptop}</span> : null}
+          </MenuItem>
+          <MenuItem
+            icon={<Laptop {...icon} />}
+            disabled={!gates.portalCheck.ok || laptop !== null}
+            onSelect={() => onCheck('laptop')}
+          >
+            Check SDMS on my laptop
+          </MenuItem>
+        </>
+      ) : null}
       <MenuItem
         icon={<RefreshCw {...icon} />}
         disabled={!gates.resendLetter.ok}

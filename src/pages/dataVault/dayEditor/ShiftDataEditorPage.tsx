@@ -14,6 +14,7 @@ import {
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
+import { RunPlaceButton } from '@/components/RunPlaceButton';
 import {
   Badge,
   Button,
@@ -53,7 +54,7 @@ import {
   dealerCodeLabel,
   recAttributionWindow,
 } from '@dk/shared';
-import type { IrasDayEditorView, IrasReportCode } from '@dk/shared';
+import type { IrasDayEditorView, IrasReportCode , BrowserPlace } from '@dk/shared';
 
 import { reportsAffected } from './describePending';
 import { IrasEditGrid } from './IrasEditGrid';
@@ -413,7 +414,7 @@ export function ShiftDataEditorPage() {
     <div>
       <Header
         day={day}
-        onCollect={() => runCollect()}
+        onCollect={(browserOn) => runCollect(browserOn)}
         collecting={collect.isPending}
         canCollect={canCollect}
       />
@@ -483,14 +484,15 @@ export function ShiftDataEditorPage() {
                 readOnly ? undefined : (
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     {portalCollects ? (
-                      <Button
+                      <RunPlaceButton
+                        serviceId="iras-shift-data"
                         variant="secondary"
                         loading={collect.isPending}
                         leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
-                        onClick={() => runCollect()}
+                        onRun={runCollect}
                       >
                         Collect this day
-                      </Button>
+                      </RunPlaceButton>
                     ) : null}
                     <Button
                       variant={portalCollects ? 'ghost' : 'secondary'}
@@ -758,9 +760,9 @@ export function ShiftDataEditorPage() {
     );
   }
 
-  function runCollect() {
+  function runCollect(browserOn: BrowserPlace = 'server') {
     collect.mutate(
-      { dealerId, businessDate },
+      { dealerId, businessDate, browserOn },
       {
         onSuccess: () =>
           toast.success(
@@ -809,7 +811,7 @@ function Header({
   canCollect,
 }: {
   day: IrasDayEditorView;
-  onCollect: () => void;
+  onCollect: (browserOn: BrowserPlace) => void;
   collecting: boolean;
   /** Whether asking the portal can finish — i.e. this dealer has an IRAS Shift
    *  Data attachment for the collect route to run, and is not archived. */
@@ -888,15 +890,16 @@ function Header({
           untouched. */}
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         {canCollect ? (
-          <Button
+          <RunPlaceButton
+            serviceId="iras-shift-data"
             variant="secondary"
             size="sm"
             loading={collecting}
             leftIcon={<DownloadCloud width={14} height={14} strokeWidth={1.75} />}
-            onClick={onCollect}
+            onRun={onCollect}
           >
             Re-collect
-          </Button>
+          </RunPlaceButton>
         ) : null}
         <HowThisWorks surface="admin-shift-data-editor" label="Shift data" />
       </div>

@@ -40,6 +40,7 @@ import {
   DealerArchiveDialogs,
   type DealerArchiveAction,
 } from './dealers/DealerDangerZone';
+import { SummonMenu } from './dealers/SummonMenu';
 
 /**
  * Every tab body is loaded on demand, and only the one on screen.
@@ -584,6 +585,8 @@ export function DealerDetailPage() {
             {setup && !isArchived && dealer.status === 'ONBOARDING' ? null : (
               <StatusChip kind="dealer" value={dealer.status} />
             )}
+            {/* Super-admins only; a deleted outlet's logins are locked. */}
+            {isArchived ? null : <SummonMenu dealerId={dealer.id} />}
           </div>
         }
         // Icon: `dense` keeps the title, subtitle, actions and tools on one row.
