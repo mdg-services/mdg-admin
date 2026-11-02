@@ -201,7 +201,12 @@ export function ClaimDetail({
         onSendBack={() => setDialog('sendBack')}
       />
 
-      <ClaimPapers dealerId={dealerId} claim={claim} onView={(doc) => setViewSlot(doc.slot)} />
+      <ClaimPapers
+        dealerId={dealerId}
+        claim={claim}
+        upload={gates.upload}
+        onView={(doc) => setViewSlot(doc.slot)}
+      />
 
       <WemmisLoginCard
         dealerId={dealerId}

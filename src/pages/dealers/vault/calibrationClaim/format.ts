@@ -450,6 +450,35 @@ export function claimGates(claim: CalibrationClaimView): ClaimGates {
     return YES;
   };
 
+  // Fetching the papers and asking the owner for them or for the login: the server
+  // takes these only while the claim is on its papers (documents, review).
+  const papersStep = (): Gate => {
+    if (closed) return no(closedReason(claim));
+    if (claim.stage !== 'documents' && claim.stage !== 'review')
+      return no('The papers are already in. Upload a paper by hand to replace one.');
+    return YES;
+  };
+
+  // A read-only look at IndianOil: once the certificate is read, and still after the
+  // claim is saved there (it reads View Claims), but not while filing is running.
+  const portalCheck = (): Gate => {
+    if (closed) return no(closedReason(claim));
+    if (working) return no(BUSY);
+    if (claim.stage === 'documents')
+      return no('Fetch or upload the papers first. The portal is looked at once they are read.');
+    if (claim.stage === 'filing') return no('Filing is running.');
+    if (!claim.certificate) return no('The certificate has not been read yet.');
+    return YES;
+  };
+
+  const upload = (): Gate => {
+    if (closed) return no(closedReason(claim));
+    if (working || claim.stage === 'filing') return no(BUSY);
+    if (claim.stage === 'filed')
+      return no('It is already saved on IndianOil, so its papers can no longer be changed here.');
+    return YES;
+  };
+
   const approve = (): Gate => {
     if (closed) return no(closedReason(claim));
     if (claim.approval) return no('Already approved.');
@@ -539,13 +568,13 @@ export function claimGates(claim: CalibrationClaimView): ClaimGates {
     finalize: finalize(),
     corrections: corrections(),
     reviewLetter: reviewLetter(),
-    fetchDocuments: idle(),
-    portalCheck: idle(),
+    fetchDocuments: !closed && working ? no(BUSY) : papersStep(),
+    portalCheck: portalCheck(),
     // "Try again" is for a step that stopped, and a filing that stopped is still in
     // the filing stage, so it cannot be held to the "not sent yet" rule.
     retry: closed ? no(closedReason(claim)) : working ? no(BUSY) : YES,
-    askOwner: whenOpen(YES),
-    upload: whenOpen(YES),
+    askOwner: papersStep(),
+    upload: upload(),
     resendLetter: resendLetter(),
     remindLetter: remindLetter(),
     markFiled: whenOpen(YES),
@@ -605,13 +634,17 @@ const EXISTS_CODE = /EXIST|ALREADY|DRAFT|DEALER_CODE|MISMATCH|CLAIM_/i;
 const FIXES_BY_CODE: Readonly<Record<string, BlockerFix[]>> = {
   wemmis_login_missing: ['ask_login', 'ask_documents'],
   documents_not_found: ['ask_documents', 'upload'],
-  certificate_unreadable: ['upload', 'ask_documents'],
-  certificate_needs_values: ['upload'],
-  receipt_unreadable: ['upload', 'ask_documents'],
-  receipt_needs_values: ['upload', 'corrections'],
+  // "Upload the … PDF from eMaaptaul, or fetch it again." A photo of a receipt has no
+  // values to correct, so Corrections would change nothing.
+  certificate_unreadable: ['upload', 'fetch'],
+  certificate_needs_values: ['upload', 'fetch'],
+  receipt_unreadable: ['upload', 'fetch'],
+  receipt_needs_values: ['upload', 'fetch'],
   papers_missing: ['fetch', 'upload'],
   check_failed: ['corrections', 'portal_check'],
-  du_mismatch: ['portal_check', 'corrections'],
+  // "Press Check SDMS again …; when they are right, press Retry to file again." The look
+  // never lets an approved claim file again by itself, so Retry is the admin's press.
+  du_mismatch: ['portal_check', 'retry'],
   multiple_receipts_upload: ['upload', 'retry'],
   claim_already_exists: ['portal_check'],
   draft_not_found: ['portal_check', 'retry'],
@@ -620,7 +653,7 @@ const FIXES_BY_CODE: Readonly<Record<string, BlockerFix[]>> = {
   sdms_password_refused: ['retry'],
   // An eMaaptaul visit that stopped part-way: Retry runs the same step again. These
   // names carry "LOGIN" or "ACCOUNT", so the guess below would ask the owner for a
-  // login that is saved and fine (1E, 2 Nov: "Press Retry" and no Retry button).
+  // login that is saved and fine (2 Nov: "Press Retry" and no Retry button).
   browser_launch_failed: ['retry'],
   site_unreachable: ['retry', 'upload'],
   login_captcha_unsolved: ['retry', 'upload'],
@@ -645,8 +678,9 @@ const FIXES_BY_CODE: Readonly<Record<string, BlockerFix[]>> = {
   receipts_page_not_found: ['upload'],
   receipt_not_found: ['upload', 'ask_documents'],
   // SDMS
+  sdms_login_no_response: ['retry'],
   du_table_unreadable: ['retry'],
-  formation_rows_mismatch: ['portal_check'],
+  formation_rows_mismatch: ['portal_check', 'retry'],
   validation_rejected: ['corrections'],
   upload_rejected: ['upload', 'retry'],
 };
@@ -673,11 +707,22 @@ export function blockerFixes(
   wemmisSaved: boolean,
 ): BlockerFix[] {
   const code = (claim.blocker?.code ?? '').toLowerCase();
-  const fixes = FIXES_BY_CODE[code] ?? guessFixes(claim, code, wemmisSaved);
+  let fixes = FIXES_BY_CODE[code] ?? guessFixes(claim, code, wemmisSaved);
+  // A paper that turns out unreadable after the letter has gone (uploaded by hand in
+  // "letter" or "ready") is replaced by an upload: fetching or asking is refused there.
+  if (!PAPERS_STEP.includes(claim.stage))
+    fixes = fixes.filter((f) => !PAPERS_STEP_FIXES.includes(f));
+  // With no eMaaptaul login saved, "Fetch papers now" fetches nothing: it asks the owner
+  // for the login in the chat. The button that says it asks the owner is offered instead.
+  if (!wemmisSaved) fixes = [...new Set(fixes.map((f) => (f === 'fetch' ? 'ask_documents' : f)))];
+  if (fixes.length === 0) fixes = ['retry'];
   if (!SAYS_RETRY.test(claim.blocker?.message ?? '') || fixes.includes('retry')) return fixes;
   const other = fixes.find((f) => f !== 'fetch' && f !== 'ask_login');
   return other ? ['retry', other] : ['retry'];
 }
+
+const PAPERS_STEP: readonly CalibrationClaimStage[] = ['documents', 'review'];
+const PAPERS_STEP_FIXES: readonly BlockerFix[] = ['fetch', 'ask_login', 'ask_documents'];
 
 /** For a code the table above does not know: chosen from where the claim is stuck. */
 function guessFixes(
@@ -692,7 +737,9 @@ function guessFixes(
     case 'review':
       if (blockingChecks(claim).length > 0 || CHECK_CODE.test(code))
         return ['corrections', 'portal_check'];
-      return ['retry', 'portal_check'];
+      // The claim does not say which step stopped: for an SDMS look Check SDMS again is
+      // Retry under another name, and for an eMaaptaul visit it would not help.
+      return ['retry'];
     case 'letter':
       return ['retry'];
     default:

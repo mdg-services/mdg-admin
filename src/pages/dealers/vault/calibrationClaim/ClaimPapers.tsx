@@ -17,7 +17,15 @@ import { downloadFile } from '@/lib/downloadFile';
 import { formatDateTime } from '@/lib/format';
 import type { CalibrationClaimView, ClaimDocumentView } from '@dk/shared';
 
-import { SLOT_LABEL, SLOT_ORDER, SOURCE_LABEL, fileSize, isClosed, isUploadSlot } from './format';
+import {
+  SLOT_LABEL,
+  SLOT_ORDER,
+  SOURCE_LABEL,
+  fileSize,
+  isClosed,
+  isUploadSlot,
+  type Gate,
+} from './format';
 import { UploadPaperButton } from './UploadPaperButton';
 
 /**
@@ -79,15 +87,22 @@ function PaperDownloadButton({ claimId, doc }: { claimId: string; doc: ClaimDocu
 export function ClaimPapers({
   dealerId,
   claim,
+  upload,
   onView,
 }: {
   dealerId: string;
   claim: CalibrationClaimView;
+  /** Whether a paper may be uploaded now: the server takes none while a run works or once filed. */
+  upload: Gate;
   onView: (doc: ClaimDocumentView) => void;
 }) {
   const open = !isClosed(claim);
   const byslot = new Map(claim.documents.map((d) => [d.slot, d]));
-  const slots = SLOT_ORDER.filter((slot) => byslot.has(slot) || (open && isUploadSlot(slot)));
+  // The signed letter is taken only once the owner has one to sign (letter, ready).
+  const letterOut = claim.stage === 'letter' || claim.stage === 'ready';
+  const fillable = (slot: (typeof SLOT_ORDER)[number]) =>
+    open && isUploadSlot(slot) && (slot !== 'signedLetter' || letterOut);
+  const slots = SLOT_ORDER.filter((slot) => byslot.has(slot) || fillable(slot));
 
   return (
     <Card>
@@ -134,13 +149,14 @@ export function ClaimPapers({
                         <PaperDownloadButton claimId={claim.id} doc={doc} />
                       </>
                     ) : null}
-                    {open && isUploadSlot(slot) ? (
+                    {fillable(slot) && isUploadSlot(slot) ? (
                       <UploadPaperButton
                         dealerId={dealerId}
                         claimId={claim.id}
                         slot={slot}
                         label={doc ? 'Replace' : 'Upload'}
                         variant={doc ? 'ghost' : 'secondary'}
+                        disabled={!upload.ok}
                       />
                     ) : null}
                   </ActionRow>
@@ -149,6 +165,9 @@ export function ClaimPapers({
             })}
           </ul>
         )}
+        {open && !upload.ok && upload.reason ? (
+          <p className="px-1 pt-2 text-xs text-text-subtle">{upload.reason}</p>
+        ) : null}
       </CardContent>
     </Card>
   );

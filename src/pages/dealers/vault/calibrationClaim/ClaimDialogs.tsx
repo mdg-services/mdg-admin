@@ -12,11 +12,12 @@ import {
   Textarea,
 } from '@/components/ui';
 import { useRevealOnChange } from '@/hooks/useRevealOnChange';
-import type { CalibrationClaimView, ClaimPlan } from '@dk/shared';
+import type { CalibrationClaimView, ClaimPlan, ClaimUploadSlot } from '@dk/shared';
 import type { ClaimOverridesInput } from '@dk/shared/schemas';
 
 import {
   approvalFacts,
+  claimGates,
   correctionFormFrom,
   correctionPayload,
   exclusionChoices,
@@ -509,14 +510,20 @@ export function UploadPapersDialog({
   dealerId: string;
   claim: CalibrationClaimView;
 }) {
-  const slots = ['certificate', 'receipt'] as const;
+  // The signed letter too once the owner has one to sign: a stopped claim's "Upload the
+  // papers" may be for that one (the owner's copy could not be read).
+  const slots: readonly ClaimUploadSlot[] =
+    claim.stage === 'letter' || claim.stage === 'ready'
+      ? ['certificate', 'receipt', 'signedLetter']
+      : ['certificate', 'receipt'];
+  const uploadGate = claimGates(claim).upload;
   return (
     <Dialog
       open={open}
       onClose={onClose}
       size="md"
       title="Upload the papers"
-      description="A PDF or a clear photo of each."
+      description={uploadGate.ok ? 'A PDF or a clear photo of each.' : uploadGate.reason}
       footer={<Button onClick={onClose}>Done</Button>}
     >
       <ul className="divide-y divide-border">
@@ -538,6 +545,7 @@ export function UploadPapersDialog({
                   dealerId={dealerId}
                   claimId={claim.id}
                   slot={slot}
+                  disabled={!uploadGate.ok}
                   label={doc ? 'Replace' : 'Choose a file'}
                   variant={doc ? 'ghost' : 'secondary'}
                 />

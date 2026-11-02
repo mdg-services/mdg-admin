@@ -21,7 +21,7 @@ const LivePromptDialog = React.lazy(
  * A picture code the robot is waiting on, on every screen of the admin app.
  *
  * The robot holds the eMaaptaul sign-in page open and the site gives it three
- * minutes. On 2 Nov the code for 1E was offered only in that claim's pane, nobody
+ * minutes. On 2 Nov the first outlet's code was offered only in that claim's pane, nobody
  * had it open, and the three minutes ran out. So the code now comes to the admin:
  * a pop-up for the one it is put to (the last to act on the claim) wherever they
  * are, and a banner for everyone else, so a code whose admin is away is still

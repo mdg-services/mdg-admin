@@ -287,6 +287,9 @@ export function WemmisLoginCard({
             </Button>
           ) : null}
         </ActionRow>
+        {canAsk && !gates.askOwner.ok && gates.askOwner.reason ? (
+          <p className="text-xs text-text-subtle">{gates.askOwner.reason}</p>
+        ) : null}
       </CardContent>
 
       <EditLoginDialog

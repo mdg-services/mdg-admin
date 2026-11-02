@@ -32,7 +32,7 @@ export function timeLeftWords(expiresAt: string, nowMs: number): string {
   return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
 }
 
-/** "1E" or, with no code on record, "this outlet". */
+/** The outlet's code or, with no code on record, "this outlet". */
 function outletWords(p: Pick<LiveCaptchaPrompt, 'dealerCode'>): string {
   return p.dealerCode ?? 'this outlet';
 }

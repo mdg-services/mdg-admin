@@ -686,8 +686,14 @@ describe('what each button may do', () => {
     assert.equal(g.retry.ok, true);
     assert.equal(g.corrections.ok, true);
     assert.equal(g.approve.ok, true);
-    assert.equal(g.fetchDocuments.ok, true);
-    assert.equal(g.portalCheck.ok, true);
+    // On the papers, a queued step leaves Fetch and Check SDMS again open too.
+    const onPapers = claimGates({
+      ...stuck,
+      stage: 'review',
+      certificate: { vcNumber: 'V' } as unknown as CalibrationClaimView['certificate'],
+    });
+    assert.equal(onPapers.fetchDocuments.ok, true);
+    assert.equal(onPapers.portalCheck.ok, true);
     // The same claim with a run in flight is shut, so the gates are not simply always open.
     const live = claimGates(
       claim({ queued: QUEUED, working: { action: 'sdms_file', runId: 'r', since: 'x' } }),
@@ -744,7 +750,7 @@ describe('what fixes a blocker', () => {
     assert.deepEqual(blockerFixes(stuck('documents', 'papers_stuck'), true), ['fetch', 'upload']);
   });
 
-  it('a picture code nobody typed in time offers Retry, not the owner login box (1E, 2 Nov)', () => {
+  it('a picture code nobody typed in time offers Retry, not the owner login box (2 Nov)', () => {
     const c = {
       stage: 'documents' as const,
       blocker: {
@@ -794,7 +800,8 @@ describe('what fixes a blocker', () => {
       'corrections',
       'portal_check',
     ]);
-    assert.deepEqual(blockerFixes(stuck('review', 'X'), true), ['retry', 'portal_check']);
+    // Which step stopped is not on the view: Check SDMS again would repeat Retry or miss.
+    assert.deepEqual(blockerFixes(stuck('review', 'X'), true), ['retry']);
   });
 
   it('anything else gets "try again", never nothing, and never more than two buttons', () => {
@@ -813,7 +820,58 @@ describe('what fixes a blocker', () => {
     const g = claimGates(claim({ stage: 'filing' }));
     assert.equal(gateForFix(g, 'retry').ok, true);
     assert.equal(gateForFix(g, 'portal_check').ok, false);
-    assert.equal(gateForFix(g, 'upload').ok, true);
+    // The server takes no paper while filing runs, nor once the claim is saved there.
+    assert.equal(gateForFix(g, 'upload').ok, false);
+    assert.equal(gateForFix(claimGates(claim({ stage: 'filed' })), 'upload').ok, false);
+    assert.equal(gateForFix(claimGates(claim({ stage: 'ready' })), 'upload').ok, true);
+  });
+
+  it('the gates follow the stages the server takes each step in', () => {
+    const read = { vcNumber: 'V' } as unknown as CalibrationClaimView['certificate'];
+    // Fetching and asking for the papers: only while the claim is on them.
+    for (const stage of ['documents', 'review'] as const) {
+      assert.equal(claimGates(claim({ stage })).fetchDocuments.ok, true, stage);
+      assert.equal(claimGates(claim({ stage })).askOwner.ok, true, stage);
+    }
+    for (const stage of ['letter', 'ready', 'filed'] as const) {
+      assert.equal(claimGates(claim({ stage })).fetchDocuments.ok, false, stage);
+      assert.equal(claimGates(claim({ stage })).askOwner.ok, false, stage);
+    }
+    // A look at SDMS: once the certificate is read, and still on a claim saved there
+    // (draft_not_found is written on a filed claim, and its first button is this one).
+    assert.equal(claimGates(claim({ stage: 'filed', certificate: read })).portalCheck.ok, true);
+    assert.equal(claimGates(claim({ stage: 'review', certificate: read })).portalCheck.ok, true);
+    assert.equal(claimGates(claim({ stage: 'review', certificate: null })).portalCheck.ok, false);
+    assert.equal(claimGates(claim({ stage: 'documents', certificate: read })).portalCheck.ok, false);
+  });
+
+  it('never offers a papers-step button after the letter has gone', () => {
+    // A receipt uploaded by hand in "ready" that cannot be read: fetching is refused there.
+    assert.deepEqual(blockerFixes(stuck('ready', 'receipt_unreadable'), true), ['upload']);
+    assert.deepEqual(blockerFixes(stuck('review', 'receipt_unreadable'), true), ['upload', 'fetch']);
+    // A photo of a receipt has no values Corrections could fix.
+    assert.deepEqual(blockerFixes(stuck('review', 'receipt_needs_values'), true), ['upload', 'fetch']);
+    // A stop with only papers-step buttons, met later, still has a button.
+    assert.deepEqual(blockerFixes(stuck('letter', 'wemmis_login_missing'), true), ['retry']);
+    // IndianOil's own "never answered" is a Retry, not an upload.
+    assert.deepEqual(blockerFixes(stuck('filed', 'sdms_login_no_response'), true), ['retry']);
+  });
+
+  it('never offers "Fetch papers now" with no eMaaptaul login saved: it would only ask the owner for one', () => {
+    assert.deepEqual(blockerFixes(stuck('review', 'receipt_unreadable'), false), [
+      'upload',
+      'ask_documents',
+    ]);
+    assert.deepEqual(blockerFixes(stuck('documents', 'papers_missing'), false), [
+      'ask_documents',
+      'upload',
+    ]);
+  });
+
+  it('a stop on the portal form asks for a look, then Retry to file again', () => {
+    for (const code of ['du_mismatch', 'formation_rows_mismatch']) {
+      assert.deepEqual(blockerFixes(stuck('ready', code), true), ['portal_check', 'retry'], code);
+    }
   });
 });
 
@@ -1172,7 +1230,7 @@ describe('a picture code waiting for an admin, on every screen', () => {
     imageUrl: 'https://signed.example/p.png',
     expiresAt: '2026-11-02T17:12:08Z',
     dealerId: 'd1',
-    dealerCode: '1E',
+    dealerCode: 'T1',
     financialYear: '2026-27',
     askedOf: { id: 'asha', name: 'Asha' },
     ...over,
@@ -1211,7 +1269,7 @@ describe('a picture code waiting for an admin, on every screen', () => {
 
   it('says which outlet, which claim, and why it came to this admin', () => {
     const w = livePromptWords(prompt(), 'asha');
-    assert.equal(w.title, 'Type the picture code for 1E');
+    assert.equal(w.title, 'Type the picture code for T1');
     assert.equal(w.subtitle, 'Calibration claim · FY 2026-27 · eMaaptaul sign-in');
     assert.match(w.why, /could not read the picture code/);
     assert.match(w.whose, /you were the last to act on this claim/);
@@ -1222,7 +1280,7 @@ describe('a picture code waiting for an admin, on every screen', () => {
   it('puts the outlet, the year, the time left and who it was put to on the banner', () => {
     assert.equal(
       liveBannerWords(prompt(), 'ravi', NOW),
-      '1E needs a picture code typed for its calibration claim, FY 2026-27. 2:38 left. Put to Asha first.',
+      'T1 needs a picture code typed for its calibration claim, FY 2026-27. 2:38 left. Put to Asha first.',
     );
     assert.equal(
       liveBannerWords(prompt({ dealerCode: null, financialYear: null, askedOf: null }), 'ravi', NOW),
