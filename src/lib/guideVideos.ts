@@ -141,6 +141,10 @@ const SHIFT_DATA: readonly GuideRef[] = [video('admin_hand_entry', 'Typing figur
 /** Running an onboarding, from a registration to a live outlet (the team's walkthrough). */
 const ONBOARDING: readonly GuideRef[] = [video('admin_onboarding', 'Running an onboarding')];
 
+/** One dealer ticket from arrival to done (3 Nov 2026). Each screen opens it at its own part. */
+const TICKET_DESK: readonly GuideRef[] = [video('admin_ticket_desk', 'The ticket desk')];
+const TICKETS_TAB = video('admin_ticket_desk', 'The Tickets tab', { at: 19.74, titleIsPart: true });
+
 /** The three-day clock is a public explainer: it lives on the website now. */
 const DOD_CLOCK: GuideRef = {
   kind: 'web',
@@ -201,6 +205,18 @@ const BY_SURFACE: Record<string, readonly GuideRef[]> = {
     }),
     video('admin_onboarding', 'Doing a step for the dealer', { at: 269.75, titleIsPart: true }),
     ...ONBOARDING,
+  ],
+  'admin-inbox': [TICKETS_TAB, ...TICKET_DESK],
+  'admin-overview-today': [TICKETS_TAB, ...TICKET_DESK],
+  'admin-inbox-thread': [
+    video('admin_ticket_desk', 'The ticket strip above the chat', { at: 75.59, titleIsPart: true }),
+    video('admin_ticket_desk', 'On it until: telling the dealer when', { at: 104.27, titleIsPart: true }),
+    video('admin_ticket_desk', 'Closing a ticket', { at: 168.47, titleIsPart: true }),
+    ...TICKET_DESK,
+  ],
+  'admin-inbox-ai-first-line-strip': [
+    video('admin_ticket_desk', 'Why the AI handed it over', { at: 84.24, titleIsPart: true }),
+    ...TICKET_DESK,
   ],
 };
 
