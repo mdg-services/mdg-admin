@@ -153,6 +153,21 @@ const CHECKING: readonly GuideRef[] = [video('admin_checking', 'Checking what de
 const KAVACH_PHOTO = video('admin_checking', 'A Kavach photo', { at: 107.72, titleIsPart: true });
 const PAPER_ON_FILE = video('admin_checking', "An outlet's papers", { at: 167.27, titleIsPart: true });
 
+/** Sending reports: who gets which DSR sheet, a corrected report, owners-only cards (3 Nov 2026). */
+const SENDING: readonly GuideRef[] = [video('admin_sending_reports', 'Sending reports to a dealer')];
+const CHECK_BEFORE_SENDING = video('admin_sending_reports', 'Opening the report and checking both pictures', {
+  at: 27.94,
+  titleIsPart: true,
+});
+const TODAYS_BOARD_SENT = video('admin_sending_reports', "The Sent column of Today's board", {
+  at: 97.53,
+  titleIsPart: true,
+});
+const OWNERS_ONLY = video('admin_sending_reports', 'Credit & DOD and Ledger watch: owners only', {
+  at: 183.28,
+  titleIsPart: true,
+});
+
 /** The three-day clock is a public explainer: it lives on the website now. */
 const DOD_CLOCK: GuideRef = {
   kind: 'web',
@@ -180,8 +195,8 @@ const LIBRARY: GuideRef = { kind: 'library', fit: 'library' };
 
 /** Tier 1: a video that is genuinely about this exact screen. */
 const BY_SURFACE: Record<string, readonly GuideRef[]> = {
-  'admin-credit-dod-card': CREDIT_DOD,
-  'admin-credit-dod-report-card': CREDIT_DOD,
+  'admin-credit-dod-card': [...CREDIT_DOD, OWNERS_ONLY],
+  'admin-credit-dod-report-card': [...CREDIT_DOD, OWNERS_ONLY],
   'admin-credit-dod-failure': CREDIT_DOD,
   'admin-dealer-vault-credit-dod': CREDIT_DOD,
   'admin-shift-editor': SHIFT_DATA,
@@ -196,9 +211,19 @@ const BY_SURFACE: Record<string, readonly GuideRef[]> = {
   ],
   'admin-iras-edit-grid': SHIFT_DATA,
   'admin-dsr-report': DSR,
-  'admin-dsr-report-view': DSR,
+  'admin-dsr-report-view': [CHECK_BEFORE_SENDING, ...DSR, ...SENDING],
   'admin-dsr-generate': DSR,
-  'admin-dsr-vault': DSR,
+  'admin-dsr-vault': [CHECK_BEFORE_SENDING, ...DSR, ...SENDING],
+  // The Share with dealer card: the Who gets what window, and the notice that
+  // appears in the same card once a sent report is built again.
+  'admin-dsr-share': [
+    video('admin_sending_reports', 'Share with dealer and Who gets what', { at: 35.27, titleIsPart: true }),
+    video('admin_sending_reports', 'Figures changed after the send: the notice', {
+      at: 120.91,
+      titleIsPart: true,
+    }),
+    ...SENDING,
+  ],
   'admin-dealer-vault-dsr': DSR,
   // The calendar an admin edits here is the input to the due-date engine, so the
   // explainer about that clock is the most useful thing we have for it.
@@ -220,7 +245,17 @@ const BY_SURFACE: Record<string, readonly GuideRef[]> = {
     ...TICKET_DESK,
     ...ANSWERING,
   ],
-  'admin-overview-today': [TICKETS_TAB, ...TICKET_DESK],
+  'admin-overview-today': [TICKETS_TAB, TODAYS_BOARD_SENT, ...TICKET_DESK, ...SENDING],
+  'admin-overview-todays-board': [TODAYS_BOARD_SENT, ...SENDING],
+  'admin-overview-needs-a-person': [
+    video('admin_sending_reports', 'Send the corrected report, or open the row', {
+      at: 141.98,
+      titleIsPart: true,
+    }),
+    ...SENDING,
+  ],
+  'admin-ledger-watch': [OWNERS_ONLY, ...SENDING],
+  'admin-dealer-vault-ledger-watch': [OWNERS_ONLY, ...SENDING],
   'admin-inbox-thread': [
     video('admin_answering', 'Suggest reply: what the helper reads', { at: 25.81, titleIsPart: true }),
     video('admin_answering', 'Send a guide video', { at: 127.93, titleIsPart: true }),
