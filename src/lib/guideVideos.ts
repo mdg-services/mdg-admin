@@ -233,10 +233,10 @@ const BY_SURFACE: Record<string, readonly GuideRef[]> = {
   // and the card's own "Do it for the dealer" buttons.
   'admin-dealer-setup': [
     video('admin_onboarding', 'Starting the services and the watch', {
-      at: 342.05,
+      at: 354.08,
       titleIsPart: true,
     }),
-    video('admin_onboarding', 'Doing a step for the dealer', { at: 269.75, titleIsPart: true }),
+    video('admin_onboarding', 'Doing a step for the dealer', { at: 281.78, titleIsPart: true }),
     ...ONBOARDING,
   ],
   'admin-inbox': [
