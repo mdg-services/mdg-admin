@@ -297,11 +297,22 @@ export function stageActions(o: StageFacts): StageActionSpec[] {
       }
       add('start_anyway', 'Start anyway…', false);
       break;
+    // The bill goes by itself when the owner saves the bill details, and nothing waits
+    // for the money (3 Nov 2026): an unpaid outlet moves on, and a payment that came by
+    // UPI or bank is still recorded from here until the services start.
     case 'logins':
+      if (o.payment.state === 'sent') {
+        add('record_payment', 'Record payment…', false);
+        add('send_bill', 'Send bill again…', false);
+      }
       add('start_anyway', 'Start anyway…', false);
       break;
     case 'setup':
       add('start_services', 'Start services…', true);
+      if (o.payment.state === 'sent') {
+        add('record_payment', 'Record payment…', false);
+        add('send_bill', 'Send bill again…', false);
+      }
       break;
     case 'watch':
       add('end_watch', 'End watch', true);

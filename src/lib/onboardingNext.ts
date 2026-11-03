@@ -333,7 +333,7 @@ export function outletNextStep(o: OutletSetupAdmin, now: number): NextStep {
       'now',
       'send_bill',
       'Send the bill',
-      `${Owner} saved the bill details ${agoPhrase(stageSince, now)}. Nothing moves until the bill goes.`,
+      `${Owner} saved the bill details ${agoPhrase(stageSince, now)}, and the bill could not go by itself. Nothing moves until it goes.`,
     );
   }
 
@@ -343,17 +343,28 @@ export function outletNextStep(o: OutletSetupAdmin, now: number): NextStep {
     const missing = o.checklist.filter((c) => c.state === 'missing');
     const first = missing[0];
     const more = missing.length - 1;
+    // The standard package sets the services up, and they start by themselves once
+    // the checklist is clear; the button is for an outlet where that has not happened.
     const why = first
-      ? `Everything the owner had to do is in. Still to check: ${(first.detail ?? first.key).replace(/\.$/, '')}${
+      ? `Everything the owner had to do is in. The services start by themselves once this is done: ${(first.detail ?? first.key).replace(/\.$/, '')}${
           more > 0 ? `, and ${more} more` : ''
         }.`
-      : 'Everything the owner had to do is in, and the checklist is clear.';
-    return step('now', 'start_services', 'Start the services', why);
+      : 'Everything the owner had to do is in, and the checklist is clear. The services start by themselves within minutes.';
+    // Only an Indian Oil outlet has the standard package: a BPCL or HPCL one is started by the team.
+    if (o.company !== null && o.company !== 'iocl') {
+      return step(
+        'now',
+        'start_services',
+        'Start the services',
+        `Everything the owner had to do is in. The services do not start by themselves for a ${o.company.toUpperCase()} pump: set them up, then press Start services.`,
+      );
+    }
+    return step('wait', 'start_services', 'Services start by themselves', why);
   }
 
   const today = istYmd(now);
   const billLate =
-    o.stage === 'payment' &&
+    (o.stage === 'payment' || o.stage === 'logins') &&
     o.payment.state === 'sent' &&
     !!o.payment.dueOn &&
     o.payment.dueOn < today;

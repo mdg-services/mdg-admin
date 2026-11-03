@@ -191,8 +191,10 @@ describe('the one thing to do next', () => {
       NOW,
     );
     assert.equal(n.kind, 'start_services');
+    // The services start by themselves: nothing for the team to press while it is fine.
+    assert.equal(n.urgency, 'wait');
     // The first open item and a count: the whole list is on the outlet's Setup card.
-    assert.match(n.why, /Still to check: IRAS login not checked yet, and 2 more\.$/);
+    assert.match(n.why, /start by themselves once this is done: IRAS login not checked yet, and 2 more\.$/);
   });
 
   it('a bill past its due date: ring, because the app never nudges about money', () => {

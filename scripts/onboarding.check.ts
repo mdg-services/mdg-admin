@@ -286,8 +286,13 @@ describe('what each stage offers', () => {
       'close',
     ]);
     assert.deepEqual(ids({}), ['record_payment', 'send_bill', 'start_anyway', 'close']);
-    assert.deepEqual(ids({ stage: 'logins' }), ['start_anyway', 'close']);
-    assert.deepEqual(ids({ stage: 'setup' }), ['start_services', 'close']);
+    // The bill went by itself and nothing waits for the money: an unpaid outlet moves on,
+    // and a UPI or bank payment is still recorded from its Setup card until the start.
+    assert.deepEqual(ids({ stage: 'logins' }), ['record_payment', 'send_bill', 'start_anyway', 'close']);
+    assert.deepEqual(ids({ stage: 'setup' }), ['start_services', 'record_payment', 'send_bill', 'close']);
+    const paidUp = { payment: { ...outlet().payment, state: 'paid' as const } };
+    assert.deepEqual(ids({ ...paidUp, stage: 'logins' }), ['start_anyway', 'close']);
+    assert.deepEqual(ids({ ...paidUp, stage: 'setup' }), ['start_services', 'close']);
     assert.deepEqual(ids({ stage: 'watch' }), ['end_watch', 'extend_watch', 'pause_billing']);
     assert.deepEqual(ids({ stage: 'sign_in' }), ['close']);
     assert.deepEqual(ids({ stage: 'company' }), ['close']);
