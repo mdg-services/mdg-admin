@@ -6,6 +6,9 @@ const BASE_URL: string =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
   'http://localhost:4000/api/v1';
 
+/** The API this page talks to; the Summon extension calls it back with a ticket's key. */
+export const API_BASE_URL = BASE_URL;
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;

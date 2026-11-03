@@ -585,7 +585,7 @@ export function DealerDetailPage() {
             {setup && !isArchived && dealer.status === 'ONBOARDING' ? null : (
               <StatusChip kind="dealer" value={dealer.status} />
             )}
-            {/* Super-admins only; a deleted outlet's logins are locked. */}
+            {/* Every admin; a deleted outlet's logins are locked. */}
             {isArchived ? null : <SummonMenu dealerId={dealer.id} />}
           </div>
         }
