@@ -148,6 +148,11 @@ const TICKETS_TAB = video('admin_ticket_desk', 'The Tickets tab', { at: 19.74, t
 /** Answering well: the Reply helper and Send a guide video (3 Nov 2026). */
 const ANSWERING: readonly GuideRef[] = [video('admin_answering', 'Answering a dealer well')];
 
+/** Checking what dealers send: papers, licences and Kavach photos (3 Nov 2026). */
+const CHECKING: readonly GuideRef[] = [video('admin_checking', 'Checking what dealers send')];
+const KAVACH_PHOTO = video('admin_checking', 'A Kavach photo', { at: 107.72, titleIsPart: true });
+const PAPER_ON_FILE = video('admin_checking', "An outlet's papers", { at: 167.27, titleIsPart: true });
+
 /** The three-day clock is a public explainer: it lives on the website now. */
 const DOD_CLOCK: GuideRef = {
   kind: 'web',
@@ -229,6 +234,49 @@ const BY_SURFACE: Record<string, readonly GuideRef[]> = {
     video('admin_ticket_desk', 'Why the AI handed it over', { at: 84.24, titleIsPart: true }),
     ...TICKET_DESK,
   ],
+  'admin-vault-documents': [
+    video('admin_checking', 'Asking for a paper', { at: 10.33, titleIsPart: true }),
+    ...CHECKING,
+  ],
+  'admin-ask-document': [
+    video('admin_checking', 'Ask for a document', { at: 17.07, titleIsPart: true }),
+    ...CHECKING,
+  ],
+  'admin-review-document-ask': [
+    video('admin_checking', 'Reading the photo, the date, Accept', { at: 50.41, titleIsPart: true }),
+    video('admin_checking', 'Sending it back', { at: 74.02, titleIsPart: true }),
+    ...CHECKING,
+  ],
+  'admin-inbox-details': [
+    video('admin_checking', 'Open requests: Mark received or Send back', {
+      at: 74.02,
+      titleIsPart: true,
+    }),
+    ...CHECKING,
+  ],
+  'admin-kavach-work-queue': [KAVACH_PHOTO, ...CHECKING],
+  'admin-kavach-request-evidence': [KAVACH_PHOTO, ...CHECKING],
+  'admin-kavach-verify-task': [
+    video('admin_checking', 'Dealer replied: Mark received in the chat', {
+      at: 115.93,
+      titleIsPart: true,
+    }),
+    ...CHECKING,
+  ],
+  'admin-documents': [
+    video('admin_checking', 'Where the paper lives', { at: 133.5, titleIsPart: true }),
+    ...CHECKING,
+  ],
+  'admin-document-validity': [
+    video('admin_checking', 'Valid until and the Reminder ladder', { at: 143.14, titleIsPart: true }),
+    ...CHECKING,
+  ],
+  'admin-document-kinds': [
+    video('admin_checking', 'The Reminder ladder', { at: 148.93, titleIsPart: true }),
+    ...CHECKING,
+  ],
+  'admin-dealer-documents': [PAPER_ON_FILE, ...CHECKING],
+  'admin-file-document-for-dealer': [PAPER_ON_FILE, ...CHECKING],
 };
 
 /**
