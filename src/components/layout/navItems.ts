@@ -81,8 +81,9 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, end: true },
   // What happened to the promotions we sent from those numbers: how many
   // reached a phone, were opened, had their link tapped, were answered or
-  // stopped. Super-admin for the inbox's reason — every line is a person.
-  { to: '/whatsapp/results', label: 'Message results', icon: ChartColumn, superAdminOnly: true },
+  // stopped. Every admin since 3 Nov 2026, as the inbox is: the whole team
+  // follows up on these sends.
+  { to: '/whatsapp/results', label: 'Message results', icon: ChartColumn },
   // Two tabs: Tickets (what needs a person) and All chats. The badge on it is
   // the open tickets that are New, Waiting or Late (`useNavBadges`) — the Tickets
   // page that sat under it is the first tab now, and `/tickets` redirects here.

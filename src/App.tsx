@@ -585,17 +585,15 @@ export default function App() {
               </LazyPage>
             }
           />
-          {/* What happened to the promotions sent from those numbers. Same
-              gate as the inbox, for the same reason. Keep in step with
-              `superAdminOnly` in navItems.ts. */}
+          {/* What happened to the promotions sent from those numbers. Every
+              admin, as the inbox is and as the API is (`requireRole('admin')`).
+              Keep in step with navItems.ts. */}
           <Route
             path="whatsapp/results"
             element={
-              <RequireSuperAdmin>
-                <LazyPage>
-                  <WhatsAppResultsPage />
-                </LazyPage>
-              </RequireSuperAdmin>
+              <LazyPage>
+                <WhatsAppResultsPage />
+              </LazyPage>
             }
           />
           {/* What people have reported on the website's grievance page, behind
