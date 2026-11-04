@@ -53,9 +53,9 @@ import { FILM_IDS, type FilmBreakdownKey, type FilmId, type FilmStats, type Film
  * pasted to a colleague. The defaults carry no param.
  *
  * Order of the page is the order of the questions: how many watched, how far
- * they got and where they left (the retention curve is the centrepiece), when,
- * from where — then the share links that make the next send measurable, and the
- * raw page loads at the bottom.
+ * they got and where they left (the retention curve is the centrepiece), when
+ * — then the share links that make the next send measurable, the raw page
+ * loads, and last where the views came from, five rows until more are asked for.
  */
 export function FilmsPage() {
   const [search, setSearch] = useSearchParams();
@@ -197,6 +197,7 @@ export function FilmsPage() {
           tagLabel={tagLabel}
           tagOpensAllTime={tagLink?.opens}
           preset={preset}
+          range={range}
           breakdown={breakdown}
           refreshing={statsQ.isFetching && statsQ.isPlaceholderData}
           onBreakdown={(k) => update({ by: k === 'tag' ? undefined : k })}
@@ -216,6 +217,7 @@ function FilmBody({
   tagLabel,
   tagOpensAllTime,
   preset,
+  range,
   breakdown,
   refreshing,
   onBreakdown,
@@ -230,6 +232,7 @@ function FilmBody({
   /** The filtered link's opens since it was made, when the list has it. */
   tagOpensAllTime: number | undefined;
   preset: FilmRangePreset;
+  range: { from?: string; to: string };
   breakdown: FilmBreakdownKey;
   refreshing: boolean;
   onBreakdown: (k: FilmBreakdownKey) => void;
@@ -365,14 +368,24 @@ function FilmBody({
           {stats.shortToFull ? <ShortToFullCard stats={stats} /> : null}
 
           <DailyCard stats={stats} />
-
-          <BreakdownsCard stats={stats} kind={breakdown} onKind={onBreakdown} />
         </>
       )}
 
       {shareLinks}
 
       <RecentViewsCard film={film} tag={tag} />
+
+      {/* Last: five rows, and the rest only when asked for. */}
+      {hasViews ? (
+        <BreakdownsCard
+          stats={stats}
+          film={film}
+          range={range}
+          tag={tag}
+          kind={breakdown}
+          onKind={onBreakdown}
+        />
+      ) : null}
     </div>
   );
 }

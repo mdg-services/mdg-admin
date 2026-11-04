@@ -1,4 +1,4 @@
-import { formatDate, formatDateTime, formatInrWhole } from '@/lib/format';
+import { formatDateTime, formatInrWhole } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
 import type {
   WhatsAppResultCounts,
@@ -19,8 +19,9 @@ export function ofLine(part: number, whole: number): string {
   return `${part} of ${whole} · ${Math.round((part / whole) * 100)}%`;
 }
 
+/** "1 person", "1,101 people" — Indian grouping. */
 export const plural = (n: number, one: string, many: string): string =>
-  `${n} ${n === 1 ? one : many}`;
+  `${n.toLocaleString('en-IN')} ${n === 1 ? one : many}`;
 
 export const OUTCOME_WORDS: Record<WhatsAppResultOutcome, { label: string; intent: Intent }> = {
   opened: { label: 'Opened', intent: 'success' },
@@ -116,7 +117,7 @@ export function missedRows(c: WhatsAppResultCounts): MissedRow[] {
     {
       label: 'Held back by WhatsApp',
       value: c.heldBack,
-      note: 'Its limit on promotions per person. Not charged. Can be sent again 24 hours later.',
+      note: 'Its limit on promotions per person. Not charged. The film tool sends it again 6 days later.',
     },
     {
       label: 'Could not be delivered',
@@ -158,19 +159,79 @@ export function minutesLabel(min: number | null): string {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
-/** What a send was, in a few words: its own words, or the kind of message. */
-export function sendTitle(s: WhatsAppResultSend): string {
-  const words = s.label.startsWith('Words not saved')
-    ? 'Words not saved'
-    : s.kind === 'Film invite'
-      ? 'Film invite'
-      : `“${s.label.length > 48 ? `${s.label.slice(0, 47).trimEnd()}…` : s.label}”`;
-  return s.campaign ? `${words} (${s.campaign})` : words;
+/** A film invite, Hindi or Hinglish: the film is what it carries, not words. */
+export const isFilmSend = (s: WhatsAppResultSend): boolean => s.kind.startsWith('Film invite');
+
+const DAY_FMT = new Intl.DateTimeFormat('en-IN', {
+  day: 'numeric',
+  month: 'short',
+  timeZone: 'Asia/Kolkata',
+});
+/** "4 Nov", in Indian time. */
+export const shortDay = (iso: string): string => DAY_FMT.format(new Date(iso));
+
+/** 1,553 — Indian grouping. */
+export const count = (n: number): string => n.toLocaleString('en-IN');
+
+/**
+ * Which day of its campaign a send was, or what it was when it is not one:
+ * "First send · 29 Oct", "Sent again · 31 Oct", "More of the list · 4 Nov",
+ * “Aapke request…”, "Account ready". No place and no count.
+ */
+export function partTitle(s: WhatsAppResultSend): string {
+  const day = shortDay(s.firstSentAt);
+  switch (s.part) {
+    case 'first':
+      return `First send · ${day}`;
+    case 'later':
+      return `${s.sentAgain === 0 ? 'More of the list' : 'Sent again'} · ${day}`;
+    case 'total':
+      // A campaign that went on one day is its own total: that day names it.
+      if (!s.campaign) return 'All messages';
+      return day === shortDay(s.lastSentAt) ? day : 'All tries';
+    default:
+      if (s.hasWords) return `“${s.label.length > 48 ? `${s.label.slice(0, 47).trimEnd()}…` : s.label}”`;
+      return s.label.startsWith('Words not saved') ? 'Words not saved' : s.kind;
+  }
 }
 
-/** One line in the message picker. */
+/**
+ * A send in a few words: a campaign's place first ("Noida · sent again · 31
+ * Oct"), the app's own messages by their kind ("Account ready"), a message the
+ * team wrote by its day and words.
+ */
+export function sendTitle(s: WhatsAppResultSend): string {
+  const part = partTitle(s);
+  if (s.campaign) return `${s.group} · ${part.charAt(0).toLowerCase()}${part.slice(1)}`;
+  if (s.part === 'total') return s.group;
+  return part === s.group ? part : `${shortDay(s.firstSentAt)} · ${part}`;
+}
+
+/** Who a send reached, by count: numbers for a campaign, people for the rest. */
+export function audienceLine(s: WhatsAppResultSend): string {
+  const c = s.counts;
+  const who = s.campaign ? plural(c.people, 'number', 'numbers') : plural(c.people, 'person', 'people');
+  return c.sent > c.people ? `${plural(c.sent, 'message', 'messages')} to ${who}` : who;
+}
+
+/** One line in the message picker. The closed picker shows only this, so it names its group. */
 export function sendOption(s: WhatsAppResultSend): string {
-  return `${formatDate(s.firstSentAt)} · ${sendTitle(s)} · ${plural(s.counts.people, 'person', 'people')}`;
+  const c = s.counts;
+  if (s.campaign) {
+    const head = `${sendTitle(s)} · ${count(c.people)} ${c.people === 1 ? 'number' : 'numbers'}`;
+    if (s.part === 'first' && s.sentAgain > 0) return `${head} · ${count(s.sentAgain)} tried twice that day`;
+    if (s.part === 'later' && s.sentAgain > 0 && s.sentAgain < c.sent)
+      return `${head} · ${count(c.sent - s.sentAgain)} of them new`;
+    if (s.part === 'total' && s.sentAgain > 0) return `${head} · ${count(s.sentAgain)} re-sends`;
+    return head;
+  }
+  if (s.part === 'total') return `${s.group} · all ${plural(c.sent, 'message', 'messages')}`;
+  return `${sendTitle(s)} · ${audienceLine(s)}`;
+}
+
+/** The heading a send's group gets in the picker: a place says when it began. */
+export function groupLabel(s: WhatsAppResultSend): string {
+  return s.campaign ? `${s.group} — from ${shortDay(s.firstSentAt)}` : s.group;
 }
 
 /** When a send went: one time, or the span it took. */

@@ -8,6 +8,8 @@ import {
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import type {
+  FilmBreakdownKey,
+  FilmBreakdownPage,
   FilmId,
   FilmSessionPage,
   FilmShareLink,
@@ -30,6 +32,13 @@ export const filmStatsKey = (film: FilmId, from: string | undefined, to: string,
 export const filmSessionsKey = (film: FilmId, tag: string | undefined) =>
   ['films', 'sessions', film, tag ?? ''] as const;
 export const filmLinksKey = (film: FilmId) => ['films', 'links', film] as const;
+export const filmBreakdownKey = (
+  film: FilmId,
+  from: string | undefined,
+  to: string,
+  tag: string | undefined,
+  by: FilmBreakdownKey,
+) => ['films', 'breakdown', film, from ?? 'all', to, tag ?? '', by] as const;
 
 export function useFilmsQuery() {
   const signedIn = useAuthStore((s) => !!s.token);
@@ -87,6 +96,39 @@ export function useFilmSessionsQuery(film: FilmId, tag: string | undefined, enab
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextBefore ?? undefined,
     enabled: signedIn && enabled,
+  });
+}
+
+const BREAKDOWN_PAGE = 25;
+
+/**
+ * Every row of one "Where the views came from" tab, a page at a time, most
+ * views first. Read from the same cached figures as the stats, so it agrees
+ * with them. `enabled` is false until someone asks for more than the first rows.
+ */
+export function useFilmBreakdownQuery(
+  film: FilmId,
+  range: { from?: string; to: string },
+  tag: string | undefined,
+  by: FilmBreakdownKey,
+  enabled: boolean,
+) {
+  const signedIn = useAuthStore((s) => !!s.token);
+  return useInfiniteQuery({
+    queryKey: filmBreakdownKey(film, range.from, range.to, tag, by),
+    queryFn: ({ pageParam }) =>
+      api.get<FilmBreakdownPage>(`/admin/films/${film}/breakdown`, {
+        from: range.from,
+        to: range.to,
+        tag,
+        by,
+        offset: pageParam,
+        limit: BREAKDOWN_PAGE,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (last) => last.nextOffset ?? undefined,
+    enabled: signedIn && enabled,
+    staleTime: 60_000,
   });
 }
 

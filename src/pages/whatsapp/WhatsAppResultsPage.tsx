@@ -26,7 +26,10 @@ import { useWhatsAppResultsQuery } from '@/hooks/api/useWhatsAppResults';
 import { ApiError } from '@/lib/api';
 import { leadHref, resultLeadAction } from '@/lib/leads';
 import {
+  WHATSAPP_LINE_INFO,
   WHATSAPP_RESULTS_ALL,
+  isWhatsAppLine,
+  type WhatsAppLine,
   type WhatsAppResultCounts,
   type WhatsAppResultPerson,
   type WhatsAppResultSend,
@@ -34,9 +37,13 @@ import {
 
 import {
   OUTCOME_WORDS,
+  audienceLine,
   costLabel,
+  count,
   filmWatchLine,
+  groupLabel,
   inFilter,
+  isFilmSend,
   linkLine,
   minutesLabel,
   missedRows,
@@ -45,12 +52,46 @@ import {
   openedLine,
   outcomeLabel,
   outletsOf,
+  partTitle,
   plural,
   sendOption,
   sendTitle,
   sentWhen,
+  shortDay,
   type PeopleFilter,
 } from './resultsFormat';
+
+/** The two numbers, as the tabs and the line under them name them. */
+const LINE_WORDS: Record<WhatsAppLine, { tab: string; all: string; about: string }> = {
+  marketing: {
+    tab: 'Marketing',
+    all: 'All marketing messages together',
+    about: 'film invites, by the place each list was for, and messages to new leads',
+  },
+  clients: {
+    tab: 'Dealer Kavach',
+    all: 'All Dealer Kavach messages together',
+    about: "the app's own messages to dealers, and messages the team wrote to them",
+  },
+};
+
+/** A group's sends, in the order the server lists them, its total first. */
+interface SendGroup {
+  key: string;
+  label: string;
+  sends: WhatsAppResultSend[];
+}
+
+function groupsOf(sends: readonly WhatsAppResultSend[]): SendGroup[] {
+  const out: SendGroup[] = [];
+  for (const s of sends) {
+    const key = s.campaign ? `campaign:${s.campaign}` : `group:${s.group}`;
+    const last = out[out.length - 1];
+    if (last?.key === key) last.sends.push(s);
+    else out.push({ key, label: groupLabel(s), sends: [s] });
+  }
+  return out;
+}
 
 /**
  * Message results — what happened to the promotions we sent on WhatsApp.
@@ -61,22 +102,51 @@ import {
  * up to what was sent. Then one line per person, which opens their chat, with a
  * filter for the ones to act on and, on each, the way to make them a lead.
  *
+ * Our two numbers are kept apart, as the inbox keeps them: the marketing
+ * number's film invites and the Dealer's Kavach number's messages to dealers
+ * are different jobs. A campaign is listed under the place its list was for,
+ * with each day it went — its first send, then the numbers it missed sent
+ * again — so a place can be followed from the first evening to the last retry.
+ *
  * The send lives in the URL (`?send=`), so a link to one send's results can be
- * passed on. With none, the server opens the newest.
+ * passed on; `?line=` names the number when no one send is. With neither, the
+ * server opens the marketing number's newest place.
  */
 export function WhatsAppResultsPage() {
   const [search, setSearch] = useSearchParams();
   const navigate = useNavigate();
-  const q = useWhatsAppResultsQuery(search.get('send') ?? undefined);
+  const lineParam = search.get('line');
+  const q = useWhatsAppResultsQuery(
+    search.get('send') ?? undefined,
+    isWhatsAppLine(lineParam) ? lineParam : undefined,
+  );
   const data = q.data;
   const [filter, setFilter] = React.useState<PeopleFilter>('all');
 
-  function pick(send: string) {
+  /** Open one send, or (`all`) every send from `line`. */
+  function pick(send: string, line?: WhatsAppLine) {
     setFilter('all');
     setSearch(
       (current) => {
         const next = new URLSearchParams(current);
         next.set('send', send);
+        // A send knows its own number; only "all" needs telling which.
+        if (send === WHATSAPP_RESULTS_ALL && line) next.set('line', line);
+        else next.delete('line');
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  /** The other number: the server opens its newest send. */
+  function pickLine(line: WhatsAppLine) {
+    setFilter('all');
+    setSearch(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('send');
+        next.set('line', line);
         return next;
       },
       { replace: true },
@@ -87,9 +157,21 @@ export function WhatsAppResultsPage() {
     () => new Map((data?.sends ?? []).map((s) => [s.id, s])),
     [data?.sends],
   );
+  const lineSends = React.useMemo(
+    () => (data?.sends ?? []).filter((s) => s.line === data?.line),
+    [data?.sends, data?.line],
+  );
+  const groups = React.useMemo(() => groupsOf(lineSends), [lineSends]);
   const isAll = data?.selected === WHATSAPP_RESULTS_ALL;
   const send = data && !isAll ? sendById.get(data.selected) : undefined;
-  const isFilm = send?.kind === 'Film invite';
+  const isFilm = send ? isFilmSend(send) : false;
+  const isMarketing = data?.line !== 'clients';
+  // The rows under the picker: every group's headline for "all", a total's own days or messages.
+  const parts = isAll
+    ? groups.map((g) => g.sends[0]!)
+    : send?.part === 'total'
+      ? (groups.find((g) => g.sends[0]?.id === send.id)?.sends.slice(1) ?? [])
+      : [];
   const shown = React.useMemo(
     () => (data?.people ?? []).filter((p) => inFilter(p, filter)),
     [data?.people, filter],
@@ -143,32 +225,90 @@ export function WhatsAppResultsPage() {
       ) : (
         <div className="grid gap-3 md:gap-4">
           <Card>
-            <CardContent className="grid gap-1">
-              <label htmlFor="results-send" className="text-xs font-medium text-text-muted">
-                Message
-              </label>
-              <Select
-                id="results-send"
-                value={data.selected}
-                onChange={(e) => pick(e.target.value)}
-              >
-                {data.sends.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {sendOption(s)}
-                  </option>
-                ))}
-                <option value={WHATSAPP_RESULTS_ALL}>
-                  All messages together · {plural(data.total.sent, 'message', 'messages')} to{' '}
-                  {plural(data.total.people, 'person', 'people')}
-                </option>
-              </Select>
-              <SendLine send={send} counts={data.counts} people={data.people} />
+            <CardContent className="grid gap-3">
+              <div className="grid gap-1">
+                <SegmentedControl
+                  aria-label="Which number"
+                  value={data.line}
+                  onChange={pickLine}
+                  options={(['marketing', 'clients'] as const).map((l) => ({
+                    value: l,
+                    label: `${LINE_WORDS[l].tab} ${count(data.totals[l].sent)}`,
+                  }))}
+                />
+                <p className="text-xs text-text-subtle">
+                  Sent from {WHATSAPP_LINE_INFO[data.line].phone} ·{' '}
+                  {WHATSAPP_LINE_INFO[data.line].name}: {LINE_WORDS[data.line].about}.
+                </p>
+              </div>
+              {lineSends.length === 0 ? (
+                <p className="text-sm text-text-muted">Nothing has been sent from this number yet.</p>
+              ) : (
+                <div className="grid gap-1">
+                  <label htmlFor="results-send" className="text-xs font-medium text-text-muted">
+                    Message
+                  </label>
+                  <Select
+                    id="results-send"
+                    value={data.selected}
+                    onChange={(e) => pick(e.target.value, data.line)}
+                  >
+                    <option value={WHATSAPP_RESULTS_ALL}>
+                      {LINE_WORDS[data.line].all} ·{' '}
+                      {plural(data.totals[data.line].sent, 'message', 'messages')} to{' '}
+                      {plural(data.totals[data.line].people, 'person', 'people')}
+                    </option>
+                    {groups.map((g) => (
+                      <optgroup key={g.key} label={g.label}>
+                        {g.sends.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {sendOption(s)}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </Select>
+                  <SendLine send={send} counts={data.counts} people={data.people} />
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          <FunnelCard counts={data.counts} people={data.people} isAll={isAll} isFilm={isFilm} />
+          {parts.length > 0 ? (
+            <PartsCard
+              title={
+                isAll
+                  ? isMarketing
+                    ? 'By place'
+                    : 'By kind of message'
+                  : send?.campaign
+                    ? 'Each day it went'
+                    : 'Each message'
+              }
+              subtitle={
+                isAll
+                  ? isMarketing
+                    ? 'Each place counts every number on its list once, at its latest try. Tap one to see its days and people.'
+                    : 'Tap one to see who it went to.'
+                  : send?.campaign
+                    ? 'The first send, then each later day: the numbers it missed sent again, or more of its list.'
+                    : 'Tap one to see who it went to.'
+              }
+              sends={parts}
+              byGroup={isAll}
+              nameHeader={isAll ? (isMarketing ? 'Place' : 'Kind') : send?.campaign ? 'Day' : 'Message'}
+              onPick={(id) => pick(id)}
+            />
+          ) : null}
 
-          <StatTileGrid columnsAtMd={4}>
+          <FunnelCard
+            counts={data.counts}
+            people={data.people}
+            isAll={isAll || (send?.part === 'total' && !send.campaign)}
+            isFilm={isFilm}
+          />
+
+          <StatTileGrid columnsAtMd={isMarketing ? 4 : 3}>
             <StatTile
               label="Replied"
               value={data.counts.replied}
@@ -188,11 +328,14 @@ export function WhatsAppResultsPage() {
               value={minutesLabel(data.counts.openMinutesMedian)}
               caption="Typical wait from sending to the blue tick"
             />
-            <StatTile
-              label="Paid for"
-              value={costLabel(data.counts.reached)}
-              caption={`${plural(data.counts.reached, 'message', 'messages')} reached a phone, about ₹1 each. The rest are free.`}
-            />
+            {/* The ₹1 is a promotion's price; the app's own messages are charged far less, so no figure for them. */}
+            {isMarketing ? (
+              <StatTile
+                label="Paid for"
+                value={costLabel(data.counts.reached)}
+                caption={`${plural(data.counts.reached, 'message', 'messages')} reached a phone, about ₹1 each. The rest are free.`}
+              />
+            ) : null}
           </StatTileGrid>
 
           <Callout intent="info">
@@ -237,8 +380,12 @@ export function WhatsAppResultsPage() {
                   </p>
                 }
                 rowKey={(p) => `${p.sendId}:${p.person}:${p.sentAt}`}
-                // Promotions go from the MDG Services number: the chat is in that inbox.
-                onRowClick={(p) => navigate(`/whatsapp?line=marketing&chat=${encodeURIComponent(p.person)}`)}
+                // The chat is in the inbox of the number the message went from.
+                onRowClick={(p) =>
+                  navigate(
+                    `/whatsapp?line=${sendById.get(p.sendId)?.line ?? data.line}&chat=${encodeURIComponent(p.person)}`,
+                  )
+                }
                 cardVariant="rows"
                 // Null when a row has nothing to offer, so its phone card stays one tap target.
                 rowActions={(p) =>
@@ -261,9 +408,12 @@ export function WhatsAppResultsPage() {
                             {phoneLabel(p.phone)}
                           </p>
                         ) : null}
-                        {isAll ? (
+                        {/* Which send, when the open one holds several: a place's day, or the message itself. */}
+                        {p.sendId !== data.selected && sendById.get(p.sendId) ? (
                           <p className="text-xs text-text-subtle">
-                            {sendById.get(p.sendId) ? sendTitle(sendById.get(p.sendId)!) : null}
+                            {isAll
+                              ? sendTitle(sendById.get(p.sendId)!)
+                              : partTitle(sendById.get(p.sendId)!)}
                           </p>
                         ) : null}
                       </div>
@@ -368,19 +518,29 @@ function SendLine({
   if (!send) {
     return (
       <p className="text-xs text-text-subtle">
-        Every promotion so far: {plural(counts.sent, 'message', 'messages')} to{' '}
+        Every message from this number so far: {plural(counts.sent, 'message', 'messages')} to{' '}
         {plural(counts.people, 'person', 'people')}. A person who got two counts twice.
       </p>
     );
   }
-  const words = send.label.startsWith('Words not saved') ? null : send.label;
   // A list made from an outlet sheet has several numbers for one outlet.
   const outlets = outletsOf(people);
+  const resends =
+    send.campaign && send.sentAgain > 0
+      ? send.part === 'total'
+        ? ` · ${plural(send.sentAgain, 're-send', 're-sends')} to numbers it missed, each counted at its latest try`
+        : send.part === 'first'
+          ? ` · ${count(send.sentAgain)} of them tried twice that day`
+          : send.sentAgain < counts.sent
+            ? ` · ${count(send.sentAgain)} sent again, ${count(counts.sent - send.sentAgain)} new`
+            : ''
+      : '';
   return (
     <>
       <p className="text-xs text-text-subtle">
-        Sent {sentWhen(send)} to {plural(counts.people, 'person', 'people')}
+        Sent {sentWhen(send)} to {audienceLine({ ...send, counts })}
         {send.campaign ? ` · campaign ${send.campaign}` : ''}
+        {resends}
       </p>
       {outlets.outlets < counts.people ? (
         <p className="text-xs text-text-subtle">
@@ -391,15 +551,17 @@ function SendLine({
           got it on at least one number.
         </p>
       ) : null}
-      {words ? (
+      {isFilmSend(send) || send.hasWords ? (
         <p className="mt-1 select-text whitespace-pre-wrap rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-text">
-          {send.kind === 'Film invite'
-            ? 'The Dealer Kavach film, with a button to watch it'
-            : words}
+          {isFilmSend(send) ? 'The Dealer Kavach film, with a button to watch it' : send.label}
         </p>
       ) : (
         <p className="text-xs text-text-subtle">
-          This one was sent outside the inbox, so its words were not saved here.
+          {send.part === 'total'
+            ? 'Every message in this group. Pick one above to read its words.'
+            : send.label.startsWith('Words not saved')
+              ? 'This one was sent outside the inbox, so its words were not saved here.'
+              : `${send.label}: the app sends it by itself, in the words WhatsApp approved for it.`}
         </p>
       )}
       {send.link ? (
@@ -417,6 +579,142 @@ function SendLine({
         </p>
       ) : null}
     </>
+  );
+}
+
+/** When a group went: "4 Nov", "29 Oct to 3 Nov · 129 re-sends". */
+function spanLine(s: WhatsAppResultSend): string {
+  const first = shortDay(s.firstSentAt);
+  const last = shortDay(s.lastSentAt);
+  const span = first === last ? first : `${first} to ${last}`;
+  return s.sentAgain > 0 ? `${span} · ${plural(s.sentAgain, 're-send', 're-sends')}` : span;
+}
+
+/**
+ * The sends inside what is open, one row each: every place (or kind of
+ * message) when the whole number is open, a place's days when the place is.
+ * A row opens that send.
+ */
+function PartsCard({
+  title,
+  subtitle,
+  sends,
+  byGroup,
+  nameHeader,
+  onPick,
+}: {
+  title: string;
+  subtitle: string;
+  sends: readonly WhatsAppResultSend[];
+  /** Rows are whole groups: named by their group, with when they began. */
+  byGroup: boolean;
+  nameHeader: string;
+  onPick: (id: string) => void;
+}) {
+  const withLink = sends.some((s) => s.counts.withLink > 0);
+  const film = sends.some(isFilmSend);
+  const withCall = film || sends.some((s) => s.counts.askedCall > 0);
+  const share = (n: number, s: WhatsAppResultSend) =>
+    s.counts.sent > 0 ? `${count(n)} · ${Math.round((n / s.counts.sent) * 100)}%` : count(n);
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>{title}</CardTitle>
+          <CardSubtitle>{subtitle}</CardSubtitle>
+        </div>
+      </CardHeader>
+      <CardContent padding="none">
+        <DataList<WhatsAppResultSend>
+          rows={sends}
+          rowKey={(s) => s.id}
+          onRowClick={(s) => onPick(s.id)}
+          cardVariant="rows"
+          minWidth={withLink ? '50rem' : '40rem'}
+          columns={[
+            {
+              id: 'name',
+              header: nameHeader,
+              mobile: 'primary',
+              width: '15rem',
+              cell: (s) => (
+                <div className="min-w-0">
+                  <p className="break-words text-sm font-medium text-text">
+                    {byGroup ? s.group : partTitle(s)}
+                  </p>
+                  <p className="text-xs text-text-subtle">
+                    {byGroup ? spanLine(s) : audienceLine(s)}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              id: 'sent',
+              header: byGroup ? 'Sent to' : 'Sent',
+              numeric: true,
+              width: '6rem',
+              cell: (s) => count(s.counts.people),
+            },
+            {
+              id: 'reached',
+              header: 'Reached',
+              mobile: 'hidden',
+              numeric: true,
+              width: '7.5rem',
+              cell: (s) => share(s.counts.reached, s),
+            },
+            // A phone row's figure on the right needs its word; the table has the column header.
+            {
+              id: 'reachedPhone',
+              header: 'Reached',
+              mobile: 'primaryRight',
+              desktop: false,
+              cell: (s) => (
+                <span className="whitespace-nowrap text-sm font-semibold tabular-nums text-text">
+                  {count(s.counts.reached)} reached
+                </span>
+              ),
+            },
+            {
+              id: 'opened',
+              header: 'Opened',
+              numeric: true,
+              width: '7.5rem',
+              cell: (s) => share(s.counts.opened, s),
+            },
+            ...(withLink
+              ? [
+                  {
+                    id: 'link',
+                    header: film ? 'Opened the film' : 'Tapped the link',
+                    numeric: true,
+                    width: '8rem',
+                    cell: (s: WhatsAppResultSend) => count(s.counts.tappedLink),
+                  },
+                ]
+              : []),
+            ...(withCall
+              ? [
+                  {
+                    id: 'call',
+                    header: 'Wants a call',
+                    numeric: true,
+                    width: '7rem',
+                    cell: (s: WhatsAppResultSend) => count(s.counts.askedCall),
+                  },
+                ]
+              : []),
+            {
+              id: 'missed',
+              header: 'Did not reach',
+              numeric: true,
+              width: '7.5rem',
+              cell: (s) => count(s.counts.sent - s.counts.reached),
+            },
+          ]}
+        />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -442,11 +740,14 @@ function FunnelCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>What happened</CardTitle>
-        <CardSubtitle>
-          Out of the {plural(c.sent, isAll ? 'message' : 'person', isAll ? 'messages' : 'people')}{' '}
-          it went to.
-        </CardSubtitle>
+        <div>
+          <CardTitle>What happened</CardTitle>
+          <CardSubtitle>
+            {c.sent === c.people
+              ? `Out of the ${plural(c.sent, 'person', 'people')} it went to.`
+              : `Out of the ${plural(c.sent, 'message', 'messages')} sent to ${plural(c.people, 'person', 'people')}.`}
+          </CardSubtitle>
+        </div>
       </CardHeader>
       <CardContent className="grid gap-4">
         <Meter

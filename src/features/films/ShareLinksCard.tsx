@@ -19,6 +19,7 @@ import {
   useToast,
   type DataColumn,
 } from '@/components/ui';
+import { useSentinel } from '@/features/whatsapp/useInView';
 import {
   useArchiveFilmLink,
   useCreateFilmLink,
@@ -28,8 +29,6 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { copyText } from '@/lib/clipboard';
 import {
-  PHONE_LIST_LIMIT,
-  cappedRows,
   formatCount,
   formatPercent,
   shareLinkPhoneLine,
@@ -40,7 +39,14 @@ import { formatDate } from '@/lib/format';
 import type { FilmId, FilmShareLink, FilmShareLinkRow } from '@dk/shared';
 import { createFilmShareLinkSchema } from '@dk/shared/schemas';
 
-import { ShowAllToggle } from './ShowAllToggle';
+/**
+ * Links listed before "Show more", then how many more join each time the end
+ * of the list nears the bottom of the screen. Every invite a campaign sends
+ * makes a link, so there are thousands; drawn at once they made the page half
+ * a million pixels tall and buried everything under them.
+ */
+const FIRST_LINKS = 5;
+const MORE_LINKS = 25;
 
 /**
  * Share links: one per person or group the film is sent to, so the numbers can
@@ -98,10 +104,18 @@ export function ShareLinksCard({
   };
 
   const isMd = useMediaQuery('(min-width: 768px)');
-  const [expanded, setExpanded] = React.useState(false);
   const allLinks = linksQ.data ?? [];
-  const limit = isMd ? null : PHONE_LIST_LIMIT;
-  const shownLinks = cappedRows(allLinks, limit, expanded);
+  const [listed, setListed] = React.useState(FIRST_LINKS);
+  // The other film's list starts short again.
+  React.useEffect(() => setListed(FIRST_LINKS), [film]);
+  const shownLinks = allLinks.slice(0, listed);
+  const expanded = listed > FIRST_LINKS;
+  // The page itself scrolls, so the sentinel is watched against the screen (a null root).
+  const screen = React.useRef<HTMLElement>(null);
+  const sentinel = useSentinel<HTMLDivElement>(screen, expanded && listed < allLinks.length, () =>
+    setListed((n) => n + MORE_LINKS),
+  );
+  const top = React.useRef<HTMLDivElement>(null);
 
   const sentTo: DataColumn<FilmShareLinkRow> = {
     id: 'label',
@@ -256,6 +270,7 @@ export function ShareLinksCard({
       </CardContent>
 
       <CardContent padding="none">
+        <div ref={top} className="scroll-mt-4" aria-hidden />
         {linksQ.isLoading ? (
           <div className="grid gap-2 p-3 md:p-4">
             <Skeleton className="h-10 w-full" />
@@ -300,14 +315,34 @@ export function ShareLinksCard({
             }
           />
         )}
-        {linksQ.isSuccess ? (
-          <ShowAllToggle
-            total={allLinks.length}
-            limit={limit}
-            expanded={expanded}
-            onToggle={() => setExpanded((v) => !v)}
-            noun="links"
-          />
+        {expanded ? <div ref={sentinel} aria-hidden /> : null}
+        {linksQ.isSuccess && allLinks.length > FIRST_LINKS ? (
+          <div className="border-t border-border px-3 py-1 md:px-4">
+            {expanded ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                padding="none"
+                onClick={() => {
+                  setListed(FIRST_LINKS);
+                  // A long list folding up would leave the reader far below the card.
+                  top.current?.scrollIntoView({ block: 'nearest' });
+                }}
+              >
+                Show fewer · {formatCount(Math.min(listed, allLinks.length))} of{' '}
+                {formatCount(allLinks.length)} shown
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                padding="none"
+                onClick={() => setListed(FIRST_LINKS + MORE_LINKS)}
+              >
+                Show more · {formatCount(allLinks.length - FIRST_LINKS)} more
+              </Button>
+            )}
+          </div>
         ) : null}
       </CardContent>
 

@@ -9,6 +9,7 @@ import {
   type ColumnDatum,
 } from '@/components/charts';
 import {
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -18,13 +19,13 @@ import {
   Tabs,
   type DataColumn,
 } from '@/components/ui';
+import { useSentinel } from '@/features/whatsapp/useInView';
+import { useFilmBreakdownQuery } from '@/hooks/api/useFilms';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import {
   BREAKDOWN_TABS,
-  PHONE_LIST_LIMIT,
   breakdownPhoneLine,
   breakdownRowLabel,
-  cappedRows,
   formatClock,
   formatCount,
   formatPercent,
@@ -32,9 +33,7 @@ import {
   formatWatchTime,
 } from '@/lib/films';
 import { formatYmd } from '@/lib/format';
-import type { FilmBreakdownKey, FilmBreakdownRow, FilmStats } from '@dk/shared';
-
-import { ShowAllToggle } from './ShowAllToggle';
+import type { FilmBreakdownKey, FilmBreakdownRow, FilmId, FilmStats } from '@dk/shared';
 
 /**
  * The read-only sections of the Films page, each one card. Every figure comes
@@ -251,23 +250,57 @@ export function DailyCard({ stats }: { stats: FilmStats }) {
 
 /* ─────────────────────────────── Breakdowns ─────────────────────────────── */
 
+/** Rows "Where the views came from" shows before "Show more". */
+const BREAKDOWN_FIRST_ROWS = 5;
+
+/**
+ * Where the views came from, by share link, place, phone and so on: the first
+ * five rows, then — once "Show more" is pressed — the rest a page at a time,
+ * each page asked for as the end of the list nears the bottom of the screen.
+ */
 export function BreakdownsCard({
   stats,
+  film,
+  range,
+  tag,
   kind,
   onKind,
 }: {
   stats: FilmStats;
+  film: FilmId;
+  range: { from?: string; to: string };
+  tag: string | undefined;
   kind: FilmBreakdownKey;
   onKind: (k: FilmBreakdownKey) => void;
 }) {
   const isMd = useMediaQuery('(min-width: 768px)');
   const [expanded, setExpanded] = React.useState(false);
-  // A new tab starts short again; "show all" was asked of the old one.
-  React.useEffect(() => setExpanded(false), [kind]);
+  // A new tab, film, window or link starts short again; "show more" was asked of the old one.
+  React.useEffect(() => setExpanded(false), [kind, film, range.from, range.to, tag]);
 
-  const rows = stats.breakdowns[kind] ?? [];
-  const limit = isMd ? null : PHONE_LIST_LIMIT;
-  const shown = cappedRows(rows, limit, expanded);
+  const first = stats.breakdowns[kind] ?? [];
+  // An older server sends no totals: what it sent is all there is.
+  const total = stats.breakdownTotals?.[kind] ?? first.length;
+  const more = useFilmBreakdownQuery(film, range, tag, kind, expanded);
+  const paged = React.useMemo(() => more.data?.pages.flatMap((p) => p.items) ?? [], [more.data]);
+  // Until the first page lands the five already shown stay, so the list only ever grows.
+  const shown = expanded && paged.length > 0 ? paged : first.slice(0, BREAKDOWN_FIRST_ROWS);
+
+  // The page itself scrolls, so the sentinel is watched against the screen (a null root).
+  const screen = React.useRef<HTMLElement>(null);
+  const sentinel = useSentinel<HTMLDivElement>(
+    screen,
+    expanded && paged.length > 0 && !!more.hasNextPage && !more.isFetchingNextPage,
+    () => void more.fetchNextPage(),
+  );
+  const top = React.useRef<HTMLDivElement>(null);
+  const collapse = () => {
+    setExpanded(false);
+    // A long list folding up would leave the reader far below the card.
+    top.current?.scrollIntoView({ block: 'nearest' });
+  };
+  const loading = expanded && (more.isPending || more.isFetchingNextPage);
+
   const groupHeader = BREAKDOWN_TABS.find((b) => b.key === kind)?.label ?? 'Group';
   const label: DataColumn<FilmBreakdownRow> = {
     id: 'label',
@@ -338,40 +371,68 @@ export function BreakdownsCard({
       ];
 
   return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>Where the views came from</CardTitle>
-          <CardSubtitle>Views only (3 seconds or more), most first</CardSubtitle>
-        </div>
-      </CardHeader>
-      <CardContent padding="none">
-        <Tabs
-          className="px-1 md:px-2"
-          items={BREAKDOWN_TABS.map((b) => ({ id: b.key, label: b.label }))}
-          value={kind}
-          onChange={(id) => onKind(id as FilmBreakdownKey)}
-        />
-        <DataList
-          rows={shown}
-          columns={columns}
-          rowKey={(r) => r.key}
-          cardVariant="rows"
-          empty={
-            <p className="px-3 py-6 text-center text-sm text-text-muted md:px-4">
-              Nothing to group yet.
+    <div ref={top} className="scroll-mt-4">
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle>Where the views came from</CardTitle>
+            <CardSubtitle>
+              Views only (3 seconds or more), most first
+              {total > 0 ? ` · ${formatCount(total)} ${total === 1 ? 'row' : 'rows'}` : ''}
+            </CardSubtitle>
+          </div>
+        </CardHeader>
+        <CardContent padding="none">
+          <Tabs
+            className="px-1 md:px-2"
+            items={BREAKDOWN_TABS.map((b) => ({ id: b.key, label: b.label }))}
+            value={kind}
+            onChange={(id) => onKind(id as FilmBreakdownKey)}
+          />
+          <DataList
+            rows={shown}
+            columns={columns}
+            rowKey={(r) => r.key}
+            cardVariant="rows"
+            empty={
+              <p className="px-3 py-6 text-center text-sm text-text-muted md:px-4">
+                Nothing to group yet.
+              </p>
+            }
+          />
+          {expanded ? <div ref={sentinel} aria-hidden /> : null}
+          {more.isError && expanded ? (
+            <p className="border-t border-border px-3 py-3 text-sm text-text-muted md:px-4">
+              Could not load more rows.{' '}
+              <button
+                type="button"
+                className="font-semibold text-brand underline"
+                onClick={() => void (paged.length > 0 ? more.fetchNextPage() : more.refetch())}
+              >
+                Try again
+              </button>
             </p>
-          }
-        />
-        <ShowAllToggle
-          total={rows.length}
-          limit={limit}
-          expanded={expanded}
-          onToggle={() => setExpanded((v) => !v)}
-          noun="rows"
-        />
-      </CardContent>
-    </Card>
+          ) : loading ? (
+            <p className="border-t border-border px-3 py-3 text-sm text-text-muted md:px-4" role="status">
+              Loading more rows…
+            </p>
+          ) : null}
+          {!expanded && total > BREAKDOWN_FIRST_ROWS ? (
+            <div className="border-t border-border px-3 py-1 md:px-4">
+              <Button variant="ghost" size="sm" padding="none" onClick={() => setExpanded(true)}>
+                Show more · {formatCount(total - BREAKDOWN_FIRST_ROWS)} more
+              </Button>
+            </div>
+          ) : expanded && !loading && paged.length > 0 ? (
+            <div className="border-t border-border px-3 py-1 md:px-4">
+              <Button variant="ghost" size="sm" padding="none" onClick={collapse}>
+                Show fewer
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

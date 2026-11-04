@@ -341,29 +341,6 @@ export function whatsAppUrl(text: string): string {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
 
-/* ─────────────────────────────── Phone lists ────────────────────────────── */
-
-/**
- * How many rows a list on the Films page shows on a phone before "Show all".
- * Breakdowns can return 50 rows and every share link ever made is listed; on a
- * 390 px screen that pushed the "make a link" form eight screens down.
- */
-export const PHONE_LIST_LIMIT = 5;
-
-/**
- * The rows to draw. `limit` is `null` where nothing is capped (a desktop
- * table); a list one row over the cap is shown whole, because a "Show all 6"
- * button costs as much height as the sixth row it hides.
- */
-export function cappedRows<T>(
-  rows: readonly T[],
-  limit: number | null,
-  expanded: boolean,
-): readonly T[] {
-  if (limit === null || expanded || rows.length <= limit + 1) return rows;
-  return rows.slice(0, Math.max(0, limit));
-}
-
 /** A breakdown row's figures on one phone line, after its view count. */
 export function breakdownPhoneLine(row: FilmBreakdownRow): string {
   return [
