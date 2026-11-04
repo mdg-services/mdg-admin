@@ -47,7 +47,7 @@ import { copyText } from '@/lib/clipboard';
 import { memberLogin } from '@/lib/onboarding';
 import { alsoRunsLine, type MemberWithOutlets } from '@/lib/outlets';
 import { generatePassword } from '@/lib/password';
-import type { Dealer, User } from '@dk/shared';
+import { SIGN_IN_MOBILE_HINT, signInMobileOf, type Dealer, type User } from '@dk/shared';
 
 interface Props {
   dealer: Dealer;
@@ -90,9 +90,20 @@ const addMemberSchema = z
     password: z.string().min(8, 'At least 8 characters').max(200),
     phone: z.string().trim().max(40).optional(),
   })
-  .refine((v) => Boolean(v.email) || (v.phone ?? '').replace(/\D/g, '').length >= 10, {
-    message: 'Give a mobile number (or an email) to sign in with',
-    path: ['phone'],
+  // The member signs in with this mobile or this email. A mobile must be one the app's
+  // sign-in takes (`signInMobileOf`): any ten digits used to pass here, and made a login
+  // the app then refused (9999Z, 5 Nov 2026).
+  .superRefine((v, ctx) => {
+    const typed = (v.phone ?? '').trim();
+    if (typed && !signInMobileOf(typed)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: SIGN_IN_MOBILE_HINT, path: ['phone'] });
+    } else if (!typed && !v.email) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Give a mobile number (or an email) to sign in with',
+        path: ['phone'],
+      });
+    }
   });
 type AddMemberForm = z.infer<typeof addMemberSchema>;
 
@@ -494,9 +505,11 @@ function AddMemberDialog({
 
   // The outlet's number is the owner's, and a mobile number is a sign-in name
   // now: two accounts on one number cannot sign in by it. So it is offered for
-  // an owner, and taken back out of a manager's box if it was only the offer.
+  // an owner, and taken back out of a manager's box if it was only the offer. Only a
+  // number the app can sign in with is offered: a landline in the outlet's phone would
+  // otherwise sit in the box and block an owner added by email alone.
   React.useEffect(() => {
-    if (!defaultPhone) return;
+    if (!defaultPhone || !signInMobileOf(defaultPhone)) return;
     const phone = (getValues('phone') ?? '').trim();
     if (role === 'owner' && !phone) setValue('phone', defaultPhone);
     if (role === 'manager' && phone === defaultPhone) setValue('phone', '');
