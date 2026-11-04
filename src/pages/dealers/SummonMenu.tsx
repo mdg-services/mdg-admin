@@ -18,8 +18,8 @@ const INSTALL_URL = (import.meta.env.VITE_SUMMON_EXTENSION_URL as string | undef
 /**
  * Summon (ADR 0030): open this dealer's SDMS, IRAS or eMaaptaul signed in, in a new
  * tab of this browser, instead of copying the ID and password out of the Password
- * vault. Every admin, in Chrome on a computer with the Dealer Kavach Summon
- * extension.
+ * vault. Every admin, in Chrome on a computer with the Dealer Kavach extension
+ * (ADR 0032).
  *
  * The extension first logs out of that portal in this browser (so no other
  * dealer's session carries on under the new login), then fills the login in the
@@ -35,7 +35,7 @@ export function SummonMenu({ dealerId }: { dealerId: string }) {
     ? 'Summon works in Chrome on a computer.'
     : extension.installed
       ? null
-      : 'Install the Dealer Kavach Summon extension in Chrome first.';
+      : 'Install the Dealer Kavach extension in Chrome first.';
 
   async function open(portal: SummonPortal) {
     const label = SUMMON_PORTAL_LABEL[portal];
