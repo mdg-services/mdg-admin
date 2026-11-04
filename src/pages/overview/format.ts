@@ -22,6 +22,7 @@ import type {
   TriageItem,
 } from '@dk/shared';
 import {
+  AI_SENDABLE_STATES,
   DSR_SHEET_LABELS,
   DSR_SHEETS,
   dealerCodeLabel,
@@ -504,6 +505,27 @@ export function boardAction(row: DealerDayRow, reportingDate: string): BoardActi
         kind: 'blocked',
         label: 'Regenerate first',
         reason: STALE_REASON,
+        href: reportHref(row),
+      };
+    }
+    // The AI check (ADR 0031): a report it is holding is not offered for sending
+    // from a list. The admin is taken to it, where each problem can be read and
+    // ticked. The server refuses the send anyway; this keeps the button honest.
+    const ai = row.dsr.ai;
+    if (ai && !AI_SENDABLE_STATES.has(ai.state)) {
+      const checking = ai.state === 'CHECKING' || ai.state === 'NOT_CHECKED';
+      return {
+        kind: 'blocked',
+        label: checking
+          ? 'AI checking…'
+          : ai.state === 'COULD_NOT_CHECK'
+            ? 'Check it yourself'
+            : `Check ${ai.waiting} first`,
+        reason: checking
+          ? 'The AI is checking this report; it usually takes two to four minutes.'
+          : ai.state === 'COULD_NOT_CHECK'
+            ? 'The AI could not check this report. Open it to check it yourself or run the check again.'
+            : `The AI found ${ai.waiting === 1 ? 'one thing' : `${ai.waiting} things`} to look at before this report goes to the dealer.`,
         href: reportHref(row),
       };
     }

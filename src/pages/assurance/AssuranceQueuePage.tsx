@@ -8,6 +8,7 @@ import {
 import * as React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+import { AiHoldsSection } from '@/components/aiCheck/AiHoldsSection';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
   Badge,
@@ -149,6 +150,10 @@ export function AssuranceQueuePage() {
           </>
         }
       />
+
+      {/* The AI check's holds first (ADR 0031): each is a report a person has
+          to open and tick before it can go. */}
+      <AiHoldsSection />
 
       {maybeTruncated ? (
         <Callout intent="warning" className="mb-4">

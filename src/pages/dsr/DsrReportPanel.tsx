@@ -13,8 +13,8 @@ import {
 import * as React from 'react';
 
 
+import { AiCheckBadge, AiCheckPanel } from '@/components/aiCheck/AiCheckPanel';
 import {
-  AiReviewBadge,
   AssuranceBadge,
   AssurancePanel,
   AssuranceSummaryStrip,
@@ -31,9 +31,11 @@ import {
   WideReportViewer,
   type KeyValueItem,
 } from '@/components/ui';
+import { useAiCheck } from '@/hooks/api/useAiCheck';
 import { useAssuranceReport } from '@/hooks/api/useAssurance';
 import { useDsrShareStatus, type DsrReportView } from '@/hooks/api/useDsr';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { aiShareBlockReason } from '@/lib/aiCheck';
 import { isHolding, shareBlockedReason } from '@/lib/assurance';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatLitres } from '@/lib/format';
@@ -143,6 +145,11 @@ export function DsrReportPanel({
           stronger caveat than "this figure was missing a nozzle". */}
       <DsrStaleNotice report={report} />
 
+      {/* The AI check (ADR 0031) — the first thing on the page, because it is
+          the answer to "can this go to the dealer?". Green and saying what it
+          checked, or red with each problem in plain words. */}
+      <AiCheckPanel kind="dsr" reportId={report.id} />
+
       {/* The verdict, before the report rather than under it. The full panel and
           the release form stay beside Share; this is the answer to "can I send
           this, and did anything look at it?", which an admin needs before they
@@ -163,7 +170,7 @@ export function DsrReportPanel({
                   day book. `Badge` refuses to shrink by design, so it pushes the
                   squeeze onto the title, which wraps. */}
               <AssuranceBadge report={report} />
-              <AiReviewBadge report={report} />
+              <AiCheckBadge kind="dsr" reportId={report.id} />
             </div>
             <p className="text-xs text-text-subtle">
               {dsrDateLabel(report.businessDate)}
@@ -724,12 +731,19 @@ function DsrShareSection({
   // yet know whether this report may be sent, and the honest reading of "do not
   // know" on the last click before something unrecallable is "wait".
   const verdictPending = assuranceQ.isPending;
-  const { blocked: shareBlocked, reason: blockedReason } = triggerBlock({
+  const trigger = triggerBlock({
     held,
     holdReason: shareBlockedReason(assuranceQ.data),
     verdictPending,
     statusState: status ? 'ready' : statusQ.isError ? 'failed' : 'loading',
   });
+  // The AI check (ADR 0031) stops the button too, with its reason under it: a
+  // report it found problems in, or has not finished, is not offered for sending.
+  // The correctness check's own reason comes first when both are holding.
+  const aiQ = useAiCheck('dsr', report.id);
+  const aiReason = aiShareBlockReason(aiQ.data, 'report');
+  const shareBlocked = trigger.blocked || !!aiReason;
+  const blockedReason = trigger.reason ?? aiReason;
   // What the section offers: the first send, more people, a quiet "change who
   // has it" when the outlet's rule is met, or nothing and why.
   const entry = shareEntry(status, alreadyShared);

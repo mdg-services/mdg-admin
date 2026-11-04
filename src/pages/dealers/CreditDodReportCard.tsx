@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
+import { AiCheckPanel } from '@/components/aiCheck/AiCheckPanel';
 import { ShareAudienceNote, ShareMenu } from '@/components/share/ShareMenu';
 import {
   audienceForMissing,
@@ -33,8 +34,10 @@ import {
   ImageLightbox,
   useToast,
 } from '@/components/ui';
+import { useAiCheck } from '@/hooks/api/useAiCheck';
 import { creditDodShareOf, useShareCreditDodSnapshot } from '@/hooks/api/useCreditDod';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { aiShareBlockReason } from '@/lib/aiCheck';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, formatDmy, inrFormat } from '@/lib/format';
 import type { CreditDodSnapshotRecord } from '@/types/creditDod';
@@ -107,7 +110,11 @@ export function CreditDodReportCard({
       : snapshot.droppedRows > 0
         ? 'Part of the portal ledger couldn’t be read for this report, so the figures may be incomplete.'
         : null;
-  const shareBlocked = shareRefusal !== null && !isSuperAdmin;
+  // The AI check (ADR 0031) holds the card for every admin alike, super-admin
+  // included: its answer is "tick what I found", which anybody can do above.
+  const aiQ = useAiCheck('credit-dod', snapshot.id);
+  const aiReason = aiShareBlockReason(aiQ.data, 'card');
+  const shareBlocked = (shareRefusal !== null && !isSuperAdmin) || aiReason !== null;
 
   async function onConfirmShare() {
     try {
@@ -124,6 +131,8 @@ export function CreditDodReportCard({
 
   return (
     <div className="grid gap-4">
+      {/* The AI check first: whether this card can go to the dealer at all. */}
+      <AiCheckPanel kind="credit-dod" reportId={snapshot.id} />
       {/* Above the card image deliberately: a missed deadline changes what the
           admin should do with this report, so it cannot sit below the fold. */}
       <OverdueNotice snapshot={snapshot} />
@@ -334,6 +343,9 @@ export function CreditDodReportCard({
             {firstSend.noOwner ? (
               <p className="basis-full text-xs text-text-muted">{NO_OWNER_NOTE}</p>
             ) : null}
+            {aiReason ? (
+              <p className="basis-full text-sm font-medium text-danger-strong md:text-danger">{aiReason}</p>
+            ) : null}
           </>
         )}
       </div>
@@ -374,6 +386,11 @@ export function CreditDodReportCard({
           </>
         }
       >
+        {aiReason ? (
+          <div className="mb-3">
+            <Notice tone="danger">{aiReason}</Notice>
+          </div>
+        ) : null}
         {shareRefusal ? (
           <div className="mb-3">
             <Notice tone="danger">
