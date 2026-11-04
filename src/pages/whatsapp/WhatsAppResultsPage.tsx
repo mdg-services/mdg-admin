@@ -23,6 +23,7 @@ import {
 import { AddAsLeadButton } from '@/features/leads/AddAsLeadButton';
 import { linkLabel, phoneLabel } from '@/features/whatsapp/format';
 import { useWhatsAppResultsQuery } from '@/hooks/api/useWhatsAppResults';
+import { useGrowingList } from '@/hooks/useGrowingList';
 import { ApiError } from '@/lib/api';
 import { leadHref, resultLeadAction } from '@/lib/leads';
 import {
@@ -176,6 +177,8 @@ export function WhatsAppResultsPage() {
     () => (data?.people ?? []).filter((p) => inFilter(p, filter)),
     [data?.people, filter],
   );
+  // A place has a thousand people and all marketing eight thousand: five, then more as you scroll.
+  const growing = useGrowingList(shown.length, `${data?.selected}|${data?.line}|${filter}`);
 
   return (
     <div>
@@ -352,6 +355,7 @@ export function WhatsAppResultsPage() {
               <CardSubtitle>Tap a person to open their chat.</CardSubtitle>
             </CardHeader>
             <CardContent padding="none">
+              <div ref={growing.top} className="scroll-mt-4" aria-hidden />
               <div className="px-3 py-3 md:px-4">
                 {/* Two by two on a phone: four counts in a row do not fit 375px. */}
                 <SegmentedControl
@@ -360,20 +364,25 @@ export function WhatsAppResultsPage() {
                   value={filter}
                   onChange={setFilter}
                   options={[
-                    { value: 'all', label: `Everyone ${data.counts.sent}` },
-                    { value: 'opened', label: `Opened ${data.counts.opened}` },
+                    { value: 'all', label: `Everyone ${count(data.counts.sent)}` },
+                    { value: 'opened', label: `Opened ${count(data.counts.opened)}` },
                     ...(isFilm || data.counts.askedCall > 0
-                      ? [{ value: 'call' as const, label: `Wants a call ${data.counts.askedCall}` }]
+                      ? [
+                          {
+                            value: 'call' as const,
+                            label: `Wants a call ${count(data.counts.askedCall)}`,
+                          },
+                        ]
                       : []),
                     {
                       value: 'missed',
-                      label: `Didn't reach ${data.counts.sent - data.counts.reached}`,
+                      label: `Didn't reach ${count(data.counts.sent - data.counts.reached)}`,
                     },
                   ]}
                 />
               </div>
               <DataList<WhatsAppResultPerson>
-                rows={shown}
+                rows={shown.slice(0, growing.listed)}
                 empty={
                   <p className="px-4 py-6 text-sm text-text-muted">
                     Nobody here{filter === 'call' ? ' has pressed "मुझे कॉल करें" yet' : ''}.
@@ -474,6 +483,21 @@ export function WhatsAppResultsPage() {
                   },
                 ]}
               />
+              {growing.expanded ? <div ref={growing.sentinel} aria-hidden /> : null}
+              {growing.hidden > 0 ? (
+                <div className="border-t border-border px-3 py-1 md:px-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    padding="none"
+                    onClick={growing.expanded ? growing.showFewer : growing.showMore}
+                  >
+                    {growing.expanded
+                      ? `Show fewer · ${count(growing.listed)} of ${count(shown.length)} shown`
+                      : `Show more · ${count(growing.hidden)} more`}
+                  </Button>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         </div>
