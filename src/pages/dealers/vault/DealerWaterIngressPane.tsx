@@ -18,13 +18,18 @@ import {
   useToast,
   type DataColumn,
 } from '@/components/ui';
-import { useWaterIngressCard, useWaterIngressDays } from '@/hooks/api/useWaterIngress';
+import {
+  useShareWaterIngressCard,
+  useWaterIngressCard,
+  useWaterIngressDays,
+} from '@/hooks/api/useWaterIngress';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, formatYmd, istTodayYmd } from '@/lib/format';
 import { shareActionLabel, shareSavedImage } from '@/lib/shareCard';
 import { dealerCodeLabel, type WaterIngressDayLog, type WaterIngressSlotRecord } from '@dk/shared';
 
+import { ShareToOutlet } from './ShareToOutlet';
 import type { DealerVaultPaneProps } from './types';
 
 /**
@@ -146,6 +151,8 @@ export function DealerWaterIngressPane({ dealer }: DealerVaultPaneProps) {
    * one, and this asks it for the file.
    */
   const card = useWaterIngressCard(dealer.id);
+  // The same picture, posted into the outlet's chats rather than saved here.
+  const shareToOutlet = useShareWaterIngressCard(dealer.id);
   const [pending, setPending] = React.useState<string | null>(null);
   const onShare = React.useCallback(
     async (businessDate: string) => {
@@ -287,7 +294,15 @@ export function DealerWaterIngressPane({ dealer }: DealerVaultPaneProps) {
         <Card>
           <CardHeader
             action={
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <ShareToOutlet
+                  what={`the card for ${formatYmd(day.businessDate, { weekday: true })}`}
+                  send={(audience) =>
+                    shareToOutlet.mutateAsync({ businessDate: day.businessDate, audience })
+                  }
+                  pending={shareToOutlet.isPending}
+                  size="md"
+                />
                 <Button
                   variant="secondary"
                   leftIcon={<Share2 width={16} height={16} strokeWidth={1.75} />}

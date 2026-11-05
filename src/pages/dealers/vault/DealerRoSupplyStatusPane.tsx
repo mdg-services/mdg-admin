@@ -33,11 +33,12 @@ import {
   useCollectRoSupplyStatus,
   useRoSupplyCard,
   useRoSupplyStatus,
+  useShareRoSupplyCard,
 } from '@/hooks/api/useRoSupplyStatus';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
-import { shareSavedImage } from '@/lib/shareCard';
+import { shareActionLabel, shareSavedImage } from '@/lib/shareCard';
 import { StatTile, StatTileRow, StatTileSkeletons } from '@/pages/dataVault/StatTile';
 import {
   roSupplyConditionCopy,
@@ -46,6 +47,7 @@ import {
  type BrowserPlace } from '@dk/shared';
 
 import { useRoSupplyRunWatcher } from './roSupply/useRoSupplyRunWatcher';
+import { ShareToOutlet } from './ShareToOutlet';
 import type { DealerVaultPaneProps } from './types';
 
 /**
@@ -93,6 +95,8 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
    * apart — so this asks for the file rather than making one.
    */
   const card = useRoSupplyCard(dealer.id);
+  // The same picture, posted into the outlet's chats rather than saved here.
+  const shareToOutlet = useShareRoSupplyCard(dealer.id);
   const onShare = React.useCallback(async () => {
     try {
       const urls = await card.mutateAsync();
@@ -116,7 +120,9 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
       leftIcon={<Share2 width={15} height={15} strokeWidth={1.75} />}
       onClick={() => void onShare()}
     >
-      Share with dealer
+      {/* This one saves the picture or opens the device's share sheet; posting it
+          into the dealer's chat is "Share to outlet". */}
+      {shareActionLabel()}
     </Button>
   );
 
@@ -185,6 +191,13 @@ export function DealerRoSupplyStatusPane({ dealer }: DealerVaultPaneProps) {
         <div className="flex flex-wrap items-center gap-2">
           {/* Only offered once there is something to send. Sharing an empty card
               would put a picture of nothing in front of a dealer. */}
+          {summary.capturedAt ? (
+            <ShareToOutlet
+              what={`the supply status card from the check at ${formatDateTime(summary.capturedAt)}`}
+              send={(audience) => shareToOutlet.mutateAsync(audience)}
+              pending={shareToOutlet.isPending}
+            />
+          ) : null}
           {summary.capturedAt ? shareButton : null}
           {captureButton}
         </div>

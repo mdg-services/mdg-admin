@@ -1,7 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { RoSupplyStatusSummary , BrowserPlace } from '@dk/shared';
+import type {
+  BrowserPlace,
+  RoSupplyStatusSummary,
+  ShareAudience,
+  ShareOutcome,
+} from '@dk/shared';
 
 /**
  * One prefix for everything this pane caches, so a finished check can clear all
@@ -70,5 +75,20 @@ export interface RoSupplyCardUrls {
 export function useRoSupplyCard(dealerId: string | undefined) {
   return useMutation({
     mutationFn: () => api.get<RoSupplyCardUrls>(`/ro-supply-status/dealers/${dealerId}/card`),
+  });
+}
+
+/** What a send answers: who it reached, and a sentence for anyone it could not. */
+export type RoSupplyShareResult = ShareOutcome & { notReached?: string[] };
+
+/**
+ * `POST /ro-supply-status/dealers/:id/card/share` — post the latest card into the
+ * outlet's chats. A picture already sent goes only to the chats that do not hold
+ * it yet; a new capture draws a new picture, which goes to everyone picked.
+ */
+export function useShareRoSupplyCard(dealerId: string | undefined) {
+  return useMutation({
+    mutationFn: (audience: ShareAudience) =>
+      api.post<RoSupplyShareResult>(`/ro-supply-status/dealers/${dealerId}/card/share`, { audience }),
   });
 }

@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { api, ApiError } from '@/lib/api';
-import type { WaterIngressDayLog } from '@dk/shared';
+import type { ShareAudience, ShareOutcome, WaterIngressDayLog } from '@dk/shared';
 
 /**
  * Water Ingress Testing — the day-shaped compliance record, per dealer.
@@ -62,6 +62,24 @@ export function useWaterIngressCard(dealerId: string | undefined) {
     mutationFn: (businessDate: string) =>
       api.get<WaterIngressCardUrls>(
         `/water-ingress/dealers/${dealerId}/days/${businessDate}/card`,
+      ),
+  });
+}
+
+/** What a send answers: who it reached, and a sentence for anyone it could not. */
+export type WaterIngressShareResult = ShareOutcome & { notReached?: string[] };
+
+/**
+ * `POST /water-ingress/dealers/:id/days/:date/card/share` — post the day's card
+ * into the outlet's chats. A picture already sent goes only to the chats that do
+ * not hold it yet, so a repeated press posts nothing twice.
+ */
+export function useShareWaterIngressCard(dealerId: string | undefined) {
+  return useMutation({
+    mutationFn: ({ businessDate, audience }: { businessDate: string; audience: ShareAudience }) =>
+      api.post<WaterIngressShareResult>(
+        `/water-ingress/dealers/${dealerId}/days/${businessDate}/card/share`,
+        { audience },
       ),
   });
 }
