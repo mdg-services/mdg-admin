@@ -93,6 +93,9 @@ const STILL_STANDING: Partial<Record<AdminAlertKind, string>> = {
     'Hidden from this list. It clears once a debit goes through or autopay ends. Razorpay keeps trying by itself.',
   first_month_refund_asked:
     "Hidden from this list. The owner is still waiting: ring them, then a super-admin gives the first month back from the outlet's Autopay section.",
+  // ── DU OTP ── hiding the alert acknowledges nothing; only the portal taking the row clears it.
+  du_otp_ack:
+    "Hidden from this list. It clears once IndianOil has the acknowledgement, or the event leaves the portal's list. Fill it in on the outlet's DU OTP pane.",
   // ── leads ── hiding the alert does not get anybody in touch; only a logged contact or a close does.
   lead_new: 'Hidden from this list. This lead stays on the Leads page until somebody gets in touch.',
   lead_due: 'Hidden from this list. This lead stays on the Leads page until somebody gets in touch.',

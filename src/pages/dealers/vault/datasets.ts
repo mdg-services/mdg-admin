@@ -9,6 +9,7 @@ import {
   Gauge,
   ReceiptText,
   ScanLine,
+  ShieldAlert,
   Truck,
 } from 'lucide-react';
 
@@ -18,6 +19,7 @@ import { DealerDsrTab } from '../DealerDsrTab';
 import { DealerLedgerWatchPane } from '../DealerLedgerWatchPane';
 
 import { DealerCalibrationClaimPane } from './DealerCalibrationClaimPane';
+import { DealerDuOtpAckPane } from './DealerDuOtpAckPane';
 import { DealerInspectionPane } from './DealerInspectionPane';
 import { DealerLoadPlannerPane } from './DealerLoadPlannerPane';
 import { DealerPadLedgerPane } from './DealerPadLedgerPane';
@@ -142,6 +144,16 @@ const REGISTRY = [
     Icon: FileCheck2,
     requiresService: 'calibration-claim',
     Pane: DealerCalibrationClaimPane,
+  },
+  {
+    // Linked from the `du_otp_ack` alert as `?tab=data-vault&vault=du-otp` — never rename the id.
+    id: 'du-otp',
+    label: 'DU OTP',
+    description:
+      'Dispenser OTP events IndianOil lists for this outlet, what has been gathered to acknowledge each one, and filing it on the portal.',
+    Icon: ShieldAlert,
+    requiresService: 'du-otp-acknowledgement',
+    Pane: DealerDuOtpAckPane,
   },
 ] as const satisfies readonly DealerVaultDataset[];
 
