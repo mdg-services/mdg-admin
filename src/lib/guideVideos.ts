@@ -258,7 +258,7 @@ const BY_SURFACE: Record<string, readonly GuideRef[]> = {
   'admin-dealer-vault-ledger-watch': [OWNERS_ONLY, ...SENDING],
   'admin-inbox-thread': [
     video('admin_answering', 'Suggest reply: what the helper reads', { at: 25.81, titleIsPart: true }),
-    video('admin_answering', 'Send a guide video', { at: 127.93, titleIsPart: true }),
+    video('admin_answering', 'Send a guide video', { at: 128.4, titleIsPart: true }),
     video('admin_ticket_desk', 'The ticket strip above the chat', { at: 75.59, titleIsPart: true }),
     video('admin_ticket_desk', 'On it until: telling the dealer when', { at: 104.27, titleIsPart: true }),
     video('admin_ticket_desk', 'Closing a ticket', { at: 168.47, titleIsPart: true }),
