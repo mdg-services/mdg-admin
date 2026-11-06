@@ -12,9 +12,9 @@
  * and the extra `linkToUserId` on Approve's body. They move into shared with the
  * next contract change.
  */
-import type { DealerMemberRow, LinkOwner, SetupMessageLang } from '@dk/shared';
+import type { DealerMemberRow, JoinOutletOption, LinkOwner, SetupMessageLang } from '@dk/shared';
 
-export type { LinkOwner, RegistrationLinkOption } from '@dk/shared';
+export type { JoinOutletOption, LinkOwner, RegistrationLinkOption } from '@dk/shared';
 /** A dealer member as the Members tab gets it: the person's other outlets ride along for an admin. */
 export type MemberWithOutlets = DealerMemberRow;
 
@@ -43,20 +43,48 @@ export function linkedResultLine(owner: Pick<LinkOwner, 'name' | 'codes'>, newCo
   return `${newCode} is now another outlet of ${owner.name} (also ${joinCodes(owner.codes)}). They sign in as before, with the same password.`;
 }
 
+/** The label on the tick that gives the person a login on the outlet we already serve. */
+export function joinChoiceLabel(join: JoinOutletOption): string {
+  return `Give them an owner login on ${join.code}`;
+}
+
+/** The line under that tick: what it opens up, and the call to make first. */
+export function joinChoiceHint(join: JoinOutletOption): string {
+  const others =
+    join.owners === 0
+      ? 'Nobody signs in to it yet.'
+      : `It has ${join.owners} owner login${join.owners === 1 ? '' : 's'} already; this adds one more.`;
+  return `${join.code} stays exactly as it is: no new outlet, no new bill, nothing asked again. ${others} They sign in with this mobile and the password they chose, and see ${join.code}'s reports. Call the outlet first to check this is really their pump.`;
+}
+
+/** The result screen's line after a join. */
+export function joinedResultLine(code: string): string {
+  return `They now have an owner login on ${code}. Nothing else about ${code} changed.`;
+}
+
 /**
  * The Approve request body: the code the person saw, the owner to link to when
- * ticked, and the language of the WhatsApp welcome (one language, as chosen on
- * screen).
+ * ticked, the existing outlet to join when that is ticked instead, and the
+ * language of the WhatsApp welcome (one language, as chosen on screen). A join
+ * sends no code: the outlet keeps its own.
  */
 export function approveBody(input: {
   code?: string | undefined;
   linkToUserId?: string | undefined;
+  joinDealerId?: string | undefined;
   messageLang?: SetupMessageLang | undefined;
 }): {
   code?: string;
   linkToUserId?: string;
+  joinDealerId?: string;
   messageLang?: SetupMessageLang;
 } {
+  if (input.joinDealerId) {
+    return {
+      joinDealerId: input.joinDealerId,
+      ...(input.messageLang ? { messageLang: input.messageLang } : {}),
+    };
+  }
   return {
     ...(input.code ? { code: input.code } : {}),
     ...(input.linkToUserId ? { linkToUserId: input.linkToUserId } : {}),
@@ -66,14 +94,18 @@ export function approveBody(input: {
 
 /**
  * Whether Approve may go ahead. A registration that is "already a client" is
- * refused unless it is being added to the owner the server named; any other
- * registration needs only a good code.
+ * refused unless it is being added to the owner the server named, or given a
+ * login on the outlet it matched (which needs no code); any other registration
+ * needs only a good code.
  */
 export function canApprove(input: {
   alreadyClient: boolean;
   linking: boolean;
+  joining?: boolean;
   codeValid: boolean;
   pending: boolean;
 }): boolean {
-  return input.codeValid && !input.pending && (!input.alreadyClient || input.linking);
+  if (input.pending) return false;
+  if (input.alreadyClient && input.joining) return true;
+  return input.codeValid && (!input.alreadyClient || input.linking);
 }

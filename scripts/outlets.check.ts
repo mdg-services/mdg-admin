@@ -21,7 +21,10 @@ import {
   alsoRunsLine,
   approveBody,
   canApprove,
+  joinChoiceHint,
+  joinChoiceLabel,
   joinCodes,
+  joinedResultLine,
   linkChoiceLabel,
   linkedResultLine,
   type LinkOwner,
@@ -114,5 +117,41 @@ describe('canApprove', () => {
     assert.equal(canApprove({ ...base, alreadyClient: true, linking: true }), true);
     assert.equal(canApprove({ ...base, alreadyClient: true, linking: true, codeValid: false }), false);
     assert.equal(canApprove({ ...base, alreadyClient: true, linking: true, pending: true }), false);
+  });
+
+  it('lets an already-a-client registration join the outlet it matched, with no code', () => {
+    assert.equal(canApprove({ ...base, alreadyClient: true, joining: true, codeValid: false }), true);
+    assert.equal(canApprove({ ...base, alreadyClient: true, joining: true, pending: true }), false);
+    // Joining means nothing for a registration that is not already a client: it still needs a code.
+    assert.equal(canApprove({ ...base, joining: true, codeValid: false }), false);
+  });
+});
+
+describe('joining an outlet we already serve', () => {
+  const join = { dealerId: 'd'.repeat(24), code: '16E', owners: 0 };
+
+  it('sends only the outlet and the language, never a code', () => {
+    assert.deepEqual(approveBody({ code: '33E', joinDealerId: join.dealerId, messageLang: 'hi' }), {
+      joinDealerId: join.dealerId,
+      messageLang: 'hi',
+    });
+    assert.deepEqual(approveBody({ joinDealerId: join.dealerId }), { joinDealerId: join.dealerId });
+  });
+
+  it('is accepted by the server schema, but never together with a link', () => {
+    assert.equal(approveRegistrationSchema.safeParse({ joinDealerId: join.dealerId }).success, true);
+    assert.equal(
+      approveRegistrationSchema.safeParse({ joinDealerId: join.dealerId, linkToUserId: 'e'.repeat(24) }).success,
+      false,
+    );
+  });
+
+  it('says what it opens up and asks for a call first', () => {
+    assert.equal(joinChoiceLabel(join), 'Give them an owner login on 16E');
+    assert.match(joinChoiceHint(join), /Nobody signs in to it yet/);
+    assert.match(joinChoiceHint({ ...join, owners: 2 }), /2 owner logins already/);
+    assert.match(joinChoiceHint(join), /no new outlet, no new bill/);
+    assert.match(joinChoiceHint(join), /Call the outlet first/);
+    assert.match(joinedResultLine('16E'), /owner login on 16E/);
   });
 });

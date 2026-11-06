@@ -124,6 +124,7 @@ export function useApproveRegistration() {
       id: string;
       code?: string;
       linkToUserId?: string;
+      joinDealerId?: string;
       messageLang?: SetupMessageLang;
     }) =>
       api.post<ApproveRegistrationResult>(`/admin/registrations/${id}/approve`, approveBody(body)),

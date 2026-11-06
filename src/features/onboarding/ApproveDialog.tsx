@@ -24,7 +24,15 @@ import {
   welcomeNotSentLine,
   type RegistrationRow,
 } from '@/lib/onboarding';
-import { LINK_CHOICE_HINT, canApprove as mayApprove, linkChoiceLabel, linkedResultLine } from '@/lib/outlets';
+import {
+  LINK_CHOICE_HINT,
+  canApprove as mayApprove,
+  joinChoiceHint,
+  joinChoiceLabel,
+  joinedResultLine,
+  linkChoiceLabel,
+  linkedResultLine,
+} from '@/lib/outlets';
 import { ageSince } from '@/pages/overview/format';
 import { dealerCodeLabel, type ApproveRegistrationResult, type SetupMessageLang } from '@dk/shared';
 import { dealerCodeSchema } from '@dk/shared/schemas';
@@ -74,6 +82,8 @@ export function ApproveDialog({
   const [now, setNow] = React.useState(() => Date.now());
   // ── one person, several outlets ── ticked: add this as another outlet of the owner on this number
   const [link, setLink] = React.useState(false);
+  // ── a pump we already serve ── ticked: give this person an owner login on that outlet
+  const [join, setJoin] = React.useState(false);
   // The owner the result screen names, kept past the refresh that follows an approval.
   const [linkedTo, setLinkedTo] = React.useState<LinkedTo | null>(null);
   // The welcome's language: what the person picked; until they do, the default on the row.
@@ -86,6 +96,7 @@ export function ApproveDialog({
     setResult(null);
     setNow(Date.now());
     setLink(false);
+    setJoin(false);
     setLinkedTo(null);
     setPickedLang(null);
   }, [row?.registrationId]);
@@ -105,23 +116,31 @@ export function ApproveDialog({
   const linkQuery = useRegistrationLinkOptionQuery(row?.registrationId, !!blocked && !result);
   const linkOwner = linkQuery.data?.owner ?? null;
   const linking = !!blocked && !!linkOwner && link;
+  const joinOption = linkQuery.data?.join ?? null;
+  const joining = !!blocked && !!joinOption && join;
   const canApprove =
     !!row &&
     mayApprove({
       alreadyClient: !!blocked,
       linking,
+      joining,
       codeValid: parsed.success,
       pending: approve.isPending,
     });
 
   async function submit() {
-    if (!row || !canApprove || !parsed.success) return;
+    if (!row || !canApprove) return;
+    if (!joining && !parsed.success) return;
     try {
       // The code on the screen, as the person saw it. If somebody else took it meanwhile the
-      // server answers 409 and says so.
+      // server answers 409 and says so. A join keeps the outlet's own code and sends none.
       const done = await approve.mutateAsync({
         id: row.registrationId,
-        code: parsed.data,
+        ...(joining && joinOption
+          ? { joinDealerId: joinOption.dealerId }
+          : parsed.success
+            ? { code: parsed.data }
+            : {}),
         ...(linking && linkOwner ? { linkToUserId: linkOwner.userId } : {}),
         // The language that is on screen, as the person saw it.
         messageLang: chosenMessageLang(pickedLang, row.messageLang),
@@ -137,7 +156,13 @@ export function ApproveDialog({
     <Dialog
       open={!!row}
       onClose={onClose}
-      title={result ? `${dealerCodeLabel(result.code)} is set up` : 'Approve registration'}
+      title={
+        result
+          ? result.joined
+            ? `Login added on ${dealerCodeLabel(result.code)}`
+            : `${dealerCodeLabel(result.code)} is set up`
+          : 'Approve registration'
+      }
       footerBelow="row"
       footer={
         result ? (
@@ -196,7 +221,7 @@ export function ApproveDialog({
               .{' '}
               {linkQuery.isLoading
                 ? 'Checking whether it can be added to their account…'
-                : linkOwner
+                : linkOwner || joinOption
                   ? null
                   : (linkQuery.data?.reason ?? 'It cannot be added as another outlet from here.')}
             </Callout>
@@ -213,32 +238,45 @@ export function ApproveDialog({
             />
           ) : null}
 
-          <div>
-            <Label htmlFor={codeId} required>
-              Dealer code
-            </Label>
-            <Input
-              id={codeId}
-              value={code}
-              onChange={(e) => {
-                setTyped(true);
-                setCode(e.target.value);
-              }}
-              placeholder="e.g. 15E"
-              autoCapitalize="characters"
-              autoComplete="off"
-              disabled={!!blocked && !linking}
-              invalid={!!codeProblem}
+          {/* ── a pump we already serve ── offered when nobody signs in with this number yet */}
+          {blocked && joinOption ? (
+            <Checkbox
+              checked={join}
+              onChange={(e) => setJoin(e.target.checked)}
+              label={joinChoiceLabel(joinOption)}
+              hint={joinChoiceHint(joinOption)}
+              align="start"
             />
-            <FieldError message={codeProblem ?? undefined} />
-            <p className="mt-1 text-xs text-text-muted">
-              {suggestion.data?.suggestion
-                ? `Next free code is ${suggestion.data.suggestion}. Change it if this outlet already has one.`
-                : suggestion.isError
-                  ? 'Could not read the next free code. Type it in.'
-                  : 'Looking up the next free code…'}
-            </p>
-          </div>
+          ) : null}
+
+          {joining ? null : (
+            <div>
+              <Label htmlFor={codeId} required>
+                Dealer code
+              </Label>
+              <Input
+                id={codeId}
+                value={code}
+                onChange={(e) => {
+                  setTyped(true);
+                  setCode(e.target.value);
+                }}
+                placeholder="e.g. 15E"
+                autoCapitalize="characters"
+                autoComplete="off"
+                disabled={!!blocked && !linking}
+                invalid={!!codeProblem}
+              />
+              <FieldError message={codeProblem ?? undefined} />
+              <p className="mt-1 text-xs text-text-muted">
+                {suggestion.data?.suggestion
+                  ? `Next free code is ${suggestion.data.suggestion}. Change it if this outlet already has one.`
+                  : suggestion.isError
+                    ? 'Could not read the next free code. Type it in.'
+                    : 'Looking up the next free code…'}
+              </p>
+            </div>
+          )}
 
           <MessageLangField
             picked={pickedLang}
@@ -248,7 +286,9 @@ export function ApproveDialog({
           />
 
           <p className="text-xs text-text-muted">
-            {linking
+            {joining
+              ? 'This adds a login to the outlet we already serve, and sends the WhatsApp welcome. They sign in with their mobile number and the password they chose.'
+              : linking
               ? 'This makes the outlet and a login for the same owner, with their existing password. No welcome is sent by itself: you get the words to send.'
               : 'This makes the outlet and its owner login from the registration, and sends the WhatsApp welcome. The owner signs in with their mobile number and the password they chose.'}
           </p>
@@ -273,13 +313,23 @@ function ApprovedResult({
 
   return (
     <div className="grid gap-3">
-      <p className="text-sm text-text">
-        <span className="font-medium">{row.name}</span> is now outlet{' '}
-        <Link className="font-semibold text-brand underline" to={`/dealers/${result.dealerId}`}>
-          {dealerCodeLabel(result.code)}
-        </Link>
-        . The login for the owner is made.
-      </p>
+      {result.joined ? (
+        <p className="text-sm text-text">
+          <span className="font-medium">{row.name}</span>:{' '}
+          {joinedResultLine(dealerCodeLabel(result.code))}{' '}
+          <Link className="font-semibold text-brand underline" to={`/dealers/${result.dealerId}`}>
+            Open {dealerCodeLabel(result.code)}
+          </Link>
+        </p>
+      ) : (
+        <p className="text-sm text-text">
+          <span className="font-medium">{row.name}</span> is now outlet{' '}
+          <Link className="font-semibold text-brand underline" to={`/dealers/${result.dealerId}`}>
+            {dealerCodeLabel(result.code)}
+          </Link>
+          . The login for the owner is made.
+        </p>
+      )}
       {linkedTo ? <p className="text-sm text-text">{linkedResultLine(linkedTo, dealerCodeLabel(result.code))}</p> : null}
 
       {welcome.sent ? (
