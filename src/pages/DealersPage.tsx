@@ -13,7 +13,6 @@ import {
   HowThisWorks,
   Input,
   MobileCardList,
-  Pagination,
   SegmentedControl,
   Select,
   Skeleton,
@@ -25,10 +24,11 @@ import {
   TRow,
   useToast,
 } from '@/components/ui';
+import { useSentinel } from '@/features/whatsapp/useInView';
 import {
   useCreateDealer,
-  useDealerServiceSummaryQuery,
-  useDealersQuery,
+  useDealerServiceSummaryChunks,
+  useDealersInfiniteQuery,
 } from '@/hooks/api/useDealers';
 import { useOnboardingBoardQuery } from '@/hooks/api/useOnboarding';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -75,6 +75,10 @@ function readDefaultView(): DealersView {
   }
 }
 
+// No scroll box of its own to watch: the sentinel is measured against the screen.
+// One shared object, so the observer is not rebuilt on every render.
+const VIEWPORT = { current: null };
+
 export function DealersPage() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -85,9 +89,9 @@ export function DealersPage() {
   const isMd = useMediaQuery('(min-width: 768px)');
   const searchTerm = search.get('q') ?? '';
   const status = (search.get('status') as DealerStatus | null) ?? undefined;
-  const page = Number(search.get('page') ?? '1');
   // Held in the URL rather than component state because the list is
-  // server-paginated: the flag has to reach the query, not filter the page.
+  // fetched a page at a time: the flag has to reach the query, not filter
+  // the rows already loaded.
   const showArchived = isSuperAdmin && search.get('archived') === '1';
 
   // ── the view ── Services (what each outlet's services did today) or Onboarding
@@ -121,7 +125,6 @@ export function DealersPage() {
   function setView(next: DealersView) {
     const params = new URLSearchParams(search);
     params.set('view', next);
-    params.delete('page');
     setSearch(params, { replace: true });
   }
 
@@ -148,51 +151,76 @@ export function DealersPage() {
       const next = new URLSearchParams(search);
       if (searchInput) next.set('q', searchInput);
       else next.delete('q');
-      next.delete('page');
       setSearch(next, { replace: true });
     }, 300);
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
 
-  const { data, isLoading, isError, error, isFetching } = useDealersQuery({
+  const {
+    data: pages,
+    isLoading,
+    isError,
+    error,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useDealersInfiniteQuery({
     search: searchTerm || undefined,
     status,
-    page,
     pageSize: PAGE_SIZE,
     sort: 'createdAt:desc',
     includeArchived: showArchived,
   });
+  const items = React.useMemo(
+    () => (pages?.pages ?? []).flatMap((p) => p.items),
+    [pages],
+  );
+  const total = pages?.pages[0]?.total ?? 0;
+
+  // The end of the list: reaching it asks for the next page. A failed page
+  // stops the sentinel (`isError`) instead of retrying in a tight loop.
+  const sentinelRef = useSentinel<HTMLDivElement>(
+    VIEWPORT,
+    view === 'services' && !!hasNextPage && !isFetchingNextPage && !isError,
+    () => void fetchNextPage(),
+  );
 
   const createDealer = useCreateDealer();
 
-  // The roster's service columns, fetched for the ids on this page only. Kept
-  // out of the dealer list request so the rows draw immediately and the chips
-  // fill in behind them.
-  const dealerIds = React.useMemo(
-    () => (data?.items ?? []).map((d) => d.id),
-    [data],
+  // The roster's service columns, fetched a page of ids at a time. Kept out of
+  // the dealer list request so the rows draw immediately and the chips fill in
+  // behind them.
+  const idChunks = React.useMemo(
+    () => (pages?.pages ?? []).map((p) => p.items.map((d) => d.id)),
+    [pages],
   );
-  const serviceSummary = useDealerServiceSummaryQuery(dealerIds);
+  const summaries = useDealerServiceSummaryChunks(idChunks);
+  const summaryStamp = summaries.map((q) => q.dataUpdatedAt).join(',');
   const servicesByDealer = React.useMemo(() => {
     const map = new Map<string, Map<string, DealerServiceSummaryEntry>>();
-    for (const row of serviceSummary.data?.items ?? []) {
-      map.set(row.dealerId, new Map(row.services.map((e) => [e.serviceId, e])));
+    for (const q of summaries) {
+      for (const row of q.data?.items ?? []) {
+        map.set(
+          row.dealerId,
+          new Map(row.services.map((e) => [e.serviceId, e])),
+        );
+      }
     }
     return map;
-  }, [serviceSummary.data]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summaryStamp]);
   // "Not known yet" and "not attached" are different answers, and a dealer only
   // leaves the first for the second once the summary has a row for THEM — not
-  // merely once a summary has arrived. Paging keeps the previous page's data on
-  // screen while the next one loads, so an id-by-id check is what keeps the new
-  // page's rows from claiming, for a second, that nothing is set up.
+  // merely once a summary has arrived. A newly loaded page's rows draw before
+  // its summary lands, so an id-by-id check is what keeps them from claiming,
+  // for a second, that nothing is set up.
   const servicesKnown = (dealerId: string) => servicesByDealer.has(dealerId);
 
   function setStatus(next: DealerStatus | '') {
     const params = new URLSearchParams(search);
     if (next) params.set('status', next);
     else params.delete('status');
-    params.delete('page');
     setSearch(params, { replace: true });
   }
 
@@ -200,13 +228,6 @@ export function DealersPage() {
     const params = new URLSearchParams(search);
     if (next) params.set('archived', '1');
     else params.delete('archived');
-    params.delete('page');
-    setSearch(params, { replace: true });
-  }
-
-  function setPage(p: number) {
-    const params = new URLSearchParams(search);
-    params.set('page', String(p));
     setSearch(params, { replace: true });
   }
 
@@ -347,13 +368,13 @@ export function DealersPage() {
             />
           ) : isLoading ? (
             <ListSkeleton />
-          ) : isError ? (
+          ) : isError && !pages ? (
             <EmptyState
               icon={<AlertCircle width={28} height={28} strokeWidth={1.75} />}
               title="Could not load dealers"
               description={(error as Error).message}
             />
-          ) : data && data.items.length === 0 ? (
+          ) : pages && items.length === 0 ? (
             <EmptyState
               icon={<Building2 width={28} height={28} strokeWidth={1.75} />}
               title="No dealers yet"
@@ -367,7 +388,7 @@ export function DealersPage() {
                 </Button>
               }
             />
-          ) : data ? (
+          ) : pages ? (
             <>
               {/* Desktop table (≥ md) */}
               <div className="hidden md:block">
@@ -381,7 +402,7 @@ export function DealersPage() {
                     </TRow>
                   </THead>
                   <TBody>
-                    {data.items.map((d) => (
+                    {items.map((d) => (
                       <TRow
                         key={d.id}
                         clickable
@@ -428,7 +449,7 @@ export function DealersPage() {
                   the screen edge instead of 59px. */}
               <MobileCardList
                 variant="rows"
-                cards={data.items.map((d) => {
+                cards={items.map((d) => {
                   const entries = servicesByDealer.get(d.id);
                   // Why a service FAILED or needs a RESEND. On desktop the
                   // reason is the cell's tooltip; a tooltip does not exist
@@ -500,17 +521,30 @@ export function DealersPage() {
                   };
                 })}
               />
-              <Pagination
-                page={data.page}
-                pageSize={data.pageSize}
-                total={data.total}
-                onPageChange={setPage}
-              />
-              {isFetching ? (
-                <p className="px-3 pb-2 text-xs text-text-subtle">
-                  Refreshing...
-                </p>
-              ) : null}
+              {/* Infinite scroll: the sentinel sits under the last row, and
+                  the footer says how far along the list is. */}
+              <div ref={sentinelRef} aria-hidden className="h-px" />
+              <p
+                className="px-3 py-3 text-sm text-text-muted"
+                aria-live="polite"
+              >
+                {isFetchingNextPage ? (
+                  'Loading more...'
+                ) : isError ? (
+                  <>
+                    Could not load more.{' '}
+                    <button
+                      type="button"
+                      className="font-medium text-text underline"
+                      onClick={() => void fetchNextPage()}
+                    >
+                      Try again
+                    </button>
+                  </>
+                ) : (
+                  `Showing ${items.length} of ${total}`
+                )}
+              </p>
             </>
           ) : null}
         </CardContent>

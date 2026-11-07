@@ -1,4 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type {
@@ -41,27 +47,60 @@ export function useDealersQuery(params: DealerListParams) {
 }
 
 /**
- * The service columns for the dealers currently on screen — has each dealer's
- * DSR, Credit & DOD and the rest been produced, and has it been sent.
+ * The dealer list as one growing run of rows, for the roster's infinite scroll.
  *
- * Keyed on the ids rather than on the list's filters so paging back to a page
- * already seen redraws it from cache. Deliberately a second request instead of
- * more fields on the dealer: the roster is the only screen that wants this, and
- * it has to be able to draw its rows before the summary lands.
+ * Pages are fetched by number and the server's `total` says when to stop:
+ * `getNextPageParam` returns nothing once the pages loaded hold every dealer.
  */
-export function useDealerServiceSummaryQuery(dealerIds: string[]) {
-  const ids = dealerIds.join(',');
-  return useQuery({
-    queryKey: ['dealers', 'service-summary', ids],
-    queryFn: () =>
-      api.get<{ items: DealerServiceSummary[] }>('/dealers/service-summary', {
-        ids,
+export function useDealersInfiniteQuery(
+  params: Omit<DealerListParams, 'page'>,
+) {
+  return useInfiniteQuery({
+    queryKey: ['dealers', 'infinite', params],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      api.get<Paginated<Dealer>>('/dealers', {
+        search: params.search,
+        status: params.status,
+        page: pageParam,
+        pageSize: params.pageSize,
+        sort: params.sort,
+        includeArchived: params.includeArchived ? true : undefined,
       }),
-    enabled: dealerIds.length > 0,
-    // A run finishing or a report being sent moves these chips, and nothing on
-    // this screen causes either — so it has to notice on its own.
-    refetchInterval: 60_000,
-    placeholderData: (prev) => prev,
+    getNextPageParam: (last, all) => {
+      const loaded = all.reduce((n, p) => n + p.items.length, 0);
+      return last.items.length > 0 && loaded < last.total
+        ? last.page + 1
+        : undefined;
+    },
+  });
+}
+
+/**
+ * The service columns for the dealers on screen — has each dealer's DSR,
+ * Credit & DOD and the rest been produced, and has it been sent. One request
+ * per chunk of ids (one chunk per loaded page), and deliberately separate from
+ * the dealer list so the rows draw first and the chips fill in behind them.
+ * A chunk's key never changes once its page is loaded, so scrolling further
+ * fetches only the new page's chips and the rows above keep theirs.
+ */
+export function useDealerServiceSummaryChunks(chunks: string[][]) {
+  return useQueries({
+    queries: chunks.map((dealerIds) => {
+      const ids = dealerIds.join(',');
+      return {
+        queryKey: ['dealers', 'service-summary', ids],
+        queryFn: () =>
+          api.get<{ items: DealerServiceSummary[] }>(
+            '/dealers/service-summary',
+            { ids },
+          ),
+        enabled: dealerIds.length > 0,
+        // A run finishing or a report being sent moves these chips, and
+        // nothing on this screen causes either — so it has to notice on its own.
+        refetchInterval: 60_000,
+      };
+    }),
   });
 }
 
