@@ -135,6 +135,16 @@ export function ChatHeader({
                 {named ? (
                   <span className={cn('shrink-0 tabular-nums', status && 'hidden md:inline')}>{phoneLabel(phone)}</span>
                 ) : null}
+                {chat.source?.startsWith('Dealer ') ? (
+                  <>
+                    {named ? (
+                      <span aria-hidden className="hidden md:inline">
+                        ·
+                      </span>
+                    ) : null}
+                    <span className="hidden shrink-0 font-medium text-text md:inline">{chat.source}</span>
+                  </>
+                ) : null}
                 {status ? (
                   <>
                     {named ? (
