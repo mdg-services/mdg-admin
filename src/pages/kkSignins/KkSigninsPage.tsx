@@ -35,14 +35,21 @@ function ShowCode({ id }: { id: string }) {
   const show = useShowKkCode();
   const [shown, setShown] = React.useState<{ code: string; until: number } | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
+  /** Gone from this row AND from the request's own memory: Hide, the end of the ten minutes, and leaving the page. */
+  const clear = React.useCallback(() => {
+    setShown(null);
+    show.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   React.useEffect(() => {
     if (!shown) return;
     const t = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(t);
   }, [shown]);
   React.useEffect(() => {
-    if (shown && now >= shown.until) setShown(null);
-  }, [now, shown]);
+    if (shown && now >= shown.until) clear();
+  }, [now, shown, clear]);
+  React.useEffect(() => clear, [clear]);
 
   if (shown) {
     return (
@@ -50,7 +57,7 @@ function ShowCode({ id }: { id: string }) {
         <p className="select-text font-mono text-2xl font-semibold tracking-[0.3em] text-text">{shown.code}</p>
         <p className="mt-1 text-xs text-text-subtle">
           Gone in {left(shown.until - now)}. Read it out only to the person it was sent to.{' '}
-          <button type="button" className="underline" onClick={() => setShown(null)}>
+          <button type="button" className="underline" onClick={clear}>
             Hide
           </button>
         </p>
@@ -66,8 +73,10 @@ function ShowCode({ id }: { id: string }) {
       onClick={() =>
         show.mutate(id, {
           onSuccess: (d) => {
-            setNow(Date.now());
-            setShown({ code: d.code, until: new Date(d.expiresAt).getTime() });
+            // Counted from the SERVER's remaining time, not its timestamp against this laptop's clock.
+            const t = Date.now();
+            setNow(t);
+            setShown({ code: d.code, until: t + d.expiresInMs });
           },
           onError: (err) => toast.error((err as Error).message || 'That code is no longer available.'),
         })
