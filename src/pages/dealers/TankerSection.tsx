@@ -92,7 +92,7 @@ export function TankerSection({ dealerId }: Props) {
                   ? ` Answered by ${tanker.answeredBy === 'mdg' ? "MDG's team" : 'the owner'}.`
                   : tanker.asked
                     ? ' Not answered yet: the login box asks the owner.'
-                    : ' Not asked: this outlet is already live.'}
+                    : ' Not asked yet: the question has not reached this outlet. You can answer for the owner.'}
               </p>
             </div>
           </div>

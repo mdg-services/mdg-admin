@@ -121,7 +121,9 @@ export function SetupCard({
               : []),
             // Only when the server says something about either: a server older than 30 Oct
             // 2026 sends neither, and "Not signed in yet" would then be wrong for every outlet.
-            ...(setup.origin || setup.lastSignIn
+            // An outlet still waiting for its first sign-in says so even with no registration
+            // (one the team added, or one served before the app).
+            ...(setup.origin || setup.lastSignIn || setup.stage === 'sign_in'
               ? [
                   {
                     key: 'uses',

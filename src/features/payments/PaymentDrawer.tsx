@@ -1,4 +1,4 @@
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, MessageCircle } from 'lucide-react';
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -24,6 +24,7 @@ import {
   usePaymentsConfigQuery,
   useRefreshPayment,
   useResendPaymentLink,
+  useSendPaymentWhatsApp,
 } from '@/hooks/api/usePayments';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { manualDrawerLines } from '@/lib/billing';
@@ -150,6 +151,7 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
   const config = usePaymentsConfigQuery().data;
   const makeLink = usePaymentLink();
   const resend = useResendPaymentLink();
+  const whatsapp = useSendPaymentWhatsApp();
   const refresh = useRefreshPayment();
   const checked = useMarkPaymentProblemChecked();
   const [cancelling, setCancelling] = React.useState(false);
@@ -163,10 +165,17 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
   const [editingBillTo, setEditingBillTo] = React.useState(false);
   // The link, shown for copying by hand — only when this device refused to copy it for us.
   const [manualLink, setManualLink] = React.useState<string | null>(null);
+  // The WhatsApp message, for a person to send, when the server could not send the template itself.
+  const [byHand, setByHand] = React.useState<{
+    reason: string;
+    text: string;
+    waLink: string;
+  } | null>(null);
 
   // A different payment starts clean.
   React.useEffect(() => {
     setManualLink(null);
+    setByHand(null);
     setCancelling(false);
     setRefunding(false);
     setHandRefunding(false);
@@ -178,7 +187,12 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
   }, [p.id]);
 
   const can = allowedActions(p, isSuperAdmin);
-  const busy = makeLink.isPending || resend.isPending || refresh.isPending || checked.isPending;
+  const busy =
+    makeLink.isPending ||
+    resend.isPending ||
+    whatsapp.isPending ||
+    refresh.isPending ||
+    checked.isPending;
   const today = istTodayYmd();
   const failedMessage = (e: unknown) =>
     e instanceof Error && e.message ? e.message : 'That did not go through.';
@@ -195,6 +209,20 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
           'This device would not let the app copy. The link is shown below — long-press it and choose Copy.',
           { duration: 8000 },
         );
+      }
+    } catch (e) {
+      toast.error(failedMessage(e));
+    }
+  }
+
+  async function onSendWhatsApp() {
+    try {
+      const out = await whatsapp.mutateAsync(p.id);
+      if (out.sent) {
+        setByHand(null);
+        toast.success('Sent on WhatsApp to the owner.');
+      } else {
+        setByHand(out);
       }
     } catch (e) {
       toast.error(failedMessage(e));
@@ -450,6 +478,17 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
                 Copy link
               </Button>
             ) : null}
+            {can.copyLink ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={whatsapp.isPending}
+                disabled={busy && !whatsapp.isPending}
+                onClick={() => void onSendWhatsApp()}
+              >
+                Send on WhatsApp
+              </Button>
+            ) : null}
             {can.sendSms ? (
               <Button
                 size="sm"
@@ -540,6 +579,24 @@ function PaymentBody({ payment: p }: { payment: AdminPayment }) {
             </p>
           ) : null}
           {manualLink ? <Copyable value={manualLink} label="Payment link" mono /> : null}
+          {byHand ? (
+            <div className="grid gap-2 rounded-md border border-border bg-surface-2 p-3">
+              <p className="text-sm text-text">
+                The WhatsApp message was not sent. {byHand.reason.replace(/[.\s]+$/, '')}. Send it
+                from your phone instead.
+              </p>
+              <Copyable value={byHand.text} label="Message" />
+              <a
+                href={byHand.waLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-9 min-h-11 w-fit items-center gap-2 rounded-md bg-success px-4 text-sm font-semibold text-white hover:bg-success/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring md:min-h-0"
+              >
+                <MessageCircle width={16} height={16} strokeWidth={1.75} aria-hidden />
+                Open WhatsApp
+              </a>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

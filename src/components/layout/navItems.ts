@@ -1,5 +1,6 @@
 import {
   Activity,
+  KeyRound,
   Bell,
   Building2,
   CalendarDays,
@@ -189,6 +190,10 @@ export const NAV_ITEMS: NavItem[] = [
   // the home page, the Khata Kavach page, the assistant. Counts the ones nobody
   // has called yet. Super-admin, as above.
   { to: '/callbacks', label: 'Call-backs', icon: PhoneCall, superAdminOnly: true },
+  // Every ask for a Khata Kavach WhatsApp code and what became of it: who, for what, whether
+  // WhatsApp delivered it, whether they got in. Behind the `kk_code_not_delivered` alert.
+  // Super-admin: it shows pump owners' numbers.
+  { to: '/kk-signins', label: 'Khata Kavach sign-ins', icon: KeyRound, superAdminOnly: true },
   { to: '/services', label: 'Service Catalog', icon: Plug, superAdminOnly: true },
   { to: '/runs', label: 'Run History', icon: Activity, superAdminOnly: true },
   { to: '/users', label: 'All Users', icon: Users, superAdminOnly: true },

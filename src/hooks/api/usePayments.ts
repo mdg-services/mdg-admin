@@ -7,6 +7,7 @@ import type {
   GstDocumentDownload,
   PaymentLink,
   PaymentsConfig,
+  SetupBillWhatsApp,
 } from '@dk/shared';
 import type {
   AdminPaymentsQuery,
@@ -177,6 +178,18 @@ export function useResendPaymentLink() {
   const refresh = useRefreshAfterChange();
   return useMutation({
     mutationFn: (id: string) => api.post<unknown>(`/admin/payments/${id}/resend`),
+    onSettled: refresh,
+  });
+}
+
+/**
+ * Send the link on WhatsApp in the approved bill template. When it cannot go, the
+ * answer carries the words and a wa.me link for a person to send instead.
+ */
+export function useSendPaymentWhatsApp() {
+  const refresh = useRefreshAfterChange();
+  return useMutation({
+    mutationFn: (id: string) => api.post<SetupBillWhatsApp>(`/admin/payments/${id}/whatsapp`),
     onSettled: refresh,
   });
 }

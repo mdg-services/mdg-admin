@@ -295,6 +295,32 @@ export function useSaveBillingForDealer() {
   });
 }
 
+/** What "Start app onboarding" sends for an outlet served before the app. */
+export interface StartOldOutletOnboardingBody {
+  /** Who the GST invoice is made out to; null and the owner is asked in the app. */
+  billing: SetupBilling | null;
+  /** Already paid outside the app up to this day; null and the first bill is sent as for a new outlet. */
+  paidThrough: string | null;
+  /** An open bill the outlet already has, kept as its first bill instead of a new one. */
+  firstBillId: string | null;
+  /** Served free: never billed, so nothing about money is asked or sent. */
+  free: boolean;
+}
+
+/**
+ * "Start app onboarding" for an outlet served before the app: the server gives it a
+ * new outlet's setup with every step it has already given filled in, so it moves
+ * through the same stages. 409 `ALREADY_ONBOARDING` when it is on it already.
+ */
+export function useStartOldOutletOnboarding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dealerId, body }: { dealerId: string; body: StartOldOutletOnboardingBody }) =>
+      api.post<OutletSetupAdmin>(`/dealers/${dealerId}/setup/start-onboarding`, body),
+    onSettled: (_data, _err, vars) => refreshAfterChange(qc, vars.dealerId),
+  });
+}
+
 /** Say one portal login is not needed for this outlet, so the logins step stops asking for it. */
 export function useMarkPortalNotNeeded() {
   const qc = useQueryClient();
