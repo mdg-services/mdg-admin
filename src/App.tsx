@@ -166,6 +166,13 @@ const CallbacksPage = React.lazy(
     })),
   ),
 );
+const KkSigninsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/kkSignins/KkSigninsPage').then((m) => ({
+      default: m.KkSigninsPage,
+    })),
+  ),
+);
 const FilmsPage = React.lazy(
   retryImport(() =>
     import('@/pages/FilmsPage').then((m) => ({ default: m.FilmsPage })),
@@ -639,6 +646,19 @@ export default function App() {
               <RequireSuperAdmin>
                 <LazyPage>
                   <CallbacksPage />
+                </LazyPage>
+              </RequireSuperAdmin>
+            }
+          />
+          {/* Every ask for a Khata Kavach WhatsApp code and what became of it, behind the
+              `kk_code_not_delivered` alert. Super-admin: it shows pump owners' numbers.
+              Keep in step with `superAdminOnly` in navItems.ts. */}
+          <Route
+            path="kk-signins"
+            element={
+              <RequireSuperAdmin>
+                <LazyPage>
+                  <KkSigninsPage />
                 </LazyPage>
               </RequireSuperAdmin>
             }

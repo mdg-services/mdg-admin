@@ -75,6 +75,8 @@ const STILL_STANDING: Partial<Record<AdminAlertKind, string>> = {
   onboarding_not_me:
     "Hidden from this list. The owner stays locked out until a super-admin clears it on the outlet's Setup card.",
   welcome_not_delivered: 'Hidden from this list. It clears once the owner signs in.',
+  kk_code_not_delivered:
+    'Hidden from this list. It clears once a later code for that number arrives or the person gets in. The Khata Kavach sign-ins page shows why.',
   no_working_device: "Hidden from this list. It clears once the owner's phone registers for notifications.",
   password_help:
     'Hidden from this list. The request stays open until someone marks it done on the Onboarding page.',
