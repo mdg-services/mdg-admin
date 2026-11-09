@@ -81,6 +81,7 @@ function StartOnboardingDialog({
   const today = istTodayYmd();
   const [billTo, setBillTo] = React.useState<BillToDraft>(billToDraftFrom(null));
   const [paid, setPaid] = React.useState(false);
+  const [free, setFree] = React.useState(false);
   const [paidThrough, setPaidThrough] = React.useState(endOfThisMonth(today));
   // The outlet's open bills: one may be kept as its first bill instead of raising another.
   const openQ = usePaymentsQuery({ status: 'due', dealerId: dealer.id, page: 1, limit: 20 }, open);
@@ -100,6 +101,7 @@ function StartOnboardingDialog({
     };
     setBillTo(billToForOutlet(base, dealer.gst, false));
     setPaid(false);
+    setFree(false);
     setKeepId(null);
     setPaidThrough(endOfThisMonth(istTodayYmd()));
     setAttempted(false);
@@ -115,14 +117,15 @@ function StartOnboardingDialog({
     if (start.isPending) return;
     setAttempted(true);
     setFormError(null);
-    if (check.kind === 'bad' || !paidOk) return;
+    if (!free && (check.kind === 'bad' || !paidOk)) return;
     try {
       await start.mutateAsync({
         dealerId: dealer.id,
         body: {
-          billing: check.kind === 'ok' ? check.billTo : null,
-          paidThrough: paid ? paidThrough : null,
-          firstBillId: paid ? null : keepId,
+          billing: !free && check.kind === 'ok' ? check.billTo : null,
+          paidThrough: !free && paid ? paidThrough : null,
+          firstBillId: free || paid ? null : keepId,
+          free,
         },
       });
       toast.success(`${dealer.code ?? 'The outlet'} is on app onboarding.`);
@@ -158,59 +161,72 @@ function StartOnboardingDialog({
           void submit();
         }}
       >
-        <div className="grid gap-2">
-          <p className="text-sm font-semibold text-text">Bill to</p>
-          <p className="text-xs text-text-muted">
-            Filled from the outlet&rsquo;s file. Leave it empty and the owner is asked in the app.
-          </p>
-          <BillToFields value={billTo} onChange={setBillTo} problems={billToShown} />
-        </div>
+        <Checkbox
+          checked={free}
+          onChange={(e) => setFree(e.target.checked)}
+          label="Served free"
+          hint="Never billed: no bill-to, bill or payment is asked for or sent."
+          align="start"
+        />
 
-        {openBills.length > 0 && !paid ? (
-          <div className="grid gap-2">
-            {openBills.map((b) => (
+        {free ? null : (
+          <>
+            <div className="grid gap-2">
+              <p className="text-sm font-semibold text-text">Bill to</p>
+              <p className="text-xs text-text-muted">
+                Filled from the outlet&rsquo;s file. Leave it empty and the owner is asked in the
+                app.
+              </p>
+              <BillToFields value={billTo} onChange={setBillTo} problems={billToShown} />
+            </div>
+
+            {openBills.length > 0 && !paid ? (
+              <div className="grid gap-2">
+                {openBills.map((b) => (
+                  <Checkbox
+                    key={b.id}
+                    checked={keepId === b.id}
+                    onChange={(e) => setKeepId(e.target.checked ? b.id : null)}
+                    label={`Keep ${b.number} as the first bill`}
+                    hint={`${formatPaise(b.amountPaise)}${b.dueDate ? `, due ${ymdLabel(b.dueDate)}` : ''}. Paying it counts as the outlet's first payment; no new bill is sent.`}
+                    align="start"
+                  />
+                ))}
+              </div>
+            ) : null}
+
+            <div className="grid gap-2">
               <Checkbox
-                key={b.id}
-                checked={keepId === b.id}
-                onChange={(e) => setKeepId(e.target.checked ? b.id : null)}
-                label={`Keep ${b.number} as the first bill`}
-                hint={`${formatPaise(b.amountPaise)}${b.dueDate ? `, due ${ymdLabel(b.dueDate)}` : ''}. Paying it counts as the outlet's first payment; no new bill is sent.`}
+                checked={paid}
+                onChange={(e) => {
+                  setPaid(e.target.checked);
+                  if (e.target.checked) setKeepId(null);
+                }}
+                label="Already paid for this month"
+                hint="The next bill goes from the app by itself when this month ends."
                 align="start"
               />
-            ))}
-          </div>
-        ) : null}
-
-        <div className="grid gap-2">
-          <Checkbox
-            checked={paid}
-            onChange={(e) => {
-              setPaid(e.target.checked);
-              if (e.target.checked) setKeepId(null);
-            }}
-            label="Already paid for this month"
-            hint="The next bill goes from the app by itself when this month ends."
-            align="start"
-          />
-          {paid ? (
-            <div>
-              <Label htmlFor={`${uid}-paid`} required>
-                Paid up to
-              </Label>
-              <Input
-                id={`${uid}-paid`}
-                type="date"
-                value={paidThrough}
-                min={today}
-                onChange={(e) => setPaidThrough(e.target.value)}
-                invalid={attempted && !paidOk}
-              />
-              <FieldError
-                message={attempted && !paidOk ? 'Pick a day from today on.' : undefined}
-              />
+              {paid ? (
+                <div>
+                  <Label htmlFor={`${uid}-paid`} required>
+                    Paid up to
+                  </Label>
+                  <Input
+                    id={`${uid}-paid`}
+                    type="date"
+                    value={paidThrough}
+                    min={today}
+                    onChange={(e) => setPaidThrough(e.target.value)}
+                    invalid={attempted && !paidOk}
+                  />
+                  <FieldError
+                    message={attempted && !paidOk ? 'Pick a day from today on.' : undefined}
+                  />
+                </div>
+              ) : null}
             </div>
-          ) : null}
-        </div>
+          </>
+        )}
         <FieldError message={formError ?? billToShown.form} />
       </form>
     </Dialog>

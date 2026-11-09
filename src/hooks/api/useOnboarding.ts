@@ -303,6 +303,8 @@ export interface StartOldOutletOnboardingBody {
   paidThrough: string | null;
   /** An open bill the outlet already has, kept as its first bill instead of a new one. */
   firstBillId: string | null;
+  /** Served free: never billed, so nothing about money is asked or sent. */
+  free: boolean;
 }
 
 /**
