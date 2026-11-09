@@ -1,11 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { PortalId, PortalLoginAskResult, PortalLoginState } from '@dk/shared';
+import type { PortalId, PortalLoginAskResult, PortalLoginState, PortalTankerView } from '@dk/shared';
+
+// `useOnboarding` imports this file's keys, so its two roots are spelled out here
+// rather than imported back (`onboardingRoot`, `outletSetupRoot`).
+const ONBOARDING_ROOT = ['onboarding'] as const;
+const OUTLET_SETUP_ROOT = ['outletSetup'] as const;
 
 export const portalLoginKeys = {
   dealer: (dealerId: string | null | undefined) =>
     ['portalLogins', dealerId] as const,
+  tanker: (dealerId: string | null | undefined) => ['portalLogins', dealerId, 'tanker'] as const,
 };
 
 /**
@@ -43,6 +49,47 @@ export function useAskPortalLogin(dealerId: string | null | undefined) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: portalLoginKeys.dealer(dealerId) });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
+}
+
+/**
+ * `GET /dealers/:id/portal-logins/tanker` — the outlet's answer to "do you also own a
+ * tanker?". A yes means the outlet also needs its IndianOil Partners login.
+ */
+export function useTankerAnswer(dealerId: string | null | undefined, enabled = true) {
+  return useQuery({
+    queryKey: portalLoginKeys.tanker(dealerId),
+    queryFn: () => api.get<PortalTankerView>(`/dealers/${dealerId}/portal-logins/tanker`),
+    enabled: enabled && !!dealerId,
+  });
+}
+
+/** `PUT /dealers/:id/portal-logins/tanker` — the team answers for the owner. Moves the logins step. */
+export function useSetTankerAnswer(dealerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (owns: boolean) => api.put<PortalTankerView>(`/dealers/${dealerId}/portal-logins/tanker`, { owns }),
+    onSuccess: (view) => {
+      qc.setQueryData(portalLoginKeys.tanker(dealerId), view);
+      void qc.invalidateQueries({ queryKey: portalLoginKeys.dealer(dealerId) });
+      void qc.invalidateQueries({ queryKey: OUTLET_SETUP_ROOT });
+      void qc.invalidateQueries({ queryKey: ONBOARDING_ROOT });
+    },
+  });
+}
+
+/**
+ * `POST /dealers/:id/portal-logins/partners/reset` — the team presses the owner's
+ * "Forgot password?" for them: MDG fills IndianOil's reset page and IndianOil sends a new
+ * password to the owner's registered mobile or email. The same daily limit as the owner's.
+ */
+export function useResetPartnersPassword(dealerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<PortalLoginState[]>(`/dealers/${dealerId}/portal-logins/partners/reset`, {}),
+    onSuccess: (states) => {
+      qc.setQueryData(portalLoginKeys.dealer(dealerId), states);
     },
   });
 }

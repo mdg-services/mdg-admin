@@ -7,8 +7,11 @@ import type { SaveCompanyPortalLoginInput } from '@dk/shared/schemas';
 import { onboardingRoot, outletSetupRoot } from './useOnboarding';
 import { portalLoginKeys } from './usePortalLogins';
 
-/** The company portals: BPCL's dealer portal and BROMA/eConnect, and HPCL's one portal. */
-export type CompanyPortalId = 'bpcl' | 'econnect' | 'hpcl';
+/**
+ * The logins nothing tries on its own: BPCL's dealer portal and BROMA/eConnect, HPCL's
+ * one portal, and IndianOil Partners (an Indian Oil owner who also runs a tanker).
+ */
+export type CompanyPortalId = 'bpcl' | 'econnect' | 'hpcl' | 'partners';
 
 const path = (dealerId: string | undefined, portal: CompanyPortalId) =>
   `/dealers/${dealerId}/company-portal-credentials/${portal}`;

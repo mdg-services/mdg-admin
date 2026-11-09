@@ -3,6 +3,7 @@ import { isCompanyPortalOutlet, loginsToEnter, type DealerTabId } from '@/lib/on
 import { CompanyPortalCredentialsSection } from '@/pages/dealers/CompanyPortalCredentialsSection';
 import { IrasCredentialsSection } from '@/pages/dealers/IrasCredentialsSection';
 import { SdmsCredentialsSection } from '@/pages/dealers/SdmsCredentialsSection';
+import { TankerSection } from '@/pages/dealers/TankerSection';
 import { dealerCodeLabel, type OutletSetupAdmin, type PortalId } from '@dk/shared';
 
 import { DealerTabLink } from './DealerTabLink';
@@ -60,11 +61,16 @@ export function EnterLoginsDialog({
               The owner’s chat gets a line saying the team entered the login for them.
             </p>
             {/* In the order the dealer is asked. A card only for a portal the outlet is asked for. */}
-            {portals.map((portal) => (
-              <PortalLoginCard key={portal} portal={portal} dealerId={outlet.dealerId} />
-            ))}
+            {portals
+              .filter((portal) => portal !== 'partners')
+              .map((portal) => (
+                <PortalLoginCard key={portal} portal={portal} dealerId={outlet.dealerId} />
+              ))}
           </>
         )}
+        {/* An Indian Oil owner is also asked whether they run a tanker; the team may answer
+            for them here, and a yes brings the IndianOil Partners card with it. */}
+        {(outlet.company ?? 'iocl') === 'iocl' ? <TankerSection dealerId={outlet.dealerId} /> : null}
         <p className="text-xs text-text-muted">
           Need to read a saved password back, or clear one? That is in the{' '}
           <DealerTabLink
@@ -92,6 +98,7 @@ function PortalLoginCard({ portal, dealerId }: { portal: PortalId; dealerId: str
     case 'bpcl':
     case 'econnect':
     case 'hpcl':
+    case 'partners':
       return <CompanyPortalCredentialsSection dealerId={dealerId} portal={portal} expected />;
   }
 }

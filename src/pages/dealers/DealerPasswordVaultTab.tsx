@@ -9,6 +9,7 @@ import { CompanyPortalCredentialsSection } from './CompanyPortalCredentialsSecti
 import { DealerAppLoginCard } from './DealerAppLoginCard';
 import { IrasCredentialsSection } from './IrasCredentialsSection';
 import { SdmsCredentialsSection } from './SdmsCredentialsSection';
+import { TankerSection } from './TankerSection';
 
 /** The company portals, in the order their cards are drawn. */
 const COMPANY_PORTAL_IDS: readonly CompanyPortalId[] = ['bpcl', 'econnect', 'hpcl'];
@@ -97,6 +98,8 @@ export function DealerPasswordVaultTab({ dealer, setup = null }: Props) {
           ))}
           <IrasCredentialsSection dealerId={dealer.id} />
           <SdmsCredentialsSection dealerId={dealer.id} />
+          {/* The tanker and its IndianOil Partners login: an Indian Oil outlet's only. */}
+          {(setup?.company ?? 'iocl') === 'iocl' ? <TankerSection dealerId={dealer.id} /> : null}
         </>
       )}
     </div>

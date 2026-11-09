@@ -45,7 +45,7 @@ import {
   OIL_COMPANIES,
   OIL_COMPANY_NAMES,
 } from '../../shared/src/types/oilCompany';
-import { PORTAL_NAMES, isCompanyPortal } from '../../shared/src/types/portalLogin';
+import { PORTAL_NAMES, TANKER_PORTAL, isCompanyPortal } from '../../shared/src/types/portalLogin';
 
 import type { Intent } from './statusIntent';
 import { watchNeedsDecision } from './watchHold';
@@ -514,7 +514,8 @@ export function portalNeedRows(
  * dealer is asked, less any the outlet is not asked for (marked "not needed").
  */
 export function loginsToEnter(o: Pick<OutletSetupAdmin, 'company' | 'loginsNeeded'>): PortalId[] {
-  return companyPortalIds(o.company).filter((p) => o.loginsNeeded.includes(p));
+  // The company's, then IndianOil Partners for an Indian Oil owner who runs a tanker.
+  return [...companyPortalIds(o.company), TANKER_PORTAL].filter((p) => o.loginsNeeded.includes(p));
 }
 
 /** Why a reason cannot be sent, or `null`. Judged on the trimmed text, as the server does. */

@@ -9,6 +9,7 @@ import {
   OIL_COMPANY_NAMES,
   PORTAL_NAMES,
   isCompanyPortal,
+  TANKER_PORTAL,
   type Message,
   type OilCompanyId,
   type OutletSetupAdmin,
@@ -420,7 +421,17 @@ export function PortalLoginPreview({
   lang: DealerLang;
 }) {
   const companyPump = !!states?.some((p) => isCompanyPortal(p.portal) && p.needed);
-  const shown = companyPump ? portals.filter(isCompanyPortal) : portals;
+  const asked = companyPump ? portals.filter(isCompanyPortal) : portals;
+  // The app grows an Indian Oil box by the IndianOil Partners row once the owner says
+  // they run a tanker (or a login is saved): the preview shows what the owner sees.
+  const partners = states?.find((p) => p.portal === TANKER_PORTAL);
+  const growsPartners =
+    !companyPump &&
+    !asked.includes(TANKER_PORTAL) &&
+    asked.some((p) => p === 'sdms' || p === 'iras') &&
+    !!partners &&
+    (partners.needed || partners.status === 'saved');
+  const shown = growsPartners ? [...asked, TANKER_PORTAL] : asked;
   if (shown.length === 0) return null;
   return (
     <div data-portal-login title={PREVIEW_TITLE} className="mt-1 flex flex-col gap-1.5">
