@@ -2,8 +2,8 @@ import { CheckCircle2, MessageCircle, TriangleAlert } from 'lucide-react';
 import * as React from 'react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Badge, DataList, EmptyState, Input, RefreshTool, SegmentedControl } from '@/components/ui';
-import { useKkSigninsQuery } from '@/hooks/api/useKkSignins';
+import { Badge, Button, DataList, EmptyState, Input, RefreshTool, SegmentedControl, useToast } from '@/components/ui';
+import { useKkSigninsQuery, useShowKkCode } from '@/hooks/api/useKkSignins';
 import { istStamp } from '@/lib/intake';
 import type { KkSigninRow } from '@dk/shared';
 
@@ -18,6 +18,65 @@ import {
 } from './format';
 
 type Days = 1 | 7 | 30;
+
+/** "7:42": how long a shown code can still be read. */
+const left = (ms: number): string => {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+
+/**
+ * "Show code" for one ask: a super-admin presses it, the server records who and when, and the six digits appear here with
+ * a countdown. They live only in this component's state — not in the list, not in a cache, not in the address — and go
+ * when the ten minutes end, when "Hide" is pressed, or when the row leaves the page.
+ */
+function ShowCode({ id }: { id: string }) {
+  const toast = useToast();
+  const show = useShowKkCode();
+  const [shown, setShown] = React.useState<{ code: string; until: number } | null>(null);
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    if (!shown) return;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [shown]);
+  React.useEffect(() => {
+    if (shown && now >= shown.until) setShown(null);
+  }, [now, shown]);
+
+  if (shown) {
+    return (
+      <div className="mt-2 rounded-md border border-border bg-surface-2 px-3 py-2">
+        <p className="select-text font-mono text-2xl font-semibold tracking-[0.3em] text-text">{shown.code}</p>
+        <p className="mt-1 text-xs text-text-subtle">
+          Gone in {left(shown.until - now)}. Read it out only to the person it was sent to.{' '}
+          <button type="button" className="underline" onClick={() => setShown(null)}>
+            Hide
+          </button>
+        </p>
+      </div>
+    );
+  }
+  return (
+    <Button
+      size="sm"
+      variant="secondary"
+      className="mt-2"
+      loading={show.isPending}
+      onClick={() =>
+        show.mutate(id, {
+          onSuccess: (d) => {
+            setNow(Date.now());
+            setShown({ code: d.code, until: new Date(d.expiresAt).getTime() });
+          },
+          onError: (err) => toast.error((err as Error).message || 'That code is no longer available.'),
+        })
+      }
+    >
+      Show code
+    </Button>
+  );
+}
 
 /**
  * Every ask for a Khata Kavach WhatsApp code: who it was for, what they were trying to do, what WhatsApp did with the
@@ -170,7 +229,12 @@ export function KkSigninsPage() {
             id: 'why',
             header: 'What happened',
             mobile: 'secondary',
-            cell: (r) => <p className="select-text text-sm text-text-muted">{r.story}</p>,
+            cell: (r) => (
+              <div>
+                <p className="select-text text-sm text-text-muted">{r.story}</p>
+                {r.codeAvailable ? <ShowCode id={r.id} /> : null}
+              </div>
+            ),
           },
         ]}
       />
