@@ -301,6 +301,8 @@ export interface StartOldOutletOnboardingBody {
   billing: SetupBilling | null;
   /** Already paid outside the app up to this day; null and the first bill is sent as for a new outlet. */
   paidThrough: string | null;
+  /** An open bill the outlet already has, kept as its first bill instead of a new one. */
+  firstBillId: string | null;
 }
 
 /**

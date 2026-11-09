@@ -16,8 +16,9 @@ import {
 } from '@/components/ui';
 import { BillToFields } from '@/features/payments/BillToFields';
 import { useStartOldOutletOnboarding } from '@/hooks/api/useOnboarding';
+import { usePaymentsQuery } from '@/hooks/api/usePayments';
 import { istTodayYmd } from '@/lib/format';
-import { addDays, isDay } from '@/lib/onboarding';
+import { addDays, formatPaise, isDay, ymdLabel } from '@/lib/onboarding';
 import {
   type BillToDraft,
   type BillToProblems,
@@ -81,6 +82,10 @@ function StartOnboardingDialog({
   const [billTo, setBillTo] = React.useState<BillToDraft>(billToDraftFrom(null));
   const [paid, setPaid] = React.useState(false);
   const [paidThrough, setPaidThrough] = React.useState(endOfThisMonth(today));
+  // The outlet's open bills: one may be kept as its first bill instead of raising another.
+  const openQ = usePaymentsQuery({ status: 'due', dealerId: dealer.id, page: 1, limit: 20 }, open);
+  const openBills = openQ.data?.items ?? [];
+  const [keepId, setKeepId] = React.useState<string | null>(null);
   // Problems wait for a press of Start: showing them against untouched boxes is a scolding.
   const [attempted, setAttempted] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
@@ -95,6 +100,7 @@ function StartOnboardingDialog({
     };
     setBillTo(billToForOutlet(base, dealer.gst, false));
     setPaid(false);
+    setKeepId(null);
     setPaidThrough(endOfThisMonth(istTodayYmd()));
     setAttempted(false);
     setFormError(null);
@@ -116,6 +122,7 @@ function StartOnboardingDialog({
         body: {
           billing: check.kind === 'ok' ? check.billTo : null,
           paidThrough: paid ? paidThrough : null,
+          firstBillId: paid ? null : keepId,
         },
       });
       toast.success(`${dealer.code ?? 'The outlet'} is on app onboarding.`);
@@ -159,10 +166,28 @@ function StartOnboardingDialog({
           <BillToFields value={billTo} onChange={setBillTo} problems={billToShown} />
         </div>
 
+        {openBills.length > 0 && !paid ? (
+          <div className="grid gap-2">
+            {openBills.map((b) => (
+              <Checkbox
+                key={b.id}
+                checked={keepId === b.id}
+                onChange={(e) => setKeepId(e.target.checked ? b.id : null)}
+                label={`Keep ${b.number} as the first bill`}
+                hint={`${formatPaise(b.amountPaise)}${b.dueDate ? `, due ${ymdLabel(b.dueDate)}` : ''}. Paying it counts as the outlet's first payment; no new bill is sent.`}
+                align="start"
+              />
+            ))}
+          </div>
+        ) : null}
+
         <div className="grid gap-2">
           <Checkbox
             checked={paid}
-            onChange={(e) => setPaid(e.target.checked)}
+            onChange={(e) => {
+              setPaid(e.target.checked);
+              if (e.target.checked) setKeepId(null);
+            }}
             label="Already paid for this month"
             hint="The next bill goes from the app by itself when this month ends."
             align="start"
