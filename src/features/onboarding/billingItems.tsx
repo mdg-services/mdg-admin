@@ -23,10 +23,7 @@ export function billingItems(setup: OutletSetupAdmin, today: string): KeyValueIt
       label: 'Bill',
       value: (
         <>
-          {/* A live outlet with no first bill was served before the app and put on monthly billing. */}
-          {setup.stage === 'live' && p.state === 'not_sent'
-            ? 'No first bill: this outlet was billed before the app'
-            : paymentLine(p)}
+          {paymentLine(p)}
           {p.paymentId ? (
             <>
               {' · '}

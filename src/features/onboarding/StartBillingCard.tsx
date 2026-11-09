@@ -15,9 +15,9 @@ import {
   useToast,
 } from '@/components/ui';
 import { BillToFields } from '@/features/payments/BillToFields';
-import { useStartOldOutletBilling } from '@/hooks/api/useOnboarding';
+import { useStartOldOutletOnboarding } from '@/hooks/api/useOnboarding';
 import { istTodayYmd } from '@/lib/format';
-import { addDays, isDay, ymdLabel } from '@/lib/onboarding';
+import { addDays, isDay } from '@/lib/onboarding';
 import {
   type BillToDraft,
   type BillToProblems,
@@ -27,38 +27,23 @@ import {
 } from '@/pages/payments/format';
 import type { Dealer } from '@dk/shared';
 
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-
-/** "November 2026" for the month that starts on `ymd`. */
-function monthOf(ymd: string): string {
-  return `${MONTH_NAMES[Number(ymd.slice(5, 7)) - 1]} ${ymd.slice(0, 4)}`;
+/** The last day of this month: what an outlet that has paid this month is paid up to. */
+function endOfThisMonth(today: string): string {
+  const [y, m] = today.split('-').map(Number) as [number, number];
+  const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+  return addDays(next, -1);
 }
 
-/** The last day of last month: what an outlet that paid for last month is paid up to. */
-function endOfLastMonth(today: string): string {
-  return addDays(`${today.slice(0, 8)}01`, -1);
+/** A value from the outlet's file, or ''. */
+function profileValue(dealer: Dealer, key: string): string {
+  return dealer.outletProfile?.find((e) => e.key === key)?.value ?? '';
 }
 
 /**
- * An outlet served before the app has no monthly billing: nothing bills it each
- * month and autopay refuses it, so its bills are typed by hand on the Payments page.
- * This card says so on its Info tab and offers "Start monthly billing", which makes
- * it a live outlet paid up to a day the admin gives (`oldOutletBilling.ts` on the
- * server). After it, the outlet's Setup card stands here with its billing and
- * "Set up autopay".
+ * An outlet that is not on app onboarding yet (one served before the app) says so on
+ * its Info tab, with "Start app onboarding". That gives it a new outlet's setup, with
+ * every step it has already given us filled in (`oldOutletBilling.ts` on the server),
+ * and the Setup card takes this card's place.
  */
 export function StartBillingCard({ dealer }: { dealer: Dealer }) {
   const [open, setOpen] = React.useState(false);
@@ -66,27 +51,21 @@ export function StartBillingCard({ dealer }: { dealer: Dealer }) {
     <Card>
       <CardHeader>
         <div>
-          <CardTitle>Monthly billing</CardTitle>
-          <CardSubtitle>Not set up for this outlet.</CardSubtitle>
+          <CardTitle>Setup</CardTitle>
+          <CardSubtitle>Not on app onboarding yet.</CardSubtitle>
         </div>
       </CardHeader>
-      <CardContent className="grid gap-3">
-        <p className="text-sm text-text-muted">
-          This outlet was served before monthly billing existed. Nothing bills it each month, and
-          autopay cannot be set up, so its bills are typed by hand on the Payments page.
-        </p>
-        <div>
-          <Button size="sm" onClick={() => setOpen(true)}>
-            Start monthly billing…
-          </Button>
-        </div>
+      <CardContent>
+        <Button size="sm" onClick={() => setOpen(true)}>
+          Start app onboarding…
+        </Button>
       </CardContent>
-      <StartBillingDialog dealer={dealer} open={open} onClose={() => setOpen(false)} />
+      <StartOnboardingDialog dealer={dealer} open={open} onClose={() => setOpen(false)} />
     </Card>
   );
 }
 
-function StartBillingDialog({
+function StartOnboardingDialog({
   dealer,
   open,
   onClose,
@@ -96,51 +75,50 @@ function StartBillingDialog({
   onClose: () => void;
 }) {
   const toast = useToast();
-  const start = useStartOldOutletBilling();
+  const start = useStartOldOutletOnboarding();
   const uid = React.useId();
   const today = istTodayYmd();
-  const [paidThrough, setPaidThrough] = React.useState(endOfLastMonth(today));
   const [billTo, setBillTo] = React.useState<BillToDraft>(billToDraftFrom(null));
-  const [billNow, setBillNow] = React.useState(true);
-  const [dueOn, setDueOn] = React.useState(addDays(today, 10));
+  const [paid, setPaid] = React.useState(false);
+  const [paidThrough, setPaidThrough] = React.useState(endOfThisMonth(today));
   // Problems wait for a press of Start: showing them against untouched boxes is a scolding.
   const [attempted, setAttempted] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
 
-  // Each opening starts over, with the outlet's own GSTIN filled in.
+  // Each opening starts over from what the outlet's file already holds.
   React.useEffect(() => {
     if (!open) return;
-    const now = istTodayYmd();
-    setPaidThrough(endOfLastMonth(now));
-    setBillTo(billToForOutlet(billToDraftFrom(null), dealer.gst, false));
-    setBillNow(true);
-    setDueOn(addDays(now, 10));
+    const base: BillToDraft = {
+      ...billToDraftFrom(null),
+      name: profileValue(dealer, 'pumpName'),
+      address: profileValue(dealer, 'pumpSite'),
+    };
+    setBillTo(billToForOutlet(base, dealer.gst, false));
+    setPaid(false);
+    setPaidThrough(endOfThisMonth(istTodayYmd()));
     setAttempted(false);
     setFormError(null);
-  }, [open, dealer.gst]);
+  }, [open, dealer]);
 
-  const check = checkBillTo(billTo, true);
+  // Bill-to may be left empty: the owner is then asked for it in the app, as a new outlet is.
+  const check = checkBillTo(billTo, false);
   const billToShown: BillToProblems = attempted && check.kind === 'bad' ? check.problems : {};
-  const paidOk = isDay(paidThrough);
-  const dueOk = !billNow || (isDay(dueOn) && dueOn >= today);
-  const nextMonth = paidOk ? monthOf(addDays(paidThrough, 1)) : null;
+  const paidOk = !paid || (isDay(paidThrough) && paidThrough >= today);
 
   async function submit() {
     if (start.isPending) return;
     setAttempted(true);
     setFormError(null);
-    if (check.kind !== 'ok' || !paidOk || !dueOk) return;
+    if (check.kind === 'bad' || !paidOk) return;
     try {
-      const out = await start.mutateAsync({
+      await start.mutateAsync({
         dealerId: dealer.id,
-        body: { paidThrough, billing: check.billTo, firstBill: billNow ? { dueOn } : null },
+        body: {
+          billing: check.kind === 'ok' ? check.billTo : null,
+          paidThrough: paid ? paidThrough : null,
+        },
       });
-      toast.success(
-        out.firstBill
-          ? `Monthly billing is on. ${out.firstBill.number} is raised and not sent: set up autopay on the Setup card, or send its link from Payments.`
-          : 'Monthly billing is on.',
-        { duration: 8000 },
-      );
+      toast.success(`${dealer.code ?? 'The outlet'} is on app onboarding.`);
       onClose();
     } catch (e) {
       setFormError(e instanceof Error && e.message ? e.message : 'That did not go through.');
@@ -151,8 +129,8 @@ function StartBillingDialog({
     <Dialog
       open={open}
       onClose={start.isPending ? () => {} : onClose}
-      title={`Start monthly billing for ${dealer.code ?? 'this outlet'}`}
-      description="The outlet is billed each month from the day after it is paid up to, like every outlet that signed up in the app."
+      title={`Start app onboarding for ${dealer.code ?? 'this outlet'}`}
+      description="The same steps as a new outlet. Whatever the outlet has already given us is filled in and not asked again."
       footerBelow="row"
       footer={
         <>
@@ -160,7 +138,7 @@ function StartBillingDialog({
             Cancel
           </Button>
           <Button onClick={() => void submit()} loading={start.isPending}>
-            Start monthly billing
+            Start app onboarding
           </Button>
         </>
       }
@@ -173,65 +151,40 @@ function StartBillingDialog({
           void submit();
         }}
       >
-        <div>
-          <Label htmlFor={`${uid}-paid`} required>
-            Paid up to
-          </Label>
-          <Input
-            id={`${uid}-paid`}
-            type="date"
-            value={paidThrough}
-            onChange={(e) => setPaidThrough(e.target.value)}
-            invalid={attempted && !paidOk}
-          />
-          <p className="mt-1 text-xs text-text-muted">
-            The last day this outlet has already paid for.
-            {nextMonth ? ` Its next bill is for ${nextMonth}.` : ''}
+        <div className="grid gap-2">
+          <p className="text-sm font-semibold text-text">Bill to</p>
+          <p className="text-xs text-text-muted">
+            Filled from the outlet&rsquo;s file. Leave it empty and the owner is asked in the app.
           </p>
-          <FieldError
-            message={attempted && !paidOk ? 'Pick the day it is paid up to.' : undefined}
-          />
+          <BillToFields value={billTo} onChange={setBillTo} problems={billToShown} />
         </div>
 
         <div className="grid gap-2">
           <Checkbox
-            checked={billNow}
-            onChange={(e) => setBillNow(e.target.checked)}
-            label={nextMonth ? `Bill ${nextMonth} now` : 'Bill the next month now'}
-            hint="Raised and not sent. Next, set up autopay (the approval takes this bill), or send its link from Payments."
+            checked={paid}
+            onChange={(e) => setPaid(e.target.checked)}
+            label="Already paid for this month"
+            hint="The next bill goes from the app by itself when this month ends."
             align="start"
           />
-          {billNow ? (
+          {paid ? (
             <div>
-              <Label htmlFor={`${uid}-due`} required>
-                Due date
+              <Label htmlFor={`${uid}-paid`} required>
+                Paid up to
               </Label>
               <Input
-                id={`${uid}-due`}
+                id={`${uid}-paid`}
                 type="date"
-                value={dueOn}
+                value={paidThrough}
                 min={today}
-                onChange={(e) => setDueOn(e.target.value)}
-                invalid={attempted && !dueOk}
+                onChange={(e) => setPaidThrough(e.target.value)}
+                invalid={attempted && !paidOk}
               />
               <FieldError
-                message={attempted && !dueOk ? 'Pick a due date from today on.' : undefined}
+                message={attempted && !paidOk ? 'Pick a day from today on.' : undefined}
               />
             </div>
-          ) : (
-            <p className="text-xs text-text-muted">
-              Without it, the morning run bills {nextMonth ?? 'the next month'} by itself
-              {paidOk && paidThrough >= today
-                ? `, five days before ${ymdLabel(paidThrough)},`
-                : ''}{' '}
-              and sends the link by SMS and WhatsApp.
-            </p>
-          )}
-        </div>
-
-        <div className="grid gap-2">
-          <p className="text-sm font-semibold text-text">Bill to</p>
-          <BillToFields value={billTo} onChange={setBillTo} problems={billToShown} required />
+          ) : null}
         </div>
         <FieldError message={formError ?? billToShown.form} />
       </form>
