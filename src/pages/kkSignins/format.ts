@@ -9,6 +9,8 @@ export const INTENT_LABEL: Record<KkSigninIntent, string> = {
   join: 'Join a pump',
   start: 'Start a pump',
   primary: 'Hand over main owner',
+  'fleet-setup': 'Transporter set-up',
+  'fleet-signin': 'Transporter sign-in',
 };
 
 /** The WhatsApp column: what WhatsApp says about the message, in a word. */
@@ -46,6 +48,9 @@ export function progress(r: Pick<KkSigninRow, 'outcome' | 'typedRight' | 'wrongT
   if (r.outcome === 'joined') return 'Joined the pump';
   if (r.outcome === 'started') return 'Started a pump';
   if (r.outcome === 'handed-over') return 'Handed over';
+  if (r.outcome === 'fleet-setup') return 'Set up the transporter';
+  if (r.outcome === 'fleet-signed-in') return 'Signed in';
+  if (r.outcome === 'fleet-pin-reset') return 'Made a new PIN';
   if (r.result !== 'sent') return '—';
   if (r.typedRight) return 'Typed the code, did not finish';
   if (r.wrongTries > 0) return `Wrong code ×${r.wrongTries}`;
