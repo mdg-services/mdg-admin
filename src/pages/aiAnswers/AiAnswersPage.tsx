@@ -265,7 +265,13 @@ function ProductionMark({ turn }: { turn: AiTurn }) {
 function Lookups({ turn }: { turn: AiTurn }) {
   const ids = turn.toolIds ?? [];
   if (ids.length === 0) {
-    return <span className="text-xs text-text-subtle">No lookup ran</span>;
+    // The briefing engine runs no separate lookups: it reads the pump's whole
+    // record in one go, so "No lookup ran" under one of its answers was false.
+    return (
+      <span className="text-xs text-text-subtle">
+        {briefRan(turn) ? "Read the pump's whole record" : 'No lookup ran'}
+      </span>
+    );
   }
   return (
     <div className="flex flex-wrap items-center gap-1">
@@ -414,13 +420,20 @@ function RefusedProse({ turn }: { turn: AiTurn }) {
   );
 }
 
-/** The outcome + reason + verdict trio, which is how a turn is read at a glance. */
+/**
+ * The outcome + reason + verdict trio, which is how a turn is read at a glance.
+ * The outcome chip steps aside when the production mark beside it already says
+ * the same words ("Passed to a person" twice), as it does on the chat strip.
+ */
 function OutcomeCell({ turn }: { turn: AiTurn }) {
+  const same = aiProduction(turn)?.label === AI_OUTCOME_LABEL[turn.outcome];
   return (
     <div className="flex flex-wrap items-center gap-1">
-      <Badge intent={AI_OUTCOME_TONE[turn.outcome]}>
-        {AI_OUTCOME_LABEL[turn.outcome]}
-      </Badge>
+      {same ? null : (
+        <Badge intent={AI_OUTCOME_TONE[turn.outcome]}>
+          {AI_OUTCOME_LABEL[turn.outcome]}
+        </Badge>
+      )}
       {turn.reason ? (
         <Badge intent={aiReasonTone(turn.reason)}>
           {AI_HANDOFF_REASON_LABEL[turn.reason]}
@@ -471,13 +484,26 @@ function AnswerCell({ turn }: { turn: AiTurn }) {
   );
 }
 
+/**
+ * The briefing engine called the model on this turn. It has no intent labels —
+ * those are the router's — so a missing intent says nothing about whether a
+ * model ran; the model id and the tokens do.
+ */
+function briefRan(turn: AiTurn): boolean {
+  return turn.engine === 'brief' && (Boolean(turn.model) || (turn.tokensIn ?? 0) > 0);
+}
+
 /** What the router made of the message: one line per thing they asked about. */
 function AsksCell({ turn }: { turn: AiTurn }) {
   const asks = aiPlanAsks(turn.plan);
   if (asks.length === 0) {
     return (
       <span className="text-xs text-text-subtle">
-        {turn.intent ? AI_INTENT_LABEL[turn.intent] : 'The model never ran'}
+        {turn.intent
+          ? AI_INTENT_LABEL[turn.intent]
+          : briefRan(turn)
+            ? 'Answered from the whole record'
+            : 'The model never ran'}
       </span>
     );
   }
