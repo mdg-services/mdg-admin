@@ -295,6 +295,38 @@ export function useSaveBillingForDealer() {
   });
 }
 
+/** What "Start monthly billing" sends for an outlet served before the app. */
+export interface StartOldOutletBillingBody {
+  /** The last day already paid for. Monthly bills start the day after. */
+  paidThrough: string;
+  billing: SetupBilling;
+  /** Bill the next month now, due on this day, without sending it. */
+  firstBill: { dueOn: string } | null;
+}
+
+export interface StartOldOutletBillingResult {
+  paidThrough: string;
+  firstBill: { id: string; number: string; amountPaise: number; dueOn: string } | null;
+  setup: OutletSetupAdmin;
+}
+
+/**
+ * "Start monthly billing" for an outlet served before the app: the server makes its
+ * setup already live and paid up to the day given, so it is billed each month from
+ * then on and autopay can be set up. 409 `ALREADY_ON_MONTHLY_BILLING` when it has it.
+ */
+export function useStartOldOutletBilling() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dealerId, body }: { dealerId: string; body: StartOldOutletBillingBody }) =>
+      api.post<StartOldOutletBillingResult>(`/dealers/${dealerId}/setup/start-billing`, body),
+    onSettled: (_data, _err, vars) => {
+      refreshAfterChange(qc, vars.dealerId);
+      void qc.invalidateQueries({ queryKey: ['payments'] });
+    },
+  });
+}
+
 /** Say one portal login is not needed for this outlet, so the logins step stops asking for it. */
 export function useMarkPortalNotNeeded() {
   const qc = useQueryClient();

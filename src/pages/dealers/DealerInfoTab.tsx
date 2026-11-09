@@ -15,6 +15,7 @@ import {
 } from '@/components/ui';
 import { OldOnboardingRecord } from '@/features/onboarding/OldOnboardingRecord';
 import { SetupCard } from '@/features/onboarding/SetupCard';
+import { StartBillingCard } from '@/features/onboarding/StartBillingCard';
 import { useDealerAuditQuery } from '@/hooks/api/useDealerAudit';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { formatDate, formatDateTime } from '@/lib/format';
@@ -35,6 +36,8 @@ interface Props {
    * outlet does not have.
    */
   setup?: OutletSetupAdmin | null;
+  /** The setup was read and there is none (not still loading): "Start monthly billing" is offered. */
+  noSetup?: boolean;
   /**
    * Opens the Password vault tab. Optional so the tab still renders standalone
    * (and so a deep link into Info never depends on the parent wiring it up) —
@@ -49,7 +52,13 @@ interface Props {
   onOpenTab?: (tab: string) => void;
 }
 
-export function DealerInfoTab({ dealer, setup = null, onOpenPasswordVault, onOpenTab }: Props) {
+export function DealerInfoTab({
+  dealer,
+  setup = null,
+  noSetup = false,
+  onOpenPasswordVault,
+  onOpenTab,
+}: Props) {
   const isSuperAdmin = useIsSuperAdmin();
   const isArchived = !!dealer.archivedAt;
   const [editingProfile, setEditingProfile] = React.useState(false);
@@ -119,6 +128,8 @@ export function DealerInfoTab({ dealer, setup = null, onOpenPasswordVault, onOpe
         </Card>
 
         {setupInGrid && setup ? <SetupCard setup={setup} {...cardTabs} /> : null}
+        {/* An outlet served before the app has no setup, so nothing bills it: offer to start. */}
+        {noSetup && !isArchived ? <StartBillingCard dealer={dealer} /> : null}
 
         {/* The old seven steps and the payment note step 5 stored, read-only, for an
             outlet from before onboarding v2. A new outlet's bill and payment are on

@@ -165,6 +165,8 @@ interface TabContext {
   goToTab: (id: string) => void;
   /** The outlet's onboarding v2 setup; `null` for one from before it. */
   setup: OutletSetupAdmin | null;
+  /** The setup was read and there is none: an outlet from before onboarding v2 (not one still loading). */
+  noSetup: boolean;
 }
 
 interface TabDef {
@@ -195,6 +197,7 @@ const INFO_TAB: TabDef = {
     <DealerInfoTab
       dealer={dealer}
       setup={ctx.setup}
+      noSetup={ctx.noSetup}
       onOpenPasswordVault={() => ctx.goToTab(PASSWORDS_TAB_ID)}
       onOpenTab={ctx.goToTab}
     />
@@ -429,8 +432,8 @@ export function DealerDetailPage() {
   // `selectTab` — only changes identity when the URL itself does, which is the
   // one moment the bodies are being swapped out anyway.
   const tabContext = React.useMemo<TabContext>(
-    () => ({ goToTab: selectTab, setup }),
-    [selectTab, setup],
+    () => ({ goToTab: selectTab, setup, noSetup: setupQ.isSuccess && setup === null }),
+    [selectTab, setup, setupQ.isSuccess],
   );
 
   React.useEffect(() => {
