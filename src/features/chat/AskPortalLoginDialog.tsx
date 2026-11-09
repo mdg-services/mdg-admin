@@ -12,6 +12,7 @@ import {
   loginNeedsAttention,
   loginsOfCompany,
   offersExplainerVideo,
+  onDemandLogins,
 } from '@/lib/portalLogin';
 import { PORTAL_NAMES, type PortalId } from '@dk/shared';
 
@@ -27,7 +28,7 @@ interface Props {
  * this dialog only decides WHICH logins to ask for.
  *
  * Only the outlet's own company's logins are offered: SDMS and IRAS for an Indian Oil
- * outlet, the one "BPCL portal" or "HPCL portal" login for the others (the company comes
+ * outlet (and IOC XtraPower, which is only ever asked for from here, on demand), the one "BPCL portal" or "HPCL portal" login for the others (the company comes
  * from the outlet's setup, and the list from `loginsOfCompany`).
  *
  * Opens with the logins that are needed and not yet saved already ticked, so the
@@ -50,7 +51,12 @@ export function AskPortalLoginDialog({ open, onClose, dealerId }: Props) {
   const company = setupQ.data?.company;
   const loaded = loginsQ.data && setupQ.data !== undefined ? loginsQ.data : undefined;
   const data = React.useMemo(
-    () => (loaded ? (companyNotChosen ? [] : loginsOfCompany(loaded, company)) : undefined),
+    () =>
+      loaded
+        ? companyNotChosen
+          ? []
+          : [...loginsOfCompany(loaded, company), ...onDemandLogins(loaded, company)]
+        : undefined,
     [loaded, company, companyNotChosen],
   );
   React.useEffect(() => {
@@ -87,7 +93,9 @@ export function AskPortalLoginDialog({ open, onClose, dealerId }: Props) {
   }
 
   const noneNeeded = !!data && data.length > 0 && !data.some(loginNeedsAttention);
-  const showVideo = !!data && offersExplainerVideo(data.map((s) => s.portal));
+  // Follows the ticks: the video is about SDMS and IRAS, so IOC XtraPower ticked alone
+  // offers none (and the toast would not mention one).
+  const showVideo = !!data && offersExplainerVideo(ticked);
 
   return (
     <Dialog

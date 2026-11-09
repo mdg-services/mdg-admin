@@ -100,6 +100,11 @@ export function DealerPasswordVaultTab({ dealer, setup = null }: Props) {
           <SdmsCredentialsSection dealerId={dealer.id} />
           {/* The tanker and its IndianOil Partners login: an Indian Oil outlet's only. */}
           {(setup?.company ?? 'iocl') === 'iocl' ? <TankerSection dealerId={dealer.id} /> : null}
+          {/* IOC XtraPower, asked on demand: always here for an Indian Oil outlet, so the
+              team can type one taken over the phone without asking first. */}
+          {(setup?.company ?? 'iocl') === 'iocl' ? (
+            <CompanyPortalCredentialsSection dealerId={dealer.id} portal="xtrapower" expected />
+          ) : null}
         </>
       )}
     </div>

@@ -11,7 +11,7 @@ import { portalLoginKeys } from './usePortalLogins';
  * The logins nothing tries on its own: BPCL's dealer portal and BROMA/eConnect, HPCL's
  * one portal, and IndianOil Partners (an Indian Oil owner who also runs a tanker).
  */
-export type CompanyPortalId = 'bpcl' | 'econnect' | 'hpcl' | 'partners';
+export type CompanyPortalId = 'bpcl' | 'econnect' | 'hpcl' | 'partners' | 'xtrapower';
 
 const path = (dealerId: string | undefined, portal: CompanyPortalId) =>
   `/dealers/${dealerId}/company-portal-credentials/${portal}`;

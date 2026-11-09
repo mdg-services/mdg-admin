@@ -26,6 +26,7 @@ import {
   loginNeedsAttention,
   loginsOfCompany,
   offersExplainerVideo,
+  onDemandLogins,
   portalLoginAskedLabel,
   portalNames,
 } from '../src/lib/portalLogin';
@@ -96,6 +97,10 @@ describe('the explainer video', () => {
     assert.equal(offersExplainerVideo(['sdms']), true);
     assert.equal(offersExplainerVideo(['iras']), true);
     assert.equal(offersExplainerVideo(['bpcl']), false);
+    // IOC XtraPower and IndianOil Partners are not what the video explains.
+    assert.equal(offersExplainerVideo(['xtrapower']), false);
+    assert.equal(offersExplainerVideo(['partners']), false);
+    assert.equal(offersExplainerVideo(['sdms', 'xtrapower']), true);
     assert.equal(offersExplainerVideo(['hpcl']), false);
     assert.equal(offersExplainerVideo([]), false);
   });
@@ -135,5 +140,25 @@ describe('the words', () => {
     assert.equal(describeLoginStatus(state('hpcl', { needed: false })), 'Not needed for this outlet');
     assert.equal(loginNeedsAttention(saved), false);
     assert.equal(loginNeedsAttention(state('bpcl')), true);
+  });
+});
+
+describe('onDemandLogins — IOC XtraPower, asked only when the team decides', () => {
+  it('offers XtraPower to an Indian Oil outlet, as not asked yet before the first ask', () => {
+    const [xp] = onDemandLogins([state('sdms'), state('iras')], 'iocl');
+    assert.equal(xp?.portal, 'xtrapower');
+    assert.equal(xp?.needed, false);
+    assert.equal(describeLoginStatus(xp!), 'Asked only when needed. Not asked yet');
+    assert.deepEqual(defaultTicked([xp!]), []);
+    assert.equal(onDemandLogins([], null)[0]?.portal, 'xtrapower');
+  });
+  it('uses the server row once asked, ticked again while it is missing', () => {
+    const asked: PortalLoginState = { portal: 'xtrapower', needed: true, status: 'missing' };
+    assert.deepEqual(onDemandLogins([state('sdms'), asked], 'iocl'), [asked]);
+    assert.deepEqual(defaultTicked([asked]), ['xtrapower']);
+  });
+  it('offers nothing to a BPCL or HPCL outlet', () => {
+    assert.deepEqual(onDemandLogins([], 'bpcl'), []);
+    assert.deepEqual(onDemandLogins([], 'hpcl'), []);
   });
 });

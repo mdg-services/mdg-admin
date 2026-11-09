@@ -31,6 +31,12 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
+/** What the card says the login is for. */
+const HAND_WORKED = "Used by MDG's team by hand. Nothing signs in with it automatically.";
+const PURPOSE: Partial<Record<CompanyPortalId, string>> = {
+  xtrapower: `Asked of the owner only when needed (Ask for portal login → IOC XtraPower). ${HAND_WORKED} The owner resets its password on XtraPower's own page from the login box.`,
+};
+
 /** Nothing is pre-filled: the stored password is never sent back to the browser. */
 const EMPTY: FormValues = { username: '', password: '' };
 
@@ -61,7 +67,7 @@ export function CompanyPortalCredentialsSection({ dealerId, portal, expected }: 
     <PortalCredentialsCard
       portal={name}
       title={`${name} login`}
-      purpose="Used by MDG's team by hand. Nothing signs in with it automatically."
+      purpose={PURPOSE[portal] ?? HAND_WORKED}
       idPrefix={portal}
       status={status}
       isLoading={isLoading}
