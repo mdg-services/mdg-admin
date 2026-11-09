@@ -1,11 +1,11 @@
 import { Badge, Button, useToast } from '@/components/ui';
+import { OutletCodeChip } from '@/features/chat/OutletMark';
 import { closedLine, ownerLine, rowAge, waitingLine } from '@/features/inbox/desk';
 import { useReopenTicket } from '@/hooks/api/useTickets';
 import { cn } from '@/lib/cn';
 import {
   TICKET_DESK_STATE_LABEL,
   TICKET_DESK_STATE_TONE,
-  dealerCodeLabel,
   ticketDeskState,
   ticketRef,
 } from '@dk/shared';
@@ -105,9 +105,7 @@ export function TicketRows({
             >
               <span className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <span className="shrink-0 rounded bg-surface-2 px-1.5 py-px font-mono text-[11px] font-medium leading-4 text-text-muted">
-                    {dealerCodeLabel(t.dealerCode)}
-                  </span>
+                  <OutletCodeChip code={t.dealerCode} />
                   <Badge intent={tone}>{TICKET_DESK_STATE_LABEL[state]}</Badge>
                   {t.urgent && t.state === 'OPEN' ? <Badge intent="danger">Urgent</Badge> : null}
                 </span>

@@ -58,6 +58,12 @@ export interface DealerViewValue {
   canEdit: boolean;
   /** A group thread (the manager's, with the owners in it): dealer-side bubbles carry their sender's name. */
   group: boolean;
+  /**
+   * The thread's dealer-side members. Ticks on MDG's messages count only these
+   * people, since every admin who opens a thread is stamped as a reader too.
+   * `undefined` when unknown: then only my own messages carry ticks.
+   */
+  dealerIds: ReadonlySet<string> | undefined;
 }
 
 export const DealerViewContext = React.createContext<DealerViewValue>({
@@ -67,6 +73,7 @@ export const DealerViewContext = React.createContext<DealerViewValue>({
   portalLoginsFailed: false,
   canEdit: true,
   group: false,
+  dealerIds: undefined,
 });
 
 const PREVIEW_TITLE = 'What the dealer sees. Only they can use it, in their app.';

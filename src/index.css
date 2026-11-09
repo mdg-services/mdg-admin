@@ -248,6 +248,34 @@
 }
 
 @layer utilities {
+  /* The inbox's chat colours (`features/chat/OutletMark.tsx`). An outlet's
+     tint is its own hue, set on the element as `--outlet-h`; the two kinds of
+     chat have one fixed colour each. Dark text on a pale tint by day, pale
+     text on a deep one by night. */
+  .outlet-tint {
+    background-color: hsl(var(--outlet-h, 220) 85% 92%);
+    color: hsl(var(--outlet-h, 220) 70% 24%);
+  }
+  .dark .outlet-tint {
+    background-color: hsl(var(--outlet-h, 220) 45% 22%);
+    color: hsl(var(--outlet-h, 220) 80% 85%);
+  }
+  .chat-owner {
+    background-color: #e0e7ff;
+    color: #3730a3;
+  }
+  .chat-group {
+    background-color: #ccfbf1;
+    color: #115e59;
+  }
+  .dark .chat-owner {
+    background-color: rgba(99, 102, 241, 0.22);
+    color: #c7d2fe;
+  }
+  .dark .chat-group {
+    background-color: rgba(20, 184, 166, 0.2);
+    color: #99f6e4;
+  }
   .scrollbar-thin {
     scrollbar-width: thin;
   }

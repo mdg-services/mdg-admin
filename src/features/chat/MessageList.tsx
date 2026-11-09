@@ -26,8 +26,10 @@ interface MessageListProps {
   dealerId?: string;
   /** The thread's primary member. An owner's cards are the editable ones; a manager's are read-only. */
   memberRole?: UserRole;
-  /** The manager's group thread: dealer-side bubbles carry their sender's name. */
+  /** A chat several of the outlet's people read: dealer-side bubbles carry their sender's name. */
   group?: boolean;
+  /** The thread's dealer-side members: MDG's messages show ticks for what they received and read. */
+  dealerMemberIds?: string[];
   /** More history exists — shows the "Load earlier" button. */
   hasEarlier?: boolean;
   loadingEarlier?: boolean;
@@ -81,6 +83,7 @@ export function MessageList({
   dealerId,
   memberRole,
   group = false,
+  dealerMemberIds,
   hasEarlier,
   loadingEarlier,
   onLoadEarlier,
@@ -222,6 +225,11 @@ export function MessageList({
   const setupQ = useOutletSetupQuery(needsSetup ? dealerId : undefined);
   const loginsQ = usePortalLogins(dealerId, needsLogins);
   const lang = React.useMemo(() => guessDealerLang(ordered), [ordered]);
+  const dealerKey = dealerMemberIds?.join(',');
+  const dealerIds = React.useMemo(
+    () => (dealerKey ? new Set(dealerKey.split(',')) : undefined),
+    [dealerKey],
+  );
   const dealerView = React.useMemo<DealerViewValue>(
     () => ({
       lang,
@@ -233,6 +241,7 @@ export function MessageList({
       // A manager's thread shows the cards read-only, as the manager's app does.
       canEdit: memberRole !== 'dealer-staff',
       group,
+      dealerIds,
     }),
     [
       lang,
@@ -243,6 +252,7 @@ export function MessageList({
       loginsQ.data,
       memberRole,
       group,
+      dealerIds,
     ],
   );
 

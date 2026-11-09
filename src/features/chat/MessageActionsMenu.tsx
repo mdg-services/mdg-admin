@@ -134,7 +134,6 @@ export function MessageActionsMenu({
   }, [onClose, isMd]);
 
   const isTemp = message.id.startsWith('tmp-');
-  const own = message.senderId === currentUserId;
   // A dealer's picture or file only — not MDG's own message, not a notice, not a
   // bare voice note. The same test decides whether the thread draws the
   // "Answer to" chip, so the menu and the chip cannot disagree.
@@ -161,9 +160,13 @@ export function MessageActionsMenu({
     }
   }
 
+  // A notice MDG's services posted (a report card) offers only what reads it —
+  // Copy, Download, Message info — never a reaction or a reply in MDG's name.
+  const notice = !!message.system;
+
   const content = (
     <>
-      {!isTemp ? (
+      {!isTemp && !notice ? (
         <>
           <div className="flex items-center justify-between gap-0.5 px-2 pb-1.5 pt-1">
             {QUICK_REACTIONS.map((emoji) => (
@@ -233,7 +236,9 @@ export function MessageActionsMenu({
           }}
         />
       ) : null}
-      {own && !isTemp ? (
+      {/* Every message, not only your own: a card MDG posted, a teammate's
+          reply, a dealer's message — who has seen it and when. */}
+      {!isTemp ? (
         <MenuRow
           icon={<Info width={15} height={15} strokeWidth={1.75} />}
           label="Message info"

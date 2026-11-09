@@ -4,14 +4,17 @@ import {
   CornerUpRight,
   Flag,
   ShieldAlert,
+  Search,
   Ticket,
-  Users,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import * as React from 'react';
 
 import { Badge } from '@/components/ui/Badge';
+import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { ChatRolePill, OutletTile, chatPeople, chatRoleWord } from '@/features/chat/OutletMark';
 import { chipClass } from '@/features/inbox/chips';
 import { TICKET_CHIPS, type TicketChip } from '@/features/inbox/desk';
 import { cn } from '@/lib/cn';
@@ -54,14 +57,6 @@ export function formatRelative(iso?: string | null): string {
   const days = Math.round(hours / 24);
   if (days < 7) return `${days}d`;
   return d.toLocaleDateString(undefined, { month: 'short', day: '2-digit' });
-}
-
-function initials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return '?';
-  const first = words[0]!.charAt(0);
-  const last = words.length > 1 ? words[words.length - 1]!.charAt(0) : '';
-  return (first + last).toUpperCase();
 }
 
 /** Devanagari text is marked Hindi, so the browser picks the right shaping and line height. */
@@ -151,13 +146,12 @@ function TicketRowChip({ conversation }: { conversation: Conversation }) {
 /**
  * One conversation in the list.
  *
- * THREE LINES, EACH WITH ONE JOB: who (name, role, when), what (the outlet and
- * the dealer's own last words), and state (waiting, ticket, AI) on a line of its
- * own only when there is any. The state chips used to share the preview's line,
- * and three chips left the preview "₹8,…".
- *
- * The outlet code rides on the row instead of a sticky header above each
- * outlet's rows: on a busy list half the lines were those headers.
+ * READ BY THE OUTLET FIRST: the outlet code in its own colour, then which of
+ * the outlet's chats it is (an owner's, or the managers' group), then who is
+ * on it and when it last spoke; the dealer's own last words under that; and
+ * the state chips (waiting, ticket, AI) on a line of their own only when there
+ * is any. The owner's name used to lead, with the code a grey tag under it,
+ * and a list of nine rows had to be read word by word to find one outlet.
  */
 export const ConversationRow = React.memo(function ConversationRow({
   conversation: c,
@@ -170,10 +164,8 @@ export const ConversationRow = React.memo(function ConversationRow({
   now: number;
   onOpen: (id: string) => void;
 }) {
-  const name = c.memberName?.trim() || roleLabel(c.memberRole) || 'Member';
-  const role = c.memberName?.trim() ? c.memberTitle?.trim() || roleLabel(c.memberRole) : '';
+  const people = chatPeople(c);
   const unread = c.unreadByAdmin;
-  const group = c.kind === 'manager';
   const preview = c.lastMessagePreview || 'No messages yet';
   const hasChips =
     c.flagged ||
@@ -186,33 +178,25 @@ export const ConversationRow = React.memo(function ConversationRow({
       type="button"
       onClick={() => onOpen(c.id)}
       aria-current={selected ? 'true' : undefined}
+      aria-label={`${dealerCodeLabel(c.dealerCode)}, ${chatRoleWord(c)}, ${people}${unread ? ', unread' : ''}`}
       className={cn(
         'focus-inset flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left transition-colors duration-150',
         selected ? 'bg-selected' : 'hover:bg-surface-2',
       )}
     >
-      <span
-        aria-hidden
-        className={cn(
-          'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
-          unread
-            ? 'bg-brand text-text-inverse'
-            : selected
-              ? 'bg-surface text-text-muted'
-              : 'bg-surface-2 text-text-muted',
-        )}
-      >
-        {group ? <Users width={16} height={16} strokeWidth={1.9} /> : initials(name)}
-      </span>
+      <OutletTile code={c.dealerCode} className="mt-0.5" />
       <span className="min-w-0 flex-1">
-        <span className="flex items-baseline gap-1.5">
+        <span className="flex items-center gap-1.5">
+          <ChatRolePill conversation={c} />
           <span
-            className={cn('min-w-0 truncate text-sm text-text', unread ? 'font-semibold' : 'font-medium')}
-            title={memberLabel(c)}
+            className={cn(
+              'min-w-0 truncate text-sm',
+              unread ? 'font-semibold text-text' : 'font-medium text-text-muted',
+            )}
+            title={people}
           >
-            {name}
+            {people}
           </span>
-          {role ? <span className="shrink-0 text-xs text-text-muted">{role}</span> : null}
           <span
             className={cn(
               'ml-auto shrink-0 pl-2 text-xs tabular-nums',
@@ -222,10 +206,7 @@ export const ConversationRow = React.memo(function ConversationRow({
             {formatRelative(c.lastMessageAt ?? c.updatedAt)}
           </span>
         </span>
-        <span className="mt-0.5 flex items-center gap-2">
-          <span className="shrink-0 rounded bg-surface-2 px-1.5 py-px font-mono text-[11px] font-medium leading-4 text-text-muted">
-            {dealerCodeLabel(c.dealerCode)}
-          </span>
+        <span className="mt-1 flex items-center gap-2">
           <span
             lang={langOf(preview)}
             className={cn(
@@ -259,7 +240,7 @@ export function ConversationListSkeleton() {
     <div aria-busy aria-label="Loading conversations">
       {[0, 1, 2, 3].map((i) => (
         <div key={i} className="flex gap-3 border-b border-border px-4 py-3">
-          <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+          <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
           <div className="grid flex-1 gap-2 pt-0.5">
             <Skeleton className="h-3.5 w-2/3" />
             <Skeleton className="h-3 w-11/12" />
@@ -413,6 +394,66 @@ export function GuardChips({
         AI guard
         {typeof count === 'number' ? <span>· {count}</span> : null}
       </button>
+    </div>
+  );
+}
+
+/**
+ * The search box under the tabs: finds a chat by the outlet's code or by a
+ * person's name. A code matches from its start, so "1" lists 1E and 12E and
+ * "1e" only 1E. Esc or the X clears it.
+ */
+export function ChatSearch({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder: string;
+}) {
+  const ref = React.useRef<HTMLInputElement>(null);
+  return (
+    <div className="relative mt-2">
+      <Search
+        width={16}
+        height={16}
+        strokeWidth={1.75}
+        aria-hidden
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle"
+      />
+      <Input
+        ref={ref}
+        type="search"
+        value={value}
+        maxLength={60}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && value) {
+            e.preventDefault();
+            onChange('');
+          }
+        }}
+        placeholder={placeholder}
+        aria-label="Search chats"
+        // Clearing is Esc or the X; the browser's own cross is hidden so there
+        // is one of them, and it is 44px on a phone.
+        className="rounded-lg bg-surface-2 pl-9 pr-9 [&::-webkit-search-cancel-button]:hidden"
+        autoComplete="off"
+      />
+      {value ? (
+        <button
+          type="button"
+          aria-label="Clear search"
+          onClick={() => {
+            onChange('');
+            ref.current?.focus();
+          }}
+          className="absolute right-0 top-1/2 flex h-11 w-9 -translate-y-1/2 items-center justify-center text-text-subtle hover:text-text md:h-9"
+        >
+          <X width={14} height={14} strokeWidth={2} />
+        </button>
+      ) : null}
     </div>
   );
 }

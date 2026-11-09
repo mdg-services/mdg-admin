@@ -15,6 +15,7 @@ import {
   Phone,
   PhoneCall,
   Plus,
+  Search,
   ShieldAlert,
   Sparkles,
   Store,
@@ -45,6 +46,7 @@ import { AskPortalLoginDialog } from '@/features/chat/AskPortalLoginDialog';
 import { Composer, type ComposerInsert } from '@/features/chat/Composer';
 import {
   ConversationListSkeleton,
+  ChatSearch,
   ConversationRow,
   GuardChips,
   InboxTabs,
@@ -58,6 +60,14 @@ import { MessageList } from '@/features/chat/MessageList';
 import { NewConversationDialog } from '@/features/chat/NewConversationDialog';
 import { OpenRequestsCard } from '@/features/chat/OpenRequestsCard';
 import { OpenTicketDialog } from '@/features/chat/OpenTicketDialog';
+import {
+  ChatRolePill,
+  chatMatches,
+  chatPeople,
+  chatRoleWord,
+  isSharedChat,
+  ticketMatches,
+} from '@/features/chat/OutletMark';
 import { PanelSection } from '@/features/chat/PanelSection';
 import { ReactionsDialog } from '@/features/chat/ReactionsDialog';
 import {
@@ -672,6 +682,26 @@ export function InboxPage() {
       : undefined,
   };
 
+  // The search box under the tabs: by the outlet's code or a person's name. It
+  // narrows whichever list is up, and is kept across the two tabs.
+  const [search, setSearch] = React.useState('');
+  const searching = search.trim().length > 0;
+  const shownChats = React.useMemo(
+    () => (searching ? conversations.filter((c) => chatMatches(c, search)) : conversations),
+    [conversations, search, searching],
+  );
+  const shownTickets = React.useMemo(
+    () => (searching ? visibleTickets.filter((t) => ticketMatches(t, search)) : visibleTickets),
+    [visibleTickets, search, searching],
+  );
+  // The chats come 100 at a time. While a search is typed the older pages are
+  // read too, one after another, so a chat past the first page is still found.
+  const { hasNextPage: moreChats, isFetchingNextPage: fetchingChats, fetchNextPage: nextChats } =
+    conversationsQ;
+  React.useEffect(() => {
+    if (searching && tab === 'chats' && moreChats && !fetchingChats) void nextChats();
+  }, [searching, tab, moreChats, fetchingChats, nextChats]);
+
   const selectedQ = useConversation(selectedId);
   const conversation = selectedQ.data ?? null;
 
@@ -1277,7 +1307,14 @@ export function InboxPage() {
   const memberRole = conversation?.memberName?.trim()
     ? conversation.memberTitle?.trim() || roleLabel(conversation.memberRole)
     : '';
-  const recipient = memberRole ? `${memberName} · ${memberRole}` : memberName;
+  // A shared chat is named by its side and outlet ("Owners · 1E"), not by the
+  // one member it happens to be anchored on.
+  const recipient =
+    conversation && isSharedChat(conversation)
+      ? `${chatRoleWord(conversation)} · ${dealerCodeLabel(conversation.dealerCode)}`
+      : memberRole
+        ? `${memberName} · ${memberRole}`
+        : memberName;
 
   /*
    * The side panel's three tabs, rendered into one of two shells below: the
@@ -1530,6 +1567,13 @@ export function InboxPage() {
               onChange={(on) => showView({ aiGuard: on })}
             />
           )}
+          <ChatSearch
+            value={search}
+            onChange={setSearch}
+            placeholder={
+              tab === 'tickets' ? 'Search outlet code or ticket' : 'Search outlet code or name'
+            }
+          />
         </InboxTabs>
         {/* overscroll-contain: index.css deliberately leaves html/body alone so
             the shell's pull-to-refresh survives, and contains the inner
@@ -1559,11 +1603,17 @@ export function InboxPage() {
                 title={emptyTickets(chip).title}
                 description={emptyTickets(chip).description}
               />
+            ) : shownTickets.length === 0 ? (
+              <EmptyState
+                icon={<Search width={26} height={26} strokeWidth={1.5} />}
+                title="No ticket matches"
+                description={`Nothing here for “${search.trim()}”. Try the outlet code, like 1E.`}
+              />
             ) : (
               <>
                 <ul>
                   <TicketRows
-                    tickets={visibleTickets}
+                    tickets={shownTickets}
                     now={now}
                     selectedConversationId={selectedId}
                     selectedTicketId={focusTicketId}
@@ -1611,10 +1661,20 @@ export function InboxPage() {
                   : 'No conversations yet.'
               }
             />
+          ) : shownChats.length === 0 ? (
+            moreChats ? (
+              <ConversationListSkeleton />
+            ) : (
+              <EmptyState
+                icon={<Search width={26} height={26} strokeWidth={1.5} />}
+                title="No chat matches"
+                description={`Nothing for “${search.trim()}”. Try the outlet code, like 1E, or part of a name.`}
+              />
+            )
           ) : (
             <>
               <ul>
-                {conversations.map((c) => (
+                {shownChats.map((c) => (
                   <li key={c.id}>
                     <ConversationRow
                       conversation={c}
@@ -1776,31 +1836,30 @@ export function InboxPage() {
                   </button>
                   {listToggle}
                   <div className="min-w-0 flex-1">
+                    {/* The outlet first, then which of its chats this is, then
+                        who is on it — the order the list's rows read in. */}
                     <div className="flex min-w-0 items-center gap-1.5">
-                      <h2
-                        className="min-w-0 break-words text-[15px] font-semibold leading-5 text-text lg:truncate"
-                        title={memberName}
-                      >
-                        {memberName}
+                      <h2 className="shrink-0 text-[15px] font-bold leading-5 text-text">
+                        {/* 44px tall below lg, the header's other targets' size,
+                            with the growth cancelled by the negative margin so the
+                            line keeps its height. */}
+                        <Link
+                          to={`/dealers/${conversation.dealerId}`}
+                          title="Open this outlet"
+                          className="-my-3 inline-flex min-h-11 items-center underline-offset-2 hover:text-brand hover:underline lg:my-0 lg:min-h-0"
+                        >
+                          {dealerCodeLabel(conversation.dealerCode)}
+                        </Link>
                       </h2>
-                      {memberRole ? (
-                        <span className="shrink-0 text-sm text-text-muted">{memberRole}</span>
-                      ) : null}
+                      <ChatRolePill conversation={conversation} />
                     </div>
                     <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs leading-4 text-text-muted lg:flex-nowrap">
-                      {/* 44px tall below lg, the header's other targets' size,
-                          with the growth cancelled by the negative margin so the
-                          line keeps its height. */}
-                      <Link
-                        to={`/dealers/${conversation.dealerId}`}
-                        className="-my-3.5 inline-flex min-h-11 shrink-0 items-center font-mono font-medium text-text-muted underline-offset-2 hover:text-brand hover:underline lg:my-0 lg:min-h-0"
+                      <span
+                        className="min-w-0 break-words text-[13px] text-text lg:truncate"
+                        title={chatPeople(conversation)}
                       >
-                        {dealerCodeLabel(conversation.dealerCode)}
-                      </Link>
-                      {/* Below lg the role beside the name already says Manager. */}
-                      {conversation.kind === 'manager' ? (
-                        <span className="hidden shrink-0 lg:inline">· Group chat</span>
-                      ) : null}
+                        {chatPeople(conversation)}
+                      </span>
                       <span className="inline-flex shrink-0">
                         <TicketFlagBadge conversation={conversation} now={now} />
                       </span>
@@ -1986,7 +2045,12 @@ export function InboxPage() {
                       currentUserId={currentUserId}
                       dealerId={conversation.dealerId}
                       memberRole={conversation.memberRole}
-                      group={conversation.kind === 'manager'}
+                      group={isSharedChat(conversation)}
+                      dealerMemberIds={
+                        conversation.participantUserIds?.length
+                          ? conversation.participantUserIds
+                          : [conversation.userId]
+                      }
                       hasEarlier={messagesQ.hasNextPage}
                       loadingEarlier={messagesQ.isFetchingNextPage}
                       onLoadEarlier={messagesQ.fetchNextPage}

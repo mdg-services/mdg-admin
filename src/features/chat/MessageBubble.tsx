@@ -51,18 +51,30 @@ interface MessageBubbleProps {
   onOpenAnswer?: (message: Message) => void;
 }
 
-/** WhatsApp-style delivery state of an MDG message: clock, ✓ sent, ✓✓ delivered, blue ✓✓ read. */
-function MessageTicks({ message }: { message: Message }) {
+/**
+ * WhatsApp-style delivery state of an MDG message: clock, ✓ sent, ✓✓ delivered,
+ * blue ✓✓ read. With the thread's dealer members known, only THEY count — an
+ * admin opening the thread is stamped as a reader and must not turn it blue.
+ */
+function MessageTicks({
+  message,
+  dealerIds,
+}: {
+  message: Message;
+  dealerIds: ReadonlySet<string> | undefined;
+}) {
   if (message.id.startsWith('tmp-')) {
     return <Clock width={12} strokeWidth={2} className="opacity-80" />;
   }
-  const seen = (message.readBy ?? []).some((id) => id && id !== message.senderId);
+  const counts = (id: string) =>
+    !!id && id !== message.senderId && (!dealerIds || dealerIds.has(id));
+  const seen = (message.readBy ?? []).some(counts);
   if (seen) {
     return (
       <CheckCheck width={15} strokeWidth={2} className="text-wa-tick-read" aria-label="Read" />
     );
   }
-  const delivered = (message.deliveredTo ?? []).some((id) => id && id !== message.senderId);
+  const delivered = (message.deliveredTo ?? []).some(counts);
   if (delivered) return <CheckCheck width={15} strokeWidth={2} aria-label="Delivered" />;
   return <Check width={15} strokeWidth={2} aria-label="Sent" />;
 }
@@ -159,7 +171,8 @@ export const MessageBubble = React.memo(function MessageBubble({
     [message, onOpenMenu],
   );
   const system = !!message.system;
-  const menuEnabled = !!onOpenMenu && !system;
+  // Notices get the menu too, for Message info: who has seen a report card.
+  const menuEnabled = !!onOpenMenu;
   const longPress = useLongPress(openMenuAtPoint);
 
   // Chevron toggle: the menu closes itself on any outside pointerdown —
@@ -201,10 +214,11 @@ export const MessageBubble = React.memo(function MessageBubble({
   const metaInFlow =
     !timeOnPicture &&
     (showAiBadge || !hasBody || !!ask || !!portalLogin || !!wemmisLogin || hasSetupBody);
-  // Ticks on MY messages only. Every admin who opens a thread is stamped into
-  // readBy/deliveredTo, so on a teammate's reply (or the first line's) blue
-  // ticks would only mean "an admin looked", never that the dealer read it.
-  const ticks = own && !system;
+  // Every admin who opens a thread is stamped into readBy/deliveredTo. With the
+  // dealer's members known the ticks count only them, so every MDG message —
+  // a teammate's, the first line's, a notice or a report card — carries them.
+  // Without, only MY messages do: there blue would only mean "an admin looked".
+  const ticks = view.dealerIds ? mdgSide : own && !system;
 
   const meta = (overlay: boolean) => (
     <span
@@ -214,7 +228,7 @@ export const MessageBubble = React.memo(function MessageBubble({
       )}
     >
       <span>{bubbleTime(message.createdAt, lang)}</span>
-      {ticks ? <MessageTicks message={message} /> : null}
+      {ticks ? <MessageTicks message={message} dealerIds={view.dealerIds} /> : null}
     </span>
   );
 
