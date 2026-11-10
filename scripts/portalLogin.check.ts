@@ -91,6 +91,79 @@ describe('which logins an outlet is offered', () => {
   });
 });
 
+describe('the old SDMS, asked only on demand (beside IOC XtraPower)', () => {
+  const blank = (): PortalLoginState => ({ portal: 'sdmsOld', needed: false, status: 'missing' });
+  const oldOf = (rows: PortalLoginState[]) => rows.find((s) => s.portal === 'sdmsOld');
+
+  it('is offered an Indian Oil outlet after XtraPower, as a blank row when the server sent none', () => {
+    assert.deepEqual(ids(onDemandLogins([state('sdms'), state('iras')], 'iocl')), ['xtrapower', 'sdmsOld']);
+    assert.deepEqual(oldOf(onDemandLogins([], 'iocl')), blank());
+    assert.deepEqual(oldOf(onDemandLogins([], null)), blank());
+    assert.deepEqual(oldOf(onDemandLogins([], undefined)), blank());
+  });
+
+  it('gives the server’s row as it came once the outlet has been asked or has saved one', () => {
+    const asked = state('sdmsOld');
+    const saved = state('sdmsOld', { status: 'saved', savedBy: 'mdg', savedAt: '2026-11-09T05:00:00.000Z' });
+    assert.deepEqual(oldOf(onDemandLogins([state('sdms'), asked], 'iocl')), asked);
+    assert.deepEqual(oldOf(onDemandLogins([saved, state('iras')], 'iocl')), saved);
+  });
+
+  it('is never offered a BPCL or HPCL outlet, even when the server sent a row', () => {
+    assert.deepEqual(onDemandLogins(everything(), 'bpcl'), []);
+    assert.deepEqual(onDemandLogins(everything(), 'hpcl'), []);
+  });
+
+  it('is left out of the outlet’s own logins, so the dialog adds it after them', () => {
+    for (const c of ['iocl', 'bpcl', 'hpcl', null, undefined] as const) {
+      assert.ok(!ids(loginsOfCompany(everything(), c)).includes('sdmsOld'), String(c));
+    }
+    const offered = [...loginsOfCompany(everything(), 'iocl'), ...onDemandLogins(everything(), 'iocl')];
+    assert.deepEqual(ids(offered), ['sdms', 'iras', 'xtrapower', 'sdmsOld']);
+  });
+
+  it('is unticked until asked once, then ticked again while it is missing — as XtraPower is', () => {
+    assert.deepEqual(defaultTicked([blank()]), []);
+    assert.deepEqual(defaultTicked([state('sdmsOld')]), ['sdmsOld']);
+    assert.deepEqual(defaultTicked([state('sdmsOld', { status: 'saved' })]), []);
+  });
+
+  it('does not bring the explainer video on its own, and does not take it away from SDMS or IRAS', () => {
+    assert.equal(offersExplainerVideo(['sdmsOld']), false);
+    assert.equal(offersExplainerVideo(['sdms', 'sdmsOld']), true);
+    assert.equal(offersExplainerVideo(['iras', 'sdmsOld']), true);
+  });
+
+  it('is a shape the shared schema accepts for an ask, with the video off', () => {
+    assert.ok(askPortalLoginSchema.safeParse({ portals: ['sdmsOld'], withVideo: false }).success);
+  });
+
+  it('is named in plain words', () => {
+    assert.equal(PORTAL_NAMES.sdmsOld, 'Old SDMS');
+    assert.equal(portalNames(['sdms', 'sdmsOld']), 'SDMS and Old SDMS');
+    assert.equal(portalLoginAskedLabel(['sdmsOld']), 'Old SDMS login');
+    assert.equal(
+      describeAskResult({ posted: 1, portals: ['sdmsOld'], video: false }),
+      'Asked the owner for the Old SDMS login in their chat.',
+    );
+  });
+
+  it('reads its status as never asked, asked, then saved — in XtraPower’s words', () => {
+    assert.equal(describeLoginStatus(blank()), 'Asked only when needed. Not asked yet');
+    assert.equal(describeLoginStatus(state('sdmsOld')), 'Asked, not filled in yet');
+    assert.match(
+      describeLoginStatus(state('sdmsOld', { status: 'saved', savedBy: 'dealer', savedAt: '2026-11-09T05:00:00.000Z' })),
+      /^Saved by the owner in the app on /,
+    );
+  });
+
+  it('counts as needing attention only once asked and not saved', () => {
+    assert.equal(loginNeedsAttention(blank()), false);
+    assert.equal(loginNeedsAttention(state('sdmsOld')), true);
+    assert.equal(loginNeedsAttention(state('sdmsOld', { status: 'saved' })), false);
+  });
+});
+
 describe('the explainer video', () => {
   it('goes with an SDMS or IRAS ask, and never with a company portal alone', () => {
     assert.equal(offersExplainerVideo(['sdms', 'iras']), true);
@@ -154,7 +227,7 @@ describe('onDemandLogins — IOC XtraPower, asked only when the team decides', (
   });
   it('uses the server row once asked, ticked again while it is missing', () => {
     const asked: PortalLoginState = { portal: 'xtrapower', needed: true, status: 'missing' };
-    assert.deepEqual(onDemandLogins([state('sdms'), asked], 'iocl'), [asked]);
+    assert.deepEqual(onDemandLogins([state('sdms'), asked], 'iocl')[0], asked);
     assert.deepEqual(defaultTicked([asked]), ['xtrapower']);
   });
   it('offers nothing to a BPCL or HPCL outlet', () => {

@@ -35,6 +35,7 @@ type FormValues = z.infer<typeof formSchema>;
 const HAND_WORKED = "Used by MDG's team by hand. Nothing signs in with it automatically.";
 const PURPOSE: Partial<Record<CompanyPortalId, string>> = {
   xtrapower: `Asked of the owner only when needed (Ask for portal login → IOC XtraPower). ${HAND_WORKED} The owner resets its password on XtraPower's own page from the login box.`,
+  sdmsOld: `IndianOil's Business Login (access.ex.indianoil.in), the older SDMS. Asked of the owner only when needed (Ask for portal login → Old SDMS). ${HAND_WORKED} The owner resets its password from the login box: an OTP comes to the mobile registered with it.`,
 };
 
 /** Nothing is pre-filled: the stored password is never sent back to the browser. */

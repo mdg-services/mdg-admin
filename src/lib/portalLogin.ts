@@ -2,7 +2,7 @@ import type { OilCompanyId, PortalId, PortalLoginState } from '@dk/shared';
 
 // By path, not from '@dk/shared': the check script (`tsx --test`) resolves the package to its
 // compiled `dist/`, which these tables are newer than (`lib/onboarding.ts` does the same).
-import { PORTAL_NAMES, XTRAPOWER_PORTAL } from '../../shared/src/types/portalLogin';
+import { ON_DEMAND_PORTAL_IDS, PORTAL_NAMES, isOnDemandPortal } from '../../shared/src/types/portalLogin';
 
 import { companyPortalIds } from './onboarding';
 
@@ -51,17 +51,19 @@ export function loginsOfCompany(
 
 /**
  * The logins an outlet is asked for only when the team decides it needs one: IOC
- * XtraPower, for an Indian Oil outlet (no company on record is Indian Oil). Offered in
- * the ask after the company's own logins, unticked until it has been asked once. The
- * server lists no row for it before the first ask, so one is drawn as "not asked yet".
+ * XtraPower and the old SDMS (IndianOil's Business Login), for an Indian Oil outlet (no
+ * company on record is Indian Oil). Offered in the ask after the company's own logins,
+ * unticked until each has been asked once. The server lists no row for one before its
+ * first ask, so one is drawn as "not asked yet".
  */
 export function onDemandLogins(
   states: readonly PortalLoginState[],
   company: OilCompanyId | null | undefined,
 ): PortalLoginState[] {
   if ((company ?? 'iocl') !== 'iocl') return [];
-  const row = states.find((s) => s.portal === XTRAPOWER_PORTAL);
-  return [row ?? { portal: XTRAPOWER_PORTAL, needed: false, status: 'missing' }];
+  return ON_DEMAND_PORTAL_IDS.map(
+    (portal) => states.find((s) => s.portal === portal) ?? { portal, needed: false, status: 'missing' as const },
+  );
 }
 
 /**
@@ -88,7 +90,7 @@ export function describeLoginStatus(s: PortalLoginState): string {
       ? `Saved by the owner in the app${on}`
       : `Saved by MDG${on}`;
   }
-  if (s.portal === XTRAPOWER_PORTAL) {
+  if (isOnDemandPortal(s.portal)) {
     return s.needed ? 'Asked, not filled in yet' : 'Asked only when needed. Not asked yet';
   }
   return s.needed ? 'Needed' : 'Not needed for this outlet';

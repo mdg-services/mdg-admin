@@ -50,6 +50,8 @@ export function AskPortalLoginDialog({ open, onClose, dealerId }: Props) {
   // Re-seed the ticks each time fresh data lands for an open dialog.
   const company = setupQ.data?.company;
   const loaded = loginsQ.data && setupQ.data !== undefined ? loginsQ.data : undefined;
+  // The outlet's own logins, then the old SDMS for an Indian Oil outlet: asked only when a
+  // piece of work needs it, never ticked by itself.
   const data = React.useMemo(
     () =>
       loaded

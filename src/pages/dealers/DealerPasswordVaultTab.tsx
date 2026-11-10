@@ -98,6 +98,13 @@ export function DealerPasswordVaultTab({ dealer, setup = null }: Props) {
           ))}
           <IrasCredentialsSection dealerId={dealer.id} />
           <SdmsCredentialsSection dealerId={dealer.id} />
+          {/* The old SDMS (IndianOil's Business Login): asked only on demand, so an Indian Oil
+              outlet always has the card for the team to fill when the work needs it. */}
+          <CompanyPortalCredentialsSection
+            dealerId={dealer.id}
+            portal="sdmsOld"
+            expected={(setup?.company ?? 'iocl') === 'iocl'}
+          />
           {/* The tanker and its IndianOil Partners login: an Indian Oil outlet's only. */}
           {(setup?.company ?? 'iocl') === 'iocl' ? <TankerSection dealerId={dealer.id} /> : null}
           {/* IOC XtraPower, asked on demand: always here for an Indian Oil outlet, so the
