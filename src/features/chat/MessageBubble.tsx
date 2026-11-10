@@ -397,6 +397,8 @@ export const MessageBubble = React.memo(function MessageBubble({
               failed={view.portalLoginsFailed}
               canEdit={view.canEdit}
               lang={lang}
+              pick={portalLogin.pick === true}
+              withWemmis={portalLogin.withWemmis === true}
             />
           ) : null}
 

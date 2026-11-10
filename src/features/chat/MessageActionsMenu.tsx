@@ -160,8 +160,9 @@ export function MessageActionsMenu({
     }
   }
 
-  // A notice MDG's services posted (a report card) offers only what reads it —
-  // Copy, Download, Message info — never a reaction or a reply in MDG's name.
+  // A notice MDG's services posted (a report card, a login box, an ask) takes no
+  // reaction in MDG's name. It can still be replied to: a team member quoting the box
+  // or the card in their own answer ("fill the box above") is a person speaking.
   const notice = !!message.system;
 
   const content = (
@@ -189,15 +190,17 @@ export function MessageActionsMenu({
             ))}
           </div>
           <div className="my-1 border-t border-border" />
-          <MenuRow
-            icon={<Reply width={15} height={15} strokeWidth={1.75} />}
-            label="Reply"
-            onClick={() => {
-              onClose();
-              onReply(message);
-            }}
-          />
         </>
+      ) : null}
+      {!isTemp ? (
+        <MenuRow
+          icon={<Reply width={15} height={15} strokeWidth={1.75} />}
+          label="Reply"
+          onClick={() => {
+            onClose();
+            onReply(message);
+          }}
+        />
       ) : null}
       {message.body ? (
         <MenuRow

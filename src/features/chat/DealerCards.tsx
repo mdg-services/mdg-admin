@@ -1,4 +1,4 @@
-import { Camera, Check, Clock, Eye, Lock } from 'lucide-react';
+import { Camera, Check, ChevronRight, Clock, Eye, KeyRound, Lock } from 'lucide-react';
 import * as React from 'react';
 
 import { Spinner } from '@/components/ui/Spinner';
@@ -8,6 +8,8 @@ import {
   OIL_COMPANIES,
   OIL_COMPANY_NAMES,
   PORTAL_NAMES,
+  canResetPortalPassword,
+  guidedResetUrl,
   isCompanyPortal,
   TANKER_PORTAL,
   type Message,
@@ -331,6 +333,19 @@ function PortalRowPreview({
   const notNeeded = !!state && state.needed === false && state.status !== 'saved';
   const formOpen = !!state && !notNeeded && canEdit && state.status !== 'saved';
   const savedDate = state?.savedAt ? shortDay(state.savedAt, lang) : '';
+  // "Forgot password?" where the app draws it (`PortalLoginBox.tsx`): SDMS with its SAP
+  // code on record (the OTP reset), the old SDMS, IndianOil Partners (its reset robot) and
+  // IOC XtraPower (the guided reset). Under the form; for a saved login, SDMS's only once
+  // the owner taps Change, the others' straight under the row.
+  const hasForgot =
+    !!state &&
+    !notNeeded &&
+    canEdit &&
+    ((portal === 'sdms' && !!state.resetPossible) ||
+      (portal === 'sdmsOld' && (!!state.resetPossible || state.status === 'saved')) ||
+      canResetPortalPassword(portal) ||
+      !!guidedResetUrl(portal));
+  const forgotShown = hasForgot && (formOpen || (state?.status === 'saved' && portal !== 'sdms'));
   return (
     <div data-portal={portal} className="rounded-md bg-wa-row-active px-2.5 py-2">
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
@@ -398,6 +413,65 @@ function PortalRowPreview({
           </p>
         </div>
       ) : null}
+
+      {forgotShown ? (
+        <FakeButton className={cn(LINK_BUTTON, 'mt-1 gap-1.5 px-1')}>
+          <KeyRound width={15} strokeWidth={2} className="shrink-0" aria-hidden />
+          {dealerWord(lang, 'portalForgot')}
+        </FakeButton>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * "Which password?" (`MessagePortalLogin.pick`), as the owner first sees it: the
+ * outlet's logins with where each stands, then eMaaptaul when offered, then the app.
+ */
+function PasswordPickerPreview({
+  portals,
+  states,
+  withWemmis,
+  lang,
+}: {
+  portals: readonly PortalId[];
+  states: PortalLoginState[] | undefined;
+  withWemmis: boolean;
+  lang: DealerLang;
+}) {
+  const rows: Array<{ key: string; label: string; note: string | null; refused: boolean }> = [
+    ...portals
+      .filter((p) => !states || states.some((s) => s.portal === p))
+      .map((p) => {
+        const s = states?.find((x) => x.portal === p);
+        return {
+          key: p,
+          label: isCompanyPortal(p) ? PORTAL_NAMES[p] : dealerWord(lang, 'portalTitle', { portal: PORTAL_NAMES[p] }),
+          note: !s
+            ? null
+            : dealerWord(lang, s.status === 'refused' ? 'portalRefused' : s.status === 'saved' ? 'portalSaved' : 'portalNeeded'),
+          refused: s?.status === 'refused',
+        };
+      }),
+    ...(withWemmis ? [{ key: 'wemmis', label: dealerWord(lang, 'pickerWemmis'), note: null, refused: false }] : []),
+    { key: 'app', label: dealerWord(lang, 'pickerApp'), note: null, refused: false },
+  ];
+  return (
+    <div data-password-picker title={PREVIEW_TITLE} className="mt-1 flex flex-col gap-1.5">
+      {rows.map((r) => (
+        <div key={r.key} data-choice={r.key} className="flex min-h-11 items-center gap-2 rounded-md bg-wa-row-active px-2.5 py-2">
+          <Lock width={14} strokeWidth={2} className="shrink-0 text-wa-meta" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block break-words text-[14px] font-medium leading-snug">{r.label}</span>
+            {r.note ? (
+              <span className={cn('block text-[12px] leading-snug', r.refused ? 'font-medium' : 'text-wa-meta')}>
+                {r.note}
+              </span>
+            ) : null}
+          </span>
+          <ChevronRight width={16} strokeWidth={2} className="shrink-0 text-wa-meta" aria-hidden />
+        </div>
+      ))}
     </div>
   );
 }
@@ -413,13 +487,19 @@ export function PortalLoginPreview({
   failed,
   canEdit,
   lang,
+  pick = false,
+  withWemmis = false,
 }: {
   portals: readonly PortalId[];
   states: PortalLoginState[] | undefined;
   failed: boolean;
   canEdit: boolean;
   lang: DealerLang;
+  /** "Which password?": the list the owner chooses from first. */
+  pick?: boolean;
+  withWemmis?: boolean;
 }) {
+  if (pick) return <PasswordPickerPreview portals={portals} states={states} withWemmis={withWemmis} lang={lang} />;
   const companyPump = !!states?.some((p) => isCompanyPortal(p.portal) && p.needed);
   const asked = companyPump ? portals.filter(isCompanyPortal) : portals;
   // The app grows an Indian Oil box by the IndianOil Partners row once the owner says

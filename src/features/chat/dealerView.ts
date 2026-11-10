@@ -43,6 +43,9 @@ const WORDS = {
     en: 'Kept safe — never shown in the chat',
     hi: 'सुरक्षित रखा जाएगा, चैट में नहीं दिखेगा',
   },
+  portalForgot: { en: 'Forgot password?', hi: 'पासवर्ड भूल गए?' },
+  pickerWemmis: { en: 'eMaaptaul login', hi: 'eMaaptaul लॉगिन' },
+  pickerApp: { en: 'Dealer Kavach app', hi: 'डीलर कवच ऐप' },
 
   ownerFills: { en: 'The owner fills this', hi: 'मालिक भरेंगे' },
   change: { en: 'Change', hi: 'बदलें' },
