@@ -62,6 +62,9 @@ import {
 
 import { SnapshotDetail } from '../dataVault/SnapshotDetail';
 
+import { DAY_DATA_SERVICE_IDS, dayDataCopy, isDayDataServiceId, providerOfAttached } from './vault/dayData';
+import { DayProviderNotes, DaySourceStrip } from './vault/DayProviderPanel';
+
 interface Props {
   dealer: Dealer;
 }
@@ -78,9 +81,6 @@ interface Props {
 // takes the number.
 const DAY_WINDOWS = ['30', '60', '90'] as const;
 type DayWindow = (typeof DAY_WINDOWS)[number];
-
-/** The plugin whose attachment decides whether the portal can be asked at all. */
-const PIPELINE_SERVICE_ID = 'iras-shift-data';
 
 /** `YYYY-MM-DD` → `Thu, 23 Jul 2026`, read as a calendar date, not an instant. */
 function dateLabel(iso: string): string {
@@ -162,12 +162,23 @@ export function DealerDataVaultTab({ dealer }: Props) {
   // Fails OPEN on purpose: hidden only once the answer is actually IN. "We could
   // not ask" is not "not attached", and the shared query is already in flight for
   // the tab strip, so this costs no extra request.
+  //
+  // "The pipeline" is whichever day-data collector the outlet has — IRAS for an
+  // Indian Oil pump, BPCL's portal for a BPCL one — so the answer, and the words
+  // around it, follow the collector rather than assuming IRAS.
   const servicesQ = useDealerServicesQuery(dealer.id);
   const canCollect =
     !servicesQ.isSuccess ||
-    servicesQ.data.some(
-      (s) => s.serviceId === PIPELINE_SERVICE_ID && s.status === 'ACTIVE',
-    );
+    servicesQ.data.some((s) => isDayDataServiceId(s.serviceId) && s.status === 'ACTIVE');
+  // The collector "Collect now" runs, for the run-place choice: the outlet's own,
+  // and IRAS while the answer is not in (the button shows then too, see above).
+  const collectorId =
+    (servicesQ.isSuccess
+      ? servicesQ.data.find((s) => isDayDataServiceId(s.serviceId) && s.status === 'ACTIVE')?.serviceId
+      : undefined) ?? DAY_DATA_SERVICE_IDS[0];
+  const copy = dayDataCopy(
+    servicesQ.isSuccess ? providerOfAttached(servicesQ.data.map((s) => s.serviceId)) : null,
+  );
 
   function runCollection(browserOn: BrowserPlace = 'server') {
     collect.mutate(
@@ -252,7 +263,7 @@ export function DealerDataVaultTab({ dealer }: Props) {
       </Button>
       {canCollect ? (
         <RunPlaceButton
-          serviceId={PIPELINE_SERVICE_ID}
+          serviceId={collectorId}
           variant="secondary"
           size="sm"
           loading={collecting}
@@ -290,7 +301,7 @@ export function DealerDataVaultTab({ dealer }: Props) {
               icon={<Database width={28} height={28} strokeWidth={1.75} />}
               title={
                 canCollect
-                  ? 'No IRAS data collected yet'
+                  ? copy.noData
                   : "This outlet's figures are entered by hand"
               }
               // Promising that data "appears here once the pipeline runs" is a
@@ -298,18 +309,22 @@ export function DealerDataVaultTab({ dealer }: Props) {
               // and that copy is what left day one with no visible next step.
               description={
                 canCollect
-                  ? 'Once the pipeline runs for this dealer, their shift-anchored reports appear here.'
+                  ? copy.noDataHint
                   : 'This dealer has no portal collection running, so nothing will arrive on its own. Pick a date and open the day to type the shift in.'
               }
               cta={dayActions}
             />
           ) : (
-            <SnapshotDetail
-              snapshot={latestQ.data}
-              hideDealerName
-              actions={dayActions}
-              correctAction="md-only"
-            />
+            <div className="flex flex-col gap-4">
+              <DaySourceStrip snapshot={latestQ.data} />
+              <SnapshotDetail
+                snapshot={latestQ.data}
+                hideDealerName
+                actions={dayActions}
+                correctAction="md-only"
+              />
+              <DayProviderNotes snapshot={latestQ.data} />
+            </div>
           )}
         </CardContent>
       </Card>
@@ -319,6 +334,8 @@ export function DealerDataVaultTab({ dealer }: Props) {
         onOpen={setOpenSnapshotId}
         days={historyDays}
         onDaysChange={setHistoryDays}
+        fromPortal={copy.fromPortal}
+        collectorLabel={copy.label}
         isLoading={historyQ.isLoading}
         isError={historyQ.isError}
         error={historyQ.error}
@@ -330,7 +347,7 @@ export function DealerDataVaultTab({ dealer }: Props) {
         onClose={() => setOpenSnapshotId(null)}
         width="lg"
         title={dealerCodeLabel(dealer.code)}
-        description="Captured IRAS shift data"
+        description={copy.drawer}
         footer={
           <Button variant="ghost" onClick={() => setOpenSnapshotId(null)}>
             Close
@@ -359,6 +376,8 @@ function HistoryCard({
   onOpen,
   days,
   onDaysChange,
+  fromPortal,
+  collectorLabel,
   isLoading,
   isError,
   error,
@@ -368,6 +387,10 @@ function HistoryCard({
   onOpen: (snapshotId: string) => void;
   days: DayWindow;
   onDaysChange: (v: DayWindow) => void;
+  /** The tag on a collected row: "From portal", or "From BPCL portal". */
+  fromPortal: string;
+  /** The collector's name, for the help button. */
+  collectorLabel: string;
   isLoading: boolean;
   isError: boolean;
   error: unknown;
@@ -393,7 +416,7 @@ function HistoryCard({
               />
               <HowThisWorks
                 surface="admin-dealer-vault-iras"
-                label="IRAS shift data"
+                label={collectorLabel}
                 variant="icon"
               />
             </div>
@@ -466,7 +489,7 @@ function HistoryCard({
                         <DayStateChip row={r} />
                       </TD>
                       <TD>
-                        <DayTags row={r} />
+                        <DayTags row={r} fromPortal={fromPortal} />
                       </TD>
                       <TD className="whitespace-nowrap font-mono text-text-muted">
                         {r.selectedShiftTime || '—'}
@@ -528,7 +551,7 @@ function HistoryCard({
                       {IRAS_DAY_STATE_HINT[r.state]}
                     </span>
                     <GapLines row={r} />
-                    <DayTags row={r} />
+                    <DayTags row={r} fromPortal={fromPortal} />
                   </span>
                 ),
                 meta: r.capturedAt ? formatDateTime(r.capturedAt) : '—',
@@ -595,14 +618,14 @@ function GapLines({ row }: { row: IrasDayStateRow }) {
  * hand-typed day can add up or not, and squashing "typed in" into the same chip
  * as "does not add up" would force one of the two facts off the screen.
  */
-function DayTags({ row }: { row: IrasDayStateRow }) {
+function DayTags({ row, fromPortal }: { row: IrasDayStateRow; fromPortal: string }) {
   if (!row.snapshotId) return <span className="text-xs text-text-subtle">—</span>;
   return (
     <span className="flex flex-wrap items-center gap-1">
       {row.source === 'MANUAL' ? (
         <Badge intent="info">Typed in</Badge>
       ) : (
-        <Badge intent="neutral">From portal</Badge>
+        <Badge intent="neutral">{fromPortal}</Badge>
       )}
       {row.correctionCount > 0 ? (
         <Badge intent="neutral">
@@ -818,5 +841,11 @@ function HistoricSnapshot({ snapshotId }: { snapshotId: string }) {
       />
     );
   }
-  return <SnapshotDetail snapshot={data} hideDealerName />;
+  return (
+    <div className="flex flex-col gap-4">
+      <DaySourceStrip snapshot={data} />
+      <SnapshotDetail snapshot={data} hideDealerName />
+      <DayProviderNotes snapshot={data} />
+    </div>
+  );
 }

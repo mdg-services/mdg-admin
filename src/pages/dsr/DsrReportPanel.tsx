@@ -40,6 +40,7 @@ import { isHolding, shareBlockedReason } from '@/lib/assurance';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatLitres } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
+import { reportTiersSentence } from '@/pages/dealers/vault/lossTiers';
 import {
   bandParts,
   type DsrAdvisoryKind,
@@ -1068,6 +1069,14 @@ function bandNote(variation: DsrVariationSummary): string {
   // Whole litres, as the dealer's card and the printed sheet both round to.
   const stock = `${b.stockPct === null ? '4%' : pct(b.stockPct)} of stock (${formatLitres(Math.round(b.stockLitres))})`;
   if (!b.leakageApplies) return `${stock} — no evaporation allowance on a surplus`;
+  // Two rates (a BPCL outlet): say both. The blended percent `bandParts` works out
+  // is arithmetically right but is neither rate MDG grants, so a reader checking
+  // it against the guideline would find no figure to match. Read straight from the
+  // report's own breakdown, so a report keeps the rates it was computed with.
+  const tiers = reportTiersSentence(variation.breakdown.lossTiers);
+  if (tiers) {
+    return `${stock} + evaporation of ${tiers} (${formatLitres(Math.round(b.leakageLitres))})`;
+  }
   const rate = b.leakagePct === null ? '' : `${pct(b.leakagePct)} `;
   return `${stock} + ${rate}evaporation (${formatLitres(Math.round(b.leakageLitres))})`;
 }

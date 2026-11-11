@@ -16,6 +16,8 @@
  */
 import type { Cadence } from '@dk/shared';
 
+import { DAY_DATA_SERVICE_IDS, anyOfGroupName, unmetAnyOfGroups } from './vault/dayData';
+
 /** Cadences the friendly picker can express a time for. The rest (ON_DEMAND, or
  *  the attach-only "plugin default") carry no picker and no cron. */
 export type TimedCadence = Extract<Cadence, 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'>;
@@ -162,31 +164,55 @@ export function parseCron(
   return null;
 }
 
-/** Service ids the DSR schedule advisory keys off. The DSR `dependsOn` BOTH. */
+/** Service ids the DSR schedule advisory keys off. */
 export const DSR_SERVICE_ID = 'dsr-report';
+/**
+ * Indian Oil's collector. Kept for the callers that name it; anything asking
+ * "is the day's data being collected?" asks {@link DAY_DATA_SERVICE_IDS}, because
+ * a BPCL outlet's collector is a different service.
+ */
 export const IRAS_SERVICE_ID = 'iras-shift-data';
 export const INSPECTION_SERVICE_ID = 'inspection-reports';
+export { DAY_DATA_SERVICE_IDS, isDayDataServiceId } from './vault/dayData';
 
 /** A daily cron is jittered ±10 min, so worst-case the two ends swing 20 min apart. */
 const DAILY_JITTER_SWING_MIN = 20;
 
 /**
  * Advisory for the DSR schedule picker. The Daily Sales Report is built from its
- * prerequisites (Inspection Reports AND IRAS Shift Data), so it can only produce
- * a report if (a) both are attached and (b) it runs AFTER IRAS has collected that
- * day. Returns the warning to show, or null when the schedule is fine. Takes
- * booleans/crons (no service ids) so the caller decides WHEN a service is the DSR.
+ * prerequisites (Inspection Reports AND one day-data collector — IRAS shift data
+ * or BPCL day readings), so it can only produce a report if (a) they are attached
+ * and (b) it runs AFTER the collector has read that day. Returns the warning to
+ * show, or null when the schedule is fine. Takes booleans/crons (no service ids)
+ * so the caller decides WHEN a service is the DSR.
+ *
+ * `irasAttached` and `irasCron` mean "the day-data collector" — whichever of the
+ * two the outlet has. A caller that has the catalog entry and the attached ids
+ * can pass `dependsOnAnyOf` + `attachedServiceIds` instead, and the answer is
+ * worked from the groups the plugin itself declares.
  */
 export function dsrIrasScheduleWarning(opts: {
   irasAttached: boolean;
   inspectionAttached: boolean;
   irasCron?: string | null;
   dsrCustomCron?: string | null;
+  /** The plugin's "one of each group" prerequisites; with `attachedServiceIds`, replaces `irasAttached`. */
+  dependsOnAnyOf?: readonly (readonly string[])[] | null;
+  attachedServiceIds?: Iterable<string> | null;
 }): string | null {
-  // Both hard prerequisites (the attach route enforces the full dependsOn set).
+  // Both hard prerequisites (the attach route enforces the full set).
   const missing: string[] = [];
   if (!opts.inspectionAttached) missing.push('Inspection Reports');
-  if (!opts.irasAttached) missing.push('IRAS Shift Data');
+  const groups = opts.dependsOnAnyOf ?? [DAY_DATA_SERVICE_IDS];
+  const unmet =
+    opts.attachedServiceIds != null
+      ? unmetAnyOfGroups(groups, opts.attachedServiceIds)
+      : opts.irasAttached
+        ? []
+        : groups.map((g) => [...g]);
+  for (const group of unmet) {
+    missing.push(group.length > 1 ? `either ${anyOfGroupName(group)}` : anyOfGroupName(group));
+  }
   if (missing.length > 0) {
     return `The Daily Sales Report is built from ${missing.join(' and ')} — attach ${
       missing.length > 1 ? 'them' : 'it'
@@ -194,8 +220,8 @@ export function dsrIrasScheduleWarning(opts: {
   }
 
   // A time comparison is only meaningful when BOTH pin an explicit time AND run
-  // on the SAME cadence — comparing a daily DSR to a weekly IRAS by time-of-day
-  // alone would give a false "ok" on the days IRAS never collects. If either runs
+  // on the SAME cadence — comparing a daily DSR to a weekly collector by time-of-day
+  // alone would give a false "ok" on the days it never collects. If either runs
   // on its plugin default (no fixed time), there is nothing precise to compare.
   const dsr = parseCron(opts.dsrCustomCron ?? '');
   const iras = parseCron(opts.irasCron ?? '');
@@ -208,8 +234,8 @@ export function dsrIrasScheduleWarning(opts: {
       const dsrTime = formatTime12h(dsr.parts.hour, dsr.parts.minute);
       const irasTime = formatTime12h(iras.parts.hour, iras.parts.minute);
       return dsrMin <= irasMin
-        ? `This DSR runs at ${dsrTime} IST — at or before IRAS Shift Data collects (${irasTime} IST). Set it to run AFTER IRAS, or that day's data won't be ready in time.`
-        : `This DSR runs at ${dsrTime} IST — very close to IRAS Shift Data (${irasTime} IST). Daily runs jitter ±10 min, so leave a wider gap after IRAS or the data may not be ready.`;
+        ? `This DSR runs at ${dsrTime} IST — at or before the day's readings are collected (${irasTime} IST). Set it to run AFTER the collection, or that day's data won't be ready in time.`
+        : `This DSR runs at ${dsrTime} IST — very close to when the day's readings are collected (${irasTime} IST). Daily runs jitter ±10 min, so leave a wider gap after the collection or the data may not be ready.`;
     }
   }
   return null;

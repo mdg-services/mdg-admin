@@ -20,6 +20,7 @@ import { DealerLedgerWatchPane } from '../DealerLedgerWatchPane';
 
 import { DealerCalibrationClaimPane } from './DealerCalibrationClaimPane';
 import { DealerDuOtpAckPane } from './DealerDuOtpAckPane';
+import { DAY_DATA_DATASET_ID, DAY_DATA_SERVICE_IDS, dayDataCopy, providerOfAttached } from './dayData';
 import { DealerInspectionPane } from './DealerInspectionPane';
 import { DealerLoadPlannerPane } from './DealerLoadPlannerPane';
 import { DealerPadLedgerPane } from './DealerPadLedgerPane';
@@ -37,17 +38,25 @@ import type { DealerVaultDataset } from './types';
  * cannot drift. Order is the rail order; the first entry is what the tab opens
  * to when no `?vault=` is named.
  *
- * IRAS shift data reuses the existing per-dealer tab body verbatim; PAD ledger
+ * The day's readings (IRAS shift data, or BPCL day readings) reuse the existing
+ * per-dealer tab body verbatim; PAD ledger
  * and Inspection Reports are per-dealer panes over the same admin endpoints the
  * cross-dealer Vault reads.
  */
 const REGISTRY = [
   {
-    id: 'iras-shift-data',
+    // The URL value stays what it was — every `?vault=iras-shift-data` link
+    // predates BPCL outlets — but the dataset is the day's readings from
+    // WHICHEVER portal this outlet has: IRAS, or BPCL's IoT portal.
+    id: DAY_DATA_DATASET_ID,
     label: 'IRAS shift data',
     description: "This dealer's shift-anchored IRAS captures — latest and history.",
     Icon: Database,
-    requiresService: 'iras-shift-data',
+    requiresAnyService: DAY_DATA_SERVICE_IDS,
+    wordsFor: (attached) => {
+      const { label, description } = dayDataCopy(providerOfAttached(attached));
+      return { label, description };
+    },
     Pane: DealerDataVaultTab,
   },
   {

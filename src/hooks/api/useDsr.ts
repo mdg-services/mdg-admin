@@ -61,6 +61,14 @@ export interface DsrPnlResponse {
     receiptBasis: 'DECANTED' | 'INVOICE';
     testingPerActivePumpLitres: number;
     testingMinDeltaLitres: number;
+    /**
+     * Where the testing litres came from: `SNAPSHOT` is BPCL's own record, with
+     * the per-pump rule above only a fallback for a day it gave none. Absent from
+     * a server that predates it, which always meant `RULE`.
+     */
+    testingSource?: 'RULE' | 'SNAPSHOT';
+    /** True when deliveries are booked exactly as the portal reports them (BPCL), not rounded up to 500 L. */
+    receiptsExact?: boolean;
   };
   products: PnlProductInput[];
 }
@@ -212,7 +220,7 @@ export interface DsrInferredReceipt {
   businessDate: string;
   productKey: string;
   litres: number;
-  /** The gain the guess was rounded up from. */
+  /** The gain the guess was read from: rounded up to the next 500 L for Indian Oil, booked as measured for BPCL. */
   unexplainedLitres: number | null;
 }
 

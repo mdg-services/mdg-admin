@@ -11,6 +11,7 @@
  */
 
 import type { Intent } from '@/lib/statusIntent';
+import { DAY_DATA_DATASET_ID } from '@/pages/dealers/vault/dayData';
 import type {
   DealerDayRow,
   DsrSheet,
@@ -181,7 +182,8 @@ export function triageBadge(item: TriageItem, now: number): string {
  * not a fault, so it asks for the typing rather than colouring the row red.
  */
 export function shiftCell(row: DealerDayRow, reportingDate: string): CellState {
-  const href = `/data-vault?dataset=iras-shift-data&date=${reportingDate}`;
+  // The Vault's day-readings dataset, for an Indian Oil or a BPCL outlet alike.
+  const href = `/data-vault?dataset=${DAY_DATA_DATASET_ID}&date=${reportingDate}`;
   const editor = `/data-vault/dealers/${row.dealerId}/days/${reportingDate}`;
   if (!row.shift.attached) return { label: 'Not set up', intent: 'neutral', href };
   if (row.shift.status === 'COMPLETE') {

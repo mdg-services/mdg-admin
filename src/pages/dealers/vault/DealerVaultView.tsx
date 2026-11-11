@@ -25,7 +25,7 @@ import type { DealerVaultDataset, DealerVaultPaneProps } from './types';
  * and the WebView Back button steps between datasets.
  *
  * A dataset is only offered once its backing service is attached to the dealer
- * (IRAS → iras-shift-data, PAD ledger & Credit & DOD → credit-dod-monitoring,
+ * (IRAS or BPCL day readings → iras-shift-data / bpcl-iot-data, PAD ledger & Credit & DOD → credit-dod-monitoring,
  * DSR → dsr-report, Inspection → inspection-reports). A dealer with none attached
  * gets a clear empty state rather than an empty bar.
  */
@@ -41,14 +41,23 @@ export function DealerVaultView({ dealer }: DealerVaultPaneProps) {
     : null;
 
   const isVisible = (d: DealerVaultDataset): boolean => {
-    if (!d.requiresService) return true;
-    if (attached) return attached.has(d.requiresService);
+    const needsAny = d.requiresAnyService;
+    if (!needsAny && !d.requiresService) return true;
+    if (attached) {
+      return needsAny
+        ? needsAny.some((id) => attached.has(id))
+        : attached.has(d.requiresService!);
+    }
     // Still asking: withhold. Ask failed: "could not ask" is not "not attached",
     // so show it — the panes degrade gracefully when the service is missing.
     return servicesQ.isError;
   };
 
-  const visible = DEALER_VAULT_DATASETS.filter(isVisible);
+  // A dataset several collectors can feed is named for the one this dealer has
+  // ("BPCL day readings", not "IRAS shift data") once the answer is in.
+  const visible = DEALER_VAULT_DATASETS.filter(isVisible).map((d) =>
+    d.wordsFor && attached ? { ...d, ...d.wordsFor(attached) } : d,
+  );
   // Never land on a hidden dataset: an old `?vault=` for a since-detached service
   // falls back to the first offered one.
   const dataset = visible.find((d) => d.id === param) ?? visible[0] ?? null;

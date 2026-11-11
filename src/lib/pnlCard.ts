@@ -26,10 +26,15 @@ import { dealerCodeLabel } from '@dk/shared';
 
 import { formatInrWhole, formatLitres, formatYmd } from './format';
 import {
+  allowancesLine,
+  cardEngineTestingRows,
+  cardTestingLitresHint,
   computeFuelPnl,
   defaultRatesFor,
+  deliveryRoundingHint,
   RATE_DEFAULTS_SOURCE,
   SUSPICIOUS_GAIN_RATE,
+  testingNobodyKnows,
   type FuelPnlResult,
   type FuelPnlSettings,
   type GradeRates,
@@ -204,7 +209,7 @@ export function buildPnlCard(
     {
       label: 'Testing charged',
       value: formatLitres(sum((p) => p.testingLitres)),
-      hint: 'Not measured',
+      hint: cardTestingLitresHint(data.config),
     },
     { label: 'Deliveries', value: String(sum((p) => p.loads.length)) },
     {
@@ -219,19 +224,11 @@ export function buildPnlCard(
 
   const cfg = data.config;
   const engine: CardKv[] = [
-    {
-      label: 'Testing charged',
-      value: `${cfg.testingPerActivePumpLitres} L per pump per day`,
-      hint: 'Assumed — nobody measures it',
-    },
-    {
-      label: 'Pump counts as active',
-      value: `Meter moved ${cfg.testingMinDeltaLitres} L or more`,
-    },
+    ...cardEngineTestingRows(cfg),
     {
       label: 'Delivery figure used',
       value: cfg.receiptBasis === 'INVOICE' ? 'Invoiced litres' : 'Dipped-in litres',
-      hint: 'Rounded up to the next 500 L',
+      hint: deliveryRoundingHint(cfg),
     },
     {
       label: 'Variation counted since',
@@ -245,7 +242,7 @@ export function buildPnlCard(
     },
     ...data.products.map((p) => ({
       label: `${p.labelEn} allowances`,
-      value: `${p.leakagePct}% evaporation + ${p.permissiblePct}% stock`,
+      value: allowancesLine(p),
       hint: 'Forgiven before it counts as a loss',
     })),
   ];
@@ -277,7 +274,7 @@ export function buildPnlCard(
     ],
     swing:
       swingValue !== null && Math.abs(swingValue) >= 1
-        ? `Was the testing fuel sold, or poured back into the tank? Nobody measures it, so nobody knows. Answering it moves the profit by ${money(
+        ? `Was the testing fuel sold, or poured back into the tank? ${testingNobodyKnows(data.config)} Answering it moves the profit by ${money(
             Math.abs(swingValue),
           )} over this period — that is the whole gap between the two figures above.`
         : null,

@@ -27,6 +27,7 @@ import {
   computeFuelPnl,
   type FuelPnlSettings,
   SUSPICIOUS_GAIN_RATE,
+  testingQuestionLead,
   withDefaultRates,
   type PnlProduct,
   type TestingTreatment,
@@ -452,11 +453,9 @@ export function DsrPnlView() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="max-w-prose text-sm text-text-muted">
-                The report charges {data.config.testingPerActivePumpLitres} litres per active pump
-                per day as testing, and assumes every one of them went back into the tank. Nobody
-                measures it. If it was sold instead, it never went missing — and most of the
-                shortage in the report is not a shortage at all. Pick an answer and the whole page
-                follows it.
+                {testingQuestionLead(data.config)} If it was sold instead, it never went missing —
+                and most of the shortage in the report is not a shortage at all. Pick an answer and
+                the whole page follows it.
               </p>
 
               <SegmentedControl

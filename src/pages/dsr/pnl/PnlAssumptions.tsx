@@ -4,7 +4,18 @@ import * as React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, HowThisWorks, Input, Label, SegmentedControl } from '@/components/ui';
 import type { DsrPnlResponse } from '@/hooks/api/useDsr';
 import { formatLitres, formatYmd } from '@/lib/format';
-import { defaultRatesFor, RATE_DEFAULTS_SOURCE, type FuelPnlSettings, type LossBasis } from '@/lib/fuelPnl';
+import {
+  allowancesLine,
+  defaultRatesFor,
+  deliveryRoundingHint,
+  PORTAL_TESTING_VALUE,
+  RATE_DEFAULTS_SOURCE,
+  testingFallbackHint,
+  testingIsPortalRecord,
+  testingUnmeasuredClause,
+  type FuelPnlSettings,
+  type LossBasis,
+} from '@/lib/fuelPnl';
 
 /**
  * Every number that is NOT a measurement, on the screen, above the answer.
@@ -23,7 +34,9 @@ import { defaultRatesFor, RATE_DEFAULTS_SOURCE, type FuelPnlSettings, type LossB
  * with. They are not editable here because changing them means regenerating the
  * dealer's reports, not re-rendering this page — but they belong on it, because
  * `testingPerActivePumpLitres` in particular decides most of the reported loss
- * and is otherwise visible nowhere in the product.
+ * on an Indian Oil outlet and is otherwise visible nowhere in the product. (A
+ * BPCL outlet's testing is the portal's own record, with that rate only a
+ * fallback for a day it gave none — see `testingIsPortalRecord`.)
  */
 
 export interface PnlAssumptionsProps {
@@ -134,8 +147,8 @@ export function PnlAssumptions({ data, settings, onChange }: PnlAssumptionsProps
           <Info width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden />
           <span>
             Every litre on this page is counted. These four things are not — no portal we read
-            gives a fuel price, and nobody measures the testing. Change any one of them and every
-            figure on the page moves.
+            gives a fuel price, and {testingUnmeasuredClause(data.config)}. Change any one of them
+            and every figure on the page moves.
           </span>
         </p>
         <p className="-mt-3 text-xs text-text-muted">
@@ -289,19 +302,34 @@ export function PnlAssumptions({ data, settings, onChange }: PnlAssumptionsProps
               and two 128px columns of that is TALLER than one 296px column, not
               shorter. */}
           <dl className="grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-4">
-            <EngineConstant
-              label="Testing charged"
-              value={`${data.config.testingPerActivePumpLitres} L / pump / day`}
-              hint="Assumed, never measured"
-            />
-            <EngineConstant
-              label="Pump counts as active"
-              value={`meter moved ${data.config.testingMinDeltaLitres} L or more`}
-            />
+            {/* An outlet whose portal records its testing (BPCL) was not charged
+                the per-pump rate: the rate is only the fallback for a day the
+                portal gave none, so it is said as that fallback, in one row, and
+                the "Pump counts as active" row — which only matters on those days
+                — is not shown at all. */}
+            {testingIsPortalRecord(data.config) ? (
+              <EngineConstant
+                label="Testing charged"
+                value={PORTAL_TESTING_VALUE}
+                hint={testingFallbackHint(data.config)}
+              />
+            ) : (
+              <>
+                <EngineConstant
+                  label="Testing charged"
+                  value={`${data.config.testingPerActivePumpLitres} L / pump / day`}
+                  hint="Assumed, never measured"
+                />
+                <EngineConstant
+                  label="Pump counts as active"
+                  value={`meter moved ${data.config.testingMinDeltaLitres} L or more`}
+                />
+              </>
+            )}
             <EngineConstant
               label="Delivery figure used"
               value={data.config.receiptBasis === 'INVOICE' ? 'Invoiced litres' : 'Dipped-in litres'}
-              hint="Rounded up to the next 500 L"
+              hint={deliveryRoundingHint(data.config)}
             />
             <EngineConstant
               label="Variation counted since"
@@ -312,7 +340,7 @@ export function PnlAssumptions({ data, settings, onChange }: PnlAssumptionsProps
               <EngineConstant
                 key={p.productKey}
                 label={`${p.labelEn} allowances`}
-                value={`${p.leakagePct}% evaporation + ${p.permissiblePct}% stock`}
+                value={allowancesLine(p)}
                 hint="What the report forgives before calling it a loss"
               />
             ))}

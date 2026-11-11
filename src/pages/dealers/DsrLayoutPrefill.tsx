@@ -7,7 +7,9 @@ import {
   type DsrDiscoveredProduct,
   type DsrSetupDraft,
 } from '@/hooks/api/useDsr';
-import type { DsrMonthOpening } from '@dk/shared';
+import type { DsrLossTiers, DsrMonthOpening } from '@dk/shared';
+
+import { setupTiersSentence } from './vault/lossTiers';
 
 /**
  * The button that fills the DSR setup form in from the dealer's own portal data.
@@ -40,6 +42,11 @@ interface DsrProductFormValue {
   tankNos: number[];
   nozzleNos: number[];
   leakagePct?: number;
+  /**
+   * The two-rate loss allowance (BPCL outlets). Not on the portal, so it is never
+   * read; it is carried across from what the form already holds.
+   */
+  lossTiers?: DsrLossTiers;
   permissiblePct: number;
   meterScale?: Record<string, number>;
   monthOpening?: DsrMonthOpening;
@@ -79,6 +86,11 @@ function toFormProduct(
     // Left undefined for an unrecognised grade so the field reads as a question
     // rather than as an answer nobody checked.
     ...(p.leakagePct === null ? {} : { leakagePct: p.leakagePct }),
+    // Carried across, never re-read. The portal knows one flat rate per grade; the
+    // two-rate allowance is a choice somebody made for this outlet, and dropping
+    // it here would put the product back on one rate at the next save and move
+    // every variation figure with it.
+    ...(existing?.lossTiers ? { lossTiers: existing.lossTiers } : {}),
     permissiblePct: p.permissiblePct,
     ...(p.meterScale && Object.keys(p.meterScale).length > 0
       ? { meterScale: p.meterScale }
@@ -271,6 +283,35 @@ function TodaysReadings({
   );
 }
 
+/**
+ * The settings a re-read of the layout leaves alone, shown so nobody wonders
+ * whether pressing the button changed them: the two-rate loss allowance on a
+ * product, and testing taken from the portal's own record. Read-only — they are
+ * set when the outlet is set up, not read from the portal. Nothing is drawn for
+ * an outlet that uses neither (every Indian Oil outlet today).
+ */
+function KeptSettings({ config }: { config: Record<string, unknown> }) {
+  const tiered = (Array.isArray(config.products) ? config.products : [])
+    .map((x) => x as DsrProductFormValue)
+    .map((p) => ({ key: p?.key, sentence: setupTiersSentence(p?.lossTiers) }))
+    .filter((p): p is { key: string; sentence: string } => !!p.key && !!p.sentence);
+  const testingFromPortal = config.testingSource === 'SNAPSHOT';
+  if (tiered.length === 0 && !testingFromPortal) return null;
+
+  return (
+    <ul className="grid gap-1 text-xs text-text-muted">
+      {tiered.map((p) => (
+        <li key={p.key}>
+          <span className="font-semibold text-text">{p.key}</span> loss allowance: {p.sentence}.
+        </li>
+      ))}
+      {testingFromPortal ? (
+        <li>Testing litres come from the portal&rsquo;s own record of the day, not the per-pump rule.</li>
+      ) : null}
+    </ul>
+  );
+}
+
 export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
   const draft = useDsrSetupDraft(dealerId);
   const [applied, setApplied] = React.useState<DsrSetupDraft | null>(null);
@@ -289,6 +330,11 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
         .map((x) => [x.key, x]),
     );
     onConfigChange({
+      // `...config` is what keeps every setting at the level of the whole outlet
+      // — the receipt basis and `testingSource` (where testing litres come from)
+      // among them. Only the products and the inspection date are read from the
+      // portal, so nothing else is listed here: naming a key below would be how a
+      // new one got forgotten.
       ...config,
       ...(data.inspection ? { sinceDate: data.inspection.date } : {}),
       products: data.products.map((p) => {
@@ -339,6 +385,8 @@ export function DsrLayoutPrefill({ dealerId, config, onConfigChange }: Props) {
           />
         </div>
       </div>
+
+      <KeptSettings config={config} />
 
       {existingProducts > 0 && !applied && (
         <p className="text-xs text-text-muted">

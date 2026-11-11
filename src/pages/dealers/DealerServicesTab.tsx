@@ -53,7 +53,7 @@ import { retryImport } from '@/lib/retryImport';
 import type { Dealer, DealerService , BrowserPlace } from '@dk/shared';
 import type { UpdateDealerServiceInput } from '@dk/shared/schemas';
 
-import { INSPECTION_SERVICE_ID, IRAS_SERVICE_ID } from './schedulePicker';
+import { INSPECTION_SERVICE_ID, isDayDataServiceId } from './schedulePicker';
 import { CADENCE_LABELS, describeSchedule } from './serviceSchedule';
 import { claimRunNowWords } from './vault/calibrationClaim/format';
 
@@ -142,15 +142,19 @@ export function DealerServicesTab({ dealer }: Props) {
   const runNow = useRunNow(dealer.id);
 
   const attachedIds = (data ?? []).map((d) => d.serviceId);
-  // The DSR schedule advisory needs to know whether IRAS Shift Data is attached
-  // (the DSR is built from it) and when it collects, to warn if the DSR would run
-  // without it or before it.
-  const irasService = (data ?? []).find((d) => d.serviceId === IRAS_SERVICE_ID);
+  // The DSR schedule advisory needs to know whether the outlet's day-data
+  // collector is attached (the DSR is built from it — IRAS shift data for Indian
+  // Oil, BPCL day readings for a BPCL outlet) and when it collects, to warn if the
+  // DSR would run without it or before it.
+  const irasService = (data ?? []).find((d) => isDayDataServiceId(d.serviceId));
   const irasAttached = !!irasService;
   const irasCron = irasService?.customCron ?? null;
-  const inspectionAttached = (data ?? []).some(
-    (d) => d.serviceId === INSPECTION_SERVICE_ID,
-  );
+  // A BPCL outlet has no SDMS, so no Inspection Reports service: its inspection
+  // baseline is read from BPCL's own portal at set-up. Counting its collector as
+  // the prerequisite matches what the attach route accepts.
+  const inspectionAttached =
+    (data ?? []).some((d) => d.serviceId === INSPECTION_SERVICE_ID) ||
+    irasService?.serviceId === 'bpcl-iot-data';
 
   // DAILY only. An on-demand service runs when somebody presses Run now, so
   // "it hasn't run today" is its normal state, not a fault — flagging it told

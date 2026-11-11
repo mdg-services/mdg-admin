@@ -39,6 +39,19 @@ export interface DealerVaultDataset {
    * datasets that are always shown (they self-explain when empty).
    */
   requiresService?: string;
+  /**
+   * The same gate for a dataset several services can feed: it earns a rail entry
+   * once ANY of these is attached. The day's readings come from IRAS or from
+   * BPCL's portal, whichever the outlet has. Behaves exactly like
+   * {@link requiresService} otherwise, and wins if both are set.
+   */
+  requiresAnyService?: readonly string[];
+  /**
+   * The words this dataset uses once the dealer's own collector is known, when
+   * they differ from `label` / `description` (which are what an outlet with no
+   * answer yet sees). Omit for datasets that read the same for everyone.
+   */
+  wordsFor?: (attachedServiceIds: ReadonlySet<string>) => { label: string; description: string };
   /** The dataset itself, scoped to the open dealer. */
   Pane: React.ComponentType<DealerVaultPaneProps>;
 }

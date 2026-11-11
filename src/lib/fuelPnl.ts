@@ -21,6 +21,8 @@
  *     for, because dealers and accountants answer that differently.
  */
 
+import type { DsrLossTiers } from '@dk/shared';
+
 /**
  * What actually happened to the litres the report charged as testing.
  *
@@ -35,9 +37,11 @@
  * variation by the whole since-inspection testing total, which at a busy outlet
  * is most of the reported loss.
  *
- * Nobody measures testing. It is `testingPerActivePumpLitres` × the number of
- * nozzles that moved, every day, so this switch is a genuine open question and
- * not a preference.
+ * On an Indian Oil outlet nobody measures testing: it is
+ * `testingPerActivePumpLitres` × the number of nozzles that moved, every day. On
+ * a BPCL outlet the portal records the litres, so the AMOUNT is measured — but
+ * where those litres went afterwards still is not, so either way this switch is a
+ * genuine open question and not a preference.
  */
 export type TestingTreatment = 'RETURNED' | 'SOLD';
 
@@ -180,6 +184,8 @@ export interface PnlProductInput {
   productKey: string;
   labelEn: string;
   leakagePct: number;
+  /** Present when the product uses the two-tier allowance (BPCL outlets). */
+  lossTiers?: DsrLossTiers;
   permissiblePct: number;
   salesLitres: number;
   testingLitres: number;
@@ -452,4 +458,123 @@ function priceProduct(p: PnlProductInput, settings: FuelPnlSettings): PnlProduct
     profitPerLitre: profit !== null && soldLitres ? profit / soldLitres : null,
     loads,
   };
+}
+
+/**
+ * The allowances line for a product, in the words the P&L screen and its card
+ * both print: "0.25% evaporation + 4% stock", or for a two-tier product (BPCL)
+ * "0.25% evaporation up to 1,644 L a day, 0.20% beyond + 4% stock". One helper
+ * so the screen and the shared card cannot state different rates.
+ */
+export function allowancesLine(
+  p: Pick<PnlProductInput, 'leakagePct' | 'lossTiers' | 'permissiblePct'>,
+): string {
+  const t = p.lossTiers;
+  if (!t) return `${p.leakagePct}% evaporation + ${p.permissiblePct}% stock`;
+  const perDay = Math.round(t.annualThresholdLitres / 365).toLocaleString('en-IN');
+  return `${t.firstPct}% evaporation up to ${perDay} L a day, ${t.restPct}% beyond + ${p.permissiblePct}% stock`;
+}
+
+// ------------------------------------------------- how the report charged testing
+
+/**
+ * The slice of the P&L's `config` that decides what the screens may say about
+ * testing and deliveries.
+ *
+ * `testingSource` is optional because a server older than this screen does not
+ * send it, and an absent value has always meant the per-pump rule. The two rate
+ * constants are always sent and are stored beside `SNAPSHOT` too (the setup's
+ * default), so they say nothing about which rule a BPCL outlet actually ran on.
+ */
+export interface PnlEngineWording {
+  testingSource?: 'RULE' | 'SNAPSHOT';
+  testingPerActivePumpLitres: number;
+  testingMinDeltaLitres: number;
+  /** True when the portal's deliveries are booked exactly as reported. Absent reads as false. */
+  receiptsExact?: boolean;
+}
+
+/** True when the testing litres are the portal's own record (BPCL), not the per-pump charge. */
+export function testingIsPortalRecord(c: Pick<PnlEngineWording, 'testingSource'>): boolean {
+  return c.testingSource === 'SNAPSHOT';
+}
+
+/** What a BPCL outlet's "Testing charged" figure is, in two words. */
+export const PORTAL_TESTING_VALUE = "BPCL's own record";
+
+/**
+ * The per-pump rule as BPCL outlets use it: a fallback for a day the portal gave
+ * no testing figure. Replaces the separate "Pump counts as active" row, which for
+ * such an outlet only matters on those days.
+ */
+export function testingFallbackHint(
+  c: Pick<PnlEngineWording, 'testingPerActivePumpLitres' | 'testingMinDeltaLitres'>,
+): string {
+  return `Only on a day BPCL gave none: ${c.testingPerActivePumpLitres} L for each pump whose meter moved ${c.testingMinDeltaLitres} L or more`;
+}
+
+/**
+ * The opening of the "Was the testing fuel sold?" explanation. The Indian Oil
+ * sentence is the one the page has always printed; a BPCL outlet's says the
+ * litres are BPCL's own record and keeps the part that is still true — the report
+ * assumes every tested litre went back into the tank, and nobody measures that.
+ */
+export function testingQuestionLead(
+  c: Pick<PnlEngineWording, 'testingSource' | 'testingPerActivePumpLitres'>,
+): string {
+  if (!testingIsPortalRecord(c)) {
+    return `The report charges ${c.testingPerActivePumpLitres} litres per active pump per day as testing, and assumes every one of them went back into the tank. Nobody measures it.`;
+  }
+  return `The report takes each day's testing litres from BPCL's own record, and charges ${c.testingPerActivePumpLitres} litres per active pump only on a day BPCL gave none. It assumes every tested litre went back into the tank, and nobody measures that.`;
+}
+
+/** One labelled line of wording, as the shared card prints it. */
+export interface WordedRow {
+  label: string;
+  value: string;
+  hint?: string;
+}
+
+/**
+ * The card's "what the report ran with" lines about testing. An Indian Oil
+ * outlet keeps the two lines it has always had; a BPCL outlet gets one, because
+ * "Pump counts as active" only matters on a day BPCL gave no figure and is said
+ * as part of the fallback instead.
+ */
+export function cardEngineTestingRows(c: PnlEngineWording): WordedRow[] {
+  if (testingIsPortalRecord(c)) {
+    return [{ label: 'Testing charged', value: PORTAL_TESTING_VALUE, hint: testingFallbackHint(c) }];
+  }
+  return [
+    {
+      label: 'Testing charged',
+      value: `${c.testingPerActivePumpLitres} L per pump per day`,
+      hint: 'Assumed — nobody measures it',
+    },
+    { label: 'Pump counts as active', value: `Meter moved ${c.testingMinDeltaLitres} L or more` },
+  ];
+}
+
+/** The hint under the card's measured "Testing charged" litres. */
+export function cardTestingLitresHint(c: Pick<PnlEngineWording, 'testingSource'>): string {
+  return testingIsPortalRecord(c) ? PORTAL_TESTING_VALUE : 'Not measured';
+}
+
+/** "…and nobody measures the testing" in the Assumptions intro, said truthfully for each portal. */
+export function testingUnmeasuredClause(c: Pick<PnlEngineWording, 'testingSource'>): string {
+  return testingIsPortalRecord(c)
+    ? 'nobody measures whether the testing fuel went back into the tank'
+    : 'nobody measures the testing';
+}
+
+/** The "Nobody measures it, so nobody knows" sentence in the card's swing line. */
+export function testingNobodyKnows(c: Pick<PnlEngineWording, 'testingSource'>): string {
+  return testingIsPortalRecord(c)
+    ? 'Nobody measures which, so nobody knows.'
+    : 'Nobody measures it, so nobody knows.';
+}
+
+/** The hint under "Delivery figure used". */
+export function deliveryRoundingHint(c: Pick<PnlEngineWording, 'receiptsExact'>): string {
+  return c.receiptsExact ? 'Exactly as BPCL reports it' : 'Rounded up to the next 500 L';
 }

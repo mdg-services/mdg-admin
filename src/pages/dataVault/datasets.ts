@@ -1,5 +1,7 @@
 import { Database, FileUp, ReceiptText } from 'lucide-react';
 
+import { DAY_DATA_DATASET_ID } from '../dealers/vault/dayData';
+
 import { DocumentsActions, DocumentsPane } from './documents/DocumentsPane';
 import { IrasShiftDataActions, IrasShiftDataPane } from './IrasShiftDataPane';
 import { PadLedgerPane } from './PadLedgerPane';
@@ -22,14 +24,18 @@ import type { VaultDataset } from './types';
  * ids literal so the derived union is the actual ids rather than `string`.
  *
  * ORDER IS THE RAIL ORDER, and the first entry is the default a bare
- * `/data-vault` opens — which is why IRAS stays first: every link an admin has
+ * `/data-vault` opens — which is why the day's readings stay first: every link an admin has
  * already bookmarked predates `?dataset=` and must keep landing there.
  */
 const REGISTRY = [
   {
-    id: 'iras-shift-data',
-    label: 'IRAS shift data',
-    description: 'Shift-anchored IRAS data collected for every dealer',
+    // The URL value is the one every bookmarked link already carries. The dataset
+    // is a day's readings from either portal now — IRAS for an Indian Oil
+    // outlet, BPCL's portal for a BPCL one — so the words are wider than the id.
+    id: DAY_DATA_DATASET_ID,
+    label: 'IRAS & BPCL data',
+    description:
+      "Each day's readings collected for every dealer — from IRAS for Indian Oil outlets, from BPCL's portal for BPCL ones",
     Icon: Database,
     Actions: IrasShiftDataActions,
     Pane: IrasShiftDataPane,
