@@ -33,7 +33,7 @@ export interface DialogProps {
    * At md every value is the same right-aligned row.
    */
   footerBelow?: OverlayFooterBelow;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   /**
    * Whether the mobile sheet plays its slide-up as it mounts. Defaults to true
    * and should stay that way everywhere but one place: a Dialog that REPLACES
@@ -72,6 +72,7 @@ const SIZE_CLASSES: Record<NonNullable<DialogProps['size']>, string> = {
   sm: 'max-w-sm',
   md: 'max-w-lg',
   lg: 'max-w-2xl',
+  xl: 'max-w-5xl',
 };
 
 /**

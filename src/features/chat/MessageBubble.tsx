@@ -12,6 +12,7 @@ import {
   AskFooterPreview,
   AskHeader,
   DealerViewContext,
+  MockDrillPreview,
   PortalLoginPreview,
   SetupCardPreview,
   WemmisLoginPreview,
@@ -199,11 +200,12 @@ export const MessageBubble = React.memo(function MessageBubble({
   const ask = message.ask;
   const portalLogin = message.portalLogin;
   const wemmisLogin = message.wemmisLogin;
+  const mockDrill = message.mockDrill;
   const setupCard = message.setupCard;
   const hasSetupBody = !!setupCard && setupCardHasBody(setupCard.card);
   // A request, a login box, a setup card or a video is as wide as a picture, as in the app.
   const wide =
-    hasMedia || videos.length > 0 || !!ask || !!portalLogin || !!wemmisLogin || hasSetupBody;
+    hasMedia || videos.length > 0 || !!ask || !!portalLogin || !!wemmisLogin || !!mockDrill || hasSetupBody;
 
   // "Instant reply" under a machine-written answer — the dealer sees it; never on a handoff.
   const showAiBadge = !!message.ai && message.ai.kind !== 'handoff';
@@ -213,7 +215,7 @@ export const MessageBubble = React.memo(function MessageBubble({
   // in something with no last line of text (a voice note, a document, a card).
   const metaInFlow =
     !timeOnPicture &&
-    (showAiBadge || !hasBody || !!ask || !!portalLogin || !!wemmisLogin || hasSetupBody);
+    (showAiBadge || !hasBody || !!ask || !!portalLogin || !!wemmisLogin || !!mockDrill || hasSetupBody);
   // Every admin who opens a thread is stamped into readBy/deliveredTo. With the
   // dealer's members known the ticks count only them, so every MDG message —
   // a teammate's, the first line's, a notice or a report card — carries them.
@@ -403,6 +405,8 @@ export const MessageBubble = React.memo(function MessageBubble({
           ) : null}
 
           {wemmisLogin ? <WemmisLoginPreview canEdit={view.canEdit} lang={lang} /> : null}
+
+          {mockDrill ? <MockDrillPreview mockDrill={view.mockDrill} /> : null}
 
           {setupCard ? (
             <SetupCardPreview

@@ -98,6 +98,9 @@ const STILL_STANDING: Partial<Record<AdminAlertKind, string>> = {
   // ── DU OTP ── hiding the alert acknowledges nothing; only the portal taking the row clears it.
   du_otp_ack:
     "Hidden from this list. It clears once IndianOil has the acknowledgement, or the event leaves the portal's list. Fill it in on the outlet's DU OTP pane.",
+  // ── Mock drill ── hiding the alert checks no photos and files nothing.
+  mock_drill:
+    "Hidden from this list. It clears once the photos are checked and the report is filed, or the drill is cancelled. Check it on the outlet's Mock drill pane.",
   // ── leads ── hiding the alert does not get anybody in touch; only a logged contact or a close does.
   lead_new: 'Hidden from this list. This lead stays on the Leads page until somebody gets in touch.',
   lead_due: 'Hidden from this list. This lead stays on the Leads page until somebody gets in touch.',

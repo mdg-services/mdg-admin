@@ -10,6 +10,7 @@ import {
   ReceiptText,
   ScanLine,
   ShieldAlert,
+  Siren,
   Truck,
 } from 'lucide-react';
 
@@ -18,11 +19,12 @@ import { DealerDataVaultTab } from '../DealerDataVaultTab';
 import { DealerDsrTab } from '../DealerDsrTab';
 import { DealerLedgerWatchPane } from '../DealerLedgerWatchPane';
 
+import { DAY_DATA_DATASET_ID, DAY_DATA_SERVICE_IDS, dayDataCopy, providerOfAttached } from './dayData';
 import { DealerCalibrationClaimPane } from './DealerCalibrationClaimPane';
 import { DealerDuOtpAckPane } from './DealerDuOtpAckPane';
-import { DAY_DATA_DATASET_ID, DAY_DATA_SERVICE_IDS, dayDataCopy, providerOfAttached } from './dayData';
 import { DealerInspectionPane } from './DealerInspectionPane';
 import { DealerLoadPlannerPane } from './DealerLoadPlannerPane';
+import { DealerMockDrillPane } from './DealerMockDrillPane';
 import { DealerPadLedgerPane } from './DealerPadLedgerPane';
 import { DealerRoSupplyStatusPane } from './DealerRoSupplyStatusPane';
 import { DealerTtDensityPane } from './DealerTtDensityPane';
@@ -163,6 +165,16 @@ const REGISTRY = [
     Icon: ShieldAlert,
     requiresService: 'du-otp-acknowledgement',
     Pane: DealerDuOtpAckPane,
+  },
+  {
+    // Linked from the `mock_drill` alert as `?tab=data-vault&vault=mock-drill` — never rename the id.
+    id: 'mock-drill',
+    label: 'Mock drill',
+    description:
+      'The emergency mock drill report for IndianOil: what the owner sent, the check before it is filed, and where it stands on the portal.',
+    Icon: Siren,
+    requiresService: 'mock-drill',
+    Pane: DealerMockDrillPane,
   },
 ] as const satisfies readonly DealerVaultDataset[];
 

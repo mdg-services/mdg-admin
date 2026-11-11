@@ -1,4 +1,4 @@
-import { Camera, Check, ChevronRight, Clock, Eye, KeyRound, Lock } from 'lucide-react';
+import { Camera, Check, ChevronRight, Clock, Eye, KeyRound, Lock, Siren } from 'lucide-react';
 import * as React from 'react';
 
 import { Spinner } from '@/components/ui/Spinner';
@@ -13,6 +13,8 @@ import {
   isCompanyPortal,
   TANKER_PORTAL,
   type Message,
+  type MockDrillAdminView,
+  type MockDrillScreen,
   type OilCompanyId,
   type OutletSetupAdmin,
   type PortalId,
@@ -57,6 +59,8 @@ export interface DealerViewValue {
   portalLogins: PortalLoginState[] | undefined;
   /** The portal logins could not be fetched: each block says so instead of spinning. */
   portalLoginsFailed: boolean;
+  /** The outlet's Mock Drill view. `undefined` while loading or not asked for; `null` when it could not be read. */
+  mockDrill: MockDrillAdminView | null | undefined;
   /** The thread's primary member is an owner: the cards are the editable ones. A manager sees them read-only. */
   canEdit: boolean;
   /** A group thread (the manager's, with the owners in it): dealer-side bubbles carry their sender's name. */
@@ -74,6 +78,7 @@ export const DealerViewContext = React.createContext<DealerViewValue>({
   setup: undefined,
   portalLogins: undefined,
   portalLoginsFailed: false,
+  mockDrill: undefined,
   canEdit: true,
   group: false,
   dealerIds: undefined,
@@ -272,6 +277,58 @@ export function WemmisLoginPreview({ canEdit, lang }: { canEdit: boolean; lang: 
         )}
       </div>
       <AdminCaption>{WEMMIS_LOGIN_CAPTION}</AdminCaption>
+    </div>
+  );
+}
+
+// ── The Mock Drill box (`message.mockDrill`) ───────────────────────────────
+
+const MOCK_DRILL_CAPTION = 'Mock drill box sent. It shows the outlet’s state now.';
+
+/**
+ * What the owner's box says for each screen, in the dealer's own wording (English
+ * only: the admin app is English, and this is a one-line picture, not the box).
+ */
+const MOCK_DRILL_SCREEN_WORDS: Record<MockDrillScreen, { title: string; button?: string }> = {
+  start: { title: 'Did your outlet do a mock drill? Send two photos and we will file the report.', button: 'Start' },
+  choose: { title: 'Same drill as last time, or a new kind?', button: 'Same as last time' },
+  collect: { title: 'The owner is giving the details.' },
+  waiting: { title: 'Sent. We are checking it and will file it with IndianOil.' },
+  done: { title: 'Submitted to IndianOil. The Field Officer approves it next.' },
+  blocked: { title: 'IndianOil already has a mock drill report waiting for approval.' },
+  failed: { title: 'The report could not be filed. MDG has been told.' },
+};
+
+/**
+ * The Mock Drill box (`message.mockDrill`): a compact card with the screen the
+ * owner is on now. The box carries nothing of its own; the app reads the outlet's
+ * live state, so this reads the same view and never shows a stale picture.
+ */
+export function MockDrillPreview({ mockDrill }: { mockDrill: MockDrillAdminView | null | undefined }) {
+  const words = mockDrill ? MOCK_DRILL_SCREEN_WORDS[mockDrill.screen] : undefined;
+  return (
+    <div data-mock-drill title={PREVIEW_TITLE} className="mt-1 flex flex-col gap-1.5">
+      <Block>
+        <p className="flex min-w-0 items-center gap-1.5 break-words text-[14px] font-medium leading-snug">
+          <Siren width={14} strokeWidth={2} className="shrink-0 text-wa-meta" aria-hidden />
+          Mock drill
+        </p>
+        {mockDrill === undefined ? (
+          <div className="mt-2 flex items-center">
+            <Spinner />
+          </div>
+        ) : words ? (
+          <>
+            <p className="mt-1 text-[13px] leading-snug text-wa-bubble-text">{words.title}</p>
+            {words.button ? (
+              <FakeButton className={cn(PRIMARY_BUTTON, 'mt-2 opacity-60')}>{words.button}</FakeButton>
+            ) : null}
+          </>
+        ) : (
+          <Note className="mt-1">The outlet’s mock drill state could not be read.</Note>
+        )}
+      </Block>
+      <AdminCaption>{MOCK_DRILL_CAPTION}</AdminCaption>
     </div>
   );
 }

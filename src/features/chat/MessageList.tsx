@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import * as React from 'react';
 
 import { useToast } from '@/components/ui/Toast';
+import { useMockDrillAdminView, useMockDrillLive } from '@/hooks/api/useMockDrill';
 import { useOutletSetupQuery } from '@/hooks/api/useOnboarding';
 import { usePortalLogins } from '@/hooks/api/usePortalLogins';
 import { useStickToBottom } from '@/hooks/useStickToBottom';
@@ -224,6 +225,9 @@ export function MessageList({
   const needsLogins = React.useMemo(() => ordered.some((m) => !!m.portalLogin), [ordered]);
   const setupQ = useOutletSetupQuery(needsSetup ? dealerId : undefined);
   const loginsQ = usePortalLogins(dealerId, needsLogins);
+  const needsMockDrill = React.useMemo(() => ordered.some((m) => !!m.mockDrill), [ordered]);
+  const mockDrillQ = useMockDrillAdminView(needsMockDrill ? dealerId : undefined);
+  useMockDrillLive(needsMockDrill ? dealerId : undefined);
   const lang = React.useMemo(() => guessDealerLang(ordered), [ordered]);
   const dealerKey = dealerMemberIds?.join(',');
   const dealerIds = React.useMemo(
@@ -238,6 +242,7 @@ export function MessageList({
       setup: !needsSetup ? undefined : setupQ.isError ? null : setupQ.data,
       portalLogins: loginsQ.data,
       portalLoginsFailed: loginsQ.isError && !loginsQ.data,
+      mockDrill: !needsMockDrill ? undefined : mockDrillQ.data ?? (mockDrillQ.isError ? null : undefined),
       // A manager's thread shows the cards read-only, as the manager's app does.
       canEdit: memberRole !== 'dealer-staff',
       group,
@@ -250,6 +255,9 @@ export function MessageList({
       setupQ.data,
       loginsQ.isError,
       loginsQ.data,
+      needsMockDrill,
+      mockDrillQ.data,
+      mockDrillQ.isError,
       memberRole,
       group,
       dealerIds,
