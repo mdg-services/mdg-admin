@@ -24,7 +24,6 @@ import { describePending, reportsAffected, type PendingDescription } from './des
 import { shiftRowGroupName } from './ShiftSheet';
 import { toChanges, type PendingApi } from './usePendingChanges';
 
-const REASON_MIN = 3;
 const REASON_MAX = 500;
 /** Report dates listed in full before collapsing into "+ N more". */
 const DATES_SHOWN = 6;
@@ -127,8 +126,6 @@ export function ReviewApplyDialog({
   manual,
 }: ReviewApplyDialogProps) {
   const [reason, setReason] = React.useState('');
-  /** Only complain about the reason once they have actually typed in it. */
-  const [touchedReason, setTouchedReason] = React.useState(false);
   const [showEveryFigure, setShowEveryFigure] = React.useState(false);
   const preview = usePreviewIrasCorrections(day.dealer.id, day.businessDate);
 
@@ -193,14 +190,11 @@ export function ReviewApplyDialog({
     if (!open) {
       requested.current = false;
       setReason('');
-      setTouchedReason(false);
       setShowEveryFigure(false);
       return;
     }
     if (requested.current) return;
     requested.current = true;
-    // Pre-filled but NOT marked as touched, so an untouched default does not
-    // make the form look edited or start it off with a validation message.
     setReason(manual?.defaultReason ?? '');
     // A commit that changes figures already on record opens with the figures
     // themselves showing: there is no honest one-line summary of "the operator
@@ -213,10 +207,12 @@ export function ReviewApplyDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const reasonOk = reason.trim().length >= REASON_MIN && reason.trim().length <= REASON_MAX;
+  // The reason is optional: blank is a valid answer. Only a note too long for
+  // the server to store blocks Apply, and the box's own `maxLength` already
+  // stops that being typed, so this is a pasted-text backstop.
+  const reasonOk = reason.trim().length <= REASON_MAX;
 
   function appendChip(text: string) {
-    setTouchedReason(true);
     setReason((prev) => {
       const base = prev.trim();
       if (base.includes(text)) return prev;
@@ -391,7 +387,7 @@ export function ReviewApplyDialog({
 
   const reasonSection = (
     <div className="min-w-0">
-      <Label htmlFor="correction-reason" required>
+      <Label htmlFor="correction-reason">
         {/*
           Two questions, because there are two acts, and the surface is not what
           separates them. Typing a shift in overwrites nothing, so the only thing
@@ -402,7 +398,8 @@ export function ReviewApplyDialog({
           WHY is the whole control. So a hand day asks "why" too, as soon as it
           is correcting rather than typing: see `correcting` above.
         */}
-        {manual && !correcting ? 'Where did these figures come from?' : 'Why is this being corrected?'}
+        {manual && !correcting ? 'Where did these figures come from?' : 'Why is this being corrected?'}{' '}
+        <span className="font-normal text-text-subtle">(optional)</span>
       </Label>
       {manual ? (
         <div className="mb-1.5 flex flex-wrap gap-1.5">
@@ -423,7 +420,7 @@ export function ReviewApplyDialog({
         value={reason}
         rows={2}
         maxLength={REASON_MAX}
-        invalid={touchedReason && !reasonOk}
+        invalid={!reasonOk}
         aria-describedby="correction-reason-hint"
         placeholder={
           correcting
@@ -437,23 +434,16 @@ export function ReviewApplyDialog({
               : 'e.g. Tanker decanted on the 14th, invoice 88231 — never entered at the outlet'
         }
         onChange={(e) => {
-          setTouchedReason(true);
           setReason(e.target.value);
         }}
       />
-      {/* The gate has to name itself. This used to read "One line." while
-          silently requiring three characters, so an operator who typed "ok"
-          got a dead button, no message, and nothing to guess from — and the
-          button sits in the sticky footer, out of sight of this field. Only
-          after they have typed, though: leading with an error on an untouched
-          form scolds someone who has not done anything wrong yet. */}
-      {touchedReason && !reasonOk ? (
-        <FieldError message={`Please write at least ${REASON_MIN} characters.`} />
+      {!reasonOk ? (
+        <FieldError message={`Please keep this under ${REASON_MAX} characters.`} />
       ) : (
         <p id="correction-reason-hint" className="mt-1 text-xs text-text-subtle">
           {manual && !correcting
             ? 'This is stored with every figure here. Change it if something needs explaining — a meter that was replaced, a tanker entered late.'
-            : `One line, ${REASON_MIN} characters or more. It is stored with every change here and is what makes this readable in a month.`}
+            : 'You can leave this blank. If you write one, it is stored with every change here and makes this readable in a month.'}
         </p>
       )}
     </div>
@@ -496,7 +486,7 @@ export function ReviewApplyDialog({
             // underneath it. `md:order-none` puts it back at the head of the
             // right-aligned row at md.
             <p className="order-last w-full text-sm text-text-muted md:order-none md:w-auto">
-              Write at least {REASON_MIN} characters above to apply these changes.
+              Shorten the note above to apply these changes.
             </p>
           )}
           <Button variant="secondary" onClick={onClose} disabled={applying}>

@@ -1457,7 +1457,8 @@ function CorrectionHistory({ dealerId }: { dealerId: string }) {
                 ),
                 meta: (
                   <span className="block break-words">
-                    {c.reason} · {formatDateTime(c.at)}
+                    {c.reason ? `${c.reason} · ` : ''}
+                    {formatDateTime(c.at)}
                   </span>
                 ),
               }))}
@@ -1474,7 +1475,7 @@ function CorrectionHistory({ dealerId }: { dealerId: string }) {
                       {c.portalValue ?? '—'} → {c.value ?? '—'}
                     </span>
                   ) : null}
-                  <span className="text-text-subtle">· {c.reason}</span>
+                  {c.reason ? <span className="text-text-subtle">· {c.reason}</span> : null}
                   <span className="text-text-subtle">· {formatDateTime(c.at)}</span>
                 </li>
               ))}
