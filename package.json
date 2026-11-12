@@ -31,6 +31,7 @@
     "check:signup-origin": "npx tsx --test scripts/signupOrigin.check.ts",
     "check:inbox-desk": "npx tsx --test scripts/inboxDesk.check.ts",
     "check:calibration-claim": "npx tsx --test scripts/calibrationClaim.check.ts",
+    "check:declarations": "npx tsx --test scripts/declarations.check.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""

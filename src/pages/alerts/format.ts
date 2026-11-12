@@ -101,6 +101,9 @@ const STILL_STANDING: Partial<Record<AdminAlertKind, string>> = {
   // ── Mock drill ── hiding the alert checks no photos and files nothing.
   mock_drill:
     "Hidden from this list. It clears once the photos are checked and the report is filed, or the drill is cancelled. Check it on the outlet's Mock drill pane.",
+  // ── Declarations ── hiding the alert fills no form and asks nobody for photos.
+  declarations:
+    "Hidden from this list. It clears once the declaration is filled on IndianOil's portal (read again), the photos arrive, or the task is marked done. Look at it on the outlet's Declarations pane.",
   // ── leads ── hiding the alert does not get anybody in touch; only a logged contact or a close does.
   lead_new: 'Hidden from this list. This lead stays on the Leads page until somebody gets in touch.',
   lead_due: 'Hidden from this list. This lead stays on the Leads page until somebody gets in touch.',

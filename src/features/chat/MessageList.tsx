@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import * as React from 'react';
 
 import { useToast } from '@/components/ui/Toast';
+import { useDeclarationsAdminView, useDeclarationsLive } from '@/hooks/api/useDeclarations';
 import { useMockDrillAdminView, useMockDrillLive } from '@/hooks/api/useMockDrill';
 import { useOutletSetupQuery } from '@/hooks/api/useOnboarding';
 import { usePortalLogins } from '@/hooks/api/usePortalLogins';
@@ -228,6 +229,9 @@ export function MessageList({
   const needsMockDrill = React.useMemo(() => ordered.some((m) => !!m.mockDrill), [ordered]);
   const mockDrillQ = useMockDrillAdminView(needsMockDrill ? dealerId : undefined);
   useMockDrillLive(needsMockDrill ? dealerId : undefined);
+  const needsDeclarations = React.useMemo(() => ordered.some((m) => !!m.declarations), [ordered]);
+  const declarationsQ = useDeclarationsAdminView(needsDeclarations ? dealerId : undefined);
+  useDeclarationsLive(needsDeclarations ? dealerId : undefined);
   const lang = React.useMemo(() => guessDealerLang(ordered), [ordered]);
   const dealerKey = dealerMemberIds?.join(',');
   const dealerIds = React.useMemo(
@@ -243,6 +247,9 @@ export function MessageList({
       portalLogins: loginsQ.data,
       portalLoginsFailed: loginsQ.isError && !loginsQ.data,
       mockDrill: !needsMockDrill ? undefined : mockDrillQ.data ?? (mockDrillQ.isError ? null : undefined),
+      declarations: !needsDeclarations
+        ? undefined
+        : declarationsQ.data ?? (declarationsQ.isError ? null : undefined),
       // A manager's thread shows the cards read-only, as the manager's app does.
       canEdit: memberRole !== 'dealer-staff',
       group,
@@ -258,6 +265,9 @@ export function MessageList({
       needsMockDrill,
       mockDrillQ.data,
       mockDrillQ.isError,
+      needsDeclarations,
+      declarationsQ.data,
+      declarationsQ.isError,
       memberRole,
       group,
       dealerIds,

@@ -1,8 +1,9 @@
-import { Camera, Check, ChevronRight, Clock, Eye, KeyRound, Lock, Siren } from 'lucide-react';
+import { Camera, Check, ChevronRight, Clock, Eye, KeyRound, ListChecks, Lock, Siren } from 'lucide-react';
 import * as React from 'react';
 
 import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/cn';
+import { formatYmd } from '@/lib/format';
 import {
   GST_STATES,
   OIL_COMPANIES,
@@ -12,6 +13,8 @@ import {
   guidedResetUrl,
   isCompanyPortal,
   TANKER_PORTAL,
+  type DeclarationScreen,
+  type DeclarationsAdminView,
   type Message,
   type MockDrillAdminView,
   type MockDrillScreen,
@@ -61,6 +64,8 @@ export interface DealerViewValue {
   portalLoginsFailed: boolean;
   /** The outlet's Mock Drill view. `undefined` while loading or not asked for; `null` when it could not be read. */
   mockDrill: MockDrillAdminView | null | undefined;
+  /** The outlet's Declarations view. `undefined` while loading or not asked for; `null` when it could not be read. */
+  declarations: DeclarationsAdminView | null | undefined;
   /** The thread's primary member is an owner: the cards are the editable ones. A manager sees them read-only. */
   canEdit: boolean;
   /** A group thread (the manager's, with the owners in it): dealer-side bubbles carry their sender's name. */
@@ -79,6 +84,7 @@ export const DealerViewContext = React.createContext<DealerViewValue>({
   portalLogins: undefined,
   portalLoginsFailed: false,
   mockDrill: undefined,
+  declarations: undefined,
   canEdit: true,
   group: false,
   dealerIds: undefined,
@@ -329,6 +335,82 @@ export function MockDrillPreview({ mockDrill }: { mockDrill: MockDrillAdminView 
         )}
       </Block>
       <AdminCaption>{MOCK_DRILL_CAPTION}</AdminCaption>
+    </div>
+  );
+}
+
+// ── The Declarations box (`message.declarations`) ──────────────────────────
+
+const DECLARATIONS_CAPTION = 'Declarations box sent. It shows the outlet’s state now.';
+
+/**
+ * What the owner's box says for each screen (English only: the admin app is
+ * English, and this is a one-line picture, not the box). `idle` is worded from
+ * the view, since it names the dates.
+ */
+const DECLARATIONS_SCREEN_WORDS: Record<
+  Exclude<DeclarationScreen, 'idle'>,
+  { title: string; button?: string }
+> = {
+  collect: {
+    title: 'IndianOil needs 2 photos of your washroom this week: one outside, one inside.',
+    button: 'Send',
+  },
+  waiting: { title: 'Photos received. We are filing it on IndianOil’s portal.' },
+  done: { title: 'Filed on IndianOil’s portal.' },
+  failed: { title: 'We could not file it. Our team is looking into it.' },
+};
+
+function declarationsIdleLine(view: DeclarationsAdminView): string {
+  const last = view.lastWashroomFiledDay
+    ? `Washroom declaration last filed ${formatYmd(view.lastWashroomFiledDay)}`
+    : 'Washroom declaration not filed by MDG yet';
+  const next = view.nextWashroomDueDay ? `; next due ${formatYmd(view.nextWashroomDueDay)}` : '';
+  return `Nothing needed now. ${last}${next}.`;
+}
+
+/**
+ * The Declarations box (`message.declarations`): a compact card with the screen
+ * the owner is on now. The box carries nothing of its own; the app reads the
+ * outlet's live state, so this reads the same view and never shows a stale
+ * picture.
+ */
+export function DeclarationsPreview({
+  declarations,
+}: {
+  declarations: DeclarationsAdminView | null | undefined;
+}) {
+  const screen = declarations?.screen;
+  const words = !declarations
+    ? undefined
+    : screen === 'idle'
+      ? { title: declarationsIdleLine(declarations), button: undefined }
+      : screen
+        ? DECLARATIONS_SCREEN_WORDS[screen]
+        : undefined;
+  return (
+    <div data-declarations title={PREVIEW_TITLE} className="mt-1 flex flex-col gap-1.5">
+      <Block>
+        <p className="flex min-w-0 items-center gap-1.5 break-words text-[14px] font-medium leading-snug">
+          <ListChecks width={14} strokeWidth={2} className="shrink-0 text-wa-meta" aria-hidden />
+          Declarations
+        </p>
+        {declarations === undefined ? (
+          <div className="mt-2 flex items-center">
+            <Spinner />
+          </div>
+        ) : words ? (
+          <>
+            <p className="mt-1 text-[13px] leading-snug text-wa-bubble-text">{words.title}</p>
+            {words.button ? (
+              <FakeButton className={cn(PRIMARY_BUTTON, 'mt-2 opacity-60')}>{words.button}</FakeButton>
+            ) : null}
+          </>
+        ) : (
+          <Note className="mt-1">The outlet’s declarations state could not be read.</Note>
+        )}
+      </Block>
+      <AdminCaption>{DECLARATIONS_CAPTION}</AdminCaption>
     </div>
   );
 }

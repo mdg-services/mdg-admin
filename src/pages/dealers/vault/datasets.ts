@@ -7,6 +7,7 @@ import {
   FileCheck2,
   Fuel,
   Gauge,
+  ListChecks,
   ReceiptText,
   ScanLine,
   ShieldAlert,
@@ -21,6 +22,7 @@ import { DealerLedgerWatchPane } from '../DealerLedgerWatchPane';
 
 import { DAY_DATA_DATASET_ID, DAY_DATA_SERVICE_IDS, dayDataCopy, providerOfAttached } from './dayData';
 import { DealerCalibrationClaimPane } from './DealerCalibrationClaimPane';
+import { DealerDeclarationsPane } from './DealerDeclarationsPane';
 import { DealerDuOtpAckPane } from './DealerDuOtpAckPane';
 import { DealerInspectionPane } from './DealerInspectionPane';
 import { DealerLoadPlannerPane } from './DealerLoadPlannerPane';
@@ -175,6 +177,16 @@ const REGISTRY = [
     Icon: Siren,
     requiresService: 'mock-drill',
     Pane: DealerMockDrillPane,
+  },
+  {
+    // Linked from the `declarations` alert as `?tab=data-vault&vault=declarations` — never rename the id.
+    id: 'declarations',
+    label: 'Declarations',
+    description:
+      'The four declarations IndianOil’s portal keeps for this outlet: safety every day, washroom with two photos, the standard form once, and Branded Fuels for an admin to fill.',
+    Icon: ListChecks,
+    requiresService: 'dealer-declarations',
+    Pane: DealerDeclarationsPane,
   },
 ] as const satisfies readonly DealerVaultDataset[];
 
