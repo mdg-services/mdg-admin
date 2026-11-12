@@ -23,7 +23,7 @@ import type {
   TriageItem,
 } from '@dk/shared';
 import {
-  AI_SENDABLE_STATES,
+  aiPersonMaySend,
   DSR_SHEET_LABELS,
   DSR_SHEETS,
   dealerCodeLabel,
@@ -514,7 +514,7 @@ export function boardAction(row: DealerDayRow, reportingDate: string): BoardActi
     // from a list. The admin is taken to it, where each problem can be read and
     // ticked. The server refuses the send anyway; this keeps the button honest.
     const ai = row.dsr.ai;
-    if (ai && !AI_SENDABLE_STATES.has(ai.state)) {
+    if (ai && !aiPersonMaySend('dsr', ai.state)) {
       const checking = ai.state === 'CHECKING' || ai.state === 'NOT_CHECKED';
       return {
         kind: 'blocked',

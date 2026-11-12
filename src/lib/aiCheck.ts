@@ -1,7 +1,7 @@
 import type { Intent } from '@/lib/statusIntent';
 import {
-  AI_SENDABLE_STATES,
   AI_UNCHECKED_ID,
+  aiPersonMaySend,
   type AiCheckView,
   type AiProblem,
   type AiSendState,
@@ -12,13 +12,19 @@ import {
  * the badge and the Share buttons all say the same thing.
  */
 
-/** May this report go to the dealer, as far as the AI check is concerned? */
+/**
+ * May this report go to the dealer, as far as the AI check is concerned?
+ *
+ * A Daily Sales Report is not held for a check that has not finished (owner,
+ * 12 Nov 2026): Share works while the AI is still looking, and the check carries
+ * on beside the send. A finished check that found something still holds it.
+ */
 export function aiSendable(view: AiCheckView | null | undefined): boolean {
   // Not loaded yet, or the request failed: say nothing here. The server's own
   // gate refuses a held report with the reason, and taking Share away from every
   // dealer because one request failed would be the worse failure.
   if (!view) return true;
-  return AI_SENDABLE_STATES.has(view.state);
+  return aiPersonMaySend(view.kind, view.state);
 }
 
 /** Problems a person still has to tick, in the order the AI listed them. */
