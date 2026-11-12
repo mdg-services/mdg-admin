@@ -36,9 +36,9 @@ import {
 } from '@/hooks/api/useDocumentAsks';
 import { useDocumentKindCatalog } from '@/hooks/api/useDocumentKinds';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useOpenPaper } from '@/hooks/useOpenPaper';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, formatYmd, istTodayYmd } from '@/lib/format';
-import { isNativeShell, requestNativeDownload } from '@/lib/nativeBridge';
 import {
   addIsoMonths,
   dealerCodeLabel,
@@ -279,29 +279,12 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
     }
   }
 
-  /** Open a PDF the way the shell can actually open one. Same route as the invoice drawer. */
-  async function openPdf(): Promise<void> {
-    const urls = fileQ.data;
-    if (!urls) return;
-    if (isNativeShell()) {
-      // The admin shell runs with `setSupportMultipleWindows={false}`, so
-      // `window.open` is unreliable inside it; the shell's own handler saves the
-      // file and hands it to whatever the phone uses for PDFs.
-      const result = await requestNativeDownload({
-        id: `ask-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        url: urls.downloadUrl,
-        filename: urls.filename,
-        contentType: urls.contentType,
-        kind: 'file',
-      });
-      if (result.ok) return;
-      if (!result.timedOut) {
-        toast.error(result.error || 'Could not open the document');
-        return;
-      }
-    }
-    window.open(urls.viewUrl, '_blank', 'noopener');
+  // A PDF opens in the app's own reader on a phone or in the app; a laptop gets a tab.
+  const paper = useOpenPaper('Could not open the document');
+  function openPdf(): void {
+    if (fileQ.data) paper.open(fileQ.data);
   }
+
 
   if (!row) return null;
 
@@ -573,7 +556,7 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
                         variant="secondary"
                         size="sm"
                         leftIcon={<ExternalLink width={14} height={14} strokeWidth={1.75} />}
-                        onClick={() => void openPdf()}
+                        onClick={openPdf}
                       >
                         Open
                       </Button>
@@ -586,7 +569,7 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
                       />
                     </>
                   ) : (
-                    <Button size="sm" onClick={() => void openPdf()}>
+                    <Button size="sm" onClick={openPdf}>
                       Open PDF
                     </Button>
                   )}
@@ -705,6 +688,7 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
           downloadUrl={fileQ.data.downloadUrl}
         />
       ) : null}
+      {paper.reader}
     </>
   );
 }

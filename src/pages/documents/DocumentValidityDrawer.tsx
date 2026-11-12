@@ -17,10 +17,10 @@ import {
 } from '@/components/ui';
 import { useDocumentAskFileUrl, useSetDocumentValidity } from '@/hooks/api/useDocumentAsks';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useOpenPaper } from '@/hooks/useOpenPaper';
 import { useRevealOnChange } from '@/hooks/useRevealOnChange';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, istTodayYmd } from '@/lib/format';
-import { isNativeShell, requestNativeDownload } from '@/lib/nativeBridge';
 import {
   dealerCodeLabel,
   dealerProfileDateLabel,
@@ -118,29 +118,12 @@ export function DocumentValidityDrawer({ open, row, onClose }: DocumentValidityD
   const fileQ = useDocumentAskFileUrl(row?.askId, open && Boolean(row?.hasFile));
   const isImage = fileQ.data?.contentType.startsWith('image/') ?? false;
 
-  /** Open a PDF the way the shell can actually open one. Same route as the review drawer. */
-  async function openPaper(): Promise<void> {
-    const urls = fileQ.data;
-    if (!urls) return;
-    if (isNativeShell()) {
-      // The admin shell runs `setSupportMultipleWindows={false}`, so
-      // `window.open` is unreliable inside it; the shell's own handler saves the
-      // file and hands it to whatever the phone uses for PDFs.
-      const result = await requestNativeDownload({
-        id: `ask-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        url: urls.downloadUrl,
-        filename: urls.filename,
-        contentType: urls.contentType,
-        kind: 'file',
-      });
-      if (result.ok) return;
-      if (!result.timedOut) {
-        toast.error(result.error || 'Could not open the paper');
-        return;
-      }
-    }
-    window.open(urls.viewUrl, '_blank', 'noopener');
+  // A PDF opens in the app's own reader on a phone or in the app; a laptop gets a tab.
+  const paper = useOpenPaper('Could not open the paper');
+  function openPaper(): void {
+    if (fileQ.data) paper.open(fileQ.data);
   }
+
 
   if (!row) return null;
 
@@ -293,7 +276,7 @@ export function DocumentValidityDrawer({ open, row, onClose }: DocumentValidityD
                       variant="secondary"
                       size="sm"
                       leftIcon={<ExternalLink width={14} height={14} strokeWidth={1.75} />}
-                      onClick={() => void openPaper()}
+                      onClick={openPaper}
                     >
                       Open
                     </Button>
@@ -306,7 +289,7 @@ export function DocumentValidityDrawer({ open, row, onClose }: DocumentValidityD
                     />
                   </>
                 ) : (
-                  <Button size="sm" onClick={() => void openPaper()}>
+                  <Button size="sm" onClick={openPaper}>
                     Open
                   </Button>
                 )}
@@ -416,6 +399,7 @@ export function DocumentValidityDrawer({ open, row, onClose }: DocumentValidityD
           downloadUrl={fileQ.data.downloadUrl}
         />
       ) : null}
+      {paper.reader}
     </>
   );
 }

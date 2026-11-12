@@ -15,8 +15,9 @@
  * and each allowed place is counted. A new one fails the build. Use instead:
  *
  *  - a photo:        `ImageLightbox` (`@/components/ui`)
- *  - a file or PDF:  `downloadFile` (`@/lib/downloadFile`), or the phone-first
- *                    open the PDF drawers use (`requestNativeDownload`, then a tab)
+ *  - a PDF:          `PdfViewer` (`@/components/ui`), or `useOpenPaper` for a
+ *                    stored paper with a view link and a download link
+ *  - any other file: `downloadFile` (`@/lib/downloadFile`)
  *  - a page of another site: add it to ALLOWED below, with why
  *
  * Plain Node, no packages, so it can run before the build anywhere:
@@ -71,13 +72,10 @@ const ALLOWED = {
     count: 2,
     why: 'the full DSR report in a laptop tab; hidden inside the phone app',
   },
-  // The PDF drawers: each opens the paper through the phone app's own file handler
-  // first, and only a browser (or an old app that never answers) gets a tab.
-  'src/pages/dataVault/documents/ReviewAskDrawer.tsx': { count: 1, why: 'phone first, then a tab' },
-  'src/pages/documents/DocumentValidityDrawer.tsx': { count: 1, why: 'phone first, then a tab' },
-  'src/pages/dealers/vault/calibrationClaim/PaperViewer.tsx': { count: 1, why: 'phone first, then a tab' },
-  'src/pages/dealers/vault/duOtp/OpenFileButton.tsx': { count: 1, why: 'phone first, then a tab' },
-  'src/pages/dealers/vault/ttDensity/InvoicePdfDrawer.tsx': { count: 1, why: 'phone first, then a tab' },
+  'src/hooks/useOpenPaper.tsx': {
+    count: 2,
+    why: "the vault papers' one road: a laptop browser gets a tab; in the app a PDF opens in PdfViewer",
+  },
 };
 
 /** Comments explain the rule and quote the bad pattern; only code counts. */
