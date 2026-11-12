@@ -92,7 +92,7 @@ export function PaperViewer({
             <Button
               variant="secondary"
               leftIcon={<ExternalLink width={14} height={14} strokeWidth={1.75} />}
-              onClick={() => window.open(urls.viewUrl, '_blank', 'noopener')}
+              onClick={() => void openOnPhone()}
             >
               Open in a new tab
             </Button>

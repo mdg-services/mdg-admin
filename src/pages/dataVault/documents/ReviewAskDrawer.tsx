@@ -573,7 +573,7 @@ export function ReviewAskDrawer({ open, row, onClose, onAskFor }: ReviewAskDrawe
                         variant="secondary"
                         size="sm"
                         leftIcon={<ExternalLink width={14} height={14} strokeWidth={1.75} />}
-                        onClick={() => window.open(fileQ.data.viewUrl, '_blank', 'noopener')}
+                        onClick={() => void openPdf()}
                       >
                         Open
                       </Button>
