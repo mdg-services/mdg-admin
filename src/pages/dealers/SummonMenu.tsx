@@ -40,8 +40,22 @@ export function SummonMenu({ dealerId }: { dealerId: string }) {
   async function open(portal: SummonPortal) {
     const label = SUMMON_PORTAL_LABEL[portal];
     setBusy(portal);
+    // The server may hold an SDMS press (up to 50 seconds) while our automatic checks finish
+    // with this login and the portal gets its short pause. Say so, rather than nothing.
+    let waitingToast: string | null = null;
+    const slow = window.setTimeout(() => {
+      waitingToast = toast.info(`Waiting for ${label}…`, {
+        description:
+          portal === 'sdms'
+            ? 'Our automatic checks are using this login or have just used it, and the portal needs a short pause before the next sign-in. This can take up to a minute; the tab opens by itself.'
+            : 'The server is slow to answer. The tab opens by itself.',
+        duration: 0,
+      });
+    }, 3000);
     try {
       const ticket = await api.post<SummonTicket>('/summon', { dealerId, portal });
+      window.clearTimeout(slow);
+      if (waitingToast) toast.dismiss(waitingToast);
       toast.info(`Opening ${label} in a new tab…`);
       const result = await extension.send(ticket);
       if (result.state === 'signed_in')
@@ -53,6 +67,8 @@ export function SummonMenu({ dealerId }: { dealerId: string }) {
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : `Could not open ${label}.`);
     } finally {
+      window.clearTimeout(slow);
+      if (waitingToast) toast.dismiss(waitingToast);
       setBusy(null);
     }
   }
