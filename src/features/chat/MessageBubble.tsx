@@ -1,11 +1,24 @@
-import { Check, CheckCheck, CheckCircle2, ChevronDown, Clock, Zap } from 'lucide-react';
+import { Check, CheckCheck, CheckCircle2, ChevronDown, Clock, Megaphone, Zap } from 'lucide-react';
 import * as React from 'react';
 
 import { requestLabel } from '@/lib/chatAsk';
 import { cn } from '@/lib/cn';
-import { linkify } from '@/lib/linkify';
+import { linkify, richText } from '@/lib/linkify';
 import { useLongPress } from '@/lib/useLongPress';
-import type { DealerOpenRequest, Message, MessageReaction } from '@dk/shared';
+import {
+  ANNOUNCEMENT_TONE_LABELS,
+  type AnnouncementTone,
+  type DealerOpenRequest,
+  type Message,
+  type MessageReaction,
+} from '@dk/shared';
+
+/** The announcement strip's colours, as the dealer's chat paints them. */
+const ANNOUNCEMENT_STRIP: Record<AnnouncementTone, { bg: string; fg: string }> = {
+  new: { bg: '#059669', fg: '#ffffff' },
+  notice: { bg: '#0284c7', fg: '#ffffff' },
+  important: { bg: '#f59e0b', fg: '#451a03' },
+};
 
 import { BubbleAttachments, splitAttachments } from './AttachmentPreview';
 import {
@@ -204,6 +217,8 @@ export const MessageBubble = React.memo(function MessageBubble({
   const mockDrill = message.mockDrill;
   const declarations = message.declarations;
   const setupCard = message.setupCard;
+  // An announcement (ADR 0039): the strip and bold title the dealer sees, then its words.
+  const announcement = message.announcement;
   const hasSetupBody = !!setupCard && setupCardHasBody(setupCard.card);
   // A request, a login box, a setup card or a video is as wide as a picture, as in the app.
   const wide =
@@ -371,6 +386,24 @@ export const MessageBubble = React.memo(function MessageBubble({
             </div>
           ) : null}
 
+          {announcement ? (
+            <div className="mb-1 overflow-hidden rounded-md" data-testid="announcement-header">
+              <div
+                className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-bold uppercase tracking-wider"
+                style={{
+                  background: ANNOUNCEMENT_STRIP[announcement.tone].bg,
+                  color: ANNOUNCEMENT_STRIP[announcement.tone].fg,
+                }}
+              >
+                <Megaphone width={13} strokeWidth={2.4} className="shrink-0" aria-hidden />
+                <span>{ANNOUNCEMENT_TONE_LABELS[announcement.tone]}</span>
+              </div>
+              <p className="px-2 pt-1.5 text-[16px] font-bold leading-snug [overflow-wrap:anywhere]">
+                {announcement.title}
+              </p>
+            </div>
+          ) : null}
+
           {hasBody ? (
             <div
               className={cn(
@@ -381,7 +414,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                 hasMedia || hasOther ? 'px-[6px] pb-0.5 pt-1' : '',
               )}
             >
-              {linkify(message.body!)}
+              {announcement ? richText(message.body!) : linkify(message.body!)}
               {/* The trailing spacer: as wide as the time (and ticks) in the
                   bottom-right corner, so the last line of words stops short of
                   them — or wraps to a line of its own — as the app's does. */}

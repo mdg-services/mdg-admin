@@ -16,6 +16,7 @@ import {
   IndianRupee,
   LayoutDashboard,
   ListChecks,
+  Megaphone,
   MessageCircle,
   MessageSquare,
   MessageSquareWarning,
@@ -212,6 +213,8 @@ export const NAV_ITEMS: NavItem[] = [
   // tell a dealer to order earlier before a closure. Same blast radius as
   // bank holidays, so it sits right beside it with the same gate.
   { to: '/depot-holidays', label: 'Depot holidays', icon: Warehouse, superAdminOnly: true },
+  // One message to many pumps at once, drawn as a coloured card in each chat (ADR 0039).
+  { to: '/announcements', label: 'Announcements', icon: Megaphone, superAdminOnly: true },
   { to: '/festival', label: 'Festival greeting', icon: PartyPopper, superAdminOnly: true },
   { to: '/activity', label: 'Activity', icon: ScrollText, superAdminOnly: true },
   { to: '/settings/team', label: 'Team', icon: UserCog, superAdminOnly: true },

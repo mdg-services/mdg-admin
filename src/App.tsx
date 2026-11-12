@@ -188,6 +188,11 @@ const LeadsPage = React.lazy(
     import('@/pages/leads/LeadsPage').then((m) => ({ default: m.LeadsPage })),
   ),
 );
+const AnnouncementsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/AnnouncementsPage').then((m) => ({ default: m.AnnouncementsPage })),
+  ),
+);
 const FestivalPage = React.lazy(
   retryImport(() =>
     import('@/pages/FestivalPage').then((m) => ({ default: m.FestivalPage })),
@@ -752,6 +757,16 @@ export default function App() {
               <RequireSuperAdmin>
                 <LazyPage>
                   <DepotHolidaysPage />
+                </LazyPage>
+              </RequireSuperAdmin>
+            }
+          />
+          <Route
+            path="announcements"
+            element={
+              <RequireSuperAdmin>
+                <LazyPage>
+                  <AnnouncementsPage />
                 </LazyPage>
               </RequireSuperAdmin>
             }
