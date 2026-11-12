@@ -1,4 +1,4 @@
-import { Check, CheckCheck, CheckCircle2, ChevronDown, Clock, Megaphone, Zap } from 'lucide-react';
+import { BellRing, Check, CheckCheck, CheckCircle2, ChevronDown, Clock, Megaphone, Zap } from 'lucide-react';
 import * as React from 'react';
 
 import { requestLabel } from '@/lib/chatAsk';
@@ -91,6 +91,17 @@ function MessageTicks({
   }
   const delivered = (message.deliveredTo ?? []).some(counts);
   if (delivered) return <CheckCheck width={15} strokeWidth={2} aria-label="Delivered" />;
+  // ADR 0040 §2: the app has not opened since, but their phone was sent a
+  // notification that Google or Apple took — a bell beside the single tick.
+  const notified = (message.notifiedTo ?? []).some(counts);
+  if (notified) {
+    return (
+      <span className="inline-flex items-center gap-0.5" aria-label="Notified on their phone" title="Notified on their phone — app not opened yet">
+        <Check width={15} strokeWidth={2} aria-hidden />
+        <BellRing width={11} strokeWidth={2} aria-hidden />
+      </span>
+    );
+  }
   return <Check width={15} strokeWidth={2} aria-label="Sent" />;
 }
 

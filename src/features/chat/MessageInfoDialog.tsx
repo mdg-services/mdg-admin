@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check, CheckCheck, Clock } from 'lucide-react';
+import { BellRing, Check, CheckCheck, Clock } from 'lucide-react';
 import * as React from 'react';
 
 import { Dialog } from '@/components/ui/Dialog';
@@ -24,7 +24,22 @@ interface InfoPerson {
   /** Null when the mark predates kept times (9 Nov 2026): who is known, not when. */
   readAt: string | null;
   deliveredAt: string | null;
+  /**
+   * ADR 0040: when a notification for it reached Google or Apple for this person
+   * (null = none did), when one was refused instead, and the WhatsApp backup sent
+   * when the app had not delivered it in time. Absent from an older server.
+   */
+  notifiedAt?: string | null;
+  notifyFailedAt?: string | null;
+  whatsapp?: { at: string; status: 'sent' | 'delivered' | 'read' | 'failed' } | null;
 }
+
+const WHATSAPP_WORD: Record<NonNullable<InfoPerson['whatsapp']>['status'], string> = {
+  sent: 'sent',
+  delivered: 'delivered',
+  read: 'read',
+  failed: 'failed',
+};
 
 interface MessageInfo {
   messageId: string;
@@ -55,26 +70,50 @@ function when(iso: string | null): string {
   return formatDateTime(iso);
 }
 
-function PersonRow({ person, show }: { person: InfoPerson; show: 'read' | 'delivered' | 'none' }) {
+function PersonRow({
+  person,
+  show,
+}: {
+  person: InfoPerson;
+  show: 'read' | 'delivered' | 'notified' | 'none';
+}) {
   const primary =
-    show === 'read' ? person.readAt : show === 'delivered' ? person.deliveredAt : null;
+    show === 'read'
+      ? person.readAt
+      : show === 'delivered'
+        ? person.deliveredAt
+        : show === 'notified'
+          ? (person.notifiedAt ?? null)
+          : null;
   return (
     <li className="flex items-start justify-between gap-3 py-1.5">
       <span className="min-w-0">
         <span className="block truncate text-sm text-text">{person.name}</span>
         <span className="block text-xs text-text-subtle">{ROLE_WORD[person.role]}</span>
       </span>
-      {show === 'none' ? null : (
-        <span className="shrink-0 text-right text-xs tabular-nums">
+      <span className="shrink-0 text-right text-xs tabular-nums">
+        {show === 'none' ? (
+          // Why it has not reached them, as far as the server knows.
+          <span className="block text-text-subtle">
+            {person.notifyFailedAt
+              ? `Notification refused ${when(person.notifyFailedAt)}`
+              : 'No notification reached their phone'}
+          </span>
+        ) : (
           <span className={primary ? 'block text-text' : 'block text-text-subtle'}>
             {when(primary)}
           </span>
-          {/* A reader's delivery time sits under it, as WhatsApp prints both. */}
-          {show === 'read' && person.deliveredAt && person.deliveredAt !== person.readAt ? (
-            <span className="block text-text-subtle">Delivered {when(person.deliveredAt)}</span>
-          ) : null}
-        </span>
-      )}
+        )}
+        {/* A reader's delivery time sits under it, as WhatsApp prints both. */}
+        {show === 'read' && person.deliveredAt && person.deliveredAt !== person.readAt ? (
+          <span className="block text-text-subtle">Delivered {when(person.deliveredAt)}</span>
+        ) : null}
+        {person.whatsapp ? (
+          <span className="block text-text-subtle">
+            WhatsApp backup {when(person.whatsapp.at)} · {WHATSAPP_WORD[person.whatsapp.status]}
+          </span>
+        ) : null}
+      </span>
     </li>
   );
 }
@@ -88,7 +127,7 @@ function Section({
   title: string;
   icon: React.ReactNode;
   people: InfoPerson[];
-  show: 'read' | 'delivered' | 'none';
+  show: 'read' | 'delivered' | 'notified' | 'none';
 }) {
   if (people.length === 0) return null;
   return (
@@ -116,7 +155,7 @@ export function MessageInfoDialog({ message, conversation, onClose }: MessageInf
   const messageId = message?.id;
   // The counts are in the key so a tick that turns blue while this is open
   // fetches the new times with it.
-  const marks = `${message?.readBy?.length ?? 0}/${message?.deliveredTo?.length ?? 0}`;
+  const marks = `${message?.readBy?.length ?? 0}/${message?.deliveredTo?.length ?? 0}/${message?.notifiedTo?.length ?? 0}`;
   const info = useQuery({
     queryKey: ['message-info', conversationId, messageId, marks],
     queryFn: () =>
@@ -130,7 +169,8 @@ export function MessageInfoDialog({ message, conversation, onClose }: MessageInf
   const sorted = [...people].sort((a, b) => outlet(a) - outlet(b));
   const read = sorted.filter((p) => p.read);
   const delivered = sorted.filter((p) => !p.read && p.delivered);
-  const waiting = sorted.filter((p) => !p.read && !p.delivered);
+  const notified = sorted.filter((p) => !p.read && !p.delivered && !!p.notifiedAt);
+  const waiting = sorted.filter((p) => !p.read && !p.delivered && !p.notifiedAt);
 
   return (
     <Dialog open={!!message} onClose={onClose} title="Message info" size="sm">
@@ -161,6 +201,12 @@ export function MessageInfoDialog({ message, conversation, onClose }: MessageInf
                 icon={<CheckCheck width={14} height={14} strokeWidth={2} />}
                 people={delivered}
                 show="delivered"
+              />
+              <Section
+                title="Notified on their phone, app not opened yet"
+                icon={<BellRing width={13} height={13} strokeWidth={2} />}
+                people={notified}
+                show="notified"
               />
               <Section
                 title="Not delivered yet"

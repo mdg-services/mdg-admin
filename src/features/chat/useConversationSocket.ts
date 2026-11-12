@@ -23,7 +23,7 @@ export function useConversationSocket(conversationId: string | null) {
   const [typing, setTyping] = React.useState<TypingState | null>(null);
 
   const applyReceipt = React.useCallback(
-    (field: 'deliveredTo' | 'readBy', userId: string, ids: string[]) => {
+    (field: 'deliveredTo' | 'readBy' | 'notifiedTo', userId: string, ids: string[]) => {
       if (!conversationId || ids.length === 0) return;
       const idSet = new Set(ids);
       qc.setQueryData<InfiniteData<Message[]>>(
@@ -160,6 +160,16 @@ export function useConversationSocket(conversationId: string | null) {
       applyReceipt('deliveredTo', payload.userId, payload.messageIds);
     };
 
+    // A notification for it reached the phone's push service (ADR 0040 §2).
+    const onNotified = (payload: {
+      conversationId: string;
+      userId: string;
+      messageIds: string[];
+    }) => {
+      if (payload.conversationId !== conversationId) return;
+      applyReceipt('notifiedTo', payload.userId, payload.messageIds);
+    };
+
     const onRead = (payload: {
       conversationId: string;
       userId: string;
@@ -175,6 +185,7 @@ export function useConversationSocket(conversationId: string | null) {
     socket.on('message:transcript', onTranscript);
     socket.on('typing', onTyping);
     socket.on('delivered', onDelivered);
+    socket.on('notified', onNotified);
     socket.on('read', onRead);
 
     return () => {
@@ -183,6 +194,7 @@ export function useConversationSocket(conversationId: string | null) {
       socket.off('message:transcript', onTranscript);
       socket.off('typing', onTyping);
       socket.off('delivered', onDelivered);
+      socket.off('notified', onNotified);
       socket.off('read', onRead);
       socket.emit('conversation:leave', conversationId);
     };

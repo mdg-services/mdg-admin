@@ -33,6 +33,7 @@ import {
   Table,
   useToast,
 } from '@/components/ui';
+import { ReachLine } from '@/features/users/ReachLine';
 import { ResetPasswordDialog } from '@/features/users/ResetPasswordDialog';
 import {
   useCreateDealerUser,
@@ -259,7 +260,11 @@ export function DealerMembersTab({ dealer }: Props) {
                 <TBody>
                   {users.map((u) => (
                     <TRow key={u.id}>
-                      <TD className="font-medium">{u.name}</TD>
+                      <TD className="font-medium">
+                        {u.name}
+                        {/* "Can we reach them?" — notifications, app, last result (ADR 0040). */}
+                        <ReachLine reach={u.reach} className="max-w-md" />
+                      </TD>
                       <TD>
                         {memberRoleLabel(u)}
                         {/* ── one person, several outlets ── */}
@@ -348,6 +353,7 @@ export function DealerMembersTab({ dealer }: Props) {
                         {alsoRunsLine(u.alsoRuns)}
                       </span>
                     ) : null}
+                    <ReachLine reach={u.reach} />
                   </span>
                 ),
                 primaryRight:
