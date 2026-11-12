@@ -16,6 +16,7 @@ import type {
   DeclarationRunSummary,
   DeclarationStatusView,
   DeclarationsAdminView,
+  WashroomPhotoView,
   WashroomState,
 } from '@dk/shared';
 import type { DeclarationsAdminAction, DeclarationsConfigBody } from '@dk/shared/schemas';
@@ -191,6 +192,22 @@ export function washroomStateView(state: WashroomState): { label: string; intent
   return WASHROOM_STATE_VIEW[state] ?? { label: String(state), intent: 'neutral' };
 }
 
+/**
+ * The small label for photos the owner put back with "use the same photos as last time", or
+ * null when every photo is a new one. Drawn under this week's photos and on a past filing, so
+ * an admin can see a washroom that was not photographed again this week.
+ */
+export function reusedPhotosLabel(
+  photos: ReadonlyArray<Pick<WashroomPhotoView, 'slot' | 'reused'>>,
+): string | null {
+  const reused = photos.filter((p) => p.reused === true);
+  if (reused.length === 0) return null;
+  if (reused.length === photos.length) {
+    return photos.length === 1 ? 'Same photo as last time' : 'Same photos as last time';
+  }
+  return `The ${reused[0]!.slot} photo is the same as last time`;
+}
+
 /** The washroom cycle in one or two sentences. */
 export function washroomLine(view: DeclarationsAdminView, now: number = Date.now()): string {
   const w = view.washroom;
@@ -216,8 +233,17 @@ export function washroomLine(view: DeclarationsAdminView, now: number = Date.now
     }
     case 'ready': {
       const sent = w.sentAt ? ` The owner sent them ${formatDateTime(w.sentAt)}.` : '';
-      const day = w.confirmedDay
-        ? ` They say the photos were taken on ${formatYmd(w.confirmedDay, { weekday: true })}.`
+      // `confirmedDay` is the day the owner pressed Send. For photos taken this week that is
+      // the day they say they were taken. For photos put back from last time it is only the
+      // day they were put back, and what the owner said is that the washroom still looks like
+      // them: the card must not say "taken on" about a photo from an earlier week. The same
+      // helper decides this and the "Same photos as last time" label under the thumbnails.
+      const putBack = reusedPhotosLabel(w.photos) !== null;
+      const confirmed = w.confirmedDay ? formatYmd(w.confirmedDay, { weekday: true }) : null;
+      const day = confirmed
+        ? putBack
+          ? ` They say the washroom still looks like these photos (put back on ${confirmed}).`
+          : ` They say the photos were taken on ${confirmed}.`
         : '';
       return `Both photos are in.${sent}${day} They are filed in the next round, or press File now.`;
     }
@@ -729,7 +755,7 @@ export function switchOnWords(key: AutoSwitchKey): ConfirmWords {
     case 'washroomAuto':
       return {
         title: 'Let MDG file the washroom declaration by itself?',
-        body: 'Once the owner has sent both photos and said they were taken today, MDG will sign in to IndianOil’s site and submit the washroom declaration in the outlet’s name on the next round, without asking again. Turn this on only if this dealer has agreed to that. You can turn it off again with one tap.',
+        body: 'MDG will ask the owner for two washroom photos every 7 days. Once the owner has sent both (new ones, or last time’s put back) and ticked that they are right, MDG will sign in to IndianOil’s site and submit the washroom declaration in the outlet’s name, without asking again. Turn this on only if this dealer has agreed to that. You can turn it off again with one tap.',
         confirm: 'Yes, the dealer agreed',
       };
     case 'standardAuto':

@@ -14,7 +14,14 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { formatDateTime, formatDuration, formatTime, formatYmd } from '@/lib/format';
 import type { DeclarationFilingView, DeclarationRunSummary } from '@dk/shared';
 
-import { kindTitle, outcomeView, runActionLabel, runStatusView, triggerLabel } from './format';
+import {
+  kindTitle,
+  outcomeView,
+  reusedPhotosLabel,
+  runActionLabel,
+  runStatusView,
+  triggerLabel,
+} from './format';
 import { WashroomPhotos } from './Photos';
 
 const FILING_COLUMNS: DataColumn<DeclarationFilingView>[] = [
@@ -59,6 +66,11 @@ const FILING_COLUMNS: DataColumn<DeclarationFilingView>[] = [
         <span className="break-words">{f.summary || outcomeView(f.outcome).sentence}</span>
         {f.month ? (
           <span className="text-xs text-text-subtle">Filed under {f.month} on the portal</span>
+        ) : null}
+        {reusedPhotosLabel(f.photos) ? (
+          <span data-reused-photos className="text-xs text-text-subtle">
+            {reusedPhotosLabel(f.photos)}
+          </span>
         ) : null}
         {f.photos.length > 0 ? (
           <details>

@@ -3,7 +3,13 @@ import { MessageSquarePlus, RotateCcw, Trash2 } from 'lucide-react';
 import { Badge, Button } from '@/components/ui';
 import type { DeclarationsAdminView } from '@dk/shared';
 
-import { washroomGates, washroomLine, washroomStateView, type PaneControls } from './format';
+import {
+  reusedPhotosLabel,
+  washroomGates,
+  washroomLine,
+  washroomStateView,
+  type PaneControls,
+} from './format';
 import { GateNotes } from './KindCard';
 import { WashroomPhotos } from './Photos';
 
@@ -23,6 +29,7 @@ export function WashroomPanel({
   const cycle = view.washroom;
   const state = washroomStateView(cycle.state);
   const gates = washroomGates(view, now);
+  const reused = reusedPhotosLabel(cycle.photos);
 
   return (
     <div className="grid gap-3 rounded-md border border-border bg-surface-2/50 p-3">
@@ -32,6 +39,11 @@ export function WashroomPanel({
       </div>
       <p className="break-words text-sm text-text-muted">{washroomLine(view, now)}</p>
       <WashroomPhotos photos={cycle.photos} />
+      {reused ? (
+        <p data-reused-photos className="text-xs text-text-subtle">
+          {reused}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="secondary"

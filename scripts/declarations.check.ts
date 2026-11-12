@@ -3,8 +3,9 @@
  * (`src/pages/dealers/vault/declarations/format.ts`, ADR 0037): Branded Fuels first,
  * no file button for Branded Fuels ever, a confirm sentence before every outward action
  * (including the two "I checked" buttons and "I filled it"), which buttons are off and
- * why (mirroring the server's own refusals), when "a run is working" is true, and the
- * confirm that stands in front of turning automatic filing on.
+ * why (mirroring the server's own refusals), when "a run is working" is true, the confirm
+ * that stands in front of turning automatic filing on, and the small label that says photos
+ * were put back from last time ("use the same photos").
  *
  *   cd mdg-admin && npm run check:declarations
  *
@@ -15,7 +16,10 @@
  * Every outlet, date and sentence below is invented. None is from a real outlet.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   declarationsAdminActionSchema,
@@ -32,6 +36,7 @@ import {
   type WashroomCycleView,
   type WashroomPhotoView,
 } from '../shared/src/types/declarations';
+import { formatYmd } from '../src/lib/format';
 import {
   AUTO_SWITCH_KEYS,
   RUN_LIVE_WINDOW_MS,
@@ -48,6 +53,7 @@ import {
   orderedStatuses,
   paneRunBusy,
   readFailureLine,
+  reusedPhotosLabel,
   settleAction,
   showSettle,
   switchOnWords,
@@ -137,6 +143,7 @@ const view = (over: Partial<DeclarationsAdminView> = {}): DeclarationsAdminView 
   lastWashroomFiledDay: null,
   nextWashroomDueDay: null,
   maxPhotoBytes: 500_000,
+  lastPhotos: [],
   statuses: DECLARATION_KINDS.map((k) => status(k)),
   history: [],
   runs: [],
@@ -653,7 +660,135 @@ describe('turning automatic filing on asks first', () => {
       assert.ok(w.confirm.length > 0);
     }
     assert.match(switchOnWords('standardAuto').body, /cannot be taken back/);
-    assert.match(switchOnWords('washroomAuto').body, /both photos/);
+    assert.match(switchOnWords('washroomAuto').body, /both \(new ones, or last time/);
+  });
+});
+
+describe('the label for photos put back from last time', () => {
+  const same = (slot: 'outside' | 'inside'): WashroomPhotoView => ({
+    ...photo(slot),
+    reused: true,
+  });
+
+  it('says nothing for photos that are all new, or for no photos at all', () => {
+    assert.equal(reusedPhotosLabel([photo('outside'), photo('inside')]), null);
+    assert.equal(reusedPhotosLabel([{ ...photo('outside'), reused: false }]), null);
+    assert.equal(reusedPhotosLabel([]), null);
+  });
+
+  it('says the same photos as last time when both were put back', () => {
+    assert.equal(reusedPhotosLabel([same('outside'), same('inside')]), 'Same photos as last time');
+    assert.equal(reusedPhotosLabel([same('inside')]), 'Same photo as last time');
+  });
+
+  it('names the one that was put back when the other is new', () => {
+    assert.equal(
+      reusedPhotosLabel([same('outside'), photo('inside')]),
+      'The outside photo is the same as last time',
+    );
+    assert.equal(
+      reusedPhotosLabel([photo('outside'), same('inside')]),
+      'The inside photo is the same as last time',
+    );
+  });
+
+  it('is plain words: no codes, no technical terms', () => {
+    for (const photos of [
+      [same('outside'), same('inside')],
+      [same('outside'), photo('inside')],
+    ]) {
+      assert.doesNotMatch(reusedPhotosLabel(photos) ?? '', /reused|key|slot|_/);
+    }
+  });
+
+  it('is drawn on the washroom card and on a past filing, from this one helper', () => {
+    const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'pages');
+    for (const file of ['WashroomPanel.tsx', 'Panels.tsx']) {
+      const source = readFileSync(path.join(dir, 'dealers', 'vault', 'declarations', file), 'utf8');
+      assert.match(source, /reusedPhotosLabel\(/, `${file} draws the label`);
+    }
+  });
+});
+
+describe('the washroom line while the photos wait to be filed', () => {
+  const same = (slot: 'outside' | 'inside'): WashroomPhotoView => ({
+    ...photo(slot),
+    reused: true,
+  });
+  const ready = (photos: WashroomPhotoView[]) =>
+    washroomLine(
+      view({
+        washroom: cycle({
+          state: 'ready',
+          photos,
+          confirmedDay: TODAY,
+          sentAt: iso(NOW - MIN),
+        }),
+      }),
+      NOW,
+    );
+  const day = formatYmd(TODAY, { weekday: true });
+
+  it('says the photos were taken on the day the owner confirmed, for photos taken this week', () => {
+    const line = ready(BOTH);
+    assert.match(line, new RegExp(`They say the photos were taken on ${day}\\.`));
+    assert.doesNotMatch(line, /still looks like/);
+    assert.doesNotMatch(line, /put back/);
+  });
+
+  it('does NOT say "taken on" for photos put back from last time: the day is only when they were put back', () => {
+    const line = ready([same('outside'), same('inside')]);
+    assert.match(
+      line,
+      new RegExp(`They say the washroom still looks like these photos \\(put back on ${day}\\)\\.`),
+    );
+    assert.doesNotMatch(line, /were taken on/);
+  });
+
+  it('says the same for a mix, one put back and one new, in either slot', () => {
+    for (const photos of [
+      [same('outside'), photo('inside')],
+      [photo('outside'), same('inside')],
+    ]) {
+      const line = ready(photos);
+      assert.match(line, /still looks like these photos \(put back on /);
+      assert.doesNotMatch(line, /were taken on/);
+    }
+  });
+
+  it('is decided by the helper that draws the "Same photos as last time" label, so the card never contradicts itself', () => {
+    for (const photos of [
+      BOTH,
+      [same('outside'), same('inside')],
+      [same('outside'), photo('inside')],
+      [photo('outside'), same('inside')],
+      [{ ...photo('outside'), reused: false }, photo('inside')],
+    ]) {
+      const labelled = reusedPhotosLabel(photos) !== null;
+      assert.equal(/still looks like these photos/.test(ready(photos)), labelled);
+      assert.equal(/were taken on/.test(ready(photos)), !labelled);
+    }
+  });
+
+  it('says no day at all when the owner has not confirmed one, put back or not', () => {
+    for (const photos of [BOTH, [same('outside'), same('inside')]]) {
+      const line = washroomLine(
+        view({ washroom: cycle({ state: 'ready', photos, confirmedDay: null }) }),
+        NOW,
+      );
+      assert.doesNotMatch(line, /They say/);
+      assert.match(line, /Both photos are in\./);
+    }
+  });
+
+  it('keeps the rest of the line: when the owner sent them, and what happens next', () => {
+    const line = ready([same('outside'), same('inside')]);
+    assert.match(line, /Both photos are in\. The owner sent them /);
+    assert.match(line, /They are filed in the next round, or press File now\./);
+  });
+
+  it('is plain words: no codes, no technical terms', () => {
+    assert.doesNotMatch(ready([same('outside'), same('inside')]), /reused|confirmedDay|key|slot|_/);
   });
 });
 
