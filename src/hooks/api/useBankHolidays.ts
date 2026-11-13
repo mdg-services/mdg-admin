@@ -1,49 +1,37 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { api } from '@/lib/api';
-import type {
-  BankHolidayMonthView,
-  BankHolidayPendingConfirmation,
-} from '@dk/shared';
+import type { BankHolidayMonthView, BankHolidayStatesView } from '@dk/shared';
 import type { ConfirmBankHolidayMonthInput } from '@dk/shared/schemas';
 
-export const bankHolidaysKey = (year: number, month: number) =>
-  ['bankHolidays', year, month] as const;
+export const bankHolidaysKey = (state: string, year: number, month: number) =>
+  ['bankHolidays', state, year, month] as const;
 
-export const bankHolidaysPendingKey = ['bankHolidays', 'pending'] as const;
+export const bankHolidayStatesKey = ['bankHolidays', 'states'] as const;
 
 /**
- * Months (current + coming) that still have library-suggested national holidays
- * the admin hasn't confirmed. Powers the nav badge + Overview banner. Only
- * super-admins can read this, so the query is disabled for everyone else.
+ * Every state that has outlets: which outlets, which RBI office its list comes
+ * from, when that list last downloaded, plus the outlets with no state at all.
  */
-export function useBankHolidayPendingQuery() {
-  const isSuperAdmin = useIsSuperAdmin();
+export function useBankHolidayStatesQuery() {
   return useQuery({
-    queryKey: bankHolidaysPendingKey,
-    queryFn: () =>
-      api.get<BankHolidayPendingConfirmation>(
-        '/super-admin/bank-holidays/pending',
-      ),
-    enabled: isSuperAdmin,
+    queryKey: bankHolidayStatesKey,
+    queryFn: () => api.get<BankHolidayStatesView>('/super-admin/bank-holidays/states'),
     staleTime: 60_000,
   });
 }
 
-/**
- * The confirmed + suggested bank-holiday rows for one month (super-admin only).
- * The server merges persisted holidays with library suggestions and returns them
- * sorted by date; suggestions carry `id:null, persisted:false, enabled:true`.
- */
-export function useBankHolidayMonthQuery(year: number, month: number) {
+/** One state's holidays for one month (super-admin only). */
+export function useBankHolidayMonthQuery(state: string | null, year: number, month: number) {
   return useQuery({
-    queryKey: bankHolidaysKey(year, month),
+    queryKey: bankHolidaysKey(state ?? '', year, month),
     queryFn: () =>
       api.get<BankHolidayMonthView>('/super-admin/bank-holidays/month', {
+        state: state ?? '',
         year,
         month,
       }),
+    enabled: Boolean(state),
     staleTime: 30_000,
   });
 }
@@ -54,12 +42,20 @@ export function useConfirmBankHolidayMonth() {
     mutationFn: (input: ConfirmBankHolidayMonthInput) =>
       api.put<BankHolidayMonthView>('/super-admin/bank-holidays/month', input),
     onSuccess: (data) => {
-      // Reflect the confirmed month instantly, then invalidate every month so a
-      // roll-forward that touches an adjacent month re-fetches when visited.
-      qc.setQueryData(bankHolidaysKey(data.year, data.month), data);
+      qc.setQueryData(bankHolidaysKey(data.state, data.year, data.month), data);
       void qc.invalidateQueries({ queryKey: ['bankHolidays'] });
-      // Confirming a month clears/updates the pending-confirmation badge.
-      void qc.invalidateQueries({ queryKey: bankHolidaysPendingKey });
+    },
+  });
+}
+
+/** Download every state's list from RBI now, instead of waiting for 05:30. */
+export function useSyncRbiHolidays() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<BankHolidayStatesView>('/super-admin/bank-holidays/sync'),
+    onSuccess: (data) => {
+      qc.setQueryData(bankHolidayStatesKey, data);
+      void qc.invalidateQueries({ queryKey: ['bankHolidays'] });
     },
   });
 }

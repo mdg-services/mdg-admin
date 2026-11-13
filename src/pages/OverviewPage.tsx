@@ -1,4 +1,4 @@
-import { AlertCircle, CalendarDays, ChevronRight, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -15,7 +15,6 @@ import {
   IconButton,
   Skeleton,
 } from '@/components/ui';
-import { useBankHolidayPendingQuery } from '@/hooks/api/useBankHolidays';
 import { useOverviewDayQuery, useOverviewHealthQuery } from '@/hooks/api/useOverview';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { CheckedAndClear } from '@/pages/overview/CheckedAndClear';
@@ -142,7 +141,6 @@ export function OverviewPage() {
             </Callout>
           ) : null}
 
-          <HolidayConfirmBanner />
 
           <Card className="mt-4">
             <CardHeader
@@ -281,47 +279,5 @@ function HealthChips({ data, failed }: { data?: OverviewHealth; failed: boolean 
         </span>
       ))}
     </div>
-  );
-}
-
-/**
- * Super-admin nudge to confirm the national holidays the library suggests for the
- * current/coming month — enabled holidays roll the DOD due date forward, so an
- * unconfirmed month silently uses only weekends. Hidden when nothing is pending.
- */
-function HolidayConfirmBanner() {
-  const isSuperAdmin = useIsSuperAdmin();
-  const { data } = useBankHolidayPendingQuery();
-  if (!isSuperAdmin || !data || data.totalCount === 0) return null;
-  const months = data.months.map((m) => m.label).join(', ');
-  return (
-    <Link
-      to="/bank-holidays"
-      className="mt-3 flex items-center gap-3 rounded-lg border border-border bg-brand-soft px-4 py-3 transition-colors hover:bg-surface-2"
-    >
-      <CalendarDays
-        width={20}
-        height={20}
-        strokeWidth={1.75}
-        className="shrink-0 text-brand"
-      />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-text">
-          {data.totalCount} national holiday{data.totalCount === 1 ? '' : 's'} need
-          confirmation
-        </p>
-        {/* Not `truncate`: this line is the only place the pending months are
-            named, and at 360px it had ~176px to say them in — "Confirm August,
-            Sep…". The banner is a Link, so the extra height only makes the
-            target bigger. */}
-        <p className="text-xs text-text-muted">
-          Confirm {months} so the Credit &amp; DOD due dates roll forward correctly.
-        </p>
-      </div>
-      <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-brand">
-        Review
-        <ChevronRight width={16} height={16} strokeWidth={2} />
-      </span>
-    </Link>
   );
 }
