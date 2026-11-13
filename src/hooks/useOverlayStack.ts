@@ -14,11 +14,26 @@ import { isNativeShell } from '@/lib/nativeBridge';
  *
  * `useOverlayEntry` puts an open overlay on a module-level stack. One keydown
  * listener sends Escape to the top entry only. Below md, or anywhere inside the
- * native shell, the first overlay to open also pushes one history entry of our
- * own (the MARKER), so Back has something to pop that is not a page: the pop
- * closes the top overlay, and if another is still open underneath, a fresh
- * marker is pushed for it. At md in a browser no entry is pushed and Back is
- * the page navigation it has always been.
+ * native shell, EACH overlay also pushes one history entry of its own (a
+ * MARKER) as it opens, so Back has something to pop that is not a page: the pop
+ * closes the top overlay, and the one underneath already has its marker
+ * waiting. At md in a browser no entry is pushed and Back is the page
+ * navigation it has always been.
+ *
+ * ── WHY ONE MARKER PER OVERLAY, PUSHED AS IT OPENS ─────────────────────────
+ *
+ * It used to be one marker for the whole stack, pushed again for the overlay
+ * underneath after each Back. Inside the admin phone app the second Back then
+ * left the app: with a confirm (or the PDF reader) open on a drawer, Back closed
+ * the confirm, and the next Back closed the APP instead of the drawer. Chrome —
+ * and Android's WebView with it — skips, for Back, a history entry a page added
+ * without a tap (a guard against pages that trap the Back button), and that
+ * re-push came after a Back key, not a tap. The shell asks the WebView
+ * `canGoBack()`, heard "no", and let Android close the app. Seen on a Pixel 9
+ * emulator, 13 Nov 2026: right after the re-push the shell was told
+ * `canGoBack: false`. A marker pushed as the overlay opens follows the tap that
+ * opened it, so it always counts — the dealer app's sheets have always done
+ * this (`useBackToClose`).
  *
  * ── WHY THIS WATCHES `history.pushState` AND `history.replaceState` ─────────
  *
@@ -66,16 +81,23 @@ const MARKER_KEY = 'dkOverlay';
 const BELOW_MD = '(max-width: 767.98px)';
 
 const stack: Entry[] = [];
-/** Non-null exactly while the CURRENT history entry is our marker. */
-let marker: Snapshot | null = null;
 /**
- * The stack emptied from the UI (X, scrim, Save). Stepping back over the marker
- * waits one task, because "Save and next" closes one overlay and opens the next
- * in the same commit — and the next one should simply inherit the marker.
+ * How many of our markers sit above the page, the current entry being the top
+ * one. Normally one per open overlay; fewer only when an overlay opened where
+ * no marker is wanted (wide screen) or survived a navigation.
+ */
+let depth = 0;
+/** The page under the markers, as the router last wrote it. Non-null exactly while `depth > 0`. */
+let page: Snapshot | null = null;
+/**
+ * Overlays closed from the UI (X, scrim, Save) whose markers are still to be
+ * stepped over. That waits one task, because "Save and next" closes one overlay
+ * and opens the next in the same commit — and the next one should simply
+ * inherit the marker.
  */
 let pendingRelease: number | null = null;
-/** Our own `history.back()` calls whose popstate has not arrived yet, each with
- *  the entry the page should end up on. */
+/** Our own history steps whose popstate has not arrived yet, each with what the
+ *  entry we land on should be rewritten to. */
 const ownPops: Snapshot[] = [];
 
 type HistoryWrite = History['pushState'];
@@ -101,7 +123,7 @@ function withoutMarker(state: unknown): unknown {
 }
 
 /** The router's own position stamp. Two entries with the same `idx` are a page
- *  and the marker above it. */
+ *  and a marker above it. */
 function routerIdx(state: unknown): unknown {
   return isRecord(state) ? state.idx : undefined;
 }
@@ -118,44 +140,52 @@ function replaceWith(snapshot: Snapshot): void {
   nativeReplace?.call(window.history, snapshot.state, '', snapshot.url);
 }
 
+/** What the entry `depth` markers above the page should hold: the page, flagged when it is a marker. */
+function entryAt(level: number, under: Snapshot): Snapshot {
+  return level > 0 ? { state: withMarker(under.state), url: under.url } : under;
+}
+
 function pushMarker(): void {
-  if (marker || !nativePush) return;
-  const snapshot: Snapshot = { state: window.history.state, url: window.location.href };
-  nativePush.call(window.history, withMarker(snapshot.state), '');
-  marker = snapshot;
+  if (!nativePush) return;
+  if (depth === 0) page = { state: window.history.state, url: window.location.href };
+  nativePush.call(window.history, withMarker(page!.state), '');
+  depth += 1;
 }
 
-/** Give the open stack a marker of its own, if it should have one and has not. */
-function armMarker(): void {
-  if (stack.length > 0 && !marker && pendingRelease === null && wantsHistory()) {
-    pushMarker();
-  }
+/** Give every open overlay its marker, if it should have one and has not. */
+function armMarkers(): void {
+  if (pendingRelease !== null || !wantsHistory()) return;
+  while (depth < stack.length) pushMarker();
 }
 
+/** Step back over the markers of overlays that closed from the UI. */
 function release(): void {
   pendingRelease = null;
-  if (stack.length > 0 || !marker) return;
-  ownPops.push(marker);
-  marker = null;
-  window.history.back();
+  const extra = depth - stack.length;
+  if (extra <= 0 || !page) return;
+  depth -= extra;
+  ownPops.push(entryAt(depth, page));
+  if (depth === 0) page = null;
+  window.history.go(-extra);
 }
 
 function add(entry: Entry): void {
   stack.push(entry);
-  if (pendingRelease !== null) {
-    // The overlay that just closed is being replaced by another: keep the
-    // marker for it rather than stepping back and pushing a new one.
+  if (pendingRelease !== null && depth >= stack.length) {
+    // The overlay that just closed is being replaced by another: keep its
+    // marker for this one rather than stepping back and pushing a new one.
     window.clearTimeout(pendingRelease);
     pendingRelease = null;
     return;
   }
-  if (stack.length === 1) armMarker();
+  // Pushed now, in the commit the opening tap caused, so the WebView counts it.
+  armMarkers();
 }
 
 function remove(entry: Entry): void {
   const i = stack.lastIndexOf(entry);
   if (i !== -1) stack.splice(i, 1);
-  if (stack.length === 0 && marker && pendingRelease === null) {
+  if (depth > stack.length && pendingRelease === null) {
     pendingRelease = window.setTimeout(release, 0);
   }
 }
@@ -177,37 +207,45 @@ function onPopState(e: PopStateEvent): void {
   if (own) {
     e.stopImmediatePropagation();
     replaceWith(own);
-    armMarker();
     return;
   }
-  if (marker) {
-    const left = marker;
-    marker = null;
-    // One step back off the marker lands on the page beneath it, which carries
-    // the same router `idx`. Anything else is a longer jump — a real
-    // navigation, left to the router.
-    if (routerIdx(window.history.state) === routerIdx(left.state)) {
+  if (depth > 0 && page) {
+    // One step back off a marker lands on the marker below it or on the page,
+    // both of which carry the page's router `idx`. Anything else is a longer
+    // jump — a real navigation, left to the router.
+    if (routerIdx(window.history.state) === routerIdx(page.state)) {
       e.stopImmediatePropagation();
-      replaceWith(left);
-      if (pendingRelease !== null) {
-        // The overlay had already closed and its marker was about to be
+      const closedAlready = depth > stack.length;
+      depth -= 1;
+      // The entry we land on may hold an older URL (the router replaced the
+      // one we left); make it the page as it is now.
+      replaceWith(entryAt(depth, page));
+      if (depth === 0) page = null;
+      if (closedAlready) {
+        // That overlay had already closed and its marker was about to be
         // stepped over; Back did it for us.
-        window.clearTimeout(pendingRelease);
-        pendingRelease = null;
+        if (pendingRelease !== null && depth <= stack.length) {
+          window.clearTimeout(pendingRelease);
+          pendingRelease = null;
+        }
         return;
       }
       stack[stack.length - 1]?.close();
-      // Whatever is still open — the parent of the overlay that just closed,
-      // or a top overlay that refused to (a confirm with its request in
-      // flight) — gets a Back of its own. The close above commits before this
-      // task runs: popstate is a discrete event, so React flushes it at once.
-      window.setTimeout(armMarker, 0);
+      // A top overlay that refused to close (a confirm with its request in
+      // flight) has just lost its marker; give it one back. Best effort: an
+      // entry pushed after a Back key may not count for the next Back in the
+      // phone app — but the overlay stayed open, so nothing is lost.
+      window.setTimeout(armMarkers, 0);
       return;
     }
+    // A longer jump left our markers behind: forget them.
+    depth = 0;
+    page = null;
   }
   if (isMarkerState(window.history.state)) {
-    // A marker left over from earlier — Forward onto one, say. Nothing is open
-    // for it to close, so make it an ordinary entry again.
+    // A marker left over from earlier — Forward onto one, or one stranded by a
+    // navigation from inside a stacked overlay. Nothing is open for it to
+    // close, so make it an ordinary entry again.
     nativeReplace?.call(window.history, withoutMarker(window.history.state), '');
   }
   for (const entry of stack) if (entry.dismissOnPop) entry.close();
@@ -226,21 +264,24 @@ function install(): () => void {
   nativeReplace = originals.replace;
 
   h.pushState = function pushState(data, unused, url) {
-    if (marker) {
-      // A navigation while the marker is the current entry takes its place.
+    if (depth > 0) {
+      // A navigation while a marker is the current entry takes its place.
       // Stacked above it instead, the marker would be a dead entry that a later
-      // Back lands on and shows the same page again.
-      marker = null;
+      // Back lands on and shows the same page again. (Markers lower down, from
+      // a stack of overlays, are cleaned up as Back reaches them.)
+      depth = 0;
+      page = null;
       originals.replace.call(h, data, unused, url);
-      // If the overlay survives the navigation, it still needs a marker.
-      window.setTimeout(armMarker, 0);
+      // Overlays that survive the navigation still need markers. This follows
+      // the click that navigated, so the WebView counts them.
+      window.setTimeout(armMarkers, 0);
       return;
     }
     originals.push.call(h, data, unused, url);
   };
   h.replaceState = function replaceState(data, unused, url) {
-    if (marker) {
-      marker = { state: data, url: resolveUrl(url) };
+    if (depth > 0) {
+      page = { state: data, url: resolveUrl(url) };
       originals.replace.call(h, withMarker(data), unused, url);
       return;
     }
