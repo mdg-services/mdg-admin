@@ -614,7 +614,8 @@ function HowItWorksNote() {
           outlets to the next working day, just like Sundays and 2nd &amp; 4th
           Saturdays. To stop an RBI date counting, untick it and save; the next
           download keeps your choice. Add a date by hand only if RBI misses it
-          (Remove is for dates added by hand).
+          (Remove is for dates added by hand). If RBI later lists that date, it
+          becomes RBI&apos;s, and goes if RBI moves it.
         </ClampedText>
       </CardContent>
     </Card>
