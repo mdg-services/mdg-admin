@@ -77,18 +77,20 @@ const line = (
 });
 
 describe('the day-data collectors', () => {
-  it('are IRAS and BPCL, and nothing else', () => {
-    assert.deepEqual([...DAY_DATA_SERVICE_IDS], ['iras-shift-data', 'bpcl-iot-data']);
+  it('are IRAS, BPCL and HPCL, and nothing else', () => {
+    assert.deepEqual([...DAY_DATA_SERVICE_IDS], ['iras-shift-data', 'bpcl-iot-data', 'hpcl-portal-data']);
     assert.equal(isDayDataServiceId('iras-shift-data'), true);
     assert.equal(isDayDataServiceId('bpcl-iot-data'), true);
+    assert.equal(isDayDataServiceId('hpcl-portal-data'), true);
     assert.equal(isDayDataServiceId('dsr-report'), false);
     assert.equal(isDayDataServiceId(null), false);
     assert.equal(isDayDataServiceId(undefined), false);
   });
 
   it('are named together the way the warning prints them', () => {
-    assert.equal(DAY_DATA_ANY_NAME, 'IRAS shift data or BPCL day readings');
-    assert.equal(anyOfGroupName(['iras-shift-data', 'bpcl-iot-data']), DAY_DATA_ANY_NAME);
+    assert.equal(DAY_DATA_ANY_NAME, 'IRAS shift data, BPCL day readings or HPCL day readings');
+    assert.equal(anyOfGroupName(['iras-shift-data', 'bpcl-iot-data', 'hpcl-portal-data']), DAY_DATA_ANY_NAME);
+    assert.equal(anyOfGroupName(['iras-shift-data', 'bpcl-iot-data']), 'IRAS shift data or BPCL day readings');
   });
 
   it('say which portal an outlet runs on, IRAS first when it has both', () => {
@@ -362,13 +364,13 @@ describe('the Daily Sales Report schedule advisory', () => {
 
   it('names either collector when neither is attached', () => {
     const w = dsrIrasScheduleWarning({ irasAttached: false, inspectionAttached: true });
-    assert.match(w ?? '', /IRAS shift data or BPCL day readings/);
+    assert.match(w ?? '', /IRAS shift data, BPCL day readings or HPCL day readings/);
     assert.doesNotMatch(w ?? '', /Inspection Reports/);
   });
 
   it('names both missing prerequisites', () => {
     const w = dsrIrasScheduleWarning({ irasAttached: false, inspectionAttached: false });
-    assert.match(w ?? '', /Inspection Reports and either IRAS shift data or BPCL day readings/);
+    assert.match(w ?? '', /Inspection Reports and either IRAS shift data, BPCL day readings or HPCL day readings/);
     assert.match(w ?? '', /attach them/);
   });
 

@@ -23,7 +23,7 @@ import type {
  * IRAS attached?" asks "is one of these attached?" instead — this is the one
  * list, so a third portal is a one-line change.
  */
-export const DAY_DATA_SERVICE_IDS = ['iras-shift-data', 'bpcl-iot-data'] as const;
+export const DAY_DATA_SERVICE_IDS = ['iras-shift-data', 'bpcl-iot-data', 'hpcl-portal-data'] as const;
 export type DayDataServiceId = (typeof DAY_DATA_SERVICE_IDS)[number];
 
 export function isDayDataServiceId(id: string | null | undefined): id is DayDataServiceId {
@@ -41,12 +41,16 @@ export const DAY_DATA_DATASET_ID = 'iras-shift-data';
 export const DAY_DATA_SERVICE_NAME: Record<DayDataServiceId, string> = {
   'iras-shift-data': 'IRAS shift data',
   'bpcl-iot-data': 'BPCL day readings',
+  'hpcl-portal-data': 'HPCL day readings',
 };
 
-/** "IRAS shift data or BPCL day readings" — the phrase for "one of the collectors". */
-export const DAY_DATA_ANY_NAME = DAY_DATA_SERVICE_IDS.map((id) => DAY_DATA_SERVICE_NAME[id]).join(
-  ' or ',
-);
+/** "A or B", "A, B or C": a list where any one will do, the way the backend words it. */
+export function orList(names: readonly string[]): string {
+  return names.length <= 2 ? names.join(' or ') : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
+}
+
+/** "IRAS shift data, BPCL day readings or HPCL day readings" — the phrase for "one of the collectors". */
+export const DAY_DATA_ANY_NAME = orList(DAY_DATA_SERVICE_IDS.map((id) => DAY_DATA_SERVICE_NAME[id]));
 
 /** The plain name of a service in a sentence, falling back to the id itself. */
 export function dayDataServiceName(serviceId: string): string {
@@ -59,13 +63,16 @@ export function dayDataServiceName(serviceId: string): string {
 export const PROVIDER_PORTAL_LABEL: Record<SnapshotProvider, string> = {
   IRAS: 'IRAS',
   BPCL_IOT: 'BPCL portal',
+  HPCL_CRIS: 'HPCL CRIS',
 };
 
 /** A snapshot with no `provider` was written before BPCL outlets existed: IRAS. */
 export function snapshotProvider(
   snapshot?: { provider?: SnapshotProvider | null } | null,
 ): SnapshotProvider {
-  return snapshot?.provider === 'BPCL_IOT' ? 'BPCL_IOT' : 'IRAS';
+  if (snapshot?.provider === 'BPCL_IOT') return 'BPCL_IOT';
+  if (snapshot?.provider === 'HPCL_CRIS') return 'HPCL_CRIS';
+  return 'IRAS';
 }
 
 /**
@@ -77,6 +84,7 @@ export function providerOfAttached(serviceIds: Iterable<string>): SnapshotProvid
   const ids = new Set(serviceIds);
   if (ids.has('iras-shift-data')) return 'IRAS';
   if (ids.has('bpcl-iot-data')) return 'BPCL_IOT';
+  if (ids.has('hpcl-portal-data')) return 'HPCL_CRIS';
   return null;
 }
 
@@ -113,6 +121,15 @@ const COPY: Record<SnapshotProvider, DayDataCopy> = {
       "Once the pipeline has read BPCL's portal for this dealer, each day's readings appear here.",
     drawer: 'Captured BPCL day readings',
     fromPortal: 'From BPCL portal',
+  },
+  HPCL_CRIS: {
+    label: 'HPCL day readings',
+    description: "This dealer's day readings from HPCL CRIS — latest and history.",
+    noData: 'No HPCL day readings collected yet',
+    noDataHint:
+      "Once the pipeline has read HPCL CRIS for this dealer (or the team has typed a day in), each day's readings appear here.",
+    drawer: 'Captured HPCL day readings',
+    fromPortal: 'From HPCL CRIS',
   },
 };
 
@@ -347,5 +364,5 @@ export function unmetAnyOfGroups(
 
 /** A group named for a sentence: `IRAS shift data or BPCL day readings`. */
 export function anyOfGroupName(group: readonly string[]): string {
-  return group.map(dayDataServiceName).join(' or ');
+  return orList(group.map(dayDataServiceName));
 }

@@ -154,7 +154,8 @@ export function DealerServicesTab({ dealer }: Props) {
   // the prerequisite matches what the attach route accepts.
   const inspectionAttached =
     (data ?? []).some((d) => d.serviceId === INSPECTION_SERVICE_ID) ||
-    irasService?.serviceId === 'bpcl-iot-data';
+    irasService?.serviceId === 'bpcl-iot-data' ||
+    irasService?.serviceId === 'hpcl-portal-data';
 
   // DAILY only. An on-demand service runs when somebody presses Run now, so
   // "it hasn't run today" is its normal state, not a fault — flagging it told
