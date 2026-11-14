@@ -264,6 +264,29 @@ function ProductionMark({ turn }: { turn: AiTurn }) {
  */
 function Lookups({ turn }: { turn: AiTurn }) {
   const ids = turn.toolIds ?? [];
+  // The agent (ADR 0041 §6) looks things up and acts through tools: each call, in
+  // order, by its plain-words label, with the ones that were refused marked.
+  if (turn.engine === 'agent') {
+    const calls = turn.agent?.calls ?? [];
+    if (calls.length === 0) return <span className="text-xs text-text-subtle">No tool was used</span>;
+    return (
+      <div className="flex flex-wrap items-center gap-1">
+        {calls.map((c, i) => (
+          <span
+            key={`${c.name}-${i}`}
+            className={
+              c.ok
+                ? 'inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-xs text-text-muted'
+                : 'inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-xs text-danger line-through'
+            }
+            title={`${c.name}${c.args && Object.keys(c.args).length > 0 ? ` ${JSON.stringify(c.args)}` : ''}${c.ok ? '' : ' (refused or failed)'}${typeof c.ms === 'number' ? ` · ${c.ms} ms` : ''}`}
+          >
+            {c.label ?? c.name}
+          </span>
+        ))}
+      </div>
+    );
+  }
   if (ids.length === 0) {
     // The briefing engine runs no separate lookups: it reads the pump's whole
     // record in one go, so "No lookup ran" under one of its answers was false.
@@ -490,7 +513,8 @@ function AnswerCell({ turn }: { turn: AiTurn }) {
  * model ran; the model id and the tokens do.
  */
 function briefRan(turn: AiTurn): boolean {
-  return turn.engine === 'brief' && (Boolean(turn.model) || (turn.tokensIn ?? 0) > 0);
+  // The agent (ADR 0041 §6) is a model with tools: read the same way for its model and tokens.
+  return (turn.engine === 'brief' || turn.engine === 'agent') && (Boolean(turn.model) || (turn.tokensIn ?? 0) > 0);
 }
 
 /** What the router made of the message: one line per thing they asked about. */
@@ -502,7 +526,9 @@ function AsksCell({ turn }: { turn: AiTurn }) {
         {turn.intent
           ? AI_INTENT_LABEL[turn.intent]
           : briefRan(turn)
-            ? 'Answered from the whole record'
+            ? turn.engine === 'agent'
+              ? 'Answered with tools'
+              : 'Answered from the whole record'
             : 'The model never ran'}
       </span>
     );

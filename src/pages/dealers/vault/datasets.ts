@@ -1,5 +1,6 @@
 import {
   ClipboardCheck,
+  ClipboardList,
   CreditCard,
   Database,
   Droplets,
@@ -24,6 +25,7 @@ import { DAY_DATA_DATASET_ID, DAY_DATA_SERVICE_IDS, dayDataCopy, providerOfAttac
 import { DealerCalibrationClaimPane } from './DealerCalibrationClaimPane';
 import { DealerDeclarationsPane } from './DealerDeclarationsPane';
 import { DealerDuOtpAckPane } from './DealerDuOtpAckPane';
+import { DealerFuelOrdersPane } from './DealerFuelOrdersPane';
 import { DealerInspectionPane } from './DealerInspectionPane';
 import { DealerLoadPlannerPane } from './DealerLoadPlannerPane';
 import { DealerMockDrillPane } from './DealerMockDrillPane';
@@ -148,6 +150,17 @@ const REGISTRY = [
     Icon: Fuel,
     requiresService: 'load-planner',
     Pane: DealerLoadPlannerPane,
+  },
+  {
+    // Right under the Load Planner: the planner says when to order, this is the
+    // order itself. Never rename the id — alert and chat links will carry it.
+    id: 'fuel-orders',
+    label: 'Fuel orders',
+    description:
+      'Fuel orders on IndianOil’s portal: what was ordered, from the chat or the portal, where each stands, and the tanker number the moment it is assigned.',
+    Icon: ClipboardList,
+    requiresService: 'fuel-indent',
+    Pane: DealerFuelOrdersPane,
   },
   {
     id: 'calibration-claim',
