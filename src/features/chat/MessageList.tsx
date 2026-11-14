@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useDeclarationsAdminView, useDeclarationsLive } from '@/hooks/api/useDeclarations';
 import { useMockDrillAdminView, useMockDrillLive } from '@/hooks/api/useMockDrill';
 import { useOutletSetupQuery } from '@/hooks/api/useOnboarding';
+import { useOutletDetails } from '@/hooks/api/useOutletDetails';
 import { usePortalLogins } from '@/hooks/api/usePortalLogins';
 import { useStickToBottom } from '@/hooks/useStickToBottom';
 import { cn } from '@/lib/cn';
@@ -232,6 +233,8 @@ export function MessageList({
   const needsDeclarations = React.useMemo(() => ordered.some((m) => !!m.declarations), [ordered]);
   const declarationsQ = useDeclarationsAdminView(needsDeclarations ? dealerId : undefined);
   useDeclarationsLive(needsDeclarations ? dealerId : undefined);
+  const needsOutletDetails = React.useMemo(() => ordered.some((m) => !!m.outletDetails), [ordered]);
+  const outletDetailsQ = useOutletDetails(needsOutletDetails ? dealerId : undefined);
   const lang = React.useMemo(() => guessDealerLang(ordered), [ordered]);
   const dealerKey = dealerMemberIds?.join(',');
   const dealerIds = React.useMemo(
@@ -250,6 +253,14 @@ export function MessageList({
       declarations: !needsDeclarations
         ? undefined
         : declarationsQ.data ?? (declarationsQ.isError ? null : undefined),
+      // `null` from the hook is a server without the form: a plain label, not a spinner.
+      outletDetails: !needsOutletDetails
+        ? undefined
+        : outletDetailsQ.data !== undefined
+          ? outletDetailsQ.data
+          : outletDetailsQ.isError
+            ? null
+            : undefined,
       // A manager's thread shows the cards read-only, as the manager's app does.
       canEdit: memberRole !== 'dealer-staff',
       group,
@@ -268,6 +279,9 @@ export function MessageList({
       needsDeclarations,
       declarationsQ.data,
       declarationsQ.isError,
+      needsOutletDetails,
+      outletDetailsQ.data,
+      outletDetailsQ.isError,
       memberRole,
       group,
       dealerIds,

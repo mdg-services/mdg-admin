@@ -32,6 +32,7 @@
     "check:inbox-desk": "npx tsx --test scripts/inboxDesk.check.ts",
     "check:calibration-claim": "npx tsx --test scripts/calibrationClaim.check.ts",
     "check:declarations": "npx tsx --test scripts/declarations.check.ts",
+    "check:outlet-details": "npx tsx --test scripts/outletDetails.check.ts",
     "check:leaving-the-app": "node scripts/leavingTheApp.check.mjs",
     "check:pdf": "npx tsx --test scripts/pdf.check.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",

@@ -361,7 +361,7 @@ export function BankHolidaysPage() {
             <EmptyState
               icon={<CalendarDays width={28} height={28} strokeWidth={1.75} />}
               title="No outlet has a state yet"
-              description="Holidays are kept per state. Once an outlet's billing details give its state, its list appears here."
+              description="Holidays are kept per state. Once an outlet has its state (from its Pump details, or its bill-to state until then), its list appears here."
             />
           ) : monthQ.isLoading || statesQ.isLoading ? (
             <ListSkeleton />
@@ -814,7 +814,8 @@ function StatesCard({
             {outletsWithoutState.length === 1 ? 'has' : 'have'} no state recorded, so
             only Sundays and the 2nd and 4th Saturdays move{' '}
             {outletsWithoutState.length === 1 ? 'its' : 'their'} Credit &amp; DOD deadline.
-            Fill in the billing details, which include the state.
+            Their Pump details form in the chat asks for it. You can also fill it for them on
+            the outlet’s Info tab, under Pump details.
           </Callout>
         ) : null}
       </CardContent>

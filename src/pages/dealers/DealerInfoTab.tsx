@@ -16,6 +16,7 @@ import {
 import { OldOnboardingRecord } from '@/features/onboarding/OldOnboardingRecord';
 import { SetupCard } from '@/features/onboarding/SetupCard';
 import { StartBillingCard } from '@/features/onboarding/StartBillingCard';
+import { PumpDetailsCard } from '@/features/outletDetails/PumpDetailsCard';
 import { useDealerAuditQuery } from '@/hooks/api/useDealerAudit';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { formatDate, formatDateTime } from '@/lib/format';
@@ -126,6 +127,17 @@ export function DealerInfoTab({
             />
           </CardContent>
         </Card>
+
+        {/* The form the dealer fills in their chat (which state the pump is in, and
+            whatever else the server asks). Beside Identity because it shows for every
+            outlet, old and archived ones included; it draws itself from the server's
+            question list and is simply absent on a server that has none. */}
+        <PumpDetailsCard
+          dealerId={dealer.id}
+          code={dealer.code}
+          archived={isArchived}
+          className="min-w-0"
+        />
 
         {setupInGrid && setup ? <SetupCard setup={setup} {...cardTabs} /> : null}
         {/* An outlet served before the app has no setup, so nothing bills it: offer to start. */}
