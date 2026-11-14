@@ -10,6 +10,7 @@ import { downloadAttachment } from '@/lib/downloadAttachment';
 import { formatDuration } from '@/lib/uploadAttachment';
 import { isVideoAttachment, type Attachment } from '@dk/shared';
 
+import { AttachmentPdfViewer, isPdfAttachment } from './AttachmentPdfViewer';
 import { DealerViewContext } from './DealerCards';
 import { dealerWord } from './dealerView';
 
@@ -376,42 +377,51 @@ const BADGE_TONE: Record<FileFlavour, string> = {
 
 /**
  * A document: the coloured type badge, the name over two lines, "PDF · 1.2 MB".
- * The tap presigns a fresh link (the one that rode in with the message expires)
- * and goes through the native download bridge.
+ * A PDF opens in the app's own reader (`AttachmentPdfViewer`): as a download,
+ * the admin phone app handed it to Chrome. Anything else presigns a fresh link
+ * (the one that rode in with the message expires) and goes through the native
+ * download bridge.
  */
 function DocumentAttachment({ attachment }: { attachment: Attachment }) {
   const { download, downloading } = useDownload(attachment);
+  const [reading, setReading] = React.useState(false);
+  const pdf = isPdfAttachment(attachment);
   return (
-    <button
-      type="button"
-      onClick={() => void download()}
-      disabled={downloading}
-      aria-label={`Download ${attachment.filename}`}
-      className="flex w-full min-w-[220px] items-center gap-3 rounded-md bg-black/[0.06] px-2.5 py-2 text-left hover:bg-black/10 disabled:opacity-70"
-    >
-      <span
-        aria-hidden
-        className={cn(
-          'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold tracking-wide text-white',
-          BADGE_TONE[fileFlavour(attachment.filename, attachment.contentType)],
-        )}
+    <>
+      <button
+        type="button"
+        onClick={() => (pdf ? setReading(true) : void download())}
+        disabled={downloading}
+        aria-label={`${pdf ? 'Open' : 'Download'} ${attachment.filename}`}
+        className="flex w-full min-w-[220px] items-center gap-3 rounded-md bg-black/[0.06] px-2.5 py-2 text-left hover:bg-black/10 disabled:opacity-70"
       >
-        {downloading ? (
-          <Spinner size={14} />
-        ) : (
-          fileTypeLabel(attachment.filename, attachment.contentType)
-        )}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="line-clamp-2 break-words text-[14px] leading-snug text-wa-bubble-text">
-          {attachment.filename}
+        <span
+          aria-hidden
+          className={cn(
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold tracking-wide text-white',
+            BADGE_TONE[fileFlavour(attachment.filename, attachment.contentType)],
+          )}
+        >
+          {downloading ? (
+            <Spinner size={14} />
+          ) : (
+            fileTypeLabel(attachment.filename, attachment.contentType)
+          )}
         </span>
-        <span className="block text-[12px] text-wa-meta">
-          {fileTypeLabel(attachment.filename, attachment.contentType)} ·{' '}
-          {formatBytes(attachment.size)}
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-2 break-words text-[14px] leading-snug text-wa-bubble-text">
+            {attachment.filename}
+          </span>
+          <span className="block text-[12px] text-wa-meta">
+            {fileTypeLabel(attachment.filename, attachment.contentType)} ·{' '}
+            {formatBytes(attachment.size)}
+          </span>
         </span>
-      </span>
-    </button>
+      </button>
+      {reading ? (
+        <AttachmentPdfViewer attachment={attachment} onClose={() => setReading(false)} />
+      ) : null}
+    </>
   );
 }
 

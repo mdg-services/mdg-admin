@@ -3,6 +3,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Download,
   Plus,
   Trash2,
 } from 'lucide-react';
@@ -13,6 +14,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import {
   Badge,
   Button,
+  Callout,
   Card,
   CardContent,
   CardHeader,
@@ -25,6 +27,7 @@ import {
   Input,
   Label,
   MobileCardList,
+  Select,
   Skeleton,
   StickyActionBar,
   Table,
@@ -37,10 +40,16 @@ import {
 } from '@/components/ui';
 import {
   useBankHolidayMonthQuery,
+  useBankHolidayStatesQuery,
   useConfirmBankHolidayMonth,
+  useSyncRbiHolidays,
 } from '@/hooks/api/useBankHolidays';
 import { ApiError } from '@/lib/api';
-import type { BankHolidayMonthRow } from '@dk/shared';
+import type {
+  BankHolidayMonthRow,
+  BankHolidaySource,
+  BankHolidayStateSummary,
+} from '@dk/shared';
 import type { ConfirmBankHolidayMonthInput } from '@dk/shared/schemas';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -65,6 +74,31 @@ function monthLabelOf(year: number, month: number): string {
   });
 }
 
+/** What the Source badge says for each kind of row. */
+const SOURCE_LABEL: Record<BankHolidaySource, string> = {
+  rbi: 'From RBI',
+  manual: 'Added by hand',
+  library: 'Old list',
+};
+
+/** "13 Nov, 5:30 am" for when a state's list last downloaded. */
+function formatSyncedAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+/** "5E, 9E and 12E". */
+function listCodes(codes: string[]): string {
+  if (codes.length <= 1) return codes.join('');
+  return `${codes.slice(0, -1).join(', ')} and ${codes[codes.length - 1]}`;
+}
+
 /** Two-digit padded date string, e.g. year 2026 month 8 day 1 -> "2026-08-01". */
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -85,8 +119,24 @@ export function BankHolidaysPage() {
   const month = Number(search.get('month')) || defaultMonth;
   const monthLabel = monthLabelOf(year, month);
 
-  const monthQ = useBankHolidayMonthQuery(year, month);
+  // Holidays are kept per state. The state comes from the URL, else the state
+  // with the most outlets (Bihar today), so the page opens on the list that
+  // matters most.
+  const statesQ = useBankHolidayStatesQuery();
+  const states = React.useMemo(() => statesQ.data?.states ?? [], [statesQ.data]);
+  const fallbackState = React.useMemo(
+    () =>
+      [...states].sort((a, b) => b.outlets.length - a.outlets.length)[0]?.state ?? null,
+    [states],
+  );
+  const stateParam = search.get('state');
+  const state =
+    stateParam && states.some((x) => x.state === stateParam) ? stateParam : fallbackState;
+  const current = states.find((x) => x.state === state) ?? null;
+
+  const monthQ = useBankHolidayMonthQuery(state, year, month);
   const confirm = useConfirmBankHolidayMonth();
+  const syncRbi = useSyncRbiHolidays();
 
   // Local editable copy of the fetched rows. Nothing persists until Save.
   const [rows, setRows] = React.useState<BankHolidayMonthRow[]>([]);
@@ -98,13 +148,30 @@ export function BankHolidaysPage() {
     if (monthQ.data) {
       setRows(monthQ.data.rows.map((r) => ({ ...r })));
     }
-  }, [monthQ.data, year, month]);
+  }, [monthQ.data, year, month, state]);
 
   function goToMonth(y: number, m: number) {
     const next = new URLSearchParams(search);
     next.set('year', String(y));
     next.set('month', String(m));
     setSearch(next, { replace: true });
+  }
+
+  function goToState(code: string) {
+    const next = new URLSearchParams(search);
+    next.set('state', code);
+    setSearch(next, { replace: true });
+  }
+
+  async function downloadNow() {
+    try {
+      const view = await syncRbi.mutateAsync();
+      const failed = view.states.filter((x) => x.lastError);
+      if (failed.length === 0) toast.success('Every state is up to date with RBI.');
+      else toast.error(`${failed.map((x) => x.name).join(', ')}: ${failed[0]?.lastError ?? ''}`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not reach RBI');
+    }
   }
 
   function shiftMonth(delta: number) {
@@ -157,7 +224,9 @@ export function BankHolidaysPage() {
       toast.error('Every enabled holiday needs a name.');
       return;
     }
+    if (!state) return;
     const input: ConfirmBankHolidayMonthInput = {
+      state,
       year,
       month,
       holidays: rows
@@ -172,7 +241,7 @@ export function BankHolidaysPage() {
     };
     try {
       await confirm.mutateAsync(input);
-      toast.success(`Bank holidays confirmed for ${monthLabel}`);
+      toast.success(`${current?.name ?? 'Bank'} holidays saved for ${monthLabel}`);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not save holidays');
     }
@@ -182,9 +251,17 @@ export function BankHolidaysPage() {
     <div>
       <PageHeader
         title="Bank holidays"
-        subtitle="Confirm the bank & national holidays the Credit & DOD engine treats as non-working days."
+        subtitle="Each state's bank holidays, downloaded from RBI every morning. An outlet's Credit & DOD deadline skips only its own state's holidays."
         actions={
           <>
+            <Button
+              variant="secondary"
+              onClick={() => void downloadNow()}
+              loading={syncRbi.isPending}
+              leftIcon={<Download width={14} height={14} strokeWidth={1.75} />}
+            >
+              Download from RBI now
+            </Button>
             {/* Below md this moves to the StickyActionBar at the foot of the
                 page; `hidden` beats `Button`'s own `inline-flex` (Tailwind
                 emits `.hidden` last), and `md:inline-flex` puts it back at
@@ -193,7 +270,7 @@ export function BankHolidaysPage() {
               className="hidden md:inline-flex"
               onClick={save}
               loading={confirm.isPending}
-              disabled={monthQ.isLoading || !monthQ.data}
+              disabled={monthQ.isLoading || !monthQ.data || !state}
             >
               Save {monthLabel}
             </Button>
@@ -203,6 +280,14 @@ export function BankHolidaysPage() {
       />
 
       <HowItWorksNote />
+
+      <StatesCard
+        loading={statesQ.isLoading}
+        states={states}
+        current={current}
+        outletsWithoutState={statesQ.data?.outletsWithoutState ?? []}
+        onPick={goToState}
+      />
 
       <Card>
         {/* `action`, not a second child. As a child, "Add holiday" was one more
@@ -272,7 +357,13 @@ export function BankHolidaysPage() {
             edges. `md:p-4` is md+ unchanged: `cn` is clsx and `.p-4` is emitted
             after `.p-0`, so the old call-site `p-0` never won there either. */}
         <CardContent padding="none" className="md:p-4">
-          {monthQ.isLoading ? (
+          {!state && !statesQ.isLoading ? (
+            <EmptyState
+              icon={<CalendarDays width={28} height={28} strokeWidth={1.75} />}
+              title="No outlet has a state yet"
+              description="Holidays are kept per state. Once an outlet's billing details give its state, its list appears here."
+            />
+          ) : monthQ.isLoading || statesQ.isLoading ? (
             <ListSkeleton />
           ) : monthQ.isError ? (
             <EmptyState
@@ -296,8 +387,8 @@ export function BankHolidaysPage() {
           ) : rows.length === 0 ? (
             <EmptyState
               icon={<CalendarDays width={28} height={28} strokeWidth={1.75} />}
-              title={`No holidays for ${monthLabel}`}
-              description="The library has no national holidays this month. Add any state or bank holidays that apply."
+              title={`No ${current?.name ?? ''} holidays in ${monthLabel}`}
+              description="RBI lists no bank holiday for this state this month. Add one by hand if a bank here is closed."
               cta={
                 <Button
                   size="sm"
@@ -339,12 +430,10 @@ export function BankHolidaysPage() {
                         </TD>
                         <TD>
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <Badge intent={r.source === 'library' ? 'info' : 'neutral'}>
-                              {r.source === 'library' ? 'Suggested' : 'Manual'}
+                            <Badge intent={r.source === 'rbi' ? 'info' : 'neutral'}>
+                              {SOURCE_LABEL[r.source]}
                             </Badge>
-                            {r.source === 'library' && !r.persisted ? (
-                              <Badge intent="warning">Needs confirmation</Badge>
-                            ) : null}
+                            {!r.persisted ? <Badge intent="warning">Not saved</Badge> : null}
                           </div>
                         </TD>
                         <TD className="text-text-muted">{r.type ?? '—'}</TD>
@@ -399,12 +488,10 @@ export function BankHolidaysPage() {
                   primaryRightWidth: 'clamp',
                   primaryRight: (
                     <>
-                      <Badge intent={r.source === 'library' ? 'info' : 'neutral'}>
-                        {r.source === 'library' ? 'Suggested' : 'Manual'}
+                      <Badge intent={r.source === 'rbi' ? 'info' : 'neutral'}>
+                        {SOURCE_LABEL[r.source]}
                       </Badge>
-                      {r.source === 'library' && !r.persisted ? (
-                        <Badge intent="warning">Needs confirmation</Badge>
-                      ) : null}
+                      {!r.persisted ? <Badge intent="warning">Not saved</Badge> : null}
                     </>
                   ),
                   secondary: (
@@ -474,7 +561,7 @@ export function BankHolidaysPage() {
         <Button
           onClick={save}
           loading={confirm.isPending}
-          disabled={monthQ.isLoading || !monthQ.data}
+          disabled={monthQ.isLoading || !monthQ.data || !state}
         >
           Save {monthLabel}
         </Button>
@@ -486,6 +573,7 @@ export function BankHolidaysPage() {
         year={year}
         month={month}
         monthLabel={monthLabel}
+        stateName={current?.name ?? ''}
         existingDates={rows.map((r) => r.date)}
         onAdd={addRow}
       />
@@ -519,11 +607,15 @@ function HowItWorksNote() {
           moreLabel="Show more"
           lessLabel="Show less"
         >
-          Enabled dates push the Credit &amp; DOD payment deadline to the next
-          working day — just like Sundays and 2nd &amp; 4th Saturdays. Library
-          suggestions are national holidays; add state or bank-specific
-          holidays manually. To exclude a suggested national holiday, uncheck
-          its Enabled box and save (Remove is for manually-added dates).
+          Bank holidays are declared state by state, so each state has its own
+          list. Every morning the server downloads each state&apos;s list from
+          RBI, which every bank in the state keeps, SBI included. A ticked date
+          pushes the Credit &amp; DOD payment deadline of that state&apos;s
+          outlets to the next working day, just like Sundays and 2nd &amp; 4th
+          Saturdays. To stop an RBI date counting, untick it and save; the next
+          download keeps your choice. Add a date by hand only if RBI misses it
+          (Remove is for dates added by hand). If RBI later lists that date, it
+          becomes RBI&apos;s, and goes if RBI moves it.
         </ClampedText>
       </CardContent>
     </Card>
@@ -538,6 +630,7 @@ function AddHolidayDialog({
   year,
   month,
   monthLabel,
+  stateName,
   existingDates,
   onAdd,
 }: {
@@ -546,6 +639,7 @@ function AddHolidayDialog({
   year: number;
   month: number;
   monthLabel: string;
+  stateName: string;
   existingDates: string[];
   onAdd: (row: BankHolidayMonthRow) => void;
 }) {
@@ -599,7 +693,7 @@ function AddHolidayDialog({
       onClose={onClose}
       size="sm"
       title="Add holiday"
-      description={`Add a state or bank holiday for ${monthLabel}. Save the month to persist it.`}
+      description={`Add a bank holiday in ${stateName} for ${monthLabel} that RBI's list misses. Save the month to keep it.`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -636,6 +730,95 @@ function AddHolidayDialog({
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/**
+ * Which state's list is on screen, which outlets follow it, and whether its RBI
+ * download is fresh. Outlets with no state are named here, because their
+ * deadline skips weekends only and nothing else on the page would say so.
+ */
+function StatesCard({
+  loading,
+  states,
+  current,
+  outletsWithoutState,
+  onPick,
+}: {
+  loading: boolean;
+  states: BankHolidayStateSummary[];
+  current: BankHolidayStateSummary | null;
+  outletsWithoutState: string[];
+  onPick: (state: string) => void;
+}) {
+  if (loading) {
+    return (
+      <Card className="mb-4">
+        <CardContent className="py-3">
+          <Skeleton className="h-11" />
+        </CardContent>
+      </Card>
+    );
+  }
+  return (
+    <Card className="mb-4">
+      <CardContent className="grid gap-3 py-3">
+        {states.length > 0 ? (
+          <div className="grid gap-1 md:max-w-sm">
+            <Label htmlFor="bh-state">State</Label>
+            <Select
+              id="bh-state"
+              value={current?.state ?? ''}
+              onChange={(e) => onPick(e.target.value)}
+            >
+              {states.map((x) => (
+                <option key={x.state} value={x.state}>
+                  {x.name} ({x.outlets.length} outlet{x.outlets.length === 1 ? '' : 's'})
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
+
+        {current ? (
+          <div className="grid gap-1 text-sm text-text-muted">
+            <p>
+              <span className="font-medium text-text">Outlets:</span> {listCodes(current.outlets)}
+            </p>
+            <p>
+              {current.rbiOffice ? (
+                <>
+                  From RBI {current.rbiOffice}
+                  {current.lastSyncedAt
+                    ? `, last downloaded ${formatSyncedAt(current.lastSyncedAt)}`
+                    : ', not downloaded yet'}
+                  {` · ${current.holidaysThisYear} holiday${current.holidaysThisYear === 1 ? '' : 's'} this year`}
+                </>
+              ) : (
+                'RBI has no list we know of for this state. Add its holidays by hand.'
+              )}
+            </p>
+          </div>
+        ) : null}
+
+        {current?.lastError ? (
+          <Callout intent="warning">
+            The latest download did not work: {current.lastError} The holidays saved before
+            still count.
+          </Callout>
+        ) : null}
+
+        {outletsWithoutState.length > 0 ? (
+          <Callout intent="warning">
+            {listCodes(outletsWithoutState)}{' '}
+            {outletsWithoutState.length === 1 ? 'has' : 'have'} no state recorded, so
+            only Sundays and the 2nd and 4th Saturdays move{' '}
+            {outletsWithoutState.length === 1 ? 'its' : 'their'} Credit &amp; DOD deadline.
+            Fill in the billing details, which include the state.
+          </Callout>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 

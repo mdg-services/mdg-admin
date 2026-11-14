@@ -39,6 +39,7 @@ import { aiShareBlockReason } from '@/lib/aiCheck';
 import { isHolding, shareBlockedReason } from '@/lib/assurance';
 import { cn } from '@/lib/cn';
 import { formatDateTime, formatLitres } from '@/lib/format';
+import { isNativeShell } from '@/lib/nativeBridge';
 import type { Intent } from '@/lib/statusIntent';
 import { reportTiersSentence } from '@/pages/dealers/vault/lossTiers';
 import {
@@ -239,8 +240,10 @@ export function DsrReportPanel({
         )}
         {/* Desktop only. Below md the frame is not inline at all, so "open it in
             a new tab" has nothing to escape from — the tap card above IS the
-            escape, and a 16px-tall text link would be under the touch floor. */}
-        {report.htmlUrl ? (
+            escape, and a 16px-tall text link would be under the touch floor.
+            Not in the phone app either (a tablet is md wide): there a new tab
+            is the phone's browser, and the frame above already shows it. */}
+        {report.htmlUrl && !isNativeShell() ? (
           <div className="hidden border-t border-border px-4 py-2 text-right md:block">
             <a
               href={report.htmlUrl}

@@ -8,12 +8,11 @@ import {
   Drawer,
   ImageLightbox,
   Skeleton,
-  useToast,
 } from '@/components/ui';
 import { useClaimFileUrls } from '@/hooks/api/useCalibrationClaim';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useOpenPaper } from '@/hooks/useOpenPaper';
 import { ApiError } from '@/lib/api';
-import { isNativeShell, requestNativeDownload } from '@/lib/nativeBridge';
 import type { ClaimDocumentView } from '@dk/shared';
 
 import { SLOT_LABEL, SOURCE_LABEL, fileSize } from './format';
@@ -43,7 +42,6 @@ export function PaperViewer({
   doc: ClaimDocumentView | null;
   onClose: () => void;
 }) {
-  const toast = useToast();
   const wideEnoughToEmbed = useMediaQuery('(min-width: 768px)');
   const [zoom, setZoom] = React.useState(false);
   const urlsQ = useClaimFileUrls(claimId, doc?.slot, !!doc);
@@ -54,128 +52,114 @@ export function PaperViewer({
   const missing = urlsQ.isError && urlsQ.error instanceof ApiError && urlsQ.error.status === 404;
   const failed = urlsQ.isError && !missing;
 
-  async function openOnPhone(): Promise<void> {
-    if (!urls) return;
-    if (isNativeShell()) {
-      // The admin shell runs with `setSupportMultipleWindows={false}`, so
-      // `window.open` is unreliable inside it; the shell's own handler saves the
-      // file and hands it to whatever the phone uses for PDFs.
-      const result = await requestNativeDownload({
-        id: `claim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        url: urls.downloadUrl,
-        filename: urls.filename,
-        contentType: urls.contentType,
-        kind: 'file',
-      });
-      if (result.ok) return;
-      if (!result.timedOut) {
-        toast.error(result.error || 'Could not open the paper');
-        return;
-      }
-      // An old shell without the handler: fall through to the browser.
-    }
-    window.open(urls.viewUrl, '_blank', 'noopener');
+  // A PDF opens in the app's own reader on a phone or in the app; a laptop gets a tab.
+  const paper = useOpenPaper('Could not open the paper');
+  function openOnPhone(): void {
+    if (urls) paper.open(urls);
   }
 
   return (
-    <Drawer
-      open={!!doc}
-      onClose={onClose}
-      width="lg"
-      title={doc ? SLOT_LABEL[doc.slot] : undefined}
-      description={
-        doc ? `${doc.filename} · ${SOURCE_LABEL[doc.source]} · ${fileSize(doc.size)}` : undefined
-      }
-      footer={
-        <>
-          {wideEnoughToEmbed && urls ? (
-            <Button
-              variant="secondary"
-              leftIcon={<ExternalLink width={14} height={14} strokeWidth={1.75} />}
-              onClick={() => window.open(urls.viewUrl, '_blank', 'noopener')}
-            >
-              Open in a new tab
-            </Button>
-          ) : null}
-          {/* One control on a phone, not two: `openOnPhone` already saves the
-              file through the shell and opens it, so a second "Download" beside
-              it did the same job through `window.open`, which the shell drops. */}
-          {!wideEnoughToEmbed && urls ? (
-            <Button onClick={() => void openOnPhone()}>Open</Button>
-          ) : null}
-          {wideEnoughToEmbed && urls ? (
-            <DownloadButton
-              variant="ghost"
-              size="md"
-              url={urls.downloadUrl}
-              filename={urls.filename}
-              contentType={urls.contentType}
-              kind={isImage ? 'image' : 'file'}
-            />
-          ) : null}
-          <Button variant="ghost" onClick={onClose}>
-            Close
-          </Button>
-        </>
-      }
-    >
-      {doc ? (
-        <div className="grid gap-3">
-          {missing ? (
-            <Callout intent="warning">
-              This paper is not stored, so there is nothing to show.
-            </Callout>
-          ) : failed ? (
-            <div className="grid justify-items-start gap-2">
-              <Callout intent="warning">
-                The paper could not be opened just now. Try again in a moment.
-              </Callout>
+    <>
+      <Drawer
+        open={!!doc}
+        onClose={onClose}
+        width="lg"
+        title={doc ? SLOT_LABEL[doc.slot] : undefined}
+        description={
+          doc ? `${doc.filename} · ${SOURCE_LABEL[doc.source]} · ${fileSize(doc.size)}` : undefined
+        }
+        footer={
+          <>
+            {wideEnoughToEmbed && urls ? (
               <Button
                 variant="secondary"
-                loading={urlsQ.isFetching}
-                leftIcon={<RotateCw width={14} height={14} strokeWidth={1.75} />}
-                onClick={() => void urlsQ.refetch()}
+                leftIcon={<ExternalLink width={14} height={14} strokeWidth={1.75} />}
+                onClick={openOnPhone}
               >
-                Try again
+                Open in a new tab
               </Button>
-            </div>
-          ) : !urls ? (
-            <Skeleton className="h-64 w-full rounded-md" />
-          ) : isImage ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setZoom(true)}
-                aria-label="Open the photo full size"
-                className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
-              >
-                <img
+            ) : null}
+            {/* One control on a phone, not two: `openOnPhone` opens a PDF in the
+                app's own reader, whose Save takes the shell's download path, so a
+                second "Download" beside it would only repeat that. */}
+            {!wideEnoughToEmbed && urls ? (
+              <Button onClick={openOnPhone}>Open</Button>
+            ) : null}
+            {wideEnoughToEmbed && urls ? (
+              <DownloadButton
+                variant="ghost"
+                size="md"
+                url={urls.downloadUrl}
+                filename={urls.filename}
+                contentType={urls.contentType}
+                kind={isImage ? 'image' : 'file'}
+              />
+            ) : null}
+            <Button variant="ghost" onClick={onClose}>
+              Close
+            </Button>
+          </>
+        }
+      >
+        {doc ? (
+          <div className="grid gap-3">
+            {missing ? (
+              <Callout intent="warning">
+                This paper is not stored, so there is nothing to show.
+              </Callout>
+            ) : failed ? (
+              <div className="grid justify-items-start gap-2">
+                <Callout intent="warning">
+                  The paper could not be opened just now. Try again in a moment.
+                </Callout>
+                <Button
+                  variant="secondary"
+                  loading={urlsQ.isFetching}
+                  leftIcon={<RotateCw width={14} height={14} strokeWidth={1.75} />}
+                  onClick={() => void urlsQ.refetch()}
+                >
+                  Try again
+                </Button>
+              </div>
+            ) : !urls ? (
+              <Skeleton className="h-64 w-full rounded-md" />
+            ) : isImage ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setZoom(true)}
+                  aria-label="Open the photo full size"
+                  className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+                >
+                  <img
+                    src={urls.viewUrl}
+                    alt={SLOT_LABEL[doc.slot]}
+                    className="max-h-[70dvh] w-full rounded-md border border-border bg-surface-2 object-contain"
+                  />
+                </button>
+                <ImageLightbox
+                  open={zoom}
+                  onClose={() => setZoom(false)}
                   src={urls.viewUrl}
                   alt={SLOT_LABEL[doc.slot]}
-                  className="max-h-[70dvh] w-full rounded-md border border-border bg-surface-2 object-contain"
+                  title={SLOT_LABEL[doc.slot]}
+                  downloadUrl={urls.downloadUrl}
                 />
-              </button>
-              <ImageLightbox
-                open={zoom}
-                onClose={() => setZoom(false)}
-                src={urls.viewUrl}
-                alt={SLOT_LABEL[doc.slot]}
-                title={SLOT_LABEL[doc.slot]}
-                downloadUrl={urls.downloadUrl}
-              />
-            </>
-          ) : isPdf && wideEnoughToEmbed ? (
-            <PdfFrame src={urls.viewUrl} title={SLOT_LABEL[doc.slot]} />
-          ) : (
-            <p className="text-sm text-text-muted">
-              {isPdf
-                ? 'A PDF opens in your phone’s own viewer. Press Open below.'
-                : 'This kind of file cannot be shown here. Download it to read it.'}
-            </p>
-          )}
-        </div>
-      ) : null}
-    </Drawer>
+              </>
+            ) : isPdf && wideEnoughToEmbed ? (
+              <PdfFrame src={urls.viewUrl} title={SLOT_LABEL[doc.slot]} />
+            ) : (
+              <p className="text-sm text-text-muted">
+                {isPdf
+                  ? 'A PDF opens in your phone’s own viewer. Press Open below.'
+                  : 'This kind of file cannot be shown here. Download it to read it.'}
+              </p>
+            )}
+          </div>
+        ) : null}
+      </Drawer>
+      {paper.reader}
+    </>
   );
 }
 

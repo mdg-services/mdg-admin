@@ -1,6 +1,5 @@
 import { useOpenAlertCount } from './api/useAdminAlerts';
 import { useAiTurnCountsQuery } from './api/useAiTurns';
-import { useBankHolidayPendingQuery } from './api/useBankHolidays';
 import { useNewCallbackCount } from './api/useCallbacks';
 import { useNewEnrolmentCount } from './api/useEnrolments';
 import { useOpenGrievanceCount } from './api/useGrievances';
@@ -11,7 +10,7 @@ import { useWhatsAppUnreadChats } from './api/useWhatsAppInbox';
 /**
  * The count badge each nav destination carries, keyed by its route: tickets that
  * need us (on the Inbox), open alerts, AI answers nobody has judged yet,
- * unconfirmed national holidays, website grievances nobody has resolved,
+ * website grievances nobody has resolved,
  * registrations nobody has dealt with yet (on the Onboarding entry), leads due now or never
  * called, and WhatsApp chats with something unread.
  *
@@ -22,8 +21,8 @@ import { useWhatsAppUnreadChats } from './api/useWhatsAppInbox';
  *
  * ONE place, because there were two and they had drifted. The desktop sidebar
  * (`AppShell`) and the phone's tab bar (`MobileTabBar`) each computed their
- * own, the phone's had never learned about bank holidays, and a super-admin
- * with three holidays waiting saw "3" on a desktop and nothing on a phone.
+ * own, and the phone's had drifted behind: a super-admin with three items
+ * waiting saw "3" on a desktop and nothing on a phone.
  *
  * The AI count is the only nudge to open the AI answers page, and the feature's
  * safety claim is that a person reads what the machine said — so it has to
@@ -36,7 +35,6 @@ import { useWhatsAppUnreadChats } from './api/useWhatsAppInbox';
  */
 export function useNavBadges(): Record<string, number> {
   const aiCountsQ = useAiTurnCountsQuery();
-  const pendingHolidaysQ = useBankHolidayPendingQuery();
   const openAlerts = useOpenAlertCount();
   const ticketsNeedingUs = useNeedsUsCount();
   // Grievances are super-admin only, and that hook stays silent for everyone else;
@@ -54,7 +52,6 @@ export function useNavBadges(): Record<string, number> {
     '/inbox': ticketsNeedingUs,
     '/alerts': openAlerts,
     '/ai-answers': aiCountsQ.data?.unreviewed ?? 0,
-    '/bank-holidays': pendingHolidaysQ.data?.totalCount ?? 0,
     '/grievances': openGrievances,
     '/onboarding': newRegistrations,
     '/callbacks': newCallbacks,

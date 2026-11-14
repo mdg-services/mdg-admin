@@ -1,4 +1,4 @@
-import { BellRing, ExternalLink, FileText, Save } from 'lucide-react';
+import { BellRing, ExternalLink, FileText, Save, ZoomIn } from 'lucide-react';
 import * as React from 'react';
 
 import {
@@ -8,6 +8,7 @@ import {
   DownloadButton,
   Drawer,
   HowThisWorks,
+  ImageLightbox,
   Input,
   Label,
   MIN_SELECTABLE_YMD,
@@ -16,10 +17,10 @@ import {
 } from '@/components/ui';
 import { useDocumentAskFileUrl, useSetDocumentValidity } from '@/hooks/api/useDocumentAsks';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useOpenPaper } from '@/hooks/useOpenPaper';
 import { useRevealOnChange } from '@/hooks/useRevealOnChange';
 import { ApiError } from '@/lib/api';
 import { formatDateTime, istTodayYmd } from '@/lib/format';
-import { isNativeShell, requestNativeDownload } from '@/lib/nativeBridge';
 import {
   dealerCodeLabel,
   dealerProfileDateLabel,
@@ -77,6 +78,8 @@ export function DocumentValidityDrawer({ open, row, onClose }: DocumentValidityD
   const today = istTodayYmd();
   const wideEnoughToEmbed = useMediaQuery('(min-width: 768px)');
   const save = useSetDocumentValidity();
+  /** A photographed paper, full size and zoomable, over the app — never a new tab. */
+  const [lightboxOpen, setLightboxOpen] = React.useState(false);
 
   const [validUntil, setValidUntil] = React.useState('');
   const [ladder, setLadder] = React.useState<ReminderLadderValue>({ mode: 'remind', text: '' });
@@ -98,6 +101,10 @@ export function DocumentValidityDrawer({ open, row, onClose }: DocumentValidityD
   const cadenceKey = (row?.cadence ?? []).join(',');
   const storedUntil = row?.validUntil ?? '';
   const askId = row?.askId;
+  // A viewer left open on one paper must not pop up over the next one.
+  React.useEffect(() => {
+    setLightboxOpen(false);
+  }, [askId, open]);
 
   // Every field is per-row. Carrying a half-typed date from one dealer's
   // certificate onto the next is the one mistake this screen could make that
@@ -109,30 +116,14 @@ export function DocumentValidityDrawer({ open, row, onClose }: DocumentValidityD
   }, [askId, storedUntil, cadenceKey]);
 
   const fileQ = useDocumentAskFileUrl(row?.askId, open && Boolean(row?.hasFile));
+  const isImage = fileQ.data?.contentType.startsWith('image/') ?? false;
 
-  /** Open a PDF the way the shell can actually open one. Same route as the review drawer. */
-  async function openPaper(): Promise<void> {
-    const urls = fileQ.data;
-    if (!urls) return;
-    if (isNativeShell()) {
-      // The admin shell runs `setSupportMultipleWindows={false}`, so
-      // `window.open` is unreliable inside it; the shell's own handler saves the
-      // file and hands it to whatever the phone uses for PDFs.
-      const result = await requestNativeDownload({
-        id: `ask-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        url: urls.downloadUrl,
-        filename: urls.filename,
-        contentType: urls.contentType,
-        kind: 'file',
-      });
-      if (result.ok) return;
-      if (!result.timedOut) {
-        toast.error(result.error || 'Could not open the paper');
-        return;
-      }
-    }
-    window.open(urls.viewUrl, '_blank', 'noopener');
+  // A PDF opens in the app's own reader on a phone or in the app; a laptop gets a tab.
+  const paper = useOpenPaper('Could not open the paper');
+  function openPaper(): void {
+    if (fileQ.data) paper.open(fileQ.data);
   }
+
 
   if (!row) return null;
 
@@ -191,188 +182,224 @@ export function DocumentValidityDrawer({ open, row, onClose }: DocumentValidityD
   const skipped = (row.ask.remindersSent ?? []).length - sent.length;
 
   return (
-    <Drawer
-      open={open}
-      onClose={onClose}
-      width="md"
-      title={row.title}
-      help={
-        <HowThisWorks
-          surface="admin-document-validity"
-          label="When a paper runs out"
-          variant="icon"
-        />
-      }
-      description={`${dealerCodeLabel(row.dealerCode)} · on file${
-        row.filedAt ? ` since ${formatDateTime(row.filedAt)}` : ''
-      }`}
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose} disabled={save.isPending}>
-            Close
-          </Button>
-          <Button
-            onClick={() => void handleSave()}
-            loading={save.isPending}
-            disabled={save.isPending || !dirty}
-            leftIcon={<Save width={16} height={16} strokeWidth={1.75} />}
-          >
-            Save
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <ValidityPill state={row.validityState} daysToExpiry={row.daysToExpiry} />
-          {row.renewalOpen ? <Badge intent="info">Renewal already asked for</Badge> : null}
-          {row.isRenewal ? <Badge intent="neutral">This one is a renewal</Badge> : null}
-          {row.filedByMdg ? <Badge intent="neutral">Filed by MDG</Badge> : null}
-        </div>
-
-        {/* Above the date and the ladder that Save is pressed from, so the
-            refusal brings itself into view rather than landing off screen. */}
-        {error ? (
-          <div ref={errorRef} role="alert">
-            <Callout intent="warning">{error}</Callout>
+    <>
+      <Drawer
+        open={open}
+        onClose={onClose}
+        width="md"
+        title={row.title}
+        help={
+          <HowThisWorks
+            surface="admin-document-validity"
+            label="When a paper runs out"
+            variant="icon"
+          />
+        }
+        description={`${dealerCodeLabel(row.dealerCode)} · on file${
+          row.filedAt ? ` since ${formatDateTime(row.filedAt)}` : ''
+        }`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={onClose} disabled={save.isPending}>
+              Close
+            </Button>
+            <Button
+              onClick={() => void handleSave()}
+              loading={save.isPending}
+              disabled={save.isPending || !dirty}
+              leftIcon={<Save width={16} height={16} strokeWidth={1.75} />}
+            >
+              Save
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <ValidityPill state={row.validityState} daysToExpiry={row.daysToExpiry} />
+            {row.renewalOpen ? <Badge intent="info">Renewal already asked for</Badge> : null}
+            {row.isRenewal ? <Badge intent="neutral">This one is a renewal</Badge> : null}
+            {row.filedByMdg ? <Badge intent="neutral">Filed by MDG</Badge> : null}
           </div>
-        ) : null}
 
-        {/* ── The paper itself ── */}
-        {row.hasFile ? (
-          fileQ.isLoading ? (
-            <Skeleton className="h-12 w-full" />
-          ) : fileQ.isError ? (
-            <Callout intent="warning" onRetry={() => void fileQ.refetch()}>
-              {fileQ.error instanceof ApiError
-                ? fileQ.error.message
-                : 'The paper could not be opened.'}{' '}
-              Do not change the date until you have read it off the paper.
-            </Callout>
-          ) : fileQ.data ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface-2 p-3">
-              <FileText width={16} height={16} strokeWidth={1.75} className="text-text-muted" />
-              <span className="min-w-0 flex-1 break-all text-sm text-text">
-                {fileQ.data.filename}
-              </span>
-              {wideEnoughToEmbed ? (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    leftIcon={<ExternalLink width={14} height={14} strokeWidth={1.75} />}
-                    onClick={() => window.open(fileQ.data.viewUrl, '_blank', 'noopener')}
-                  >
+          {/* Above the date and the ladder that Save is pressed from, so the
+              refusal brings itself into view rather than landing off screen. */}
+          {error ? (
+            <div ref={errorRef} role="alert">
+              <Callout intent="warning">{error}</Callout>
+            </div>
+          ) : null}
+
+          {/* ── The paper itself ── */}
+          {row.hasFile ? (
+            fileQ.isLoading ? (
+              <Skeleton className="h-12 w-full" />
+            ) : fileQ.isError ? (
+              <Callout intent="warning" onRetry={() => void fileQ.refetch()}>
+                {fileQ.error instanceof ApiError
+                  ? fileQ.error.message
+                  : 'The paper could not be opened.'}{' '}
+                Do not change the date until you have read it off the paper.
+              </Callout>
+            ) : fileQ.data && isImage ? (
+              // A photographed paper: shown here and opened full size in the app, as
+              // the review drawer does. "Open" used to be a new tab — in the phone
+              // app, the phone's browser — for what is just a picture.
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setLightboxOpen(true)}
+                  className="block w-full"
+                  aria-label="Open the paper full size, where it can be zoomed"
+                >
+                  <img
+                    src={fileQ.data.viewUrl}
+                    alt={`${row.title} from ${dealerCodeLabel(row.dealerCode)}`}
+                    draggable={false}
+                    className="max-h-72 w-full rounded-sm border border-border object-contain"
+                  />
+                </button>
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-text-muted">
+                  <ZoomIn width={14} height={14} strokeWidth={1.75} className="shrink-0" />
+                  Tap the photo to open it full size, then pinch or double-tap to read it.
+                </p>
+              </div>
+            ) : fileQ.data ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface-2 p-3">
+                <FileText width={16} height={16} strokeWidth={1.75} className="text-text-muted" />
+                <span className="min-w-0 flex-1 break-all text-sm text-text">
+                  {fileQ.data.filename}
+                </span>
+                {wideEnoughToEmbed ? (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<ExternalLink width={14} height={14} strokeWidth={1.75} />}
+                      onClick={openPaper}
+                    >
+                      Open
+                    </Button>
+                    <DownloadButton
+                      variant="ghost"
+                      size="sm"
+                      url={fileQ.data.downloadUrl}
+                      filename={fileQ.data.filename}
+                      label="Save"
+                    />
+                  </>
+                ) : (
+                  <Button size="sm" onClick={openPaper}>
                     Open
                   </Button>
-                  <DownloadButton
-                    variant="ghost"
-                    size="sm"
-                    url={fileQ.data.downloadUrl}
-                    filename={fileQ.data.filename}
-                    label="Save"
-                  />
-                </>
-              ) : (
-                <Button size="sm" onClick={() => void openPaper()}>
-                  Open
-                </Button>
-              )}
-            </div>
-          ) : null
-        ) : null}
-
-        {/* ── The date ── */}
-        <div>
-          <Label htmlFor="validity-until">Valid until</Label>
-          <Input
-            id="validity-until"
-            type="date"
-            value={validUntil}
-            min={MIN_SELECTABLE_YMD}
-            max={DOCUMENT_VALIDITY_MAX_DAY}
-            disabled={save.isPending}
-            onChange={(e) => setValidUntil(e.target.value)}
-          />
-          <p className="mt-1 text-xs text-text-muted">
-            The date printed on the paper — not a date worked out from an issue date. Where the
-            catalog maps this paper to a field on the Info tab, saving here moves that date too,
-            so the two can never disagree.
-          </p>
-          {typedDays !== null ? (
-            <p className="mt-1 text-xs text-text-subtle">
-              {dealerProfileDateLabel(validUntil, 'en')} · {documentValidityLabel(typedDays, 'en')}
-            </p>
+                )}
+              </div>
+            ) : null
           ) : null}
-          {validUntil !== '' ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              padding="none"
-              className="mt-1"
+
+          {/* ── The date ── */}
+          <div>
+            <Label htmlFor="validity-until">Valid until</Label>
+            <Input
+              id="validity-until"
+              type="date"
+              value={validUntil}
+              min={MIN_SELECTABLE_YMD}
+              max={DOCUMENT_VALIDITY_MAX_DAY}
               disabled={save.isPending}
-              onClick={() => setValidUntil('')}
-            >
-              This paper does not run out — clear the date
-            </Button>
-          ) : null}
-        </div>
-
-        {/* ── The ladder ── */}
-        <ReminderLadderField
-          id="validity-ladder"
-          value={ladder}
-          onChange={setLadder}
-          disabled={save.isPending}
-          subject={`${dealerCodeLabel(row.dealerCode)}’s ${row.title}`}
-          inherited={
-            row.cadenceOverridden
-              ? 'this paper has its own ladder; clearing it back to the catalog’s needs a re-type'
-              : `it follows the catalog — ${cadenceSentence(row.cadence).toLowerCase()}`
-          }
-        />
-
-        {/* ── What has already gone out ── */}
-        <div className="rounded-md border border-border bg-surface-2 p-3">
-          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
-            <BellRing width={13} height={13} strokeWidth={1.75} aria-hidden />
-            What the dealer has already been told
-          </p>
-          {sent.length === 0 && skipped === 0 ? (
-            <p className="mt-1 text-sm text-text-muted">Nothing yet.</p>
-          ) : (
-            <ul className="mt-1 space-y-1 text-sm text-text">
-              {sent.map((entry) => (
-                <li key={`${entry.offsetDays}-${entry.at}`} className="break-words">
-                  {/* The message quoted the REAL days left, not the step. A sweep
-                      resuming on the tenth day fires the fifteen-day step and
-                      says "10 days left", because that is what was true — so
-                      this prints what they read, not which rung it came off. */}
-                  {formatDateTime(entry.at)} — “{documentValidityLabel(entry.daysLeft, 'en')}”
-                </li>
-              ))}
-              {skipped > 0 ? (
-                <li className="text-xs text-text-subtle">
-                  {skipped} step{skipped === 1 ? '' : 's'} written off because the window had
-                  already gone by — that is what stops four notifications about one certificate
-                  landing in one minute.
-                </li>
-              ) : null}
-            </ul>
-          )}
-          {row.lapsedNoticeAt ? (
+              onChange={(e) => setValidUntil(e.target.value)}
+            />
             <p className="mt-1 text-xs text-text-muted">
-              The “this has lapsed” notice went out on {formatDateTime(row.lapsedNoticeAt)}.
+              The date printed on the paper — not a date worked out from an issue date. Where the
+              catalog maps this paper to a field on the Info tab, saving here moves that date too,
+              so the two can never disagree.
             </p>
-          ) : null}
-        </div>
+            {typedDays !== null ? (
+              <p className="mt-1 text-xs text-text-subtle">
+                {dealerProfileDateLabel(validUntil, 'en')} · {documentValidityLabel(typedDays, 'en')}
+              </p>
+            ) : null}
+            {validUntil !== '' ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                padding="none"
+                className="mt-1"
+                disabled={save.isPending}
+                onClick={() => setValidUntil('')}
+              >
+                This paper does not run out — clear the date
+              </Button>
+            ) : null}
+          </div>
 
-        {/* No icon of its own: `Callout` already draws one. */}
-        <Callout intent="info">
-          Correcting the date does not re-send anything. Steps already sent stay sent, so
-          pushing a date further out will not repeat a warning the dealer has already had.
-        </Callout>
-      </div>
-    </Drawer>
+          {/* ── The ladder ── */}
+          <ReminderLadderField
+            id="validity-ladder"
+            value={ladder}
+            onChange={setLadder}
+            disabled={save.isPending}
+            subject={`${dealerCodeLabel(row.dealerCode)}’s ${row.title}`}
+            inherited={
+              row.cadenceOverridden
+                ? 'this paper has its own ladder; clearing it back to the catalog’s needs a re-type'
+                : `it follows the catalog — ${cadenceSentence(row.cadence).toLowerCase()}`
+            }
+          />
+
+          {/* ── What has already gone out ── */}
+          <div className="rounded-md border border-border bg-surface-2 p-3">
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
+              <BellRing width={13} height={13} strokeWidth={1.75} aria-hidden />
+              What the dealer has already been told
+            </p>
+            {sent.length === 0 && skipped === 0 ? (
+              <p className="mt-1 text-sm text-text-muted">Nothing yet.</p>
+            ) : (
+              <ul className="mt-1 space-y-1 text-sm text-text">
+                {sent.map((entry) => (
+                  <li key={`${entry.offsetDays}-${entry.at}`} className="break-words">
+                    {/* The message quoted the REAL days left, not the step. A sweep
+                        resuming on the tenth day fires the fifteen-day step and
+                        says "10 days left", because that is what was true — so
+                        this prints what they read, not which rung it came off. */}
+                    {formatDateTime(entry.at)} — “{documentValidityLabel(entry.daysLeft, 'en')}”
+                  </li>
+                ))}
+                {skipped > 0 ? (
+                  <li className="text-xs text-text-subtle">
+                    {skipped} step{skipped === 1 ? '' : 's'} written off because the window had
+                    already gone by — that is what stops four notifications about one certificate
+                    landing in one minute.
+                  </li>
+                ) : null}
+              </ul>
+            )}
+            {row.lapsedNoticeAt ? (
+              <p className="mt-1 text-xs text-text-muted">
+                The “this has lapsed” notice went out on {formatDateTime(row.lapsedNoticeAt)}.
+              </p>
+            ) : null}
+          </div>
+
+          {/* No icon of its own: `Callout` already draws one. */}
+          <Callout intent="info">
+            Correcting the date does not re-send anything. Steps already sent stay sent, so
+            pushing a date further out will not repeat a warning the dealer has already had.
+          </Callout>
+        </div>
+      </Drawer>
+      {fileQ.data && isImage ? (
+        <ImageLightbox
+          open={open && lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+          src={fileQ.data.viewUrl}
+          alt={`${row.title} from ${dealerCodeLabel(row.dealerCode)}`}
+          title={`${dealerCodeLabel(row.dealerCode)} · ${row.title}`}
+          downloadUrl={fileQ.data.downloadUrl}
+        />
+      ) : null}
+      {paper.reader}
+    </>
   );
 }

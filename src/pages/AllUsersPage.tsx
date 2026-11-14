@@ -31,6 +31,7 @@ import {
   Input,
   Label,
   MobileCardList,
+  Select,
   Skeleton,
   TBody,
   TD,
@@ -421,6 +422,19 @@ const credentialsFormSchema = z.object({
 });
 type CredentialsForm = z.infer<typeof credentialsFormSchema>;
 
+const detailsFormSchema = z.object({
+  name: z.string().trim().min(2, 'Name is required').max(120, 'At most 120 characters'),
+  title: z.string().trim().max(60, 'At most 60 characters'),
+  // Blank clears the number; otherwise the same shape the API accepts.
+  phone: z
+    .string()
+    .trim()
+    .refine((v) => v === '' || /^\+?[0-9\-\s]{7,20}$/.test(v), 'Enter a valid phone number'),
+  // '' = never chosen: the dealer apps then open in Hindi.
+  lang: z.enum(['', 'en', 'hi']),
+});
+type DetailsForm = z.infer<typeof detailsFormSchema>;
+
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-subtle">
@@ -458,12 +472,30 @@ function ManageUserDialog({
     defaultValues: { email: '', password: '' },
   });
 
-  // Re-seed the form and clear any pending confirm each time a user is opened.
+  const {
+    register: registerDetails,
+    handleSubmit: handleDetailsSubmit,
+    reset: resetDetails,
+    formState: { errors: detailsErrors, isDirty: detailsDirty },
+  } = useForm<DetailsForm>({
+    resolver: zodResolver(detailsFormSchema),
+    defaultValues: { name: '', title: '', phone: '', lang: '' },
+  });
+
+  // Re-seed the forms and clear any pending confirm each time a user is opened.
   React.useEffect(() => {
     setConfirming(null);
     setDiscardOpen(false);
-    if (user) reset({ email: user.email, password: '' });
-  }, [user, reset]);
+    if (user) {
+      reset({ email: user.email, password: '' });
+      resetDetails({
+        name: user.name,
+        title: user.title ?? '',
+        phone: user.phone ?? '',
+        lang: user.lang ?? '',
+      });
+    }
+  }, [user, reset, resetDetails]);
 
   const isSelf = !!user && user.id === currentUserId;
   const isArchived = !!user?.archivedAt;
@@ -550,6 +582,20 @@ function ManageUserDialog({
     }
   }
 
+  const saveDetails = handleDetailsSubmit(async (values) => {
+    if (!user) return;
+    const payload: SuperAdminUpdateUserInput = {};
+    if (values.name !== user.name) payload.name = values.name;
+    if (values.title !== (user.title ?? '')) payload.title = values.title;
+    if (values.phone !== (user.phone ?? '')) payload.phone = values.phone;
+    if (values.lang !== '' && values.lang !== (user.lang ?? '')) payload.lang = values.lang;
+    if (Object.keys(payload).length === 0) {
+      toast.info('No detail changes to save.');
+      return;
+    }
+    await runUpdate(payload, `${values.name}: details saved.`);
+  });
+
   const saveCredentials = handleSubmit(async (values) => {
     if (!user) return;
     const payload: SuperAdminUpdateUserInput = {};
@@ -573,7 +619,7 @@ function ManageUserDialog({
      word said. Ask first when there is something to lose. The backdrop and
      Escape route through here too, which is the point. */
   function requestClose() {
-    if (isDirty) {
+    if (isDirty || detailsDirty) {
       setDiscardOpen(true);
       return;
     }
@@ -742,6 +788,69 @@ function ManageUserDialog({
               ) : null}
             </>
           )}
+
+          {/* Personal details */}
+          <section>
+            <SectionTitle>Details</SectionTitle>
+            <form onSubmit={saveDetails} className="grid gap-3" noValidate>
+              <div>
+                <Label htmlFor="manage-name" required>
+                  Name
+                </Label>
+                <Input
+                  id="manage-name"
+                  autoComplete="off"
+                  invalid={!!detailsErrors.name}
+                  {...registerDetails('name')}
+                />
+                <FieldError message={detailsErrors.name?.message} />
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="manage-phone">Phone</Label>
+                  <Input
+                    id="manage-phone"
+                    type="tel"
+                    autoComplete="off"
+                    placeholder="+91 98765 43210"
+                    invalid={!!detailsErrors.phone}
+                    {...registerDetails('phone')}
+                  />
+                  <FieldError message={detailsErrors.phone?.message} />
+                </div>
+                <div>
+                  <Label htmlFor="manage-title">Title</Label>
+                  <Input
+                    id="manage-title"
+                    autoComplete="off"
+                    placeholder="e.g. Owner, Manager"
+                    invalid={!!detailsErrors.title}
+                    {...registerDetails('title')}
+                  />
+                  <FieldError message={detailsErrors.title?.message} />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="manage-lang">App language</Label>
+                <Select id="manage-lang" {...registerDetails('lang')}>
+                  <option value="">Not chosen (opens in Hindi)</option>
+                  <option value="hi">Hindi</option>
+                  <option value="en">English</option>
+                </Select>
+              </div>
+              <div>
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="w-full md:w-auto"
+                  loading={updateUser.isPending}
+                  disabled={busy}
+                >
+                  Save details
+                </Button>
+              </div>
+            </form>
+          </section>
 
           {/* Credentials */}
           <section>

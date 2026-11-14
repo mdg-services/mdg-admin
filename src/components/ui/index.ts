@@ -43,3 +43,4 @@ export * from './Pagination';
 export * from './DateRangeFilter';
 export * from './HowThisWorks';
 export * from './VideoPoster';
+export * from './PdfViewer';

@@ -5,7 +5,6 @@ import type {
   TtDensitySummary,
   TtInvoice,
   TtInvoiceSummary,
-  TtRegisterDaySummary,
   TtSignedFileUrls,
  BrowserPlace } from '@dk/shared';
 
@@ -32,8 +31,7 @@ import type {
 
 /**
  * Every key hangs off the `['ttDensity']` prefix so one invalidation after a
- * fetch or a photo upload refreshes the hero, the invoice list and the register
- * calendar at once.
+ * fetch refreshes the hero and the invoice list at once.
  */
 export const ttDensityKeys = {
   all: ['ttDensity'] as const,
@@ -44,10 +42,6 @@ export const ttDensityKeys = {
     ['ttDensity', 'invoice', dealerId, invoiceId] as const,
   pdfUrl: (dealerId: string | undefined, invoiceId: string | undefined) =>
     ['ttDensity', 'pdfUrl', dealerId, invoiceId] as const,
-  days: (dealerId: string | undefined, range: TtRegisterDaysRange) =>
-    ['ttDensity', 'days', dealerId, range] as const,
-  dayPhotoUrl: (dealerId: string | undefined, businessDate: string | undefined) =>
-    ['ttDensity', 'dayPhotoUrl', dealerId, businessDate] as const,
 };
 
 /** Inclusive IST bounds and paging for the invoice list (A2). */
@@ -64,18 +58,6 @@ export interface TtInvoiceListResponse {
   total: number;
   page: number;
   pageSize: number;
-}
-
-/** How the register days are asked for: a whole month, or the last N days. */
-export type TtRegisterDaysRange = { from: string; to: string } | { limit: number };
-
-/** What A7 wants: the presigned key plus the file's own facts. */
-export interface TtRegisterPhotoBody {
-  storageKey: string;
-  filename: string;
-  contentType: string;
-  size: number;
-  note?: string;
 }
 
 /**
@@ -170,72 +152,6 @@ export function useTtInvoicePdfUrl(
     retry: retryUnlessClientError,
     gcTime: 60_000,
     staleTime: 0,
-  });
-}
-
-/**
- * A stretch of register days, INCLUDING the ones nobody photographed. The gaps
- * are the output — a list that omitted them would show a clean month that never
- * happened.
- */
-export function useTtRegisterDays(
-  dealerId: string | undefined,
-  range: TtRegisterDaysRange,
-  enabled = true,
-) {
-  return useQuery({
-    queryKey: ttDensityKeys.days(dealerId, range),
-    enabled: !!dealerId && enabled,
-    queryFn: () =>
-      api.get<TtRegisterDaySummary[]>(
-        `/tt-density/dealers/${dealerId}/days`,
-        'limit' in range
-          ? { limit: range.limit }
-          : { from: range.from, to: range.to },
-      ),
-    staleTime: 30_000,
-  });
-}
-
-/**
- * The signed URLs for one day's register photo. 404 means the day has no photo,
- * which the calendar already knows — so, like the PDF URL, it is a state and not
- * an error.
- */
-export function useTtRegisterDayPhotoUrl(
-  dealerId: string | undefined,
-  businessDate: string | undefined,
-  enabled = true,
-) {
-  return useQuery({
-    queryKey: ttDensityKeys.dayPhotoUrl(dealerId, businessDate),
-    enabled: !!dealerId && !!businessDate && enabled,
-    queryFn: () =>
-      api.get<TtSignedFileUrls>(
-        `/tt-density/dealers/${dealerId}/days/${businessDate}/photo-url`,
-      ),
-    retry: retryUnlessClientError,
-    gcTime: 60_000,
-    staleTime: 0,
-  });
-}
-
-/**
- * Record a register photo on the dealer's behalf. The object is already in the
- * bucket by the time this runs — the dialog presigns and PUTs first — so this
- * call only attaches the key to a day.
- */
-export function useUploadTtRegisterPhoto(dealerId: string | undefined) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { businessDate: string; photo: TtRegisterPhotoBody }) =>
-      api.post(
-        `/tt-density/dealers/${dealerId}/days/${input.businessDate}/photo`,
-        input.photo,
-      ),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ttDensityKeys.all });
-    },
   });
 }
 

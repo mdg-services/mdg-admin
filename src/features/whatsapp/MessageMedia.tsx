@@ -2,13 +2,22 @@ import { FileText, ImageOff, MapPin, Play, RotateCw } from 'lucide-react';
 import * as React from 'react';
 
 import { GuideVideoPlayer } from '@/components/ui/GuideVideoPlayer';
+import { ImageLightbox } from '@/components/ui/ImageLightbox';
+import { PdfViewer } from '@/components/ui/PdfViewer';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { VideoPoster } from '@/components/ui/VideoPoster';
 import { useGuideVideoLibrary } from '@/hooks/api/useGuideVideos';
-import { openWhatsAppMedia, useWhatsAppMedia } from '@/hooks/api/useWhatsAppMedia';
+import {
+  fetchWhatsAppMedia,
+  openWhatsAppMedia,
+  useWhatsAppMedia,
+} from '@/hooks/api/useWhatsAppMedia';
 import { lengthLabel } from '@/lib/chatGuideVideos';
 import { cn } from '@/lib/cn';
+import { downloadFile } from '@/lib/downloadFile';
+import { isNativeShell } from '@/lib/nativeBridge';
+import { isPdfFile } from '@/lib/pdf';
 import type { WhatsAppChatMessage } from '@dk/shared';
 
 import { FILE_OPENS_ON_COMPUTER_WORDS, MEDIA_GONE_WORDS, type MediaKind, unshownWords } from './format';
@@ -242,15 +251,52 @@ function VideoMedia({ message, overlay }: { message: WhatsAppChatMessage; overla
   );
 }
 
+/**
+ * A document from WhatsApp, with an Open button.
+ *
+ * A PDF opens in the app's own reader and a photo sent as a document in the
+ * photo viewer, on every screen — inside the admin phone app these used to be
+ * "this file opens on a computer", because the file is held in the page's
+ * memory and the app's WebView has nowhere to open it. Anything else opens in a
+ * computer's browser as before (`openWhatsAppMedia`), and the phone app still
+ * says so in words. Save needs a browser for the same reason, so the app shows
+ * none.
+ */
 function DocumentMedia({ message }: { message: WhatsAppChatMessage }) {
   const toast = useToast();
   const [busy, setBusy] = React.useState(false);
   const name = message.media?.filename?.trim() || 'Document';
+  const mime = (message.media?.mime ?? '').toLowerCase();
+  const pdf = isPdfFile(name, mime);
+  const picture = mime.startsWith('image/');
+  const [reading, setReading] = React.useState(false);
+  const [photo, setPhoto] = React.useState<{ url: string; blob: Blob } | null>(null);
+  const canSave = !isNativeShell();
+
+  // The photo's object URL lives as long as the viewer does.
+  React.useEffect(() => {
+    if (!photo) return;
+    return () => URL.revokeObjectURL(photo.url);
+  }, [photo]);
+
+  async function save(blob: Blob) {
+    const result = await downloadFile({ blob, filename: name, contentType: blob.type || mime });
+    if (!result.ok) toast.error(result.reason || 'Could not save this file.');
+  }
 
   async function open() {
     if (busy) return;
+    if (pdf) {
+      setReading(true);
+      return;
+    }
     setBusy(true);
     try {
+      if (picture) {
+        const blob = await fetchWhatsAppMedia(message.id);
+        setPhoto({ url: URL.createObjectURL(blob), blob });
+        return;
+      }
       // In the native app nothing can open it; say so, instead of a tap that does nothing.
       if ((await openWhatsAppMedia(message.id, name)) === 'not-here') toast.info(FILE_OPENS_ON_COMPUTER_WORDS);
     } catch (e) {
@@ -261,26 +307,48 @@ function DocumentMedia({ message }: { message: WhatsAppChatMessage }) {
   }
 
   return (
-    <div className={cn('flex items-center gap-3 rounded-md bg-black/[0.06] p-2', BOX)}>
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-black/[0.07] text-[var(--wa-meta)]">
-        <FileText width={20} height={20} strokeWidth={1.75} aria-hidden />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium [overflow-wrap:anywhere]">{name}</span>
-        {message.media?.mime ? (
-          <span className="block truncate text-xs text-[var(--wa-meta)]">{message.media.mime}</span>
-        ) : null}
-      </span>
-      <button
-        type="button"
-        onClick={() => void open()}
-        disabled={busy}
-        className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-2 text-sm font-semibold text-[var(--wa-link)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-60 md:min-h-8"
-      >
-        {busy ? <Spinner size={14} /> : null}
-        Open
-      </button>
-    </div>
+    <>
+      <div className={cn('flex items-center gap-3 rounded-md bg-black/[0.06] p-2', BOX)}>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-black/[0.07] text-[var(--wa-meta)]">
+          <FileText width={20} height={20} strokeWidth={1.75} aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium [overflow-wrap:anywhere]">{name}</span>
+          {message.media?.mime ? (
+            <span className="block truncate text-xs text-[var(--wa-meta)]">{message.media.mime}</span>
+          ) : null}
+        </span>
+        <button
+          type="button"
+          onClick={() => void open()}
+          disabled={busy}
+          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-2 text-sm font-semibold text-[var(--wa-link)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-60 md:min-h-8"
+        >
+          {busy ? <Spinner size={14} /> : null}
+          Open
+        </button>
+      </div>
+      {reading ? (
+        <PdfViewer
+          title={name}
+          load={() => fetchWhatsAppMedia(message.id).then((blob) => blob.arrayBuffer())}
+          onSave={
+            canSave ? () => void fetchWhatsAppMedia(message.id).then(save) : undefined
+          }
+          onClose={() => setReading(false)}
+        />
+      ) : null}
+      {photo ? (
+        <ImageLightbox
+          open
+          onClose={() => setPhoto(null)}
+          src={photo.url}
+          alt={name}
+          title={name}
+          onDownload={canSave ? () => save(photo.blob) : undefined}
+        />
+      ) : null}
+    </>
   );
 }
 

@@ -18,6 +18,7 @@ import type {
   ConversationMediaTab,
 } from '@dk/shared';
 
+import { AttachmentPdfViewer, isPdfAttachment } from './AttachmentPdfViewer';
 import { formatBytes } from './AttachmentPreview';
 import { PanelSection } from './PanelSection';
 
@@ -113,6 +114,8 @@ function MediaGalleryDrawer({
   const [tab, setTab] = React.useState<ConversationMediaTab>('media');
   const q = useConversationMedia(conversationId, tab, open);
   const items = React.useMemo(() => (q.data?.pages ?? []).flat(), [q.data]);
+  /** A PDF from the Docs list, open in the app's own reader rather than downloaded. */
+  const [reading, setReading] = React.useState<Attachment | null>(null);
 
   async function handleDownload(attachment: Attachment) {
     try {
@@ -174,7 +177,11 @@ function MediaGalleryDrawer({
             <li key={`${item.messageId}-${attachment.storageKey}`}>
               <button
                 type="button"
-                onClick={() => void handleDownload(attachment)}
+                onClick={() =>
+                  isPdfAttachment(attachment)
+                    ? setReading(attachment)
+                    : void handleDownload(attachment)
+                }
                 className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left hover:bg-surface-2"
               >
                 <FileText
@@ -269,6 +276,9 @@ function MediaGalleryDrawer({
             Load more
           </Button>
         </div>
+      ) : null}
+      {reading ? (
+        <AttachmentPdfViewer attachment={reading} onClose={() => setReading(null)} />
       ) : null}
     </Drawer>
   );

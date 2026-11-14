@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.json && vite build",
+    "build": "node scripts/leavingTheApp.check.mjs && tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check:intake": "npx tsx --test scripts/intake.check.ts",
@@ -32,6 +32,8 @@
     "check:inbox-desk": "npx tsx --test scripts/inboxDesk.check.ts",
     "check:calibration-claim": "npx tsx --test scripts/calibrationClaim.check.ts",
     "check:declarations": "npx tsx --test scripts/declarations.check.ts",
+    "check:leaving-the-app": "node scripts/leavingTheApp.check.mjs",
+    "check:pdf": "npx tsx --test scripts/pdf.check.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
@@ -45,6 +47,7 @@
     "@tanstack/react-query": "^5.59.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.451.0",
+    "pdfjs-dist": "4.10.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.53.0",

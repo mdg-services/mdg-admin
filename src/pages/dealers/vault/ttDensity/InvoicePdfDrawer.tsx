@@ -7,13 +7,12 @@ import {
   DownloadButton,
   Drawer,
   Skeleton,
-  useToast,
 } from '@/components/ui';
 import { useTtInvoice, useTtInvoicePdfUrl } from '@/hooks/api/useTtDensity';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useOpenPaper } from '@/hooks/useOpenPaper';
 import { ApiError } from '@/lib/api';
 import { formatYmd, inrFormat } from '@/lib/format';
-import { isNativeShell, requestNativeDownload } from '@/lib/nativeBridge';
 import type { TtInvoice, TtInvoiceProduct, TtInvoiceSummary } from '@dk/shared';
 
 import { formatDensity } from './format';
@@ -66,7 +65,6 @@ export function InvoicePdfDrawer({
   onFetch,
   fetching,
 }: InvoicePdfDrawerProps) {
-  const toast = useToast();
   const wideEnoughToEmbed = useMediaQuery('(min-width: 768px)');
 
   const detailQ = useTtInvoice(dealerId, invoice?.id);
@@ -84,28 +82,12 @@ export function InvoicePdfDrawer({
   // nothing and offers them nothing to press.
   const urlsFailed = urlsQ.isError && !noFile;
 
-  async function openOnPhone(): Promise<void> {
-    if (!urls) return;
-    if (isNativeShell()) {
-      // The admin shell runs with `setSupportMultipleWindows={false}`, so
-      // `window.open` is unreliable inside it; the shell's own handler saves the
-      // file and hands it to whatever the phone uses for PDFs.
-      const result = await requestNativeDownload({
-        id: `tt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        url: urls.downloadUrl,
-        filename: urls.filename,
-        contentType: urls.contentType,
-        kind: 'file',
-      });
-      if (result.ok) return;
-      if (!result.timedOut) {
-        toast.error(result.error || 'Could not open the invoice');
-        return;
-      }
-      // Old shell without the handler — fall through to the browser.
-    }
-    window.open(urls.viewUrl, '_blank', 'noopener');
+  // A PDF opens in the app's own reader on a phone or in the app; a laptop gets a tab.
+  const paper = useOpenPaper('Could not open the invoice');
+  function openOnPhone(): void {
+    if (urls) paper.open(urls);
   }
+
 
   const description = invoice
     ? [
@@ -118,93 +100,94 @@ export function InvoicePdfDrawer({
     : undefined;
 
   return (
-    <Drawer
-      open={!!invoice}
-      onClose={onClose}
-      width="lg"
-      title={invoice ? `Invoice ${invoice.sapInvoiceNo}` : undefined}
-      description={description}
-      footer={
-        <>
-          {wideEnoughToEmbed && urls ? (
-            <Button
-              variant="secondary"
-              leftIcon={<ExternalLink width={14} height={14} strokeWidth={1.75} />}
-              onClick={() => window.open(urls.viewUrl, '_blank', 'noopener')}
-            >
-              Open in a new tab
-            </Button>
-          ) : null}
-          {/*
-            One control on a phone, not two. `openOnPhone()` already hands the
-            file to the shell's own download path, which saves it and opens it in
-            whatever the phone uses for PDFs — so a second "Download" beside it
-            did the same job, and did it through `window.open`, which this file
-            documents (above) as unreliable here because the shell runs
-            `setSupportMultipleWindows={false}`. A button that probably does
-            nothing, beside one that works, is worse than no button.
-
-            At md the pair is meaningful again — view in a tab, or save — and the
-            save goes through `DownloadButton`, so a landscape phone (already
-            `≥ md` at 852px) still gets the native route and a visible error
-            instead of a dropped window.
-          */}
-          {!wideEnoughToEmbed && urls ? (
-            <Button onClick={() => void openOnPhone()}>Open PDF</Button>
-          ) : null}
-          {wideEnoughToEmbed && urls ? (
-            <DownloadButton
-              variant="ghost"
-              size="md"
-              url={urls.downloadUrl}
-              filename={urls.filename}
-              contentType={urls.contentType}
-              kind="file"
-            />
-          ) : null}
-          <Button variant="ghost" onClick={onClose}>
-            Close
-          </Button>
-        </>
-      }
-    >
-      {invoice ? (
-        <div className="grid gap-4">
-          <DensityChips
-            summary={invoice}
-            products={detail?.products}
-            unreadable={detail?.parseStatus === 'UNREADABLE'}
-          />
-
-          {detail ? <InvoiceFacts invoice={detail} /> : null}
-
-          {noFile ? (
-            <MissingFile
-              onFetch={onFetch}
-              fetching={fetching}
-              hasFigures={invoice.densities.length > 0}
-            />
-          ) : urlsFailed ? (
-            <div className="grid gap-2 justify-items-start">
-              <Callout intent="warning">
-                The invoice PDF could not be opened just now. Try again in a
-                moment.
-              </Callout>
+    <>
+      <Drawer
+        open={!!invoice}
+        onClose={onClose}
+        width="lg"
+        title={invoice ? `Invoice ${invoice.sapInvoiceNo}` : undefined}
+        description={description}
+        footer={
+          <>
+            {wideEnoughToEmbed && urls ? (
               <Button
                 variant="secondary"
-                loading={urlsQ.isFetching}
-                leftIcon={<RotateCw width={14} height={14} strokeWidth={1.75} />}
-                onClick={() => void urlsQ.refetch()}
+                leftIcon={<ExternalLink width={14} height={14} strokeWidth={1.75} />}
+                onClick={openOnPhone}
               >
-                Try again
+                Open in a new tab
               </Button>
-            </div>
-          ) : wideEnoughToEmbed ? (
-            <PdfFrame src={urls?.viewUrl ?? null} sapInvoiceNo={invoice.sapInvoiceNo} />
-          ) : null}
-        </div>
-      ) : null}
-    </Drawer>
+            ) : null}
+            {/*
+              One control on a phone, not two. `openOnPhone()` opens the invoice in
+              the app's own PDF reader (`useOpenPaper`), whose Save takes the
+              shell's own download path — so a second "Download" beside it would do
+              the same job twice, the old one through `window.open`, which the shell
+              drops (`setSupportMultipleWindows={false}`).
+
+              At md the pair is meaningful again — view in a tab, or save — and the
+              save goes through `DownloadButton`, so a landscape phone (already
+              `≥ md` at 852px) still gets the native route and a visible error
+              instead of a dropped window.
+            */}
+            {!wideEnoughToEmbed && urls ? (
+              <Button onClick={openOnPhone}>Open PDF</Button>
+            ) : null}
+            {wideEnoughToEmbed && urls ? (
+              <DownloadButton
+                variant="ghost"
+                size="md"
+                url={urls.downloadUrl}
+                filename={urls.filename}
+                contentType={urls.contentType}
+                kind="file"
+              />
+            ) : null}
+            <Button variant="ghost" onClick={onClose}>
+              Close
+            </Button>
+          </>
+        }
+      >
+        {invoice ? (
+          <div className="grid gap-4">
+            <DensityChips
+              summary={invoice}
+              products={detail?.products}
+              unreadable={detail?.parseStatus === 'UNREADABLE'}
+            />
+
+            {detail ? <InvoiceFacts invoice={detail} /> : null}
+
+            {noFile ? (
+              <MissingFile
+                onFetch={onFetch}
+                fetching={fetching}
+                hasFigures={invoice.densities.length > 0}
+              />
+            ) : urlsFailed ? (
+              <div className="grid gap-2 justify-items-start">
+                <Callout intent="warning">
+                  The invoice PDF could not be opened just now. Try again in a
+                  moment.
+                </Callout>
+                <Button
+                  variant="secondary"
+                  loading={urlsQ.isFetching}
+                  leftIcon={<RotateCw width={14} height={14} strokeWidth={1.75} />}
+                  onClick={() => void urlsQ.refetch()}
+                >
+                  Try again
+                </Button>
+              </div>
+            ) : wideEnoughToEmbed ? (
+              <PdfFrame src={urls?.viewUrl ?? null} sapInvoiceNo={invoice.sapInvoiceNo} />
+            ) : null}
+          </div>
+        ) : null}
+      </Drawer>
+      {paper.reader}
+    </>
   );
 }
 

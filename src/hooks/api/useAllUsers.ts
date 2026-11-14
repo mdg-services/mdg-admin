@@ -20,7 +20,7 @@ export interface UpdateUserVars extends SuperAdminUpdateUserInput {
 }
 
 /**
- * Full-control edit of any user: email, password, status (suspend/reactivate),
+ * Full-control edit of any user: name, phone, title, language, email, password, status (suspend/reactivate),
  * role (owner↔manager), or the super-admin tier.
  */
 export function useUpdateUser() {

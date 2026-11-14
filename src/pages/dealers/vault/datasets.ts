@@ -119,7 +119,7 @@ const REGISTRY = [
     id: 'tt-density',
     label: 'TT Density',
     description:
-      "Density@15 from this dealer's tanker invoices, and the daily register photos.",
+      "Density@15 from this dealer's tanker invoices. Each new tanker's figure goes to the dealer's chat as a card.",
     Icon: Gauge,
     requiresService: 'tt-density',
     Pane: DealerTtDensityPane,
