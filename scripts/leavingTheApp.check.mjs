@@ -72,6 +72,10 @@ const ALLOWED = {
     count: 2,
     why: 'the full DSR report in a laptop tab; hidden inside the phone app',
   },
+  'src/lib/nativeBridge.ts': {
+    count: 2,
+    why: "the Play Store page, when an old phone app can't record voice notes and can't open the store itself",
+  },
   'src/hooks/useOpenPaper.tsx': {
     count: 2,
     why: "the vault papers' one road: a laptop browser gets a tab; in the app a PDF opens in PdfViewer",

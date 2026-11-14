@@ -1,4 +1,4 @@
-import { ChevronDown, Mic, Paperclip, Plus, Send, Sparkles, Trash2, Wand2, X } from 'lucide-react';
+import { ChevronDown, Mic, Paperclip, Plus, Send, Sparkles, Wand2, X } from 'lucide-react';
 import * as React from 'react';
 
 
@@ -11,9 +11,9 @@ import { Textarea } from '@/components/ui/Textarea';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { usePublishBottomBar } from '@/hooks/usePublishBottomBar';
 import { cn } from '@/lib/cn';
-import { isNativeShell, requestNativeMicPermission } from '@/lib/nativeBridge';
+import { androidMicUpdateLive, micAskYesWords, TEAM_APP_PLAY_URL } from '@/lib/micPolicy';
+import { openAppStore } from '@/lib/nativeBridge';
 import {
-  formatDuration,
   isSendable,
   MAX_ATTACHMENT_BYTES,
   notSendableMessage,
@@ -21,13 +21,24 @@ import {
   UPLOAD_ACCEPT,
   uploadAttachment,
 } from '@/lib/uploadAttachment';
-import { useVoiceRecorder } from '@/lib/useVoiceRecorder';
+import type { VoiceRecording } from '@/lib/useVoiceRecorder';
 import {
   SHARE_AUDIENCE_LABELS,
   SHARE_AUDIENCES,
   type Attachment,
   type ShareAudience,
 } from '@dk/shared';
+
+import { useVoiceNote } from './useVoiceNote';
+import {
+  MIC_ACTION_TEXT,
+  MIC_STRIP_TEXT,
+  MicStatusStrip,
+  VoiceRecordingBar,
+  VoiceReviewBar,
+  type MicStripAction,
+  type MicStripKind,
+} from './VoiceNoteParts';
 
 function extForMime(mimeType: string): string {
   if (mimeType.includes('mp4') || mimeType.includes('aac')) return 'm4a';
@@ -171,8 +182,15 @@ export function Composer({
   // right-hand end, where Send is.
   const rootRef = React.useRef<HTMLDivElement>(null);
   usePublishBottomBar(rootRef, true, true);
-  const recorder = useVoiceRecorder();
-  const isRecording = recorder.status === 'recording';
+  // The voice note: tap the mic, then Send or the bin. Every rule about the
+  // microphone lives in useVoiceNote; this file only draws what it decided.
+  const notify = React.useCallback((message: string) => setError(message || null), []);
+  const voice = useVoiceNote({
+    sendClip: sendVoiceClip,
+    focusText: () => textareaRef.current?.focus(),
+    notify,
+  });
+  const isRecording = voice.mode !== 'idle';
   const isMd = useMediaQuery('(min-width: 768px)');
   // "Suggest" earns its word only where the box is wide enough to keep its own.
   const roomyRow = useMediaQuery('(min-width: 1440px)');
@@ -257,6 +275,21 @@ export function Composer({
   React.useEffect(() => {
     if (!body.trim()) setFromHelper(false);
   }, [body]);
+  // Typing is an answer to the mic strip: the person chose to write instead.
+  React.useEffect(() => {
+    if (body.trim()) voice.dismissStrip();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- react to typing only
+  }, [body]);
+  // Another chat: no strip, recording or review from the last one carries over.
+  const firstChatRef = React.useRef(true);
+  React.useEffect(() => {
+    if (firstChatRef.current) {
+      firstChatRef.current = false;
+      return;
+    }
+    voice.resetForNewChat();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the chat id is the signal
+  }, [conversationId]);
 
   function pickFiles(list: FileList | null) {
     if (!list) return;
@@ -345,37 +378,8 @@ export function Composer({
     }
   }
 
-  async function startRecording() {
-    setError(null);
-    if (!recorder.supported) {
-      // The reason used to live only in `title`, which never fires on touch —
-      // so on a phone the mic was a greyed-out button with no explanation
-      // anywhere. Keep the control tappable and answer in visible text.
-      setError('Voice notes are not supported in this browser.');
-      return;
-    }
-    const ok = await recorder.start();
-    if (!ok) {
-      // Mic blocked (permission denied / unsupported). Inside the native shell
-      // the WebView's getUserMedia can't trigger the Android runtime prompt on
-      // its own — ask the shell to request it just-in-time. If the user grants
-      // it, prompt them to try again; otherwise fall back to the settings hint.
-      // In a plain browser requestNativeMicPermission resolves false, so this
-      // goes straight to the hint.
-      if (isNativeShell()) {
-        const granted = await requestNativeMicPermission();
-        if (granted) {
-          setError('Microphone enabled. Tap the mic again to record.');
-          return;
-        }
-      }
-      setError('Microphone unavailable. Check browser permissions.');
-    }
-  }
-
-  async function stopAndSendVoice() {
-    const rec = await recorder.stop();
-    if (!rec || rec.blob.size === 0) return;
+  /** Upload a finished voice note and send it to this chat. */
+  async function sendVoiceClip(rec: VoiceRecording) {
     // Normalise to a clean base audio MIME (strip ";codecs=…", guarantee audio/*)
     // so the presign allowlist accepts it and the S3 PUT matches the signed type.
     let mime = ((rec.mimeType || rec.blob.type || 'audio/webm').split(';')[0] || 'audio/webm').trim();
@@ -395,6 +399,74 @@ export function Composer({
       setSending(false);
     }
   }
+
+  /** What the mic strip says, and the buttons it offers, for each cause. */
+  function stripView(kind: MicStripKind): {
+    title: string;
+    hint?: string;
+    actions: MicStripAction[];
+    tone?: 'neutral' | 'warning';
+  } {
+    const typeAction = { label: MIC_ACTION_TEXT.typeInstead, onClick: voice.typeInstead };
+    const retryAction = {
+      label: MIC_ACTION_TEXT.tryAgain,
+      onClick: () => void voice.start(),
+      primary: true,
+    };
+    const many = voice.failCount >= 2;
+    const androidYes = micAskYesWords() === 'while-using';
+    switch (kind) {
+      case 'failed':
+        return { ...MIC_STRIP_TEXT.failed, actions: many ? [retryAction, typeAction] : [retryAction] };
+      case 'muted':
+        return {
+          ...MIC_STRIP_TEXT.muted,
+          actions: many ? [retryAction, typeAction] : [retryAction],
+          tone: 'warning',
+        };
+      case 'app-update':
+        // Until the fixed Android app is on the Play Store there is nothing to
+        // update to, so the card only says when it will work (lib/micPolicy).
+        return androidMicUpdateLive()
+          ? {
+              ...MIC_STRIP_TEXT['app-update-live'],
+              actions: [
+                {
+                  label: MIC_ACTION_TEXT.update,
+                  onClick: () => {
+                    openAppStore(TEAM_APP_PLAY_URL);
+                  },
+                  primary: true,
+                },
+                typeAction,
+              ],
+            }
+          : { ...MIC_STRIP_TEXT['app-update'], actions: [{ ...typeAction, primary: true }] };
+      case 'refused':
+        return {
+          // Android 11 and later has no "Allow" for the mic on its own screen.
+          ...MIC_STRIP_TEXT[androidYes ? 'refused-android' : 'refused'],
+          actions: [{ label: MIC_ACTION_TEXT.allow, onClick: () => void voice.allowMic(), primary: true }],
+        };
+      case 'restart':
+        return { ...MIC_STRIP_TEXT.restart, actions: [{ ...typeAction, primary: true }] };
+      case 'settings':
+        // The team app cannot open its own Settings page, so the steps are the help.
+        return { ...MIC_STRIP_TEXT.settings, actions: [] };
+      case 'blocked-browser':
+        return { ...MIC_STRIP_TEXT['blocked-browser'], actions: [] };
+      case 'missing':
+      case 'unavailable':
+        return { ...MIC_STRIP_TEXT[kind], actions: [typeAction] };
+      case 'explainer':
+        return {
+          ...MIC_STRIP_TEXT[androidYes ? 'explainer-android' : 'explainer'],
+          actions: [{ label: MIC_ACTION_TEXT.ok, onClick: voice.explainerOk, primary: true }],
+        };
+    }
+  }
+
+  const strip = voice.strip && !isRecording && !voice.review ? stripView(voice.strip) : null;
 
   return (
     /*
@@ -489,7 +561,16 @@ export function Composer({
       {error ? (
         <p className="mb-1 text-xs text-danger">{error}</p>
       ) : null}
-      {onShareToOutlet && hasContent && !replyingTo && !isRecording ? (
+      {strip ? (
+        <MicStatusStrip
+          title={strip.title}
+          hint={strip.hint}
+          actions={strip.actions}
+          tone={strip.tone}
+          onDismiss={voice.dismissStrip}
+        />
+      ) : null}
+      {onShareToOutlet && hasContent && !replyingTo && !isRecording && !voice.review ? (
         <div className="mb-2 flex flex-col gap-1">
           <div className="flex items-center gap-2 text-xs text-text-muted">
             <span>Send to</span>
@@ -521,31 +602,24 @@ export function Composer({
         </div>
       ) : null}
       {isRecording ? (
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => recorder.cancel()}
-            aria-label="Cancel recording"
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-surface-2 hover:text-text md:h-9 md:w-9"
-          >
-            <Trash2 width={18} height={18} strokeWidth={1.75} />
-          </button>
-          <div className="flex flex-1 items-center gap-2">
-            <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-danger" />
-            <span className="text-sm font-medium tabular-nums text-text">
-              {formatDuration(recorder.elapsedMs)}
-            </span>
-            <span className="text-sm text-text-subtle">Recording…</span>
-          </div>
-          <Button
-            type="button"
-            onClick={stopAndSendVoice}
-            loading={sending}
-            leftIcon={sending ? null : <Send width={16} height={16} strokeWidth={1.75} />}
-          >
-            Send
-          </Button>
-        </div>
+        <VoiceRecordingBar
+          opening={voice.mode === 'opening'}
+          elapsedMs={voice.elapsedMs}
+          getLevels={voice.getLevels}
+          sending={sending}
+          onCancel={voice.cancel}
+          onSend={() => void voice.stopAndSend()}
+        />
+      ) : voice.review ? (
+        <VoiceReviewBar
+          clip={voice.review.clip}
+          url={voice.review.url}
+          reason={voice.review.reason}
+          sending={sending}
+          onDelete={voice.deleteReviewed}
+          onSend={voice.sendReviewed}
+          onRecordAgain={voice.recordAgain}
+        />
       ) : (
         <div className="grid gap-2">
           {/* Whose words these are, until they are sent or the box is emptied:
@@ -706,7 +780,7 @@ export function Composer({
             ) : (
               <button
                 type="button"
-                onClick={startRecording}
+                onClick={() => void voice.start()}
                 disabled={busy}
                 aria-label="Record voice message"
                 className={cn(

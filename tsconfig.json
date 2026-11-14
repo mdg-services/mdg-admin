@@ -28,5 +28,9 @@
     },
     "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Tests run under Vitest from the shared install at the mdg-service root (see
+  // vitest.config.ts). The Vercel build installs only this app's packages, which
+  // have no Vitest, so test files stay out of the build's type check.
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }
