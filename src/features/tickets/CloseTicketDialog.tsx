@@ -14,7 +14,6 @@ import {
   useToast,
 } from '@/components/ui';
 import {
-  DEALER_WAITING_MESSAGE,
   OTHER_SERVICE_ID,
   buildCloseBody,
   closeProblems,
@@ -41,13 +40,13 @@ function failure(e: unknown): string {
  * both optional, and the dealer is sent nothing: they learn of it from the bar
  * in their chat, and the reply that answered them is the answer.
  *
- * THE ONE THING IT WILL NOT DO IS CLOSE OVER A DEALER WHO IS WAITING. When the
- * thread's dealer wrote after the last reply (`dealerWaitingSince`), the sheet
- * says so and carries a reply box: Close sends that text as an ordinary chat
- * reply first, through the same path as the composer, and then closes. The
- * server refuses the same close (409 `DEALER_WAITING`) and the sheet says the
- * server's own words, which is what happens if the dealer writes again between
- * the reply and the close — the box comes back for the new message.
+ * A REPLY IS OPTIONAL. When the thread's dealer wrote after the last reply
+ * (`dealerWaitingSince`), the sheet says so and carries a reply box. If text is
+ * typed in it, Close sends that text as an ordinary chat reply first, through the
+ * same path as the composer, and then closes. If it is left empty, Close just
+ * closes: the server no longer refuses a close over a waiting dealer, and the
+ * dealer stays on the inbox's waiting list until somebody answers or marks the
+ * thread "Answered outside the app".
  *
  * "Answered them on the phone" is not this sheet's job: the thread's "⋯" menu
  * has "Answered outside the app", which clears the waiting clock.
@@ -88,9 +87,6 @@ export function CloseTicketDialog({
   // True once this sheet has sent the dealer's answer, so the box goes away and
   // a failed close cannot send it twice.
   const [replySent, setReplySent] = React.useState(false);
-  // The server said the dealer wrote again, in its own words; the box is back for
-  // the new message.
-  const [waitedAgain, setWaitedAgain] = React.useState<string | null>(null);
 
   // A fresh, empty sheet for every ticket.
   React.useEffect(() => {
@@ -101,20 +97,19 @@ export function CloseTicketDialog({
     setServiceName('');
     setAttempted(false);
     setReplySent(false);
-    setWaitedAgain(null);
   }, [ticket?.id]);
 
   // A TYPED REPLY IS NEVER DROPPED. If a colleague answers (or marks it answered
   // outside the app) while this sheet is open, the dealer stops counting as waiting
   // — but the words already typed here still go before the close.
-  const waiting =
-    !!ticket &&
-    (!!waitedAgain || ((!!ticket.dealerWaitingSince || reply.trim().length > 0) && !replySent));
-  const problems = closeProblems({ note, waiting, reply, addService, serviceId, serviceName });
+  const typed = reply.trim().length > 0;
+  const replyBox = !!ticket && !replySent && (!!ticket.dealerWaitingSince || typed);
+  // Only text that was typed is sent; an empty box means close without replying.
+  const willSend = replyBox && typed;
+  const problems = closeProblems({ note, addService, serviceId, serviceName });
   const tooLong = note.trim().length > TICKET_NOTE_MAX;
   const shown = {
     note: problems.note && (attempted || tooLong) ? problems.note : undefined,
-    reply: attempted ? problems.reply : undefined,
     service: attempted ? problems.service : undefined,
     serviceName: attempted ? problems.serviceName : undefined,
   };
@@ -126,8 +121,8 @@ export function CloseTicketDialog({
     setAttempted(true);
     if (Object.keys(problems).length > 0) return;
 
-    // The answer first. Nothing is closed unless it went.
-    if (waiting) {
+    // The answer first, when one was typed. Nothing is closed unless it went.
+    if (willSend) {
       try {
         await send.mutateAsync({ conversationId: ticket.conversationId, body: reply.trim() });
       } catch (e) {
@@ -135,7 +130,6 @@ export function CloseTicketDialog({
         return;
       }
       setReplySent(true);
-      setWaitedAgain(null);
       setReply('');
     }
 
@@ -148,15 +142,6 @@ export function CloseTicketDialog({
       toast.success(`Ticket ${ticketRef(ticket.number)} closed.`);
       onClose();
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'DEALER_WAITING') {
-        // They wrote again while this sheet was open. Their new message needs an
-        // answer too; nothing typed here can change that.
-        const words = e.message || DEALER_WAITING_MESSAGE;
-        setWaitedAgain(words);
-        setAttempted(false);
-        toast.error(words);
-        return;
-      }
       toast.error(failure(e));
       // A 409 otherwise means somebody closed it first. The lists are already
       // being refreshed, and nothing typed here can change that, so do not leave
@@ -179,7 +164,7 @@ export function CloseTicketDialog({
             Cancel
           </Button>
           <Button onClick={() => void submit()} loading={busy}>
-            {waiting ? 'Send and close' : 'Close'}
+            {willSend ? 'Send and close' : 'Close'}
           </Button>
         </>
       }
@@ -201,22 +186,22 @@ export function CloseTicketDialog({
             <p className="mt-0.5 line-clamp-3 text-sm text-text-muted">{ticket.question}</p>
           </div>
 
-          {waiting ? (
+          {replyBox ? (
             <div className="grid gap-2">
               <Callout intent="warning">
-                {waitedAgain ?? heading ?? 'The dealer wrote since your last reply'}
+                {heading ?? 'The dealer wrote since your last reply'}
               </Callout>
               <div>
-                <Label htmlFor={ids.reply}>Your reply to the dealer</Label>
+                <Label htmlFor={ids.reply} hint="Optional">
+                  Your reply to the dealer
+                </Label>
                 <Textarea
                   id={ids.reply}
                   rows={3}
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
-                  placeholder="Write the answer. It goes to the dealer in the chat, then the ticket closes."
-                  invalid={!!shown.reply}
+                  placeholder="Write the answer. It goes to the dealer in the chat, then the ticket closes. Leave it empty to close without replying."
                 />
-                <FieldError message={shown.reply} />
               </div>
             </div>
           ) : null}
@@ -311,9 +296,11 @@ export function CloseTicketDialog({
           </div>
 
           <p className="text-xs text-text-muted">
-            {waiting
+            {willSend
               ? 'Your reply goes to the dealer first; closing itself sends nothing more. Only your team sees the note.'
-              : 'Closing sends nothing to the dealer and does not change the AI’s quiet. Only your team sees the note.'}
+              : replyBox
+                ? 'Closing without a reply sends nothing to the dealer, who stays on the waiting list until someone answers. Only your team sees the note.'
+                : 'Closing sends nothing to the dealer and does not change the AI’s quiet. Only your team sees the note.'}
           </p>
         </form>
       ) : null}

@@ -214,18 +214,11 @@ export function emptyTickets(chip: TicketChip): { title: string; description: st
 
 /* ───────────────────────── Close ───────────────────────── */
 
-/** The server's own words for a close refused while the dealer is waiting; the sheet says them too. */
-export const DEALER_WAITING_MESSAGE =
-  'The dealer wrote since your last reply. Answer first, then close.';
-
 /** "Other" in the service picker: the admin types the name. */
 export const OTHER_SERVICE_ID = 'other';
 
 export interface CloseDraft {
   note: string;
-  /** The dealer is waiting, so the sheet carries a reply box. */
-  waiting: boolean;
-  reply: string;
   /** "Add to Services provided" is ticked. */
   addService: boolean;
   serviceId: string;
@@ -234,14 +227,14 @@ export interface CloseDraft {
 
 export interface CloseProblems {
   note?: string;
-  reply?: string;
   service?: string;
   serviceName?: string;
 }
 
 /**
  * What stops Close, field by field; an empty object means it can go. Judged on
- * trimmed text, because that is what the server measures. An unticked "Add to
+ * trimmed text, because that is what the server measures. The reply to a waiting
+ * dealer is optional and never a problem. An unticked "Add to
  * Services provided" is never a problem whatever its boxes hold: they are not
  * sent.
  */
@@ -251,7 +244,6 @@ export function closeProblems(d: CloseDraft): CloseProblems {
   if (note > TICKET_NOTE_MAX) {
     out.note = `Keep it under ${TICKET_NOTE_MAX.toLocaleString('en-IN')} characters. It is ${note.toLocaleString('en-IN')} now.`;
   }
-  if (d.waiting && d.reply.trim().length === 0) out.reply = DEALER_WAITING_MESSAGE;
   if (d.addService) {
     if (!d.serviceId) out.service = 'Pick the service, or untick the box.';
     else if (d.serviceId === OTHER_SERVICE_ID && !d.serviceName.trim()) {
