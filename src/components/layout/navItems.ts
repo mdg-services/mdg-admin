@@ -33,6 +33,7 @@ import {
   Target,
   UserCog,
   Users,
+  Truck,
   Warehouse,
   Zap,
   type LucideIcon,
@@ -101,6 +102,7 @@ export const NAV_ITEMS: NavItem[] = [
   // two together are the whole of "what is waiting on me". On a phone it is
   // also the bell in the header, since the tab bar is full.
   { to: '/alerts', label: 'Alerts', icon: Bell },
+  { to: '/tanker-worker', label: 'Tanker documents', icon: Truck },
   // The AI first line's turn log, and the whole safety case for it: every answer
   // the machine has given a dealer, with a verdict button on each. Deliberately
   // NOT `superAdminOnly` — the people who answer the tickets are the people who

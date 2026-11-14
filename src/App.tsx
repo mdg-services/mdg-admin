@@ -35,6 +35,11 @@ const ActivityPage = React.lazy(
     import('@/pages/ActivityPage').then((m) => ({ default: m.ActivityPage })),
   ),
 );
+const TankerWorkerPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/tankerWorker/TankerWorkerPage').then((m) => ({ default: m.TankerWorkerPage })),
+  ),
+);
 const AlertsPage = React.lazy(
   retryImport(() =>
     import('@/pages/alerts/AlertsPage').then((m) => ({ default: m.AlertsPage })),
@@ -340,6 +345,14 @@ export default function App() {
             element={
               <LazyPage>
                 <AlertsPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="tanker-worker"
+            element={
+              <LazyPage>
+                <TankerWorkerPage />
               </LazyPage>
             }
           />
