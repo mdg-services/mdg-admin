@@ -1,9 +1,21 @@
-import { Camera, Check, ChevronRight, Clock, Eye, KeyRound, ListChecks, Lock, Siren } from 'lucide-react';
+import {
+  Camera,
+  Check,
+  ChevronRight,
+  ClipboardList,
+  Clock,
+  Eye,
+  KeyRound,
+  ListChecks,
+  Lock,
+  Siren,
+} from 'lucide-react';
 import * as React from 'react';
 
 import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/cn';
 import { formatYmd } from '@/lib/format';
+import { completionWords } from '@/lib/outletDetails';
 import {
   GST_STATES,
   OIL_COMPANIES,
@@ -19,6 +31,7 @@ import {
   type MockDrillAdminView,
   type MockDrillScreen,
   type OilCompanyId,
+  type OutletDetailsView,
   type OutletSetupAdmin,
   type PortalId,
   type PortalLoginState,
@@ -66,6 +79,8 @@ export interface DealerViewValue {
   mockDrill: MockDrillAdminView | null | undefined;
   /** The outlet's Declarations view. `undefined` while loading or not asked for; `null` when it could not be read. */
   declarations: DeclarationsAdminView | null | undefined;
+  /** The outlet's Pump details form. `undefined` while loading or not asked for; `null` when it could not be read. */
+  outletDetails: OutletDetailsView | null | undefined;
   /** The thread's primary member is an owner: the cards are the editable ones. A manager sees them read-only. */
   canEdit: boolean;
   /** A group thread (the manager's, with the owners in it): dealer-side bubbles carry their sender's name. */
@@ -85,6 +100,7 @@ export const DealerViewContext = React.createContext<DealerViewValue>({
   portalLoginsFailed: false,
   mockDrill: undefined,
   declarations: undefined,
+  outletDetails: undefined,
   canEdit: true,
   group: false,
   dealerIds: undefined,
@@ -411,6 +427,46 @@ export function DeclarationsPreview({
         )}
       </Block>
       <AdminCaption>{DECLARATIONS_CAPTION}</AdminCaption>
+    </div>
+  );
+}
+
+// ── The Pump details box (`message.outletDetails`) ─────────────────────────
+
+const OUTLET_DETAILS_CAPTION = 'Pump details form sent. It shows the outlet’s answers now.';
+
+/**
+ * The Pump details form (`message.outletDetails`): a compact card that says whether the
+ * outlet has answered it. The message carries nothing of its own; the app draws the form
+ * from the outlet's answers now, so this reads the same view and never shows a stale
+ * picture. It names no question and counts none, because the questions belong to the
+ * server and change without a release: only how many are still open.
+ */
+export function OutletDetailsPreview({
+  outletDetails,
+}: {
+  outletDetails: OutletDetailsView | null | undefined;
+}) {
+  return (
+    <div data-outlet-details title={PREVIEW_TITLE} className="mt-1 flex flex-col gap-1.5">
+      <Block>
+        <p className="flex min-w-0 items-center gap-1.5 break-words text-[14px] font-medium leading-snug">
+          <ClipboardList width={14} strokeWidth={2} className="shrink-0 text-wa-meta" aria-hidden />
+          Pump details form
+        </p>
+        {outletDetails === undefined ? (
+          <div className="mt-2 flex items-center">
+            <Spinner />
+          </div>
+        ) : outletDetails ? (
+          <p className="mt-1 text-[13px] leading-snug text-wa-bubble-text">
+            {completionWords(outletDetails)}
+          </p>
+        ) : (
+          <Note className="mt-1">The outlet’s answers could not be read.</Note>
+        )}
+      </Block>
+      <AdminCaption>{OUTLET_DETAILS_CAPTION}</AdminCaption>
     </div>
   );
 }

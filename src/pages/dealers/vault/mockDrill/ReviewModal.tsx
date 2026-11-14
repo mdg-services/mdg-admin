@@ -21,12 +21,27 @@ import {
   type MockDrillDependentView,
   type MockDrillSubmissionView,
 } from '@dk/shared';
-import { mockDrillDependentEditSchema, type MockDrillDependentEdit } from '@dk/shared/schemas';
+import {
+  mockDrillDependentEditSchema,
+  mockDrillGeneratedEditSchema,
+  type MockDrillDependentEdit,
+} from '@dk/shared/schemas';
 
-import { GeneratedDraft } from './GeneratedDraft';
+import {
+  GeneratedEditor,
+  generatedEditsFrom,
+  startingGeneratedForm,
+  validateGenerated,
+  type GeneratedForm,
+} from './GeneratedFields';
 import { PhotoStrip } from './Photos';
 
 const OBSERVER_SLOTS = 3;
+
+/** The IST date now (YYYY-MM-DD): the latest day a drill may be put on. */
+function todayIst(): string {
+  return new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+}
 const REASON_MIN = 3;
 const REASON_MAX = 300;
 
@@ -188,6 +203,10 @@ export function ReviewModal({
   const [form, setForm] = React.useState<FormState | null>(
     dependent ? startingForm(dependent) : null,
   );
+  const generated = submission.generated;
+  const [genForm, setGenForm] = React.useState<GeneratedForm | null>(
+    generated ? startingGeneratedForm(generated) : null,
+  );
   const [serverError, setServerError] = React.useState<string | null>(null);
   const [confirmingApprove, setConfirmingApprove] = React.useState(false);
   const [sendingBack, setSendingBack] = React.useState(false);
@@ -198,21 +217,28 @@ export function ReviewModal({
   // what the server now holds. Keyed on the id and on the fields themselves, so
   // an admin's own typing is never wiped by a re-read that changed nothing.
   const serverKey = dependent
-    ? JSON.stringify([submission.id, startingForm(dependent)])
+    ? JSON.stringify([
+        submission.id,
+        startingForm(dependent),
+        generated ? startingGeneratedForm(generated) : null,
+      ])
     : submission.id;
   const lastKey = React.useRef(serverKey);
   React.useEffect(() => {
     if (lastKey.current === serverKey) return;
     lastKey.current = serverKey;
     setForm(dependent ? startingForm(dependent) : null);
+    setGenForm(generated ? startingGeneratedForm(generated) : null);
     setServerError(null);
     setTried(false);
-  }, [serverKey, dependent]);
+  }, [serverKey, dependent, generated]);
 
   const saving = review.isPending;
   const errors = form ? validate(form) : {};
-  const hasErrors = Object.keys(errors).length > 0;
+  const genErrors = genForm ? validateGenerated(genForm, todayIst()) : {};
+  const hasErrors = Object.keys(errors).length > 0 || Object.keys(genErrors).length > 0;
   const shown = tried ? errors : {};
+  const genShown = tried ? genErrors : {};
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => (f ? { ...f, [key]: value } : f));
@@ -231,7 +257,11 @@ export function ReviewModal({
     if (!form || !dependent || hasErrors) return;
     const edits = editsFrom(dependent, form);
     // The same rules the server applies; a mismatch here is our bug, not the admin's.
-    if (!mockDrillDependentEditSchema.safeParse(edits).success) {
+    const genEdits = generated && genForm ? generatedEditsFrom(generated, genForm) : {};
+    if (
+      !mockDrillDependentEditSchema.safeParse(edits).success ||
+      !mockDrillGeneratedEditSchema.safeParse(genEdits).success
+    ) {
       setServerError('Something in the form is not allowed. Check each box and try again.');
       return;
     }
@@ -245,11 +275,15 @@ export function ReviewModal({
   async function approve() {
     if (!form || !dependent) return;
     const edits = editsFrom(dependent, form);
+    const genEdits = generated && genForm ? generatedEditsFrom(generated, genForm) : {};
     try {
       await review.mutateAsync({
         submissionId: submission.id,
-        body:
-          Object.keys(edits).length > 0 ? { decision: 'approve', edits } : { decision: 'approve' },
+        body: {
+          decision: 'approve',
+          ...(Object.keys(edits).length > 0 ? { edits } : {}),
+          ...(Object.keys(genEdits).length > 0 ? { generated: genEdits } : {}),
+        },
       });
       setConfirmingApprove(false);
       toast.success(
@@ -489,20 +523,24 @@ export function ReviewModal({
               </section>
             </div>
 
-            {submission.generated ? (
+            {generated && genForm ? (
               <section
-                aria-label="Written by the system"
+                aria-label="The rest of the report"
                 className="grid gap-2 border-t border-border pt-4"
               >
                 <div>
                   <h3 className="text-sm font-semibold text-text">The rest of the report</h3>
                   <p className="text-xs text-text-muted">
-                    Written by the system for this drill. You cannot edit it here; it goes to
-                    IndianOil as shown.
+                    Written by the system for this drill. Correct anything that is wrong; it goes to
+                    IndianOil as shown here.
                   </p>
                 </div>
-                <GeneratedDraft
-                  generated={submission.generated}
+                <GeneratedEditor
+                  form={genForm}
+                  onChange={setGenForm}
+                  disabled={saving}
+                  errors={genShown}
+                  today={todayIst()}
                   personsPresent={wholeNumber(form.personsPresent)}
                   headCountShort={wholeNumber(form.headCountShort)}
                 />

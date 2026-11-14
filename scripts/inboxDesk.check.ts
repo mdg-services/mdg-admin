@@ -23,7 +23,6 @@ import { ticketDeskState } from '../shared/src/lib/ticketView';
 import { TICKET_NOTE_MAX, TICKET_SUMMARY_MAX } from '../shared/src/types/ticket';
 import type { TicketView } from '../shared/src/types/ticket';
 import {
-  DEALER_WAITING_MESSAGE,
   GAP_DAYS,
   OTHER_SERVICE_ID,
   buildCloseBody,
@@ -250,8 +249,6 @@ describe('the words on a row', () => {
 describe('Close', () => {
   const blank = {
     note: '',
-    waiting: false,
-    reply: '',
     addService: false,
     serviceId: '',
     serviceName: '',
@@ -265,17 +262,9 @@ describe('Close', () => {
     const p = closeProblems({ ...blank, note: 'x'.repeat(TICKET_NOTE_MAX + 1) });
     assert.match(p.note ?? '', /under 1,000 characters/);
   });
-  it('refuses to close over a waiting dealer with no reply, in the server\'s words', () => {
-    assert.equal(closeProblems({ ...blank, waiting: true }).reply, DEALER_WAITING_MESSAGE);
-    assert.equal(closeProblems({ ...blank, waiting: true, reply: '   ' }).reply, DEALER_WAITING_MESSAGE);
-    assert.deepEqual(closeProblems({ ...blank, waiting: true, reply: 'Done, sir.' }), {});
-    assert.equal(
-      DEALER_WAITING_MESSAGE,
-      'The dealer wrote since your last reply. Answer first, then close.',
-    );
-  });
-  it('does not need a reply when the dealer is not waiting', () => {
-    assert.deepEqual(closeProblems({ ...blank, waiting: false, reply: '' }), {});
+  it('never needs a reply: an empty reply box closes without replying', () => {
+    assert.deepEqual(closeProblems({ ...blank }), {});
+    assert.deepEqual(closeProblems({ ...blank, note: 'rang him' }), {});
   });
   it('asks for the service only when the box is ticked', () => {
     assert.deepEqual(closeProblems({ ...blank, addService: false, serviceId: '' }), {});

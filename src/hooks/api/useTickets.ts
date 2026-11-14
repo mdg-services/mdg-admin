@@ -274,10 +274,9 @@ export function useMarkTicketSeen() {
  * and the AI's quiet is left alone. Everything in the body is optional — an
  * internal note, and a service to add to the dealer's "Services provided".
  *
- * The server refuses (409, code `DEALER_WAITING`) while the dealer has written
- * since the last reply; the Close sheet sends the answer first, so that is only
- * seen when the dealer wrote again in between. A service entry also refreshes
- * that dealer's history, which is what the old chat Resolve did.
+ * A reply is optional: the server closes even while the dealer has written since
+ * the last reply, and the Close sheet sends a typed answer first. A service entry
+ * also refreshes that dealer's history, which is what the old chat Resolve did.
  */
 export function useCloseTicket() {
   const qc = useQueryClient();
