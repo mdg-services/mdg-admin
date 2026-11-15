@@ -10,25 +10,32 @@ import {
   CardHeader,
   CardSubtitle,
   CardTitle,
+  Input,
   KeyValueList,
+  Label,
   Skeleton,
   Spinner,
   useToast,
 } from '@/components/ui';
-import { useServicePackageQuery, useStartServicePackage } from '@/hooks/api/useServicePackage';
+import { useSaveHpclInspection, useServicePackageQuery, useStartServicePackage } from '@/hooks/api/useServicePackage';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import type { Intent } from '@/lib/statusIntent';
 import {
   serviceLabel,
   type Dealer,
+  type HpclInspectionEntry,
   type ServicePackageStatus,
   type ServicePackageStepView,
 } from '@dk/shared';
 
 /**
- * The standard package on the dealer's Services tab: the eight services every
- * Indian Oil outlet gets, set up by the server from one button.
+ * The standard package on the dealer's Services tab: the services every Indian Oil
+ * outlet gets (or an HPCL pump's own), set up by the server from one button.
+ *
+ * An HPCL pump's setup asks the owner for their last inspection report and waits:
+ * a person types the inspection's date and time from it here, and only then does
+ * the setup attach anything (owner, 15 Nov 2026).
  *
  * Before it starts: what it does, what is attached already, and the button.
  * While it works: each step in plain words, how far a long step is, and — when a
@@ -102,6 +109,74 @@ function Step({ step }: { step: ServicePackageStepView }) {
   );
 }
 
+/** Today in India, `YYYY-MM-DD`: an inspection cannot be later than this. */
+function istToday(): string {
+  return new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+}
+
+/**
+ * An HPCL pump's last inspection, typed from the owner's copy of the officer's report.
+ * Saving lets the setup carry on from its inspection step; saving again works the DSR's
+ * starting figures out again.
+ */
+function HpclInspectionForm({ dealerId, entry }: { dealerId: string; entry: HpclInspectionEntry }) {
+  const toast = useToast();
+  const save = useSaveHpclInspection(dealerId);
+  const [date, setDate] = React.useState(entry.date ?? '');
+  const [time, setTime] = React.useState(entry.time ?? '');
+  const typed = !!entry.date && !!entry.time;
+
+  const onSave = () => {
+    save.mutate(
+      { date, time },
+      {
+        onSuccess: () => toast.success('Saved. The setup carries on from the inspection within a minute.'),
+        onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Could not save. Please try again.'),
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-2 rounded-md border border-border p-3">
+      <div>
+        <p className="text-sm font-medium text-text">Last inspection, from the owner&rsquo;s report</p>
+        <p className="mt-0.5 text-xs text-text-muted">
+          Type the date and time the officer wrote on the report. The DSR&rsquo;s starting figures are read from
+          HPCL CRIS at that moment.
+          {typed
+            ? ` Saved as ${entry.date} at ${entry.time}${entry.enteredBy ? ` by ${entry.enteredBy}` : ''}${
+                entry.enteredAt ? `, ${formatDateTime(entry.enteredAt)}` : ''
+              }.`
+            : ''}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <div>
+          <Label htmlFor="hpcl-inspection-date" required>
+            Date
+          </Label>
+          <Input
+            id="hpcl-inspection-date"
+            type="date"
+            value={date}
+            max={istToday()}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </div>
+        <div>
+          <Label htmlFor="hpcl-inspection-time" required>
+            Time
+          </Label>
+          <Input id="hpcl-inspection-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+        </div>
+        <Button onClick={onSave} loading={save.isPending} disabled={!date || !time}>
+          {typed ? 'Save again' : 'Save'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function ServicePackagePanel({ dealer }: { dealer: Dealer }) {
   const toast = useToast();
   const { data, isLoading } = useServicePackageQuery(dealer.id);
@@ -112,7 +187,7 @@ export function ServicePackagePanel({ dealer }: { dealer: Dealer }) {
     start.mutate(undefined, {
       onSuccess: () =>
         toast.success(
-          data?.setup ? 'Trying again. The step begins within a minute.' : 'Setting up the eight services. The first step begins within a minute.',
+          data?.setup ? 'Trying again. The step begins within a minute.' : 'Setting up the services. The first step begins within a minute.',
         ),
       onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Could not start. Please try again.'),
     });
@@ -129,6 +204,7 @@ export function ServicePackagePanel({ dealer }: { dealer: Dealer }) {
   }
 
   const { setup, services, cannotStart } = data;
+  const hpcl = data.company === 'hpcl';
   const attachedCount = services.filter((s) => s.attached).length;
   const status = setup ? STATUS[setup.status] : null;
   // A finished setup folds its steps away; everything else shows them.
@@ -146,19 +222,30 @@ export function ServicePackagePanel({ dealer }: { dealer: Dealer }) {
         <div>
           <CardTitle>Standard package</CardTitle>
           <CardSubtitle>
-            The eight services every Indian Oil outlet gets, with their starting figures worked out from the
-            portals.
+            {hpcl
+              ? "HPCL's services, with the DSR's starting figures read from HPCL CRIS at the inspection on the owner's report."
+              : `The ${services.length} services every Indian Oil outlet gets, with their starting figures worked out from the portals.`}
           </CardSubtitle>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {!setup ? (
           <div className="space-y-3">
-            <p className="text-sm text-text">
-              One press attaches all eight on the same schedules as every other outlet, finds the pump&rsquo;s day
-              close, reads every tanker invoice since the last inspection for the DSR, and runs each service once.
-              Nothing reaches the dealer until you press Start services.
-            </p>
+            {hpcl ? (
+              <p className="text-sm text-text">
+                One press checks the HPCL login and asks the owner, in the chat, for a photo of their last inspection
+                report. Nothing is attached until you type the inspection&rsquo;s date and time from it here. Then it
+                attaches HPCL&rsquo;s services, works the DSR&rsquo;s starting figures out from HPCL CRIS and lists
+                them for you to compare with the report. Nothing reaches the dealer until you press Start services,
+                and an HPCL pump&rsquo;s watch lasts until the team ends it.
+              </p>
+            ) : (
+              <p className="text-sm text-text">
+                One press attaches all {services.length} on the same schedules as every other outlet, finds the
+                pump&rsquo;s day close, reads every tanker invoice since the last inspection for the DSR, and runs each
+                service once. Nothing reaches the dealer until you press Start services.
+              </p>
+            )}
             <ul className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
               {services.map((s) => (
                 <li key={s.serviceId} className="flex items-center gap-2">
@@ -176,7 +263,7 @@ export function ServicePackagePanel({ dealer }: { dealer: Dealer }) {
             </ul>
             {attachedCount > 0 && !cannotStart ? (
               <p className="text-xs text-text-muted">
-                {attachedCount} of 8 are attached already. Those are left exactly as they are.
+                {attachedCount} of {services.length} are attached already. Those are left exactly as they are.
               </p>
             ) : null}
           </div>
@@ -185,7 +272,9 @@ export function ServicePackagePanel({ dealer }: { dealer: Dealer }) {
         {setup ? (
           <p className="text-xs text-text-muted">
             {setup.startedBy.kind === 'auto'
-              ? 'Started by itself once both logins worked'
+              ? hpcl
+                ? 'Started by itself once the HPCL login worked'
+                : 'Started by itself once both logins worked'
               : `Started by ${setup.startedBy.name ?? 'an admin'}`}
             , {formatDateTime(setup.startedAt)}.
           </p>
@@ -196,6 +285,10 @@ export function ServicePackagePanel({ dealer }: { dealer: Dealer }) {
             items={setup.found.map((f) => ({ key: f.label, label: f.label, value: f.value }))}
             labelWidth="200px"
           />
+        ) : null}
+
+        {hpcl && setup && data.inspection?.canEnter ? (
+          <HpclInspectionForm dealerId={dealer.id} entry={data.inspection} />
         ) : null}
 
         {setup && setup.held.length > 0 ? (
@@ -252,7 +345,13 @@ export function ServicePackagePanel({ dealer }: { dealer: Dealer }) {
             loading={start.isPending}
             leftIcon={<PackageCheck width={16} height={16} strokeWidth={1.75} />}
           >
-            {!setup ? 'Set up all eight services' : setup.status === 'waiting' ? 'Check again now' : 'Try again'}
+            {!setup
+              ? hpcl
+                ? "Set up HPCL's services"
+                : `Set up all ${services.length} services`
+              : setup.status === 'waiting'
+                ? 'Check again now'
+                : 'Try again'}
           </Button>
         ) : null}
       </CardContent>

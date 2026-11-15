@@ -149,5 +149,17 @@ export function watchNeedsDecision(
   return new Date(o.milestones.watchUntil).getTime() <= now;
 }
 
+/**
+ * A watch set to end only when a person ends it: an HPCL pump's, started with a watch of
+ * ten years (`OPEN_WATCH_DAYS` on the server, owner 15 Nov 2026). Anything over a year
+ * reads that way, so the screens say "until the team ends it", not a date in 2036.
+ */
+export const OPEN_WATCH_MS = 365 * 24 * 3_600_000;
+export function watchEndsByHand(watchUntil: string | null | undefined, now: number): boolean {
+  if (!watchUntil) return false;
+  const t = Date.parse(watchUntil);
+  return Number.isFinite(t) && t - now > OPEN_WATCH_MS;
+}
+
 export const WATCH_DECISION_TEXT =
   'The watch is over, but a message was dropped during it, so this outlet will not go live by itself. End the watch to make it live, or extend it.';

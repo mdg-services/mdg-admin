@@ -48,7 +48,7 @@ import {
 import { PORTAL_NAMES, TANKER_PORTAL, isCompanyPortal } from '../../shared/src/types/portalLogin';
 
 import type { Intent } from './statusIntent';
-import { watchNeedsDecision } from './watchHold';
+import { watchEndsByHand, watchNeedsDecision } from './watchHold';
 
 // ── Defaults the dialogs start from ─────────────────────────────────────────
 
@@ -219,6 +219,7 @@ export function setupChip(
   if (o.stage === 'watch') {
     // ── watch hold ── the days ran out but a message was dropped: a person decides.
     if (watchNeedsDecision(o, now)) return { text: 'Watch over · end or extend', intent: 'warning' };
+    if (watchEndsByHand(o.milestones.watchUntil, now)) return { text: 'Watching · until the team ends it', intent };
     const ends = istDay(o.milestones.watchUntil);
     return { text: ends ? `Watching · ends ${ends}` : 'Watching', intent };
   }
@@ -1022,8 +1023,12 @@ export function milestoneRows(
 ): MilestoneRow[] {
   const rows: MilestoneRow[] = [];
   for (const key of Object.keys(MILESTONE_LABEL) as Array<keyof SetupMilestones>) {
-    const at = m[key] ?? null;
     const isCompany = key === 'companySavedAt';
+    if (key === 'watchUntil' && watchEndsByHand(m.watchUntil, now)) {
+      rows.push({ key, label: 'Watch ends when the team ends it', at: null, done: false, by: null });
+      continue;
+    }
+    const at = m[key] ?? null;
     if (isCompany && company && at === null) continue;
     const t = at ? Date.parse(at) : NaN;
     const done = at !== null && !(Number.isFinite(t) && t > now);

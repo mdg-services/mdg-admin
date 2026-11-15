@@ -21,7 +21,7 @@
 import type { OnboardingBoardRow, OutletSetupAdmin, SetupCall, SetupStage } from '@dk/shared';
 
 import { PORTAL_LABEL, formatPaise, stageLabel } from './onboarding';
-import { watchNeedsDecision } from './watchHold';
+import { watchEndsByHand, watchNeedsDecision } from './watchHold';
 
 // ── What the view says about a row ──────────────────────────────────────────
 
@@ -438,8 +438,21 @@ export function outletNextStep(o: OutletSetupAdmin, now: number): NextStep {
   }
 
   if (o.stage === 'watch') {
-    const until = time(o.milestones.watchUntil);
     const started = time(o.milestones.servicesStartedAt);
+    if (watchEndsByHand(o.milestones.watchUntil, now)) {
+      return step(
+        'wait',
+        'watching',
+        'Watching until the team ends it',
+        joinWords(
+          started ? `Services started on ${dayLabel(started)}.` : 'Services have started.',
+          'Every message the services would send the dealer by themselves waits for a person. End the watch when the reports have been right for a few days.',
+        ),
+        stageSince,
+        null,
+      );
+    }
+    const until = time(o.milestones.watchUntil);
     return step(
       'wait',
       'watching',

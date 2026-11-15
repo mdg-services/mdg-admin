@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { ServicePackageState } from '@dk/shared';
+import type { HpclInspectionInput, ServicePackageState } from '@dk/shared';
 
 /**
  * The standard package's progress for one outlet. Polled every 15 seconds while
@@ -28,6 +28,19 @@ export function useStartServicePackage(dealerId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.post<ServicePackageState>(`/dealers/${dealerId}/service-package/start`, {}),
+    onSuccess: (data) => {
+      qc.setQueryData(['servicePackage', dealerId], data);
+      qc.invalidateQueries({ queryKey: ['dealerServices', dealerId] });
+    },
+  });
+}
+
+/** An HPCL pump's last inspection, typed from the owner's report: the setup carries on from it within a minute. */
+export function useSaveHpclInspection(dealerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: HpclInspectionInput) =>
+      api.post<ServicePackageState>(`/dealers/${dealerId}/service-package/inspection`, input),
     onSuccess: (data) => {
       qc.setQueryData(['servicePackage', dealerId], data);
       qc.invalidateQueries({ queryKey: ['dealerServices', dealerId] });
