@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardSubtitle,
   CardTitle,
+  HowThisWorks,
   Input,
   KeyValueList,
   Label,
@@ -286,6 +287,8 @@ export function ServicePackagePanel({ dealer }: { dealer: Dealer }) {
             labelWidth="200px"
           />
         ) : null}
+
+        {hpcl ? <HowThisWorks surface="admin-service-package-hpcl" label="Setting up an HPCL pump" /> : null}
 
         {hpcl && setup && data.inspection?.canEnter ? (
           <HpclInspectionForm dealerId={dealer.id} entry={data.inspection} />

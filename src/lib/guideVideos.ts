@@ -141,6 +141,9 @@ const SHIFT_DATA: readonly GuideRef[] = [video('admin_hand_entry', 'Typing figur
 /** Running an onboarding, from a registration to a live outlet (the team's walkthrough). */
 const ONBOARDING: readonly GuideRef[] = [video('admin_onboarding', 'Running an onboarding')];
 
+/** Setting up an HPCL pump: the inspection report, its date and time, the figures, the watch (16 Nov 2026). */
+const HPCL_SETUP: readonly GuideRef[] = [video('admin_hpcl_setup', 'Setting up an HPCL pump')];
+
 /** One dealer ticket from arrival to done (3 Nov 2026). Each screen opens it at its own part. */
 const TICKET_DESK: readonly GuideRef[] = [video('admin_ticket_desk', 'The ticket desk')];
 const TICKETS_TAB = video('admin_ticket_desk', 'The Tickets tab', { at: 19.74, titleIsPart: true });
@@ -229,6 +232,8 @@ const BY_SURFACE: Record<string, readonly GuideRef[]> = {
   // explainer about that clock is the most useful thing we have for it.
   'admin-bank-holidays': [DOD_CLOCK, ...CREDIT_DOD],
   'admin-onboarding': ONBOARDING,
+  // An HPCL pump's Standard package card: the inspection report, its date and time, the figures and the watch.
+  'admin-service-package-hpcl': [...HPCL_SETUP, ...ONBOARDING],
   // The Setup card on a dealer page: the walkthrough from "Ready to start?" on,
   // and the card's own "Do it for the dealer" buttons.
   'admin-dealer-setup': [
