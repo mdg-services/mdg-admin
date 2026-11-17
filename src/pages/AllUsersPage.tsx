@@ -54,7 +54,9 @@ import { generatePassword } from '@/lib/password';
 import { selectUser, useAuthStore } from '@/store/auth';
 import {
   ACCOUNT_WIPE_AFTER_DAYS,
+  DEALER_LANGS,
   dealerCodeLabel,
+  type DealerLang,
   type DealerUserGroup,
   type User,
 } from '@dk/shared';
@@ -430,10 +432,17 @@ const detailsFormSchema = z.object({
     .string()
     .trim()
     .refine((v) => v === '' || /^\+?[0-9\-\s]{7,20}$/.test(v), 'Enter a valid phone number'),
-  // '' = never chosen: the dealer apps then open in Hindi.
-  lang: z.enum(['', 'en', 'hi']),
+  // '' = never chosen: the dealer apps then open in Hindi (and ask on next open).
+  lang: z.enum(['', ...DEALER_LANGS]),
 });
 type DetailsForm = z.infer<typeof detailsFormSchema>;
+
+/** How the team reads each dealer language (`shared/types/dealerLanguage.ts`). */
+const LANG_LABEL: Record<DealerLang, string> = {
+  hi: 'Hindi (हिंदी)',
+  hl: 'Hinglish (Hindi in English letters)',
+  en: 'English',
+};
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -831,11 +840,14 @@ function ManageUserDialog({
                 </div>
               </div>
               <div>
-                <Label htmlFor="manage-lang">App language</Label>
+                <Label htmlFor="manage-lang">Language (app, messages, cards, AI)</Label>
                 <Select id="manage-lang" {...registerDetails('lang')}>
                   <option value="">Not chosen (opens in Hindi)</option>
-                  <option value="hi">Hindi</option>
-                  <option value="en">English</option>
+                  {DEALER_LANGS.map((code) => (
+                    <option key={code} value={code}>
+                      {LANG_LABEL[code]}
+                    </option>
+                  ))}
                 </Select>
               </div>
               <div>
