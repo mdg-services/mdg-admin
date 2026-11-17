@@ -440,7 +440,7 @@ function facts(lead: LeadRow, now: number): { short: KeyValueItem[]; long: KeyVa
       value: (
         <>
           {registrationWords(lead.registration.state)}.{' '}
-          <Link to="/onboarding" className={LINK}>
+          <Link to="/dealers?view=onboarding" className={LINK}>
             Open Onboarding
           </Link>
         </>

@@ -7,6 +7,7 @@ import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { RequireSuperAdmin } from '@/components/layout/RequireSuperAdmin';
 import { Skeleton } from '@/components/ui';
 import { retryImport } from '@/lib/retryImport';
+import { onboardingRedirectTarget } from '@/lib/onboardingRedirect';
 import { InboxPage } from '@/pages/InboxPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -154,13 +155,6 @@ const GrievancesPage = React.lazy(
   retryImport(() =>
     import('@/pages/grievances/GrievancesPage').then((m) => ({
       default: m.GrievancesPage,
-    })),
-  ),
-);
-const OnboardingPage = React.lazy(
-  retryImport(() =>
-    import('@/pages/onboarding/OnboardingPage').then((m) => ({
-      default: m.OnboardingPage,
     })),
   ),
 );
@@ -313,6 +307,15 @@ function TicketsRedirect() {
   const [search] = useSearchParams();
   const lens = search.get('view') === 'resolved' ? 'resolved' : 'tickets';
   return <Navigate to={`/inbox?lens=${lens}`} replace />;
+}
+
+/**
+ * `/onboarding` — the page that became the Dealers page's Onboarding view. Its one
+ * option, `?view=live|lost`, is that view's Live / Closed switch.
+ */
+function OnboardingRedirect() {
+  const [search] = useSearchParams();
+  return <Navigate to={onboardingRedirectTarget(search)} replace />;
 }
 
 export default function App() {
@@ -636,24 +639,12 @@ export default function App() {
               </RequireSuperAdmin>
             }
           />
-          {/* From a registration to a live outlet: everyone who has filled in
-              "Register your pump" (the website's form and the app's sign-up
-              screen, behind the `enrolment_new` alert) and every outlet on its
-              way. Every admin, not super-admin: the rows are everyday work, and
-              so is every step on them (approving a registration, recording a
-              payment), here and on the server. Keep in step with `navItems.ts`. */}
-          <Route
-            path="onboarding"
-            element={
-              <LazyPage>
-                <OnboardingPage />
-              </LazyPage>
-            }
-          />
-          {/* The old Registrations list, folded into Onboarding. Kept as a
-              redirect because alerts, bookmarks and the phone's push links
-              still carry it. */}
-          <Route path="registrations" element={<Navigate to="/onboarding" replace />} />
+          {/* Onboarding lives on the Dealers page now (its Onboarding view): registrations,
+              outlets on their way, held messages, password help, Live and Closed. Kept as
+              a redirect because alerts, bookmarks and the phone's push links still carry
+              /onboarding and /registrations. */}
+          <Route path="onboarding" element={<OnboardingRedirect />} />
+          <Route path="registrations" element={<OnboardingRedirect />} />
           {/* Everyone who asked us to call them on the website — the film pages'
               form above all — behind the `callback_new` alert. Super-admin for
               the same reason as the two pages above. Keep in step with

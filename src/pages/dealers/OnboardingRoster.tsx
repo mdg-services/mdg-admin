@@ -2,20 +2,27 @@ import { CheckCircle2, ClipboardList, MessageCircle, TriangleAlert } from 'lucid
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 
-import { ActionRow, Badge, Button, DataList, EmptyState } from '@/components/ui';
+import { ActionRow, Badge, Button, DataList, EmptyState, useToast } from '@/components/ui';
 import { ContactLinks } from '@/features/intake/ContactLinks';
 import { ApproveDialog } from '@/features/onboarding/ApproveDialog';
+import { CloseDialog } from '@/features/onboarding/CloseDialog';
 import { LogCallDialog, type CallTarget } from '@/features/onboarding/LogCallDialog';
+import { OutletFollowUpLines } from '@/features/onboarding/SetupFollowUp';
 import { StageActions } from '@/features/onboarding/StageActions';
+import { useCloseRegistration } from '@/hooks/api/useOnboarding';
 import { cn } from '@/lib/cn';
+import { agoLabel, istStamp } from '@/lib/intake';
 import {
   boardRowKey,
+  closeBody,
   companyChipText,
   daysInStage,
   daysLabel,
+  portalsLine,
   type MainActionId,
   type RegistrationRow,
 } from '@/lib/onboarding';
+import { lastCallLine } from '@/lib/onboardingCalls';
 import {
   inboxChatHref,
   rosterCounts,
@@ -25,6 +32,8 @@ import {
   type RosterRow,
   type TrackState,
 } from '@/lib/onboardingNext';
+import { deviceUseLabel, originLabel } from '@/lib/signupOrigin';
+import { ageSince } from '@/pages/overview/format';
 import { dealerCodeLabel, type OnboardingBoardRow } from '@dk/shared';
 
 /** The buttons a row's next step needs beyond the stage's primary one. */
@@ -69,7 +78,10 @@ export function OnboardingRoster({
   /** The search box has text in it: an empty list means "no match", not "nothing to do". */
   filtered: boolean;
 }) {
+  const toast = useToast();
+  const closeRegistration = useCloseRegistration();
   const [approving, setApproving] = React.useState<RegistrationRow | null>(null);
+  const [closing, setClosing] = React.useState<RegistrationRow | null>(null);
   const [calling, setCalling] = React.useState<CallTarget | null>(null);
 
   const toDo = rows.filter((r) => r.next.urgency === 'now');
@@ -119,6 +131,9 @@ export function OnboardingRoster({
       >
         Log call…
       </Button>
+      <Button size="sm" variant="ghost" onClick={() => setClosing(r)}>
+        Close…
+      </Button>
     </ActionRow>
   );
 
@@ -150,7 +165,7 @@ export function OnboardingRoster({
           header: 'Outlet',
           width: '13rem',
           mobile: 'primary',
-          cell: (r) => <OutletCell row={r.row} />,
+          cell: (r) => <OutletCell row={r.row} now={now} />,
         },
         {
           id: 'next',
@@ -174,6 +189,7 @@ export function OnboardingRoster({
   return (
     <div>
       <Section
+        id="needs-you-now"
         title="Needs you now"
         count={toDo.length}
         tone="warning"
@@ -202,19 +218,54 @@ export function OnboardingRoster({
         </Section>
       ) : null}
 
-      <LogCallDialog target={calling} onClose={() => setCalling(null)} />
+      <LogCallDialog
+        target={calling}
+        onClose={() => setCalling(null)}
+        // "Not interested" offers to close the registration (an outlet's own Close sits on its row).
+        onNotInterested={(t: CallTarget) => {
+          const hit = rows.find(
+            (x) =>
+              x.row.kind === 'registration' &&
+              t.kind === 'registration' &&
+              x.row.registrationId === t.registrationId,
+          );
+          if (hit) setClosing(hit.row as RegistrationRow);
+        }}
+      />
       <ApproveDialog row={approving} onClose={() => setApproving(null)} />
+      <CloseDialog
+        open={!!closing}
+        title="Close this registration"
+        subject={
+          closing ? (
+            <>
+              <span className="font-medium">{closing.name}</span>
+              <span className="text-text-muted"> · SAP code {closing.sapCode}</span>
+            </>
+          ) : null
+        }
+        confirmLabel="Close registration"
+        pending={closeRegistration.isPending}
+        onClose={() => setClosing(null)}
+        onSubmit={async (reason) => {
+          if (!closing) return;
+          await closeRegistration.mutateAsync({ id: closing.registrationId, ...closeBody(reason) });
+          toast.success('Registration closed.');
+        }}
+      />
     </div>
   );
 }
 
 function Section({
+  id,
   title,
   count,
   tone,
   hint,
   children,
 }: {
+  id?: string;
   title: string;
   count: number;
   tone: 'warning' | 'info';
@@ -222,7 +273,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="mt-5 first-of-type:mt-3 md:first-of-type:mt-0">
+    <section id={id} className="mt-5 scroll-mt-20 first-of-type:mt-3 md:first-of-type:mt-0">
       <div className="px-3 pb-2 md:px-0">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
           <span
@@ -240,21 +291,38 @@ function Section({
 }
 
 /** Who: the code (a link to the outlet) and the owner, or a registration's name. */
-function OutletCell({ row }: { row: OnboardingBoardRow }) {
+function OutletCell({ row, now }: { row: OnboardingBoardRow; now: number }) {
   if (row.kind === 'registration') {
+    const r = row as RegistrationRow;
     return (
       <div className="min-w-0 [overflow-wrap:anywhere]">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-          <span className="select-text font-medium text-text">{row.name}</span>
+          <span className="select-text font-medium text-text">{r.name}</span>
           <Badge intent="warning">New</Badge>
+          {/* Which form, and on what device: "App · Android". */}
+          {r.origin ? <Badge>{originLabel(r.origin)}</Badge> : null}
+          {r.fromCampaign ? <Badge intent="info">From our campaign</Badge> : null}
+          {r.alreadyClient ? (
+            <Link to={`/dealers/${r.alreadyClient.dealerId}`}>
+              <Badge intent="danger">Already a client: {dealerCodeLabel(r.alreadyClient.code)}</Badge>
+            </Link>
+          ) : null}
         </div>
-        <p className="mt-0.5 select-text text-xs text-text-subtle">
-          SAP code <span className="font-mono">{row.sapCode}</span>
+        {r.pumpName ? <p className="mt-0.5 select-text text-sm text-text-muted">{r.pumpName}</p> : null}
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-text-subtle">
+          <span className="select-text">
+            SAP code <span className="font-mono">{r.sapCode}</span>
+          </span>
+          {r.siteType ? <Badge>{r.siteType}</Badge> : null}
         </p>
         <div className="mt-0.5">
-          <ContactLinks mobile={row.mobile} />
+          <ContactLinks mobile={r.mobile} />
         </div>
-        <ChatLink mobile={row.mobile} />
+        {r.lastCall ? <p className="mt-0.5 text-xs text-text-subtle">{lastCallLine(r.lastCall)}</p> : null}
+        <p className="mt-0.5 text-xs text-text-subtle">
+          Sent {agoLabel(ageSince(r.submittedAt, now))} · {istStamp(r.submittedAt, now)}
+        </p>
+        <ChatLink mobile={r.mobile} />
       </div>
     );
   }
@@ -276,6 +344,20 @@ function OutletCell({ row }: { row: OnboardingBoardRow }) {
         <div className="mt-0.5">
           <ContactLinks mobile={o.mobile} />
         </div>
+      ) : null}
+      {o.origin || o.lastSignIn ? (
+        <p className="mt-0.5 text-xs text-text-subtle">
+          {[
+            o.origin ? `Signed up: ${originLabel(o.origin)}` : null,
+            o.lastSignIn ? `Uses: ${deviceUseLabel(o.lastSignIn.device)}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      ) : null}
+      {/* A login the team said this outlet does not need, so a missing one is not a gap. */}
+      {o.portalsNotNeeded.length > 0 ? (
+        <p className="mt-0.5 text-xs text-text-subtle">{portalsLine(o.loginsNeeded, o.portalsNotNeeded)}</p>
       ) : null}
       <ChatLink mobile={o.mobile} />
     </div>
@@ -308,7 +390,7 @@ function NextCell({ item }: { item: RosterRow }) {
   const { next, row } = item;
   const elsewhere =
     next.kind === 'held_messages'
-      ? { to: '/onboarding', label: 'Open the held messages' }
+      ? null
       : (next.kind === 'not_me' || next.kind === 'other' || next.kind === 'send_welcome') &&
           row.kind === 'outlet'
         ? { to: `/dealers/${row.outlet.dealerId}?tab=info`, label: 'Open the outlet' }
@@ -324,6 +406,15 @@ function NextCell({ item }: { item: RosterRow }) {
         {next.title}
       </p>
       <p className="mt-0.5 text-sm text-text-muted">{next.why}</p>
+      {next.kind === 'held_messages' ? (
+        <button
+          type="button"
+          onClick={() => document.getElementById('held-messages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          className="mt-1 inline-block text-xs font-medium text-brand underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+        >
+          Go to the held messages
+        </button>
+      ) : null}
       {elsewhere ? (
         <Link
           to={elsewhere.to}
@@ -378,6 +469,12 @@ function StepCell({ row, now }: { row: OnboardingBoardRow; now: number }) {
       <p className="mt-1 text-xs text-text-subtle">
         {watching ? label : `Step ${step} of ${of}${label ? ` · ${label}` : ''}`}
       </p>
+      {/* When the next reminder goes, the last call, and a flag if somebody replied NO. */}
+      {row.kind === 'outlet' ? (
+        <span className="mt-1 flex flex-col items-start gap-0.5">
+          <OutletFollowUpLines outlet={row.outlet} />
+        </span>
+      ) : null}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   HowThisWorks,
   Input,
   MobileCardList,
+  RefreshTool,
   SegmentedControl,
   Select,
   Skeleton,
@@ -24,12 +25,18 @@ import {
   TRow,
   useToast,
 } from '@/components/ui';
+import { AttentionStrip, type AttentionItem } from '@/features/onboarding/AttentionStrip';
+import { HeldMessagesSection } from '@/features/onboarding/HeldMessagesSection';
+import { MonthlyPriceTool } from '@/features/onboarding/MonthlyPriceTool';
+import { OnboardingFunnel } from '@/features/onboarding/OnboardingFunnel';
+import { PasswordHelpSection } from '@/features/onboarding/PasswordHelpSection';
 import { useSentinel } from '@/features/whatsapp/useInView';
 import {
   useCreateDealer,
   useDealerServiceSummaryChunks,
   useDealersInfiniteQuery,
 } from '@/hooks/api/useDealers';
+import { useHeldMessagesQuery } from '@/hooks/api/useHeldMessages';
 import { useOnboardingBoardQuery } from '@/hooks/api/useOnboarding';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -51,6 +58,7 @@ import {
 } from '@dk/shared';
 
 import { DealerCreateDrawer } from './dealers/DealerCreateDrawer';
+import { OnboardingClosedList } from './dealers/OnboardingClosedList';
 import { OnboardingRoster } from './dealers/OnboardingRoster';
 import {
   ServiceStateChip,
@@ -116,6 +124,24 @@ export function DealersPage() {
     [roster, searchTerm],
   );
   const toDoCount = roster.filter((r) => r.next.urgency === 'now').length;
+  // Onboarding, narrowed: the open ones (the roster), those that went live, those that were closed.
+  const stageParam = search.get('stage');
+  const stage: 'open' | 'live' | 'lost' =
+    stageParam === 'live' || stageParam === 'lost' ? stageParam : 'open';
+
+  // ── what is waiting on MDG ── shown above both views, so an admin who opens the
+  // Services list still sees that a registration is waiting for a yes.
+  const held = useHeldMessagesQuery();
+  const newRegistrations = roster.filter((r) => r.row.kind === 'registration').length;
+  const outletsToDo = roster.filter(
+    (r) => r.row.kind === 'outlet' && r.next.urgency === 'now',
+  ).length;
+  const attention: AttentionItem[] = [
+    { target: 'needs-you-now', label: newRegistrations === 1 ? 'new registration' : 'new registrations', count: newRegistrations, intent: 'warning' },
+    { target: 'needs-you-now', label: outletsToDo === 1 ? 'outlet needs you' : 'outlets need you', count: outletsToDo, intent: 'warning' },
+    { target: 'held-messages', label: 'held for review', count: held.data?.items.length ?? 0, intent: 'warning' },
+    { target: 'password-help', label: 'locked out', count: board.data?.passwordHelp.length ?? 0, intent: 'danger' },
+  ];
   const settingUp = React.useMemo(() => {
     const map = new Map<string, RosterRow>();
     for (const r of roster) if (r.row.kind === 'outlet') map.set(r.row.outlet.dealerId, r);
@@ -126,6 +152,27 @@ export function DealersPage() {
     const params = new URLSearchParams(search);
     params.set('view', next);
     setSearch(params, { replace: true });
+  }
+
+  function setStage(next: 'open' | 'live' | 'lost') {
+    const params = new URLSearchParams(search);
+    if (next === 'open') params.delete('stage');
+    else params.set('stage', next);
+    setSearch(params, { replace: true });
+  }
+
+  /** Scroll to a section of the Onboarding view, opening that view first when it is not the one showing. */
+  function jumpTo(id: string) {
+    const go = () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (view === 'onboarding' && stage === 'open') {
+      go();
+      return;
+    }
+    const params = new URLSearchParams(search);
+    params.set('view', 'onboarding');
+    params.delete('stage');
+    setSearch(params, { replace: true });
+    window.setTimeout(go, 200);
   }
 
   function makeDefault(next: DealersView) {
@@ -235,18 +282,37 @@ export function DealersPage() {
     <div>
       <PageHeader
         title="Dealers"
-        subtitle="Onboard new dealers and manage their lifecycle."
+        subtitle="Every outlet, from registration to live."
         actions={
           <>
+            {view === 'onboarding' ? (
+              <RefreshTool
+                label="Refresh the onboarding list"
+                loading={board.isRefetching}
+                onRefresh={() => void board.refetch()}
+              />
+            ) : null}
             <Button
               leftIcon={<Plus width={16} height={16} strokeWidth={1.75} />}
               onClick={() => setDrawerOpen(true)}
             >
               Add dealer
             </Button>
-            <HowThisWorks surface="admin-dealers-list" label="Dealers" />
+            {/* One help button, for the view that is open. */}
+            {view === 'onboarding' ? (
+              <HowThisWorks surface="admin-onboarding" label="Onboarding" />
+            ) : (
+              <HowThisWorks surface="admin-dealers-list" label="Dealers" />
+            )}
           </>
         }
+      />
+
+      <AttentionStrip
+        items={attention}
+        loading={board.isPending}
+        failed={board.isError && !board.data}
+        onJump={jumpTo}
       />
 
       {/* ── the view ── which columns the list carries, and which one opens first. */}
@@ -280,6 +346,29 @@ export function DealersPage() {
           </Button>
         )}
       </div>
+
+      {view === 'onboarding' ? (
+        <SegmentedControl<'open' | 'live' | 'lost'>
+          aria-label="Which outlets"
+          value={stage}
+          onChange={setStage}
+          className="mb-3"
+          options={[
+            { value: 'open', label: 'Open' },
+            { value: 'live', label: 'Live' },
+            { value: 'lost', label: 'Closed' },
+          ]}
+        />
+      ) : null}
+
+      {/* The cards that are about people waiting right now: locked out of the app, and
+          messages held for a new outlet's first days. Each draws nothing when empty. */}
+      {view === 'onboarding' && stage === 'open' ? (
+        <>
+          <PasswordHelpSection rows={board.data?.passwordHelp ?? []} now={now} />
+          <HeldMessagesSection now={now} />
+        </>
+      ) : null}
 
       <Card className="mb-3 md:mb-4">
         <CardContent className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
@@ -357,7 +446,7 @@ export function DealersPage() {
             stylesheet order — which is how the dealer code ended up 59px from
             the left of a 360px screen. */}
         <CardContent padding="none" className="md:p-4">
-          {view === 'onboarding' ? (
+          {view === 'onboarding' && stage === 'open' ? (
             <OnboardingRoster
               rows={rosterShown}
               now={now}
@@ -366,6 +455,8 @@ export function DealersPage() {
               onRetry={() => void board.refetch()}
               filtered={searchTerm.trim().length > 0}
             />
+          ) : view === 'onboarding' ? (
+            <OnboardingClosedList view={stage as 'live' | 'lost'} search={searchTerm} now={now} />
           ) : isLoading ? (
             <ListSkeleton />
           ) : isError && !pages ? (
@@ -549,6 +640,14 @@ export function DealersPage() {
           ) : null}
         </CardContent>
       </Card>
+
+      {/* The last 90 days, and the one price every new bill is raised at. */}
+      {view === 'onboarding' ? (
+        <div className="mt-4">
+          {board.data ? <OnboardingFunnel funnel={board.data.funnel} signups={board.data.signups} /> : null}
+          <MonthlyPriceTool />
+        </div>
+      ) : null}
 
       <DealerCreateDrawer
         open={drawerOpen}

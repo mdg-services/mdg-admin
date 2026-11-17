@@ -34,12 +34,16 @@ import { dealerCodeLabel, type PasswordHelpRow } from '@dk/shared';
  * and pushed the list this page is for below the fold. From md it is open.
  */
 export function PasswordHelpSection({
-  rows,
+  rows: allRows,
   now,
+  dealerId,
 }: {
   rows: readonly PasswordHelpRow[];
   now: number;
+  /** On one outlet's info page: only the requests that matched an account of this outlet. */
+  dealerId?: string;
 }) {
+  const rows = dealerId ? allRows.filter((r) => r.match?.dealerId === dealerId) : allRows;
   const toast = useToast();
   const done = usePasswordHelpDone();
   const busy = useBusyIds();
@@ -62,7 +66,7 @@ export function PasswordHelpSection({
   }
 
   return (
-    <Card className="mb-4">
+    <Card className="mb-4 scroll-mt-20" id={dealerId ? undefined : 'password-help'}>
       <CardHeader
         action={
           <div className="flex items-center gap-2">

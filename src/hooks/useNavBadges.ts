@@ -53,7 +53,7 @@ export function useNavBadges(): Record<string, number> {
     '/alerts': openAlerts,
     '/ai-answers': aiCountsQ.data?.unreviewed ?? 0,
     '/grievances': openGrievances,
-    '/onboarding': newRegistrations,
+    '/dealers': newRegistrations,
     '/callbacks': newCallbacks,
     '/leads': leadsToDo,
     '/whatsapp': whatsappUnread,

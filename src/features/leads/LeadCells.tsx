@@ -365,7 +365,7 @@ export function LeadStandsCell({
           {onPhone ? null : (
             <>
               {' '}
-              <Link to="/onboarding" onClick={stop} className={cn(LINK, 'text-brand')}>
+              <Link to="/dealers?view=onboarding" onClick={stop} className={cn(LINK, 'text-brand')}>
                 Open Onboarding
               </Link>
             </>

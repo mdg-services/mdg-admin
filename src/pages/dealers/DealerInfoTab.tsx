@@ -14,6 +14,7 @@ import {
   StatusChip,
 } from '@/components/ui';
 import { OldOnboardingRecord } from '@/features/onboarding/OldOnboardingRecord';
+import { OutletWaitingCards } from '@/features/onboarding/OutletWaitingCards';
 import { SetupCard } from '@/features/onboarding/SetupCard';
 import { StartBillingCard } from '@/features/onboarding/StartBillingCard';
 import { PumpDetailsCard } from '@/features/outletDetails/PumpDetailsCard';
@@ -71,6 +72,8 @@ export function DealerInfoTab({
   const cardTabs = onOpenTab ? { onGoToTab: onOpenTab } : {};
   return (
     <div className="grid gap-3 md:gap-4">
+      {/* Held messages and password-help requests for THIS outlet: the Dealers home shows them for all. */}
+      {setup && !isArchived ? <OutletWaitingCards dealerId={dealer.id} /> : null}
       {setupOnTop && setup ? <SetupCard setup={setup} {...cardTabs} /> : null}
       {/* NO TAX CARD HERE ANY MORE. GST and PAN are catalog fields on the
           outlet file below, under "Tax and registration", and they read from

@@ -69,7 +69,7 @@ export function HowFollowUpsWork() {
                 every admin is told. The first admin to log a contact on a lead becomes its owner.
               </li>
               <li>
-                When somebody fills in “Register your pump”, the Onboarding page takes over and the
+                When somebody fills in “Register your pump”, the Onboarding view of the Dealers page takes over and the
                 lead shows as Registered.
               </li>
               <li>

@@ -54,7 +54,7 @@ const errorText = (err: unknown) =>
  * A queue that FAILED to load is said so, because "nothing is held" would then be a
  * false thing to read. Kept fresh by `useHeldMessagesLive` in the shell.
  */
-export function HeldMessagesSection({ now }: { now: number }) {
+export function HeldMessagesSection({ now, dealerId }: { now: number; dealerId?: string }) {
   const toast = useToast();
   const q = useHeldMessagesQuery();
   const send = useSendHeldMessage();
@@ -62,8 +62,9 @@ export function HeldMessagesSection({ now }: { now: number }) {
   const [sending, setSending] = React.useState<HeldMessage | null>(null);
   const [dropping, setDropping] = React.useState<HeldMessage | null>(null);
 
-  const items = q.data?.items ?? [];
-  if (q.isError && !q.data) {
+  // On the Dealers home: every outlet's. On one outlet's info page (`dealerId`): its own.
+  const items = (q.data?.items ?? []).filter((h) => !dealerId || h.dealerId === dealerId);
+  if (q.isError && !q.data && !dealerId) {
     return (
       <Callout className="mb-4" onRetry={() => void q.refetch()}>
         Could not load the messages held for review. This does not mean none are waiting.
@@ -88,7 +89,7 @@ export function HeldMessagesSection({ now }: { now: number }) {
   }
 
   return (
-    <Card className="mb-4" aria-label="Held for review">
+    <Card className="mb-4 scroll-mt-20" aria-label="Held for review" id={dealerId ? 'outlet-held-messages' : 'held-messages'}>
       <CardHeader action={<Badge intent="warning">{heldHeadline(items.length)}</Badge>}>
         <div>
           <CardTitle>Held for review</CardTitle>

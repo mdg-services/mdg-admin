@@ -6,7 +6,6 @@ import {
   CalendarDays,
   ChartColumn,
   Clapperboard,
-  ClipboardPen,
   Database,
   FileBarChart2,
   FileClock,
@@ -112,6 +111,9 @@ export const NAV_ITEMS: NavItem[] = [
   // nobody is nudged to open is not a safety case.
   { to: '/ai-answers', label: 'AI answers', icon: Zap },
   { to: '/overview', label: 'Overview', icon: LayoutDashboard },
+  // Every outlet, and the way in for a new one: its Onboarding view holds the registrations
+  // waiting for a yes and every outlet on its way, with whose move it is. It replaced the
+  // Onboarding page. The count is the registrations nobody has dealt with yet (`useNavBadges`).
   { to: '/dealers', label: 'Dealers', icon: Building2 },
   // The WORK QUEUE is what "Kavach" means to an admin day to day: what has to be
   // verified right now, across every dealer. The per-dealer standing view lives
@@ -181,14 +183,6 @@ export const NAV_ITEMS: NavItem[] = [
   // in was promised an answer. Super-admin: strangers' words and numbers, and
   // a grievance may be about our own staff.
   { to: '/grievances', label: 'Grievances', icon: MessageSquareWarning, superAdminOnly: true },
-  // From a registration to a live outlet, one row each: everyone who has filled
-  // in "Register your pump" waiting for a yes, and every outlet on its way
-  // (services, bill, payment, logins, setup, watch), with whose move it is. It
-  // replaced the Registrations list and the old seven-step tab. The count is the
-  // registrations nobody has dealt with yet. Every admin: outlets on their way are
-  // everyday work, and so is every button inside the page, approving a registration
-  // and recording a payment included.
-  { to: '/onboarding', label: 'Onboarding', icon: ClipboardPen },
   // Everyone who asked us to call them on the website: the film pages' form,
   // the home page, the Khata Kavach page, the assistant. Counts the ones nobody
   // has called yet. Super-admin, as above.

@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 
 import { Callout } from '@/components/ui';
 import { WATCH_DECISION_TEXT, heldCountLine, watchNeedsDecision } from '@/lib/watchHold';
@@ -30,9 +29,16 @@ export function SetupWatch({ setup, now }: { setup: OutletSetupAdmin; now: numbe
       {held ? (
         <Callout intent="info">
           {held}.{' '}
-          <Link className="font-semibold underline" to="/onboarding">
+          {/* They are the card at the top of this same page (`OutletWaitingCards`). */}
+          <button
+            type="button"
+            className="font-semibold underline"
+            onClick={() =>
+              document.getElementById('outlet-held-messages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }
+          >
             Review them
-          </Link>
+          </button>
         </Callout>
       ) : null}
       <SetupChecklist dealerId={setup.dealerId} items={setup.checklist} company={setup.company} />

@@ -72,7 +72,7 @@ export function StageActions({
   callFirst?: boolean;
   /**
    * In `compact`, leave the stage's primary button out: the row's next step is done
-   * somewhere else (held messages are checked on the Onboarding page, and "End
+   * somewhere else (held messages are checked on the Dealers home, and "End
    * watch" beside them would invite ending the watch with messages unread).
    */
   withoutPrimary?: boolean;
