@@ -29,6 +29,7 @@ import {
   Tabs,
 } from '@/components/ui';
 import { DealerSetupChip } from '@/features/onboarding/DealerSetupChip';
+import { YourVideosAdminCard } from '@/features/yourVideos/YourVideosAdminCard';
 import { useDealerQuery } from '@/hooks/api/useDealers';
 import { useDealerServicesQuery } from '@/hooks/api/useDealerServices';
 import { useOutletSetupQuery } from '@/hooks/api/useOnboarding';
@@ -248,6 +249,7 @@ const TABS: TabDef[] = [
       <div className="flex flex-col gap-4">
         <ServicePackagePanel dealer={dealer} />
         <DealerServicesTab dealer={dealer} />
+        <YourVideosAdminCard dealerId={dealer.id} archived={!!dealer.archivedAt} />
       </div>
     ),
   },

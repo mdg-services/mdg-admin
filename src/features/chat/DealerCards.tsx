@@ -8,6 +8,7 @@ import {
   KeyRound,
   ListChecks,
   Lock,
+  PlayCircle,
   Siren,
 } from 'lucide-react';
 import * as React from 'react';
@@ -38,6 +39,7 @@ import {
   type SetupBilling,
   type SetupCardKind,
   type SetupStage,
+  type YourVideosAdminView,
 } from '@dk/shared';
 
 import {
@@ -81,6 +83,8 @@ export interface DealerViewValue {
   declarations: DeclarationsAdminView | null | undefined;
   /** The outlet's Pump details form. `undefined` while loading or not asked for; `null` when it could not be read. */
   outletDetails: OutletDetailsView | null | undefined;
+  /** The outlet's "your videos" list as the team sees it. `undefined` while loading or not asked for; `null` when it could not be read. */
+  videoList: YourVideosAdminView | null | undefined;
   /** The thread's primary member is an owner: the cards are the editable ones. A manager sees them read-only. */
   canEdit: boolean;
   /** A group thread (the manager's, with the owners in it): dealer-side bubbles carry their sender's name. */
@@ -101,6 +105,7 @@ export const DealerViewContext = React.createContext<DealerViewValue>({
   mockDrill: undefined,
   declarations: undefined,
   outletDetails: undefined,
+  videoList: undefined,
   canEdit: true,
   group: false,
   dealerIds: undefined,
@@ -467,6 +472,46 @@ export function OutletDetailsPreview({
         )}
       </Block>
       <AdminCaption>{OUTLET_DETAILS_CAPTION}</AdminCaption>
+    </div>
+  );
+}
+
+// ── The "your videos" list (`message.videoList`) ───────────────────────────
+
+const VIDEO_LIST_CAPTION =
+  'The dealer’s Your videos list: a video for each service, the sentences to type to it, and a tick on each one they have watched. Each person’s ticks are their own.';
+
+/**
+ * The "your videos" list (`message.videoList`): a compact card that says how many of the
+ * list's videos anyone at this outlet has watched. The ticks and names are on the outlet's
+ * Services tab; this is the thread's one-line answer to "did they open it?". It draws no
+ * rows of its own, so a video added to the list needs no change here.
+ */
+export function YourVideosPreview({ videoList }: { videoList: YourVideosAdminView | null | undefined }) {
+  const total = videoList?.rows.length ?? 0;
+  const watched = videoList?.rows.filter((r) => r.watchedBy.length > 0).length ?? 0;
+  return (
+    <div data-your-videos title={PREVIEW_TITLE} className="mt-1 flex flex-col gap-1.5">
+      <Block>
+        <p className="flex min-w-0 items-center gap-1.5 break-words text-[14px] font-medium leading-snug">
+          <PlayCircle width={14} strokeWidth={2} className="shrink-0 text-wa-meta" aria-hidden />
+          Your videos
+        </p>
+        {videoList === undefined ? (
+          <div className="mt-2 flex items-center">
+            <Spinner />
+          </div>
+        ) : videoList ? (
+          <p className="mt-1 text-[13px] leading-snug text-wa-bubble-text">
+            {watched === 0
+              ? `Nobody has watched a video yet (${total} in the list).`
+              : `${watched} of ${total} videos watched by someone at this outlet.`}
+          </p>
+        ) : (
+          <Note className="mt-1">The videos watched could not be read.</Note>
+        )}
+      </Block>
+      <AdminCaption>{VIDEO_LIST_CAPTION}</AdminCaption>
     </div>
   );
 }

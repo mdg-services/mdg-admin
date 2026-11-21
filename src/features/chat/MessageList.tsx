@@ -6,6 +6,7 @@ import { useDeclarationsAdminView, useDeclarationsLive } from '@/hooks/api/useDe
 import { useMockDrillAdminView, useMockDrillLive } from '@/hooks/api/useMockDrill';
 import { useOutletSetupQuery } from '@/hooks/api/useOnboarding';
 import { useOutletDetails } from '@/hooks/api/useOutletDetails';
+import { useYourVideosAdmin } from '@/hooks/api/useYourVideos';
 import { usePortalLogins } from '@/hooks/api/usePortalLogins';
 import { useStickToBottom } from '@/hooks/useStickToBottom';
 import { cn } from '@/lib/cn';
@@ -238,6 +239,8 @@ export function MessageList({
   useDeclarationsLive(needsDeclarations ? dealerId : undefined);
   const needsOutletDetails = React.useMemo(() => ordered.some((m) => !!m.outletDetails), [ordered]);
   const outletDetailsQ = useOutletDetails(needsOutletDetails ? dealerId : undefined);
+  const needsVideoList = React.useMemo(() => ordered.some((m) => !!m.videoList), [ordered]);
+  const videoListQ = useYourVideosAdmin(needsVideoList ? dealerId : undefined);
   const lang = React.useMemo(() => guessDealerLang(ordered), [ordered]);
   const dealerKey = dealerMemberIds?.join(',');
   const dealerIds = React.useMemo(
@@ -264,6 +267,14 @@ export function MessageList({
           : outletDetailsQ.isError
             ? null
             : undefined,
+      // `null` from the hook is a server without the list: a plain label, not a spinner.
+      videoList: !needsVideoList
+        ? undefined
+        : videoListQ.data !== undefined
+          ? videoListQ.data
+          : videoListQ.isError
+            ? null
+            : undefined,
       // A manager's thread shows the cards read-only, as the manager's app does.
       canEdit: memberRole !== 'dealer-staff',
       group,
@@ -285,6 +296,9 @@ export function MessageList({
       needsOutletDetails,
       outletDetailsQ.data,
       outletDetailsQ.isError,
+      needsVideoList,
+      videoListQ.data,
+      videoListQ.isError,
       memberRole,
       group,
       dealerIds,
