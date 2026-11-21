@@ -1,4 +1,4 @@
-import { CheckCircle2, Copy, Download, Info, Reply, Undo2 } from 'lucide-react';
+import { CheckCircle2, Copy, Download, Info, Reply, Trash2, Undo2 } from 'lucide-react';
 import * as React from 'react';
 
 import { Portal } from '@/components/ui/Portal';
@@ -34,6 +34,8 @@ interface MessageActionsMenuProps {
   onMarkReceived?: (message: Message) => void;
   /** Send a dealer's answer back with a reason. Paired with `onMarkReceived`. */
   onSendBack?: (message: Message) => void;
+  /** Delete the message for everyone. Passed only to a super admin; absent, the row is not drawn. */
+  onDelete?: (message: Message) => void;
   onClose: () => void;
 }
 
@@ -43,19 +45,24 @@ function MenuRow({
   icon,
   label,
   onClick,
+  danger = false,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
+  danger?: boolean;
 }) {
   return (
     <button
       type="button"
       role="menuitem"
       onClick={onClick}
-      className="flex min-h-11 w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-text hover:bg-surface-2 md:min-h-0"
+      className={cn(
+        'flex min-h-11 w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-surface-2 md:min-h-0',
+        danger ? 'text-danger' : 'text-text',
+      )}
     >
-      <span className="shrink-0 text-text-muted">{icon}</span>
+      <span className={cn('shrink-0', danger ? 'text-danger' : 'text-text-muted')}>{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
     </button>
   );
@@ -75,6 +82,7 @@ export function MessageActionsMenu({
   onOpenInfo,
   onMarkReceived,
   onSendBack,
+  onDelete,
   onClose,
 }: MessageActionsMenuProps) {
   const toast = useToast();
@@ -250,6 +258,20 @@ export function MessageActionsMenu({
             onOpenInfo(message);
           }}
         />
+      ) : null}
+      {!isTemp && onDelete ? (
+        <>
+          <div className="my-1 border-t border-border" />
+          <MenuRow
+            danger
+            icon={<Trash2 width={15} height={15} strokeWidth={1.75} />}
+            label="Delete message…"
+            onClick={() => {
+              onClose();
+              onDelete(message);
+            }}
+          />
+        </>
       ) : null}
     </>
   );

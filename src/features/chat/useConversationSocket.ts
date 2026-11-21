@@ -5,6 +5,7 @@ import {
 import * as React from 'react';
 
 import { conversationKey } from '@/hooks/api/useConversation';
+import { withoutMessage } from '@/hooks/api/useDeleteMessage';
 import { messagesKey } from '@/hooks/api/useMessages';
 import { applyTranscript, type TranscriptEvent } from '@/lib/chatTranscript';
 import { getSocket } from '@/lib/socket';
@@ -138,6 +139,15 @@ export function useConversationSocket(conversationId: string | null) {
       );
     };
 
+    // A super admin deleted a message: it leaves this open thread at once.
+    const onDeleted = (payload: { conversationId: string; messageId: string }) => {
+      if (payload.conversationId !== conversationId) return;
+      qc.setQueryData<InfiniteData<Message[]>>(
+        messagesKey(conversationId),
+        (curr) => withoutMessage(curr, payload.messageId),
+      );
+    };
+
     const onTyping = (payload: {
       conversationId: string;
       userId: string;
@@ -183,6 +193,7 @@ export function useConversationSocket(conversationId: string | null) {
     socket.on('message:new', onMessage);
     socket.on('message:reaction', onReaction);
     socket.on('message:transcript', onTranscript);
+    socket.on('message:deleted', onDeleted);
     socket.on('typing', onTyping);
     socket.on('delivered', onDelivered);
     socket.on('notified', onNotified);
@@ -192,6 +203,7 @@ export function useConversationSocket(conversationId: string | null) {
       socket.off('message:new', onMessage);
       socket.off('message:reaction', onReaction);
       socket.off('message:transcript', onTranscript);
+      socket.off('message:deleted', onDeleted);
       socket.off('typing', onTyping);
       socket.off('delivered', onDelivered);
       socket.off('notified', onNotified);

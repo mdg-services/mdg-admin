@@ -46,6 +46,8 @@ interface MessageListProps {
   onMarkReceived?: (message: Message) => void;
   /** Send a dealer's answer back with a reason (message menu). */
   onSendBack?: (message: Message) => void;
+  /** Delete a message for everyone (message menu). Super admins only: leave it out for anyone else. */
+  onDelete?: (message: Message) => void;
   /**
    * The requests a dealer has answered and MDG has not yet checked, by the id of
    * the message that carried the answer. Computed once for the thread, so no
@@ -96,6 +98,7 @@ export function MessageList({
   onOpenInfo,
   onMarkReceived,
   onSendBack,
+  onDelete,
   pendingAnswers,
   askStatuses,
   jumpTo,
@@ -398,6 +401,7 @@ export function MessageList({
           onOpenInfo={onOpenInfo}
           onMarkReceived={onMarkReceived}
           onSendBack={onSendBack}
+          onDelete={onDelete}
           onClose={closeMenu}
         />
       ) : null}

@@ -38,6 +38,7 @@ import { HowThisWorks } from '@/components/ui/HowThisWorks';
 import { Menu, MenuItem, MenuSeparator } from '@/components/ui/Menu';
 import { Sheet, SheetItem } from '@/components/ui/Sheet';
 import { Spinner } from '@/components/ui/Spinner';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { AiFirstLineLog } from '@/features/chat/AiFirstLineStrip';
 import { AiQuietLine } from '@/features/chat/AiQuietLine';
@@ -111,6 +112,7 @@ import { useDealerOpenRequestsQuery } from '@/hooks/api/useChatAsks';
 import { useConversation } from '@/hooks/api/useConversation';
 import { useConversationCounts, useConversations } from '@/hooks/api/useConversations';
 import { useMessages } from '@/hooks/api/useMessages';
+import { useDeleteMessage } from '@/hooks/api/useDeleteMessage';
 import { useReactToMessage } from '@/hooks/api/useReactToMessage';
 import {
   usePendingReplyHelperAsk,
@@ -725,6 +727,8 @@ export function InboxPage() {
   const [reactionsForId, setReactionsForId] = React.useState<string | null>(
     null,
   );
+  // "Delete message…" (super admins only): the message waiting for the confirm.
+  const [deleteTarget, setDeleteTarget] = React.useState<Message | null>(null);
 
   // "Mark received…" and "Send back…" each act on one dealer message. `message`
   // is null when the action came from the card for a message that is not loaded
@@ -815,6 +819,7 @@ export function InboxPage() {
     setReplyTo(null);
     setInfoForId(null);
     setReactionsForId(null);
+    setDeleteTarget(null);
     setComposerInsert(null);
     setReceiveTarget(null);
     setSendBackTarget(null);
@@ -860,6 +865,8 @@ export function InboxPage() {
   const shareToOutlet = useShareToOutlet();
   const setUrgent = useSetTicketUrgent();
   const { mutate: reactToMessage } = useReactToMessage();
+  const deleteMessage = useDeleteMessage();
+  const canDeleteMessages = useIsSuperAdmin();
 
   // Stable handlers — MessageBubble is memoized, so anything that flows down
   // to it must not change identity per render.
@@ -869,6 +876,23 @@ export function InboxPage() {
     (m: Message) => setInfoForId(m.id),
     [],
   );
+  const handleDelete = React.useCallback((m: Message) => setDeleteTarget(m), []);
+  const confirmDelete = React.useCallback(() => {
+    if (!deleteTarget) return;
+    deleteMessage.mutate(
+      { conversationId: deleteTarget.conversationId, messageId: deleteTarget.id },
+      {
+        onSuccess: () => {
+          setDeleteTarget(null);
+          toast.success('Message deleted');
+        },
+        onError: (err) => {
+          setDeleteTarget(null);
+          toast.error(err instanceof Error ? err.message : 'Could not delete the message');
+        },
+      },
+    );
+  }, [deleteTarget, deleteMessage, toast]);
   const handleOpenReactions = React.useCallback(
     (m: Message) => setReactionsForId(m.id),
     [],
@@ -2060,6 +2084,7 @@ export function InboxPage() {
                       onOpenInfo={handleOpenInfo}
                       onMarkReceived={handleMarkReceivedForMessage}
                       onSendBack={handleSendBackForMessage}
+                      onDelete={canDeleteMessages ? handleDelete : undefined}
                       pendingAnswers={pendingAnswers}
                       askStatuses={askStatuses}
                       jumpTo={jumpTo}
@@ -2146,6 +2171,28 @@ export function InboxPage() {
               message={infoMessage}
               conversation={conversation}
               onClose={() => setInfoForId(null)}
+            />
+
+            <ConfirmDialog
+              open={!!deleteTarget}
+              onCancel={() => setDeleteTarget(null)}
+              onConfirm={confirmDelete}
+              loading={deleteMessage.isPending}
+              title="Delete this message for everyone?"
+              description={
+                <>
+                  {deleteTarget ? (
+                    <span className="mb-2 block truncate rounded bg-surface-2 px-2 py-1 text-text">
+                      {deleteTarget.body?.trim() ||
+                        (deleteTarget.attachments[0]?.filename ?? 'Message')}
+                    </span>
+                  ) : null}
+                  It disappears from the dealer&apos;s app and from every admin screen
+                  right away. A copy is kept in the Activity log.
+                </>
+              }
+              confirmLabel="Delete"
+              confirmVariant="danger"
             />
 
             <ReceiveAskDialog

@@ -58,7 +58,9 @@ function actionIntent(action: string): Intent {
     action === 'IRAS_CREDENTIALS_CLEAR' ||
     action === 'SDMS_CREDENTIALS_CLEAR' ||
     action === 'STAFF_DRAFT_CLEAR' ||
-    action === 'STAFF_POINTS_UNDO'
+    action === 'STAFF_POINTS_UNDO' ||
+    // A super admin deleted a chat message; the row keeps what it said.
+    action === 'CHAT_MESSAGE_DELETED'
   ) {
     return 'danger';
   }
