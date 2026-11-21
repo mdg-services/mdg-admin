@@ -137,7 +137,13 @@ describe('the setup checklist', () => {
 
   it('starting needs a reason before "setting up" AND while any line is open — and only then', () => {
     assert.equal(startNeedsReason('setup', ready), false);
-    assert.equal(startNeedsReason('setup', [item('kavach_started', 'missing')]), true);
+    // ADR 0050: Kavach is set up by the start itself, and the DSR's figures and first runs
+    // come after the start, so none of them asks for a reason; the logins do.
+    assert.equal(startNeedsReason('setup', [item('kavach_started', 'missing')]), false);
+    assert.equal(startNeedsReason('setup', [item('first_run_ok', 'missing')]), false);
+    assert.equal(startNeedsReason('setup', [item('files_received', 'missing')]), false);
+    assert.equal(startNeedsReason('setup', [item('logins_working', 'missing')]), true);
+    assert.equal(startNeedsReason('setup', [item('services_attached', 'missing')]), true);
     assert.equal(startNeedsReason('payment', ready), true);
     assert.equal(startNeedsReason('logins', []), true);
     // no checklist from the server (an old answer): the wave-1 rule alone

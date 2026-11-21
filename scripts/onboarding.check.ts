@@ -868,24 +868,27 @@ describe('what an admin can do for the dealer', () => {
 
   it('offers the logins at the logins stage, and nothing of the dealer’s once the services are ready', () => {
     assert.deepEqual(ids({ stage: 'logins' }), ['fill_logins', 'fill_company', 'portal_not_needed']);
-    // at "ready to set up" only the company is still the dealer's to change
-    assert.deepEqual(ids({ stage: 'setup' }), ['fill_company']);
+    // at "ready to set up" nothing (ADR 0050): the logins work and the services start by themselves
+    assert.deepEqual(ids({ stage: 'setup' }), []);
     for (const stage of ['watch', 'live', 'lost'] as const)
       assert.deepEqual(ids({ stage }), [], stage);
   });
 
-  it('offers the company at its own step, and to change until the services start', () => {
+  it('offers the company at its own step, and to change until the logins work', () => {
     // the open step: not chosen yet, so it is "Choose", and it is the only dealer step
     assert.deepEqual(ids({ stage: 'company', company: null, loginsNeeded: [] }), ['fill_company']);
     assert.deepEqual(labels({ stage: 'company', company: null, loginsNeeded: [] }), [
       'Choose company…',
     ]);
     // after it: "Change", behind the open step's own button
-    for (const stage of ['billing', 'payment', 'logins', 'setup'] as const) {
+    for (const stage of ['billing', 'payment', 'logins'] as const) {
       assert.ok(ids({ stage, billing }).includes('fill_company'), stage);
       assert.ok(labels({ stage, billing }).includes('Change company…'), stage);
       assert.ok(!labels({ stage, billing }).includes('Choose company…'), stage);
     }
+    // ADR 0050: at "setting up" the logins of that company work and the services start by
+    // themselves within minutes, so the card offers no company change there.
+    assert.ok(!ids({ stage: 'setup', billing }).includes('fill_company'));
     assert.deepEqual(ids({ stage: 'billing' }).slice(0, 2), ['fill_billing', 'fill_company']);
     assert.deepEqual(ids({ stage: 'logins' }).slice(0, 2), ['fill_logins', 'fill_company']);
     // paid: the bill details are locked but the company is not
@@ -918,10 +921,9 @@ describe('what an admin can do for the dealer', () => {
     );
     // at "ready to set up" the mark can be taken back, but a new one is not offered
     assert.deepEqual(ids({ stage: 'setup', loginsNeeded: ['sdms'], portalsNotNeeded: marked }), [
-      'fill_company',
       'portal_not_needed',
     ]);
-    assert.deepEqual(ids({ stage: 'setup', loginsNeeded: ['sdms'] }), ['fill_company']);
+    assert.deepEqual(ids({ stage: 'setup', loginsNeeded: ['sdms'] }), []);
   });
 
   it('never makes one of them the primary button: they have no such field', () => {

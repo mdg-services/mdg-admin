@@ -109,12 +109,25 @@ export function checklistSummary(list: readonly SetupChecklistItem[]): string {
 }
 
 /**
+ * The lines a start waits for, as the admin sees them (ADR 0050): the logins and something
+ * attached. Kavach is a gate line on the server too, but the start sets it up itself, so it
+ * never asks a person for a reason; the DSR's figures and the first runs are prepared after
+ * the start and never stop it.
+ */
+const START_GATE: readonly SetupChecklistKey[] = ['logins_working', 'services_attached'];
+
+/** The start-gate lines that are open. */
+export function missingStartGate(list: readonly SetupChecklistItem[]): SetupChecklistKey[] {
+  return missingChecklist(list).filter((k) => START_GATE.includes(k));
+}
+
+/**
  * Does starting need a reason? Yes before the setup is at "setting up" (the wave-1
- * rule), and yes while a checklist line is open: the server refuses with
+ * rule), and yes while a line the start waits for is open: the server refuses with
  * `CHECKLIST_OPEN` otherwise, and this form says so first.
  */
 export function startNeedsReason(stage: OutletSetupAdmin['stage'], checklist: readonly SetupChecklistItem[]): boolean {
-  return stage !== 'setup' || missingChecklist(checklist).length > 0;
+  return stage !== 'setup' || missingStartGate(checklist).length > 0;
 }
 
 /** Which keys a `CHECKLIST_OPEN` refusal named, or null when the error is something else. */

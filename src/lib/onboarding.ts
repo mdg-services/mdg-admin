@@ -308,8 +308,10 @@ export function stageActions(o: StageFacts): StageActionSpec[] {
       }
       add('start_anyway', 'Start anyway…', false);
       break;
+    // The services start by themselves the minute the logins work (ADR 0050); the button
+    // is for a person who wants it this minute, or for an outlet that will not start itself.
     case 'setup':
-      add('start_services', 'Start services…', true);
+      add('start_services', 'Start now…', true);
       if (o.payment.state === 'sent') {
         add('record_payment', 'Record payment…', false);
         add('send_bill', 'Send bill again…', false);
@@ -399,11 +401,13 @@ function canMarkNotNeeded(stage: SetupStage): boolean {
 
 /**
  * The company is chosen at its own step and can be changed at every step after it
- * until the services start: the server answers 409 `SIGN_IN_FIRST` before the owner's
- * first sign-in and `SETUP_OVER` once the services have started.
+ * until the logins work: the server answers 409 `SIGN_IN_FIRST` before the owner's
+ * first sign-in and `SETUP_OVER` once the services have started. Not offered at
+ * "setting up" (ADR 0050): that company's logins have worked and the services start
+ * by themselves within minutes, so the button was only noise on the card.
  */
 function canChangeCompany(stage: SetupStage): boolean {
-  return stage === 'billing' || stage === 'payment' || stage === 'logins' || stage === 'setup';
+  return stage === 'billing' || stage === 'payment' || stage === 'logins';
 }
 
 /** …and a mark can be taken back at any step until the services start. */

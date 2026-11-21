@@ -12,6 +12,7 @@ import {
   KeyValueList,
   HowThisWorks,
 } from '@/components/ui';
+import { useServicePackageQuery } from '@/hooks/api/useServicePackage';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { showsBillingStatus } from '@/lib/billingRelease';
 import { billingEndedLine, canBillAgain } from '@/lib/billingRelease2';
@@ -29,6 +30,7 @@ import {
   welcomeLine,
   type DealerTabId,
 } from '@/lib/onboarding';
+import { leadLine } from '@/lib/setupProgress';
 import { deviceUseLabel, originLabel } from '@/lib/signupOrigin';
 import { GST_STATES, type OutletSetupAdmin } from '@dk/shared';
 
@@ -36,6 +38,7 @@ import { AutopayPanel } from './AutopayPanel';
 import { BillingBlock } from './BillingBlock';
 import { BillingHistory } from './BillingHistory';
 import { billingItems } from './billingItems';
+import { PackageProgress } from './PackageProgress';
 import { RestartBillingDialog } from './RestartBillingDialog';
 import { SetupFollowUp } from './SetupFollowUp';
 import { SetupWatch } from './SetupWatch';
@@ -46,6 +49,12 @@ import { StageActions } from './StageActions';
  * given so far, every milestone with its time (and who did it, when an admin did
  * it for the dealer), and the same stage buttons the Onboarding page's row has
  * (`StageActions`, one component for both), with "Do it for the dealer" under them.
+ *
+ * From the logins on (ADR 0050) it leads with ONE sentence of where the outlet stands
+ * ("The logins work. The services start by themselves within a minute", "Services
+ * running since 21 Nov, 11:51 · messages checked by the team until 23 Nov") and,
+ * under it, only the services still getting ready and anything that needs a person
+ * (`PackageProgress`), each with its next try or what to do.
  *
  * It replaces the old step-counter and the "Payment recorded at step 5" card for
  * outlets that came through onboarding v2; outlets from before it keep those.
@@ -70,6 +79,10 @@ export function SetupCard({
   const endedLine = billingEndedLine(setup, istTodayYmd());
   const billAgain = canBillAgain(setup, isSuperAdmin);
   const milestones = milestoneRows(setup.milestones, now, setup.doneBy, setup.company);
+  // The package's progress, from the logins on: the lead sentence and what is still getting ready.
+  const fromLogins = ['logins', 'setup', 'watch', 'live'].includes(setup.stage);
+  const pkg = useServicePackageQuery(fromLogins ? setup.dealerId : undefined);
+  const lead = leadLine(setup, pkg.data, now);
   return (
     <Card>
       <CardHeader
@@ -82,10 +95,13 @@ export function SetupCard({
       >
         <div>
           <CardTitle>Setup</CardTitle>
-          <CardSubtitle>{waiting || 'From registration to live service.'}</CardSubtitle>
+          <CardSubtitle>{lead ?? (waiting || 'From registration to live service.')}</CardSubtitle>
         </div>
       </CardHeader>
       <CardContent className="grid gap-4">
+        {pkg.data && setup.stage !== 'logins' ? (
+          <PackageProgress dealerId={setup.dealerId} state={pkg.data} compact now={now} />
+        ) : null}
         <StageActions outlet={setup} {...(onGoToTab ? { onGoToTab } : {})} />
         {/* ── reminders and calls ── */}
         <SetupFollowUp setup={setup} />

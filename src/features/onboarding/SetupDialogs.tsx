@@ -27,7 +27,7 @@ import {
   watchBody,
 } from '@/lib/onboarding';
 import { serviceLabel } from '@/lib/serviceLabel';
-import { CHECKLIST_LABEL, checklistOpenKeys, missingChecklist, startNeedsReason } from '@/lib/watchHold';
+import { CHECKLIST_LABEL, checklistOpenKeys, missingStartGate, startNeedsReason } from '@/lib/watchHold';
 import { dealerCodeLabel, type OutletSetupAdmin, type PortalId } from '@dk/shared';
 
 import { DealerTabLink } from './DealerTabLink';
@@ -87,8 +87,10 @@ export function ForOutlet({ outlet }: { outlet: OutletSetupAdmin }) {
 // ── Start services ──────────────────────────────────────────────────────────
 
 /**
- * Start the outlet's services. From "ready to set up" it is one tap; from the
- * bill or logins stage it is the API's override, and a reason is required.
+ * Start the outlet's services. At "setting up" they start by themselves within a minute
+ * of the logins working (ADR 0050), so this is one tap for a person who wants it now:
+ * no checklist, no reason. Before the logins or the bill it is the API's override, and
+ * the checklist, the attached services, the logins and a reason are all shown.
  */
 export function StartServicesDialog({ outlet, onClose, onGoToTab }: Props) {
   return outlet ? (
@@ -119,7 +121,7 @@ function StartServicesForm({ outlet, onClose, onGoToTab }: FormProps) {
   // "setting up". Starting with a line open is allowed but needs a reason, as the server says.
   const fresh = useOutletSetupQuery(outlet.dealerId);
   const checklist = fresh.data?.checklist ?? outlet.checklist;
-  const openLines = missingChecklist(checklist);
+  const openLines = missingStartGate(checklist);
   const needsReason = startNeedsReason(outlet.stage, checklist);
   const anyway = early || openLines.length > 0;
   const form = { watchDays: days, reason, needsReason };
@@ -150,7 +152,7 @@ function StartServicesForm({ outlet, onClose, onGoToTab }: FormProps) {
     <Dialog
       open
       onClose={onClose}
-      title={anyway ? 'Start anyway' : 'Start services'}
+      title={anyway ? 'Start anyway' : 'Start the services now'}
       footerBelow="row"
       footer={
         <>
@@ -158,7 +160,7 @@ function StartServicesForm({ outlet, onClose, onGoToTab }: FormProps) {
             Cancel
           </Button>
           <Button onClick={() => void submit()} loading={start.isPending}>
-            {anyway ? 'Start anyway' : 'Start services'}
+            {anyway ? 'Start anyway' : 'Start now'}
           </Button>
         </>
       }
@@ -184,15 +186,25 @@ function StartServicesForm({ outlet, onClose, onGoToTab }: FormProps) {
           </Callout>
         ) : null}
 
-        {/* ── watch hold ── the setup checklist; a line still open needs a reason too */}
-        <SetupChecklist dealerId={outlet.dealerId} items={checklist} company={outlet.company} />
+        {/* ── watch hold ── the setup checklist, only for a start that needs a reason */}
+        {anyway ? (
+          <SetupChecklist dealerId={outlet.dealerId} items={checklist} company={outlet.company} />
+        ) : (
+          <p className="text-sm text-text">
+            Every attached service starts now. IRAS shift data, Credit &amp; dues, the DSR and the
+            load planner come on by themselves as their starting figures are worked out.
+          </p>
+        )}
         {!early && openLines.length > 0 ? (
           <Callout intent="warning">
-            The checklist is not complete. Starting now is allowed, but say why. The reason is kept
-            with the outlet.
+            {openLines.map((k) => CHECKLIST_LABEL[k]).join(' and ')} not done yet. Starting now is
+            allowed, but say why. The reason is kept with the outlet.
           </Callout>
         ) : null}
 
+        {/* What is attached and which logins are saved: only for a start that needs a reason. */}
+        {anyway ? (
+          <>
         <div>
           <p className="text-sm font-medium text-text">Services attached</p>
           {attached.isPending ? (
@@ -265,6 +277,8 @@ function StartServicesForm({ outlet, onClose, onGoToTab }: FormProps) {
             </ul>
           ) : null}
         </div>
+          </>
+        ) : null}
 
         <div className="max-w-[12rem]">
           <Label htmlFor={daysId} required hint={`0 to ${MAX_WATCH_DAYS}`}>

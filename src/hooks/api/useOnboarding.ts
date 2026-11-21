@@ -107,6 +107,8 @@ export function refreshAfterChange(qc: QueryClient, dealerId?: string) {
   void qc.invalidateQueries({ queryKey: ['admin-alerts'] });
   void qc.invalidateQueries({ queryKey: ['dealers'] });
   if (dealerId) void qc.invalidateQueries({ queryKey: ['dealer', dealerId] });
+  // A start switches the held services on: the Setup card's "N of 13 running" reads the package.
+  if (dealerId) void qc.invalidateQueries({ queryKey: ['servicePackage', dealerId] });
 }
 
 /**
