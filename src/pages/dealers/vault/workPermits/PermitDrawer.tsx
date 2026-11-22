@@ -8,11 +8,13 @@ import {
   Callout,
   DealerChip,
   Drawer,
+  ImageLightbox,
   KeyValueList,
   useToast,
   type KeyValueItem,
 } from '@/components/ui';
 import { fetchPermitFileUrl } from '@/hooks/api/useWorkPermits';
+import { useOpenPaper } from '@/hooks/useOpenPaper';
 import { ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import type { WorkPermitAdminRow } from '@dk/shared';
@@ -46,6 +48,9 @@ export function PermitDrawer({
   const toast = useToast();
   const [opening, setOpening] = React.useState<'pdf' | 'letter' | null>(null);
   const [showReadBack, setShowReadBack] = React.useState(false);
+  // In-app viewers only (the admin phone app hands any other address to the phone's browser).
+  const paper = useOpenPaper('Could not open the permit PDF');
+  const [letterUrl, setLetterUrl] = React.useState<string | null>(null);
   if (!row) return null;
 
   async function open(doc: 'pdf' | 'letter') {
@@ -53,7 +58,8 @@ export function PermitDrawer({
     setOpening(doc);
     try {
       const { url } = await fetchPermitFileUrl(row.dealerId, row.id, doc);
-      window.open(url, '_blank', 'noopener');
+      if (doc === 'letter') setLetterUrl(url);
+      else paper.open({ viewUrl: url, downloadUrl: url, filename: `Work permit ${row.number ?? ''}.pdf`.replace(' .pdf', '.pdf'), contentType: 'application/pdf' });
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not open the file');
     } finally {
@@ -104,7 +110,16 @@ export function PermitDrawer({
   ];
 
   return (
-    <Drawer
+    <>
+      {paper.reader}
+      <ImageLightbox
+        open={!!letterUrl}
+        onClose={() => setLetterUrl(null)}
+        src={letterUrl ?? ''}
+        alt="Letter of authorization"
+        title="Letter of authorization"
+      />
+      <Drawer
       open
       onClose={onClose}
       width="lg"
@@ -203,5 +218,6 @@ export function PermitDrawer({
         </section>
       </div>
     </Drawer>
+    </>
   );
 }
