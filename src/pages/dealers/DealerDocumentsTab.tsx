@@ -24,6 +24,7 @@ import { StatTile, StatTileRow, StatTileSkeletons } from '../dataVault/StatTile'
 import { DocumentValidityDrawer } from '../documents/DocumentValidityDrawer';
 import { DocumentValidityList } from '../documents/DocumentValidityList';
 import { FileForDealerDialog } from '../documents/FileForDealerDialog';
+import { DealerTankerPapers } from '../documents/TankerPapers';
 import {
   DEFAULT_EXPIRING_WITHIN_DAYS,
   rowFromValidityAsk,
@@ -251,6 +252,9 @@ export function DealerDocumentsTab({ dealer }: { dealer: Dealer }) {
           ) : null}
         </CardContent>
       </Card>
+
+      {/* The tanker's own papers, per vehicle, read from IndianOil Partners (ADR 0044). Draws nothing for an outlet without any. */}
+      <DealerTankerPapers dealerId={dealer.id} />
 
       <DocumentValidityDrawer
         open={Boolean(live)}

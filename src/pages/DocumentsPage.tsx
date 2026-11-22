@@ -51,6 +51,7 @@ import {
   type DocumentValidityRow,
   type ValidityFilter,
 } from './documents/format';
+import { EstateTankerPapers } from './documents/TankerPapers';
 import { ValidityLegend } from './documents/ValidityPill';
 
 /**
@@ -247,6 +248,9 @@ export function DocumentsPage() {
         subtitle="Every paper MDG holds for every outlet, and when each one stops being good. Requesting a paper and reviewing what came in live in the Data Vault's Documents shelf."
         actions={<HowThisWorks surface="admin-documents" label="Documents" />}
       />
+
+      {/* Tanker papers (read from IndianOil Partners) that have run out or are about to — drawn only when there are any. */}
+      <EstateTankerPapers />
 
       {loading ? (
         <StatTileSkeletons />
