@@ -160,6 +160,13 @@ const CallbacksPage = React.lazy(
     })),
   ),
 );
+const ComplaintsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/complaints/ComplaintsPage').then((m) => ({
+      default: m.ComplaintsPage,
+    })),
+  ),
+);
 const KkSigninsPage = React.lazy(
   retryImport(() =>
     import('@/pages/kkSignins/KkSigninsPage').then((m) => ({
@@ -644,6 +651,18 @@ export default function App() {
                   <CallbacksPage />
                 </LazyPage>
               </RequireSuperAdmin>
+            }
+          />
+          {/* Maintenance complaints for every outlet (ADR 0052), behind the
+              `complaint_attention` alert. Any admin: the endpoints are
+              `requireRole('admin')`, and a complaint stuck on the portal is caught by
+              whoever manages the account. Keep in step with navItems.ts. */}
+          <Route
+            path="complaints"
+            element={
+              <LazyPage>
+                <ComplaintsPage />
+              </LazyPage>
             }
           />
           {/* Every ask for a Khata Kavach WhatsApp code and what became of it, behind the

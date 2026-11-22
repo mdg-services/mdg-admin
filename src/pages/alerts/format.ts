@@ -63,6 +63,8 @@ const STILL_STANDING: Partial<Record<AdminAlertKind, string>> = {
     'Hidden from this list. Dealer messages keep coming to you as tickets until the AI is switched back on.',
   enrolment_new:
     'Hidden from this list. Registrations stay new until someone marks them as contacted.',
+  complaint_attention:
+    'Hidden from this list. It clears once the complaint is settled on the Complaints page or moves on by itself on the portal.',
   callback_new: 'Hidden from this list. Call-backs stay new until someone marks them as called.',
   payment_problem:
     'Hidden from this list. The payment stays flagged until someone marks it as checked.',

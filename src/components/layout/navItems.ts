@@ -32,6 +32,7 @@ import {
   Target,
   UserCog,
   Users,
+  Wrench,
   Warehouse,
   Zap,
   type LucideIcon,
@@ -185,6 +186,10 @@ export const NAV_ITEMS: NavItem[] = [
   // the home page, the Khata Kavach page, the assistant. Counts the ones nobody
   // has called yet. Super-admin, as above.
   { to: '/callbacks', label: 'Call-backs', icon: PhoneCall, superAdminOnly: true },
+  // Maintenance complaints filed and followed on IndianOil's portals for every outlet
+  // (ADR 0052). Deliberately NOT `superAdminOnly`; the badge counts the ones that need a
+  // person plus those waiting on a dealer's "is it working now?". Falls into the More sheet.
+  { to: '/complaints', label: 'Complaints', icon: Wrench },
   // Every ask for a Khata Kavach WhatsApp code and what became of it: who, for what, whether
   // WhatsApp delivered it, whether they got in. Behind the `kk_code_not_delivered` alert.
   // Super-admin: it shows pump owners' numbers.

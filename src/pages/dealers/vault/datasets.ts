@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   Siren,
   Truck,
+  Wrench,
 } from 'lucide-react';
 
 import { DealerCreditDodTab } from '../DealerCreditDodTab';
@@ -22,6 +23,7 @@ import { DealerDsrTab } from '../DealerDsrTab';
 import { DealerLedgerWatchPane } from '../DealerLedgerWatchPane';
 
 import { DAY_DATA_DATASET_ID, DAY_DATA_SERVICE_IDS, dayDataCopy, providerOfAttached } from './dayData';
+import { DealerComplaintsPane } from './DealerComplaintsPane';
 import { DealerCalibrationClaimPane } from './DealerCalibrationClaimPane';
 import { DealerDeclarationsPane } from './DealerDeclarationsPane';
 import { DealerDuOtpAckPane } from './DealerDuOtpAckPane';
@@ -161,6 +163,17 @@ const REGISTRY = [
     Icon: ClipboardList,
     requiresService: 'fuel-indent',
     Pane: DealerFuelOrdersPane,
+  },
+  {
+    // Next to Fuel orders: both are things the dealer asks for in the chat and MDG does on a portal.
+    // Never rename the id — alert and chat links will carry it.
+    id: 'complaints',
+    label: 'Complaints',
+    description:
+      'Maintenance complaints: what the dealer raised in the chat, where each one stands on IndianOil’s four complaint systems, and what the portals hold that nobody raised here.',
+    Icon: Wrench,
+    requiresService: 'maintenance-complaints',
+    Pane: DealerComplaintsPane,
   },
   {
     id: 'calibration-claim',

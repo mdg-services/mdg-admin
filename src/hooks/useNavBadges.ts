@@ -1,6 +1,7 @@
 import { useOpenAlertCount } from './api/useAdminAlerts';
 import { useAiTurnCountsQuery } from './api/useAiTurns';
 import { useNewCallbackCount } from './api/useCallbacks';
+import { useComplaintsBadgeCount } from './api/useComplaints';
 import { useNewEnrolmentCount } from './api/useEnrolments';
 import { useOpenGrievanceCount } from './api/useGrievances';
 import { useLeadsTodoCount } from './api/useLeads';
@@ -43,6 +44,8 @@ export function useNavBadges(): Record<string, number> {
   const openGrievances = useOpenGrievanceCount();
   const newRegistrations = useNewEnrolmentCount();
   const newCallbacks = useNewCallbackCount();
+  // Complaints that need a person or a dealer's answer: counts only, one small request.
+  const complaintsToWatch = useComplaintsBadgeCount();
   // Leads due now or nobody has called. Every admin: they all chase them.
   const leadsToDo = useLeadsTodoCount();
   // Chats with something unread, from the same small request the page title
@@ -55,6 +58,7 @@ export function useNavBadges(): Record<string, number> {
     '/grievances': openGrievances,
     '/dealers': newRegistrations,
     '/callbacks': newCallbacks,
+    '/complaints': complaintsToWatch,
     '/leads': leadsToDo,
     '/whatsapp': whatsappUnread,
   };
