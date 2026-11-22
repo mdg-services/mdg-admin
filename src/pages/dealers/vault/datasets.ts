@@ -8,6 +8,7 @@ import {
   FileCheck2,
   Fuel,
   Gauge,
+  HardHat,
   ListChecks,
   ReceiptText,
   ScanLine,
@@ -24,6 +25,7 @@ import { DealerLedgerWatchPane } from '../DealerLedgerWatchPane';
 
 import { DAY_DATA_DATASET_ID, DAY_DATA_SERVICE_IDS, dayDataCopy, providerOfAttached } from './dayData';
 import { DealerComplaintsPane } from './DealerComplaintsPane';
+import { DealerWorkPermitsPane } from './DealerWorkPermitsPane';
 import { DealerCalibrationClaimPane } from './DealerCalibrationClaimPane';
 import { DealerDeclarationsPane } from './DealerDeclarationsPane';
 import { DealerDuOtpAckPane } from './DealerDuOtpAckPane';
@@ -174,6 +176,17 @@ const REGISTRY = [
     Icon: Wrench,
     requiresService: 'maintenance-complaints',
     Pane: DealerComplaintsPane,
+  },
+  {
+    // Next to Complaints: a dealer's visiting engineer is often there for a complaint.
+    // Linked from the `work_permit_attention` alert as `?tab=data-vault&vault=work-permits` — never rename the id.
+    id: 'work-permits',
+    label: 'Work permits',
+    description:
+      'Non-Critical work permits issued on IndianOil’s SDMS from the dealer’s chat: where each stands, who signs for the outlet, and the letterhead the Letter of Authorization is made on.',
+    Icon: HardHat,
+    requiresService: 'work-permits',
+    Pane: DealerWorkPermitsPane,
   },
   {
     id: 'calibration-claim',

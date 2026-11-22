@@ -22,6 +22,7 @@ import {
   MonitorPlay,
   PartyPopper,
   PhoneCall,
+  HardHat,
   Plug,
   Repeat,
   ScanLine,
@@ -190,6 +191,9 @@ export const NAV_ITEMS: NavItem[] = [
   // (ADR 0052). Deliberately NOT `superAdminOnly`; the badge counts the ones that need a
   // person plus those waiting on a dealer's "is it working now?". Falls into the More sheet.
   { to: '/complaints', label: 'Complaints', icon: Wrench },
+  // Non-Critical work permits MDG issues on SDMS from the dealer's chat (ADR 0053), behind the
+  // `work_permit_attention` alert. Not `superAdminOnly`; the badge counts the ones that need a person.
+  { to: '/work-permits', label: 'Work permits', icon: HardHat },
   // Every ask for a Khata Kavach WhatsApp code and what became of it: who, for what, whether
   // WhatsApp delivered it, whether they got in. Behind the `kk_code_not_delivered` alert.
   // Super-admin: it shows pump owners' numbers.

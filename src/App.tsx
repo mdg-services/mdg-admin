@@ -167,6 +167,13 @@ const ComplaintsPage = React.lazy(
     })),
   ),
 );
+const WorkPermitsPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/workPermits/WorkPermitsPage').then((m) => ({
+      default: m.WorkPermitsPage,
+    })),
+  ),
+);
 const KkSigninsPage = React.lazy(
   retryImport(() =>
     import('@/pages/kkSignins/KkSigninsPage').then((m) => ({
@@ -662,6 +669,16 @@ export default function App() {
             element={
               <LazyPage>
                 <ComplaintsPage />
+              </LazyPage>
+            }
+          />
+          {/* Non-Critical work permits for every outlet (ADR 0053), behind the
+              `work_permit_attention` alert. Any admin, like complaints. Keep in step with navItems.ts. */}
+          <Route
+            path="work-permits"
+            element={
+              <LazyPage>
+                <WorkPermitsPage />
               </LazyPage>
             }
           />

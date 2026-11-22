@@ -19,6 +19,7 @@
     "check:billing-release2": "npx tsx --test scripts/billingRelease2.check.ts",
     "check:autopay": "npx tsx --test scripts/autopay.check.ts",
     "check:complaints": "npx tsx --test scripts/complaints.check.ts",
+    "check:work-permits": "npx tsx --test scripts/workPermits.check.ts",
     "check:leads": "npx tsx --test scripts/leads.check.ts",
     "check:watch-hold": "npx tsx --test scripts/watchHold.check.ts",
     "check:outlets": "npx tsx --test scripts/outlets.check.ts",
