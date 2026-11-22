@@ -57,9 +57,8 @@ export const ATTENTION_WORDS: Record<WorkPermitAttention, string> = {
 };
 
 export const LETTERHEAD_WORDS: Record<LetterheadWay, string> = {
-  sign_each: 'Dealer signs and stamps each letter and sends a photo',
-  blank_letterhead: 'Photo of a blank letterhead; MDG prints each letter onto it',
-  sign_stamp: 'Photo of signature and stamp; MDG puts it under each letter',
+  blank_letterhead: 'Photo of the outlet’s blank letterhead; MDG prints each letter onto it',
+  sign_each: 'MDG’s letterhead with the outlet’s name; a letter that needs a signature is printed and signed by the dealer',
 };
 
 /** The same list as the shared `WORK_PERMIT_FINAL_STAGES`, spelled out (and checked against it) so this file needs no runtime import. */

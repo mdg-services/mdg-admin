@@ -70,7 +70,7 @@ export function LetterheadCard({ dealerId, view }: { dealerId: string; view: Wor
   const reset = useResetLetterhead(dealerId);
   const [confirming, setConfirming] = React.useState(false);
   const kit = view.letterhead;
-  const anything = kit.way !== null || kit.hasBlankLetterhead || kit.hasSignStamp;
+  const anything = kit.way !== null || kit.hasBlankLetterhead;
 
   return (
     <Card>
@@ -86,9 +86,6 @@ export function LetterheadCard({ dealerId, view }: { dealerId: string; view: Wor
           <div className="flex flex-wrap gap-2">
             <Badge intent={kit.hasBlankLetterhead ? 'success' : 'neutral'}>
               {kit.hasBlankLetterhead ? 'Blank letterhead on file' : 'No blank letterhead'}
-            </Badge>
-            <Badge intent={kit.hasSignStamp ? 'success' : 'neutral'}>
-              {kit.hasSignStamp ? 'Signature and stamp on file' : 'No signature and stamp'}
             </Badge>
           </div>
           <div>
