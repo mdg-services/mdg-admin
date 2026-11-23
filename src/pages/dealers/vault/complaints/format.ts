@@ -81,6 +81,8 @@ export const ATTENTION_WORDS: Record<ComplaintAttention, string> = {
   login_problem: 'The portal login does not work, so the complaint could not be filed or followed.',
   rejected: 'The portal rejected this complaint. Read the reason below and help the dealer.',
   ack_blocked: 'The portal asked for something MDG does not know when acknowledging. Nothing was pressed.',
+  stalled:
+    'This complaint has not moved for days and nobody has come. The dealer asked the team to step in, or MDG raised it after a week. Chase IndianOil or the vendor, tell the dealer, then clear this flag.',
 };
 
 /**

@@ -41,6 +41,14 @@ describe('complaint words', () => {
     for (const a of COMPLAINT_ATTENTION) assert.ok(ATTENTION_WORDS[a]);
   });
 
+  it('has plain words for the stalled flag, in every copy of the shared list', () => {
+    assert.ok((COMPLAINT_ATTENTION as readonly string[]).includes('stalled'));
+    assert.match(ATTENTION_WORDS.stalled, /not moved/i);
+    // The team's way out of the flag is the existing "Clear this flag" button.
+    assert.match(ATTENTION_WORDS.stalled, /clear this flag/i);
+    assert.doesNotMatch(ATTENTION_WORDS.stalled, /\b(sir|madam)\b/i);
+  });
+
   it('agrees with the shared list of final stages', () => {
     assert.deepEqual([...FINAL_STAGES].sort(), [...COMPLAINT_FINAL_STAGES].sort());
   });
