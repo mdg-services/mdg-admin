@@ -37,6 +37,7 @@ import {
   type AskPreviewPhase,
 } from './DealerCards';
 import { bubbleTime, dealerWord } from './dealerView';
+import { FuelOrderCardPreview } from './FuelOrderCardPreview';
 import { replyPreviewText, replySenderLabel } from './replyPreview';
 
 interface MessageBubbleProps {
@@ -237,7 +238,7 @@ export const MessageBubble = React.memo(function MessageBubble({
   const hasSetupBody = !!setupCard && setupCardHasBody(setupCard.card);
   // A request, a login box, a setup card or a video is as wide as a picture, as in the app.
   const wide =
-    hasMedia || videos.length > 0 || !!ask || !!portalLogin || !!wemmisLogin || !!mockDrill || !!declarations || !!outletDetails || !!videoList || hasSetupBody;
+    hasMedia || videos.length > 0 || !!message.fuelCard || !!ask || !!portalLogin || !!wemmisLogin || !!mockDrill || !!declarations || !!outletDetails || !!videoList || hasSetupBody;
 
   // "Instant reply" under a machine-written answer — the dealer sees it; never on a handoff.
   const showAiBadge = !!message.ai && message.ai.kind !== 'handoff';
@@ -247,7 +248,7 @@ export const MessageBubble = React.memo(function MessageBubble({
   // in something with no last line of text (a voice note, a document, a card).
   const metaInFlow =
     !timeOnPicture &&
-    (showAiBadge || !hasBody || !!ask || !!portalLogin || !!wemmisLogin || !!mockDrill || !!declarations || !!outletDetails || !!videoList || hasSetupBody);
+    (showAiBadge || !hasBody || !!message.fuelCard || !!ask || !!portalLogin || !!wemmisLogin || !!mockDrill || !!declarations || !!outletDetails || !!videoList || hasSetupBody);
   // Every admin who opens a thread is stamped into readBy/deliveredTo. With the
   // dealer's members known the ticks count only them, so every MDG message —
   // a teammate's, the first line's, a notice or a report card — carries them.
@@ -401,6 +402,8 @@ export const MessageBubble = React.memo(function MessageBubble({
             </div>
           ) : null}
 
+          {message.fuelCard && !announcement ? <FuelOrderCardPreview card={message.fuelCard} /> : null}
+
           {announcement ? (
             <div className="mb-1 overflow-hidden rounded-md" data-testid="announcement-header">
               <div
@@ -419,7 +422,8 @@ export const MessageBubble = React.memo(function MessageBubble({
             </div>
           ) : null}
 
-          {hasBody ? (
+          {/* A tanker card replaces its words, as in the dealer's chat (they are its plain copy). */}
+          {hasBody && !message.fuelCard ? (
             <div
               className={cn(
                 // `anywhere`, not `break-words`: only it lowers the bubble's
