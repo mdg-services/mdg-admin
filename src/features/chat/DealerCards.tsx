@@ -574,8 +574,8 @@ function PortalRowPreview({
   const formOpen = !!state && !notNeeded && canEdit && state.status !== 'saved';
   const savedDate = state?.savedAt ? shortDay(state.savedAt, lang) : '';
   // "Forgot password?" where the app draws it (`PortalLoginBox.tsx`): SDMS with its SAP
-  // code on record (the OTP reset), the old SDMS, IndianOil Partners (its reset robot) and
-  // IOC XtraPower (the guided reset). Under the form; for a saved login, SDMS's only once
+  // code on record (the OTP reset), the old SDMS and IRAS (the same OTP reset, by user ID),
+  // IndianOil Partners (its reset robot) and IOC XtraPower (the guided reset). Under the form; for a saved login, SDMS's only once
   // the owner taps Change, the others' straight under the row.
   const hasForgot =
     !!state &&
@@ -583,6 +583,7 @@ function PortalRowPreview({
     canEdit &&
     ((portal === 'sdms' && !!state.resetPossible) ||
       (portal === 'sdmsOld' && (!!state.resetPossible || state.status === 'saved')) ||
+      (portal === 'iras' && (!!state.resetPossible || state.status === 'saved')) ||
       canResetPortalPassword(portal) ||
       !!guidedResetUrl(portal));
   const forgotShown = hasForgot && (formOpen || (state?.status === 'saved' && portal !== 'sdms'));
