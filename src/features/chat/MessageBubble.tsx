@@ -11,6 +11,7 @@ import {
   type DealerOpenRequest,
   type Message,
   type MessageReaction,
+  sayIn,
 } from '@dk/shared';
 
 /** The announcement strip's colours, as the dealer's chat paints them. */
@@ -477,6 +478,17 @@ export const MessageBubble = React.memo(function MessageBubble({
           ) : null}
 
           {ask ? <AskFooterPreview ask={ask} phase={askPhase} lang={lang} /> : null}
+
+          {/* The answer buttons the dealer saw under this question (they tap; the team only sees them). */}
+          {message.replyChoices ? (
+            <div className="flex flex-wrap gap-1 px-1.5 pb-1 pt-1" data-testid="reply-choices-preview">
+              {message.replyChoices.options.map((o) => (
+                <span key={o.value} className="rounded-full border border-wa-divider px-2 py-0.5 text-[12.5px] text-wa-meta">
+                  {sayIn(o.label, 'hl')}
+                </span>
+              ))}
+            </div>
+          ) : null}
 
           {metaInFlow ? (
             <div className="flex items-center justify-between gap-3 px-1.5 pb-0.5 pt-0.5">
