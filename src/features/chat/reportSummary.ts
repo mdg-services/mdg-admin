@@ -50,7 +50,6 @@ export const REPORT_KIND_SHORT_NAME: Record<ReportKind, string> = {
   declaration_filed: 'Declaration filed',
   du_otp: 'DU OTP',
   mock_drill: 'Mock drill',
-  kavach: 'Kavach',
   ledger_watch: 'Ledger watch',
   announcement: 'Announcement',
   electrical_audit: 'Electrical audit',
@@ -504,20 +503,6 @@ function paperExpiry(d: Extract<ReportData, { kind: 'paper_expiry' }>): Body {
   };
 }
 
-function kavach(d: Extract<ReportData, { kind: 'kavach' }>): Body {
-  const showScore = d.scored && d.scorePublishable && isNum(d.pct);
-  return {
-    day: d.businessDate,
-    headline: showScore ? `Score ${Math.round(d.pct as number)}%` : 'Score not shown yet',
-    facts: compact([
-      showScore ? fact('Points', `${d.validPoints} of ${d.totalPoints}`) : null,
-      fact('Waiting on the dealer', (d.asks ?? []).length),
-      fact('Waiting on MDG', (d.pending ?? []).length + (d.pendingOverflow ?? 0)),
-      d.unverifiedCount ? fact('Not yet verified', d.unverifiedCount) : null,
-    ]),
-  };
-}
-
 function announcement(d: Extract<ReportData, { kind: 'announcement' }>): Body {
   const TONE = { new: 'New', notice: 'Notice', important: 'Important' } as const;
   return {
@@ -566,8 +551,6 @@ function read(data: ReportData): Body {
       return electricalAudit(data);
     case 'paper_expiry':
       return paperExpiry(data);
-    case 'kavach':
-      return kavach(data);
     case 'announcement':
       return announcement(data);
   }

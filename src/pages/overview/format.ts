@@ -350,44 +350,6 @@ export function sentCell(row: BoardRow): CellState {
   return { label: 'Not sent', intent: 'warning', href };
 }
 
-/**
- * What Kavach is holding for this outlet.
- *
- * A dealer with no programme reads "Not scored yet" — never 0% and never 100%.
- * Both of those are claims, and neither is true of an outlet nobody has set up.
- */
-export function kavachCell(row: DealerDayRow): CellState {
-  const base = `/kavach?dealerId=${row.dealerId}`;
-  if (!row.kavach.hasProgramme) {
-    return { label: 'Not scored yet', intent: 'neutral', href: base };
-  }
-  if (row.kavach.sosFlagged > 0) {
-    return {
-      label: `${row.kavach.sosFlagged} flagged on a visit`,
-      intent: 'danger',
-      href: `${base}&status=SOS_FLAGGED`,
-    };
-  }
-  if (row.kavach.expired > 0) {
-    return {
-      label: `${row.kavach.expired} overdue`,
-      intent: 'danger',
-      href: `${base}&status=EXPIRED`,
-    };
-  }
-  if (row.kavach.submitted > 0) {
-    return {
-      label: `${row.kavach.submitted} to review`,
-      intent: 'warning',
-      href: `${base}&awaitingReview=1`,
-    };
-  }
-  if (row.kavach.held > 0) {
-    return { label: `${row.kavach.held} on hold`, intent: 'warning', href: `${base}&status=HELD` };
-  }
-  return { label: 'Nothing', intent: 'success', href: base };
-}
-
 /** Is anybody at this outlet waiting on us? */
 export function chatCell(row: DealerDayRow, now: number): CellState {
   const href = row.chat.conversationId

@@ -1,6 +1,5 @@
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import * as React from 'react';
-import { Link } from 'react-router-dom';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -126,21 +125,6 @@ export function OverviewPage() {
           <p className="text-lg font-semibold text-text">{verdictSentence(data)}</p>
           <p className="mt-0.5 text-sm text-text-muted">{verdictDetail(data)}</p>
 
-          {/* Nothing computes Kavach status on read: a cron scores the estate at
-              00:20 IST and stamps each programme. A sweep that failed raises no
-              error anywhere — the estate simply stops expiring things and every
-              Kavach cell below goes quietly green. This is the only warning. */}
-          {data.kavachStaleProgrammes > 0 ? (
-            <Callout intent="warning" className="mt-3">
-              Kavach statuses are from before today — last night&apos;s scoring did not finish for{' '}
-              {data.kavachStaleProgrammes} of {data.summary.dealersTotal} outlets. Every Kavach
-              figure below is yesterday&apos;s.{' '}
-              <Link to="/kavach/dashboard" className="font-medium underline">
-                Open Kavach standing
-              </Link>
-            </Callout>
-          ) : null}
-
 
           <Card className="mt-4">
             <CardHeader
@@ -195,7 +179,6 @@ export function OverviewPage() {
                 selectedDate={selectedDate}
                 loading={false}
                 now={now}
-                kavachLastEvaluatedAt={data.kavachLastEvaluatedAt}
               />
             </CardContent>
           </Card>

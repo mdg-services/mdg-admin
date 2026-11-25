@@ -6,8 +6,8 @@ import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { RequireSuperAdmin } from '@/components/layout/RequireSuperAdmin';
 import { Skeleton } from '@/components/ui';
-import { retryImport } from '@/lib/retryImport';
 import { onboardingRedirectTarget } from '@/lib/onboardingRedirect';
+import { retryImport } from '@/lib/retryImport';
 import { InboxPage } from '@/pages/InboxPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -206,24 +206,31 @@ const FestivalPage = React.lazy(
     import('@/pages/FestivalPage').then((m) => ({ default: m.FestivalPage })),
   ),
 );
-const KavachDashboardPage = React.lazy(
+const KavachReviewPage = React.lazy(
   retryImport(() =>
-    import('@/pages/KavachDashboardPage').then((m) => ({
-      default: m.KavachDashboardPage,
+    import('@/pages/KavachReviewPage').then((m) => ({
+      default: m.KavachReviewPage,
     })),
   ),
 );
-const KavachDefaultsPage = React.lazy(
+const KavachReviewRunPage = React.lazy(
   retryImport(() =>
-    import('@/pages/KavachDefaultsPage').then((m) => ({
-      default: m.KavachDefaultsPage,
+    import('@/pages/KavachReviewRunPage').then((m) => ({
+      default: m.KavachReviewRunPage,
     })),
   ),
 );
-const KavachWorkQueuePage = React.lazy(
+const KavachOutletsPage = React.lazy(
   retryImport(() =>
-    import('@/pages/KavachWorkQueuePage').then((m) => ({
-      default: m.KavachWorkQueuePage,
+    import('@/pages/KavachOutletsPage').then((m) => ({
+      default: m.KavachOutletsPage,
+    })),
+  ),
+);
+const KavachChecklistPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/KavachChecklistPage').then((m) => ({
+      default: m.KavachChecklistPage,
     })),
   ),
 );
@@ -397,35 +404,38 @@ export default function App() {
               </LazyPage>
             }
           />
-          {/* The queue is what an admin opens: everything outstanding across
-              every dealer, in one list. The old dashboard keeps a route as the
-              per-dealer standing view — including "how long since anyone at MDG
-              verified this outlet", which is the only alarm for OUR backlog. */}
+          {/* Kavach (ADR 0057): the review desk, a run through one group's checks, the
+              outlets and the checklist every outlet shares. All four are every admin's. */}
           <Route
             path="kavach"
             element={
               <LazyPage>
-                <KavachWorkQueuePage />
+                <KavachReviewPage />
               </LazyPage>
             }
           />
           <Route
-            path="kavach/dashboard"
+            path="kavach/review"
             element={
               <LazyPage>
-                <KavachDashboardPage />
+                <KavachReviewRunPage />
               </LazyPage>
             }
           />
-          {/* Editing points here moves every dealer without an override. */}
           <Route
-            path="kavach/defaults"
+            path="kavach/outlets"
             element={
-              <RequireSuperAdmin>
-                <LazyPage>
-                  <KavachDefaultsPage />
-                </LazyPage>
-              </RequireSuperAdmin>
+              <LazyPage>
+                <KavachOutletsPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="kavach/checklist"
+            element={
+              <LazyPage>
+                <KavachChecklistPage />
+              </LazyPage>
             }
           />
           {/* Every movement on every dealer's PAD ledger that is not the
@@ -541,7 +551,7 @@ export default function App() {
           {/* Everything the pre-send correctness gate is withholding, across
               every dealer, plus the per-dealer standing remarks. NOT
               super-admin: the endpoints behind it are `requireRole('admin')`,
-              and a report withheld on an automatic path — the Kavach digest
+              and a report withheld on an automatic path — a card
               sends on its own schedule with no admin involved — is seen here or
               nowhere. */}
           <Route
@@ -750,7 +760,7 @@ export default function App() {
           />
           {/* The document catalog and its reminder ladders. Super-admin, because
               a ladder edited here moves every outlet with no override for that
-              paper — the same blast radius as the Kavach defaults, and the same
+              paper — the same blast radius as the work-list defaults, and the same
               gate the route itself uses (`/v1/super-admin/document-kinds`). The
               flag in `navItems.ts` only hides the link; this wrapper is what
               guards the URL. */}

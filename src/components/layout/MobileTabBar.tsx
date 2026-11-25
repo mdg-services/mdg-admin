@@ -34,6 +34,7 @@ export function MobileTabBar({ className }: { className?: string }) {
    */
   const badges = useNavBadges();
   const unreadCount = badges['/inbox'] ?? 0;
+  const kavachWaiting = badges['/kavach'] ?? 0;
 
   const bottomItems = BOTTOM_TAB_ROUTES.map((route) =>
     NAV_ITEMS.find((i) => i.to === route),
@@ -74,8 +75,8 @@ export function MobileTabBar({ className }: { className?: string }) {
           <NavLink
             key={item.to}
             to={item.to}
-            // `/kavach` is a prefix of `/kavach/defaults`, and NavLink matches
-            // by prefix by default — so on the defaults page the Kavach tab and
+            // `/kavach` is a prefix of `/kavach/outlets`, and NavLink matches
+            // by prefix by default — so on the outlets page the Kavach tab and
             // More both read as active. The flag lives on the item, next to the
             // route it is about.
             end={item.end}
@@ -91,6 +92,14 @@ export function MobileTabBar({ className }: { className?: string }) {
               {item.to === '/inbox' && unreadCount > 0 ? (
                 <span className="absolute -right-2 -top-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-brand px-1 text-[10px] font-semibold leading-4 text-text-inverse">
                   {unreadCount}
+                </span>
+              ) : null}
+              {item.to === '/kavach' && kavachWaiting > 0 ? (
+                <span
+                  aria-label={`${kavachWaiting} to check`}
+                  className="absolute -right-2 -top-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-brand px-1 text-[10px] font-semibold leading-4 text-text-inverse"
+                >
+                  {kavachWaiting > 99 ? '99+' : kavachWaiting}
                 </span>
               ) : null}
             </span>

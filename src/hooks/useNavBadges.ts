@@ -2,12 +2,13 @@ import { useOpenAlertCount } from './api/useAdminAlerts';
 import { useAiTurnCountsQuery } from './api/useAiTurns';
 import { useNewCallbackCount } from './api/useCallbacks';
 import { useComplaintsBadgeCount } from './api/useComplaints';
-import { useWorkPermitsBadgeCount } from './api/useWorkPermits';
 import { useNewEnrolmentCount } from './api/useEnrolments';
 import { useOpenGrievanceCount } from './api/useGrievances';
+import { useKavachWaitingCount } from './api/useKavach';
 import { useLeadsTodoCount } from './api/useLeads';
 import { useNeedsUsCount } from './api/useTickets';
 import { useWhatsAppUnreadChats } from './api/useWhatsAppInbox';
+import { useWorkPermitsBadgeCount } from './api/useWorkPermits';
 
 /**
  * The count badge each nav destination carries, keyed by its route: tickets that
@@ -54,6 +55,9 @@ export function useNavBadges(): Record<string, number> {
   // Chats with something unread, from the same small request the page title
   // reads. Super-admin only, and silent — no request at all — for everyone else.
   const whatsappUnread = useWhatsAppUnreadChats();
+  // Kavach photos the outlets sent that nobody at MDG has checked yet: the same
+  // by-point list the review page draws, so a second caller costs no request.
+  const kavachWaiting = useKavachWaitingCount();
   return {
     '/inbox': ticketsNeedingUs,
     '/alerts': openAlerts,
@@ -65,5 +69,6 @@ export function useNavBadges(): Record<string, number> {
     '/work-permits': permitsToWatch,
     '/leads': leadsToDo,
     '/whatsapp': whatsappUnread,
+    '/kavach': kavachWaiting,
   };
 }

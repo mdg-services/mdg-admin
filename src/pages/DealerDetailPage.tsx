@@ -8,7 +8,6 @@ import {
   ListTodo,
   RotateCcw,
   Send,
-  ShieldCheck,
   Trash2,
 } from 'lucide-react';
 import * as React from 'react';
@@ -83,13 +82,6 @@ const DealerKavachTab = React.lazy(
   retryImport(() =>
     import('./dealers/DealerKavachTab').then((m) => ({
       default: m.DealerKavachTab,
-    })),
-  ),
-);
-const DealerKavachWorkListTab = React.lazy(
-  retryImport(() =>
-    import('./dealers/DealerKavachWorkListTab').then((m) => ({
-      default: m.DealerKavachWorkListTab,
     })),
   ),
 );
@@ -212,15 +204,14 @@ const INFO_TAB: TabDef = {
  * job needs, so the split is by "is this what I opened the dealer to do?":
  *
  * - strip — the daily work: how far onboarding has got, the record itself, the
- *   services it runs, Kavach, its warriors, its team of app logins, and the
- *   Data Vault.
- * - menu — the occasional and the administrative: the two configuration lists
- *   (which Kavach tasks this outlet has, which paid works its warriors may
- *   claim), the Password vault, the services-provided ledger, the run history,
+ *   services it runs, Kavach (its switch, its checks and its own list), its
+ *   warriors, its team of app logins, and the Data Vault.
+ * - menu — the occasional and the administrative: the configuration list
+ *   (which paid works its warriors may claim), the Password vault, the services-provided ledger, the run history,
  *   the engineer-only custom requests, and delete/restore. None of it is needed
  *   to answer "how is this dealer doing today?".
  *
- * The two work lists sit in the menu because they are set during setup and
+ * The warriors' work list sits in the menu because it is set during setup and
  * revisited rarely, while Team was promoted out of it because adding or
  * resetting a member is ordinary support work that used to take two clicks to
  * find.
@@ -260,18 +251,6 @@ const TABS: TabDef[] = [
     body: (dealer) => <DealerKavachTab dealer={dealer} />,
   },
   {
-    // Which Kavach tasks this outlet actually has: hide the ones that do not
-    // apply, add ones only they have, and depart from the global points where
-    // there is a reason to. Set once when the outlet is configured and revisited
-    // rarely, so it answers to the menu rather than holding a permanent slot
-    // beside the Kavach panel it configures.
-    id: 'kavach-work-list',
-    label: 'Kavach tasks',
-    placement: 'menu',
-    icon: <ShieldCheck {...ICON} />,
-    body: (dealer) => <DealerKavachWorkListTab dealer={dealer} />,
-  },
-  {
     id: 'staff',
     label: 'Warriors & points',
     placement: 'strip',
@@ -288,7 +267,7 @@ const TABS: TabDef[] = [
   },
   {
     // Which paid works this dealer's warriors may claim, and for how many
-    // points. Configuration, like the Kavach task list above it: set during
+    // points. Configuration: set during
     // setup, reviewed occasionally, not part of the daily read.
     id: 'work-list',
     label: 'Work list',
@@ -455,6 +434,11 @@ export function DealerDetailPage() {
         },
         { replace: true },
       );
+      return;
+    }
+    // The Kavach tasks tab folded into the Kavach tab: a saved link lands there.
+    if (requested === 'kavach-work-list') {
+      setTab('kavach');
       return;
     }
     // The Onboarding tab is retired: a saved `?tab=onboarding` link lands on Info,

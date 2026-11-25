@@ -49,6 +49,8 @@ export interface ZoomableImageProps {
   onZoomChange?: (scale: number) => void;
   /** Applied to the `<img>` in both branches — this is where sizing belongs. */
   className?: string;
+  /** The picture failed to load (expired link, missing file). */
+  onError?: () => void;
 }
 
 /** A second tap within this window, near the first, counts as a double tap. */
@@ -87,6 +89,7 @@ export function ZoomableImage({
   doubleTapScale = 2.5,
   onZoomChange,
   className,
+  onError,
 }: ZoomableImageProps) {
   const isMd = useMediaQuery('(min-width: 768px)');
   const imgRef = React.useRef<HTMLImageElement | null>(null);
@@ -273,6 +276,7 @@ export function ZoomableImage({
       // belt that survives a stylesheet regression.
       draggable={false}
       className={className}
+      onError={onError}
       style={
         isMd
           ? undefined

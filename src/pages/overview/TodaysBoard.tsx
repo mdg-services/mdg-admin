@@ -21,7 +21,6 @@ import {
   boardAction,
   chatCell,
   dsrCell,
-  kavachCell,
   noRuleSheetsNote,
   sentCell,
   shiftCell,
@@ -105,7 +104,6 @@ export function TodaysBoard({
   selectedDate,
   loading,
   now,
-  kavachLastEvaluatedAt,
 }: {
   rows: DealerDayRow[];
   /** The day the server graded — goes into the collect/generate request bodies. */
@@ -114,7 +112,6 @@ export function TodaysBoard({
   selectedDate?: string;
   loading: boolean;
   now: number;
-  kavachLastEvaluatedAt: string | null;
 }) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -220,7 +217,6 @@ export function TodaysBoard({
                   { label: 'Shift', state: shiftCell(r, reportingDate) },
                   { label: 'Report', state: dsrCell(r) },
                   { label: 'Sent', state: sentCell(r) },
-                  { label: 'Kavach', state: kavachCell(r) },
                   { label: 'Chat', state: chatCell(r, now) },
                 ]}
               />
@@ -243,12 +239,6 @@ export function TodaysBoard({
             header: 'Sent',
             mobile: 'hidden',
             cell: (r) => <Cell state={sentCell(r)} label="Sent" />,
-          },
-          {
-            id: 'kavach',
-            header: 'Kavach',
-            mobile: 'hidden',
-            cell: (r) => <Cell state={kavachCell(r)} label="Kavach" />,
           },
           {
             id: 'chat',
@@ -316,20 +306,6 @@ export function TodaysBoard({
           );
         }}
       />
-
-      {kavachLastEvaluatedAt ? (
-        <p className="px-3 pb-3 pt-2 text-xs text-text-subtle md:px-0 md:pb-0">
-          Kavach statuses last scored{' '}
-          {new Date(kavachLastEvaluatedAt).toLocaleString('en-GB', {
-            day: 'numeric',
-            month: 'short',
-            hour: '2-digit',
-            minute: '2-digit',
-            timeZone: 'Asia/Kolkata',
-          })}
-          .
-        </p>
-      ) : null}
 
       <ConfirmDialog
         open={!!pending}

@@ -31,7 +31,6 @@ const REPORT_KIND_NAME: Record<ReportKind, string> = {
   declaration_filed: 'Declaration filed',
   du_otp: 'DU OTP receipt',
   mock_drill: 'Mock drill receipt',
-  kavach: 'Kavach photos',
   ledger_watch: 'Ledger watch card',
   announcement: 'Announcement',
   electrical_audit: 'Electrical audit',

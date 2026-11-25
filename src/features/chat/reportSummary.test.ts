@@ -1,5 +1,6 @@
-import { REPORT_KINDS, type MessageReport, type ReportData, type ReportKind } from '@dk/shared';
 import { describe, expect, it } from 'vitest';
+
+import { REPORT_KINDS, type MessageReport, type ReportData, type ReportKind } from '@dk/shared';
 
 import { dealerSeesLine } from './reportNote';
 import { REPORT_KIND_SHORT_NAME, fmtDay, fmtInstant, fmtLitres, fmtRupees, summarizeReport } from './reportSummary';
@@ -284,22 +285,6 @@ const DATA: Record<ReportKind, ReportData> = {
     moreCount: 4,
     sentOn: '2026-11-24',
   },
-  kavach: {
-    kind: 'kavach',
-    v: 1,
-    outletCode: '1E',
-    businessDate: '2026-11-23',
-    computedAt: NOW,
-    scored: true,
-    scorePublishable: true,
-    pct: 86.4,
-    validPoints: 190,
-    totalPoints: 220,
-    unverifiedCount: 2,
-    asks: [{ code: 'a', itemId: 'i', label: { en: 'x', hi: 'x' }, points: 5, state: 'asked' }],
-    pending: [],
-    pendingOverflow: 0,
-  },
   announcement: {
     kind: 'announcement',
     v: 1,
@@ -473,7 +458,7 @@ describe('summarizeReport: the key figures the team needs', () => {
     expect(factOf('ro_supply', 'Failing')).toBe('2');
   });
 
-  it('DU OTP, declaration, mock drill, electrical audit, papers and Kavach', () => {
+  it('DU OTP, declaration, mock drill, electrical audit, papers', () => {
     expect(summarizeReport(tag('du_otp'))!.headline).toBe('Waiting for the OTP');
     expect(factOf('du_otp', 'Events')).toBe('1 (+2 more)');
     expect(factOf('du_otp', 'First')).toBe('Gilbarco Encore, nozzle 3');
@@ -485,15 +470,6 @@ describe('summarizeReport: the key figures the team needs', () => {
     expect(summarizeReport(tag('electrical_audit'))!.headline).toBe('Partly filed');
     expect(factOf('electrical_audit', 'Points')).toBe('4');
     expect(factOf('paper_expiry', 'Most urgent')).toBe('MH12AB1234 PUC, 3 days left');
-    expect(summarizeReport(tag('kavach'))!.headline).toBe('Score 86%');
-    expect(factOf('kavach', 'Points')).toBe('190 of 220');
-  });
-
-  it('Kavach: an unpublishable score is not printed', () => {
-    const data = { ...DATA.kavach, scorePublishable: false } as ReportData;
-    const s = summarizeReport({ kind: 'kavach', status: 'info', data })!;
-    expect(s.headline).toBe('Score not shown yet');
-    expect(s.facts.find((f) => f.label === 'Points')).toBeUndefined();
   });
 
   it('announcement: tone and whether the dealer must tap Got it (never repeats the words)', () => {

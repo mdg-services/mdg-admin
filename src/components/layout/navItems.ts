@@ -5,12 +5,12 @@ import {
   Building2,
   CalendarDays,
   ChartColumn,
+  ClipboardCheck,
   Clapperboard,
   Database,
   FileBarChart2,
   FileClock,
   FileCog,
-  Gauge,
   Headset,
   IndianRupee,
   LayoutDashboard,
@@ -29,8 +29,8 @@ import {
   ScrollText,
   ShieldAlert,
   ShieldCheck,
-  ShieldPlus,
   Target,
+  ToggleRight,
   UserCog,
   Users,
   Wrench,
@@ -115,22 +115,22 @@ export const NAV_ITEMS: NavItem[] = [
   // waiting for a yes and every outlet on its way, with whose move it is. It replaced the
   // Onboarding page. The count is the registrations nobody has dealt with yet (`useNavBadges`).
   { to: '/dealers', label: 'Dealers', icon: Building2 },
-  // The WORK QUEUE is what "Kavach" means to an admin day to day: what has to be
-  // verified right now, across every dealer. The per-dealer standing view lives
-  // one level down at /kavach/dashboard.
+  // The review desk (ADR 0057): every Kavach photo the outlets have sent and nobody at MDG has
+  // checked yet, by point or by outlet. The badge is that count (`useNavBadges`).
   //
-  // `end` matters here and nowhere else in this list: `/kavach` is a PREFIX of
-  // `/kavach/dashboard` and `/kavach/defaults`, and a NavLink matches by prefix
-  // unless told otherwise — so without it the Kavach tab and the More tab both
-  // lit up on the two child routes, and the desktop sidebar highlighted two
-  // rows at once.
+  // `end` matters here and for no other entry: `/kavach` is a PREFIX of
+  // `/kavach/outlets` and `/kavach/checklist`, and a NavLink matches by prefix
+  // unless told otherwise — without it the Kavach tab and the More tab both lit
+  // up on the two child routes, and the desktop sidebar highlighted two rows at
+  // once.
   { to: '/kavach', label: 'Kavach', icon: ShieldCheck, end: true },
-  // Where every dealer stands, and — the only alarm anywhere for OUR backlog —
-  // how long since anybody at MDG verified each outlet. It has a route in
-  // `App.tsx` but had no link from anywhere, and the admin app is a WebView
-  // shell with no address bar: on a phone the screen simply could not be
-  // opened. Not in `BOTTOM_TAB_ROUTES`, so it falls into the More sheet.
-  { to: '/kavach/dashboard', label: 'Kavach standing', icon: Gauge },
+  // One row per outlet: is Kavach on, how much is done, what is late. The way to switch it on
+  // for one outlet or for all. Every admin. Not in `BOTTOM_TAB_ROUTES`, so on a phone it is in
+  // the More sheet.
+  { to: '/kavach/outlets', label: 'Kavach outlets', icon: ToggleRight },
+  // The checklist every outlet shares. Every admin edits it (ADR 0057); each change is audited.
+  // Not in `BOTTOM_TAB_ROUTES`, so on a phone it is in the More sheet.
+  { to: '/kavach/checklist', label: 'Kavach checklist', icon: ClipboardCheck },
   // Every movement on every dealer's PAD ledger that is not the routine
   // buy-and-pay pair: interest, licence-fee recoveries, participation fees, a
   // card settlement clawed back. All of them silently move the outstanding, and
@@ -169,7 +169,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Everything the pre-send correctness gate is refusing to send, across every
   // dealer. Deliberately NOT `superAdminOnly` — the endpoint behind it is
   // `requireRole('admin')`, and more to the point a withheld report on an
-  // automatic path (the Kavach digest sends on its own schedule with nobody
+  // automatic path (an automatic report sends on its own schedule with nobody
   // watching) is discovered here or not at all. Not in `BOTTOM_TAB_ROUTES`: the
   // bar holds four, and this is a once-a-day check rather than a working
   // surface, so it falls into the More sheet.
@@ -202,9 +202,6 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/runs', label: 'Run History', icon: Activity, superAdminOnly: true },
   { to: '/users', label: 'All Users', icon: Users, superAdminOnly: true },
   { to: '/work-list', label: 'Work list', icon: ListChecks, superAdminOnly: true },
-  // The global Kavach task catalog. Editing points here moves every dealer who
-  // has no override, so it sits with the other super-admin-only defaults.
-  { to: '/kavach/defaults', label: 'Kavach defaults', icon: ShieldPlus, superAdminOnly: true },
   // The document catalog: what MDG can ask any dealer for, and how far ahead
   // each expiring paper is chased. Editing a ladder here moves every outlet with
   // no override for that paper, so it sits with the other super-admin defaults —

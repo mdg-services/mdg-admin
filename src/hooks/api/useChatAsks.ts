@@ -9,7 +9,6 @@ import type {
 
 import { conversationKey } from './useConversation';
 import { documentAskKeys } from './useDocumentAsks';
-import { kavachKeys } from './useKavach';
 import { messagesKey } from './useMessages';
 import { ttDensityKeys } from './useTtDensity';
 
@@ -62,12 +61,10 @@ interface ChatAskActionVars {
 /**
  * Everything an answered request touches, refreshed at once.
  *
- * The same set the document and Kavach writes already refresh, because this is
- * the same decision made from another door: the Vault shelf, the Kavach queue
+ * The same set the document writes already refresh, because this is
+ * the same decision made from another door: the Vault shelf
  * and the density calendar must not go on saying "waiting" about a paper the
- * inbox has just received. The Kavach queue is marked stale but not refetched,
- * for the reason `useQueueInvalidation` gives: an admin working down that list
- * must not see it reshuffle under them. The thread is refetched too — MDG's
+ * inbox has just received. The thread is refetched too — MDG's
  * "Received" or "Sent back" reply is a new message, and the socket echo is not
  * something to bet the screen on.
  */
@@ -79,12 +76,6 @@ function useRefreshAfterChatAsk() {
     void qc.invalidateQueries({ queryKey: conversationKey(vars.conversationId) });
     void qc.invalidateQueries({ queryKey: ['conversations'] });
     void qc.invalidateQueries({ queryKey: documentAskKeys.all });
-    void qc.invalidateQueries({ queryKey: kavachKeys.workQueue, refetchType: 'none' });
-    void qc.invalidateQueries({ queryKey: kavachKeys.dashboard });
-    if (vars.dealerId) {
-      void qc.invalidateQueries({ queryKey: kavachKeys.items(vars.dealerId) });
-      void qc.invalidateQueries({ queryKey: kavachKeys.programme(vars.dealerId) });
-    }
     void qc.invalidateQueries({ queryKey: ttDensityKeys.all });
   };
 }

@@ -27,6 +27,7 @@ import {
 import { useTicketsLive } from '@/hooks/api/useTickets';
 import { useHeldMessagesLive } from '@/hooks/useHeldMessagesLive';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { useKavachLive } from '@/hooks/useKavachLive';
 import { useLeadsLive } from '@/hooks/useLeadsLive';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useNavBadges } from '@/hooks/useNavBadges';
@@ -126,7 +127,7 @@ function NavList({
             <NavLink
               to={item.to}
               // Prefix matching is the default, so an item that is a prefix of
-              // another route (`/kavach` vs `/kavach/defaults`) lights two rows
+              // another route (`/kavach` vs `/kavach/outlets`) lights two rows
               // at once unless it opts out.
               end={item.end ?? item.to === '/'}
               onClick={onNavigate}
@@ -178,6 +179,7 @@ export function AppShell() {
   useHeldMessagesLive(); // ...and the held-message queue, and the held count on each Setup card
   useWhatsAppLive(); // ...and the WhatsApp badge, toasts, sound and tab title
   useLeadsLive(); // ...and the Leads badge, list and open lead
+  useKavachLive(); // ...and the Kavach badge, the review run and the outlets list
   const admin = useAuthStore((s) => s.admin);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
@@ -204,7 +206,10 @@ export function AppShell() {
     (location.pathname === '/whatsapp' && searchParams.has('chat'));
   // The bottom bar shows on top-level list screens and hides on full-screen
   // drill-ins so chat/detail own the whole viewport (native "push hides tabs").
-  const showTabBar = !isDealerDetail && !inThread;
+  // The Kavach review run is a drill-in too: it carries its own Back and a
+  // pinned action bar, and the tab bar under it would cost the photo 56px.
+  const isKavachRun = location.pathname === '/kavach/review';
+  const showTabBar = !isDealerDetail && !inThread && !isKavachRun;
   // ...and while the on-screen keyboard is up. Navigation cannot be used
   // mid-entry, and on the shift sheet at 360×420 the bar was 65px of the 226px
   // left for the form. It comes back when the field loses focus.
@@ -229,7 +234,7 @@ export function AppShell() {
 
   // Back must not walk out of the app: a push notification can deep-link
   // straight to a dealer, making it the first entry in history.
-  const goBack = useSafeBack('/dealers');
+  const goBack = useSafeBack(isKavachRun ? '/kavach' : '/dealers');
 
   function onLogout() {
     logout();
@@ -284,7 +289,7 @@ export function AppShell() {
           )}
         >
           {/* Mobile: a back chevron on a drill-in, otherwise the brand. Both md:hidden. */}
-          {isDealerDetail ? (
+          {isDealerDetail || isKavachRun ? (
             <button
               type="button"
               aria-label="Back"
