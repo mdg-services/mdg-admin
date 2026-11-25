@@ -544,7 +544,7 @@ export function boardAction(row: DealerDayRow, reportingDate: string): BoardActi
       path: `/dsr/reports/${row.dsr.reportId}/share`,
       confirm: rule
         ? `Send the ${day} report to ${who}? ${ruleSentence(rule)}${revised}`
-        : `Send the ${day} report to ${who}? The dealer sees it in their chat straight away.${revised}`,
+        : `Send the ${day} report to ${who}? The dealer gets a message in their chat straight away, and the report opens on their Today page.${revised}`,
       rule,
     };
   }

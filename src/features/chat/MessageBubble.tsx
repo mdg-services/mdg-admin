@@ -1,4 +1,4 @@
-import { BellRing, Check, CheckCheck, CheckCircle2, ChevronDown, Clock, Megaphone, Zap } from 'lucide-react';
+import { BellRing, Check, CheckCheck, CheckCircle2, ChevronDown, Clock } from 'lucide-react';
 import * as React from 'react';
 
 import { requestLabel } from '@/lib/chatAsk';
@@ -6,20 +6,12 @@ import { cn } from '@/lib/cn';
 import { linkify, richText } from '@/lib/linkify';
 import { useLongPress } from '@/lib/useLongPress';
 import {
-  ANNOUNCEMENT_TONE_LABELS,
-  type AnnouncementTone,
   type DealerOpenRequest,
   type Message,
   type MessageReaction,
   sayIn,
+  reportOf,
 } from '@dk/shared';
-
-/** The announcement strip's colours, as the dealer's chat paints them. */
-const ANNOUNCEMENT_STRIP: Record<AnnouncementTone, { bg: string; fg: string }> = {
-  new: { bg: '#059669', fg: '#ffffff' },
-  notice: { bg: '#0284c7', fg: '#ffffff' },
-  important: { bg: '#f59e0b', fg: '#451a03' },
-};
 
 import { BubbleAttachments, splitAttachments } from './AttachmentPreview';
 import {
@@ -40,6 +32,9 @@ import {
 import { bubbleTime, dealerWord } from './dealerView';
 import { FuelOrderCardPreview } from './FuelOrderCardPreview';
 import { replyPreviewText, replySenderLabel } from './replyPreview';
+import { aiChipTitle, dealerSeesLine, reportNoteTitle } from './reportNote';
+import { ReportSummaryCard } from './ReportSummaryCard';
+import { summarizeReport } from './reportSummary';
 
 interface MessageBubbleProps {
   message: Message;
@@ -212,6 +207,14 @@ export const MessageBubble = React.memo(function MessageBubble({
   // was not.
   const menuWasOpenRef = React.useRef(false);
 
+  // A report (ADR 0055): the dealer's chat shows its words and a button to Today, not
+  // the picture. The thread keeps the picture (the team checks what went out) and
+  // says so in one muted line. Interactive boxes are never reports, so they get no line.
+  const report = React.useMemo(() => reportOf(message), [message]);
+  // ADR 0056: a new report has no picture, only a snapshot. The team reads it as a short
+  // summary under the words. Old messages (no snapshot) keep their pictures and get none.
+  const reportSummary = React.useMemo(() => summarizeReport(report), [report]);
+
   // The retired services question: the app draws nothing for it, so neither do we.
   if (isRetiredSetupCard(message)) return null;
 
@@ -234,22 +237,22 @@ export const MessageBubble = React.memo(function MessageBubble({
   const outletDetails = message.outletDetails;
   const videoList = message.videoList;
   const setupCard = message.setupCard;
-  // An announcement (ADR 0039): the strip and bold title the dealer sees, then its words.
+  // An announcement (ADR 0039, 0055): the plain card the dealer sees: a bold title, then its words.
   const announcement = message.announcement;
   const hasSetupBody = !!setupCard && setupCardHasBody(setupCard.card);
   // A request, a login box, a setup card or a video is as wide as a picture, as in the app.
   const wide =
-    hasMedia || videos.length > 0 || !!message.fuelCard || !!ask || !!portalLogin || !!wemmisLogin || !!mockDrill || !!declarations || !!outletDetails || !!videoList || hasSetupBody;
+    hasMedia || videos.length > 0 || !!message.fuelCard || !!reportSummary || !!ask || !!portalLogin || !!wemmisLogin || !!mockDrill || !!declarations || !!outletDetails || !!videoList || hasSetupBody;
 
-  // "Instant reply" under a machine-written answer — the dealer sees it; never on a handoff.
-  const showAiBadge = !!message.ai && message.ai.kind !== 'handoff';
-
-  // Where the time goes: inside the text's last line when there is text; on the
+  // Where the time goes (a small "AI" chip, below, takes the row's left side on a
+  // machine-written message — the dealer's app shows nothing, ADR 0055, but the
+  // team must tell which messages a person did not write, handoff lines and
+  // re-sends included): inside the text's last line when there is text; on the
   // picture when it is a bare picture; on a line of its own when the bubble ends
   // in something with no last line of text (a voice note, a document, a card).
   const metaInFlow =
     !timeOnPicture &&
-    (showAiBadge || !hasBody || !!message.fuelCard || !!ask || !!portalLogin || !!wemmisLogin || !!mockDrill || !!declarations || !!outletDetails || !!videoList || hasSetupBody);
+    (!!message.ai || !!report || !hasBody || !!message.fuelCard || !!ask || !!portalLogin || !!wemmisLogin || !!mockDrill || !!declarations || !!outletDetails || !!videoList || hasSetupBody);
   // Every admin who opens a thread is stamped into readBy/deliveredTo. With the
   // dealer's members known the ticks count only them, so every MDG message —
   // a teammate's, the first line's, a notice or a report card — carries them.
@@ -406,21 +409,13 @@ export const MessageBubble = React.memo(function MessageBubble({
           {message.fuelCard && !announcement ? <FuelOrderCardPreview card={message.fuelCard} /> : null}
 
           {announcement ? (
-            <div className="mb-1 overflow-hidden rounded-md" data-testid="announcement-header">
-              <div
-                className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-bold uppercase tracking-wider"
-                style={{
-                  background: ANNOUNCEMENT_STRIP[announcement.tone].bg,
-                  color: ANNOUNCEMENT_STRIP[announcement.tone].fg,
-                }}
-              >
-                <Megaphone width={13} strokeWidth={2.4} className="shrink-0" aria-hidden />
-                <span>{ANNOUNCEMENT_TONE_LABELS[announcement.tone]}</span>
-              </div>
-              <p className="px-2 pt-1.5 text-[16px] font-bold leading-snug [overflow-wrap:anywhere]">
-                {announcement.title}
-              </p>
-            </div>
+            // A plain card, as the dealer's chat draws it: no coloured strip, no tone label.
+            <p
+              className="px-1 pt-0.5 text-[16px] font-bold leading-snug [overflow-wrap:anywhere]"
+              data-testid="announcement-card"
+            >
+              {announcement.title}
+            </p>
           ) : null}
 
           {/* A tanker card replaces its words, as in the dealer's chat (they are its plain copy). */}
@@ -490,12 +485,27 @@ export const MessageBubble = React.memo(function MessageBubble({
             </div>
           ) : null}
 
+          {reportSummary ? <ReportSummaryCard summary={reportSummary} /> : null}
+
+          {report ? (
+            <p
+              data-testid="dealer-sees-report"
+              title={reportNoteTitle(report)}
+              className="px-1.5 pb-0.5 pt-1 text-[11px] leading-tight text-wa-meta"
+            >
+              {dealerSeesLine(report)}
+            </p>
+          ) : null}
+
           {metaInFlow ? (
             <div className="flex items-center justify-between gap-3 px-1.5 pb-0.5 pt-0.5">
-              {showAiBadge ? (
-                <span className="flex items-center gap-0.5 text-[11px] leading-none text-wa-meta">
-                  <Zap width={11} strokeWidth={2} className="shrink-0" />
-                  {dealerWord(lang, 'aiInstantReply')}
+              {message.ai ? (
+                <span
+                  data-testid="ai-chip"
+                  title={aiChipTitle(message.ai)}
+                  className="rounded-sm border border-wa-divider px-1 py-px text-[10px] font-semibold uppercase leading-none tracking-wide text-wa-meta"
+                >
+                  AI
                 </span>
               ) : (
                 <span />

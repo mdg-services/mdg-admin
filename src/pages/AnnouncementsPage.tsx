@@ -1,4 +1,3 @@
-import { Megaphone } from 'lucide-react';
 import * as React from 'react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -41,13 +40,6 @@ import type { PreviewAnnouncementInput } from '@dk/shared/schemas';
 
 type TargetKind = AnnouncementTarget['kind'];
 
-/** The strip colours, written out so the preview does not depend on this app's palette. */
-const STRIP: Record<AnnouncementTone, { bg: string; fg: string }> = {
-  new: { bg: '#059669', fg: '#ffffff' },
-  notice: { bg: '#0284c7', fg: '#ffffff' },
-  important: { bg: '#f59e0b', fg: '#451a03' },
-};
-
 const TONE_OPTIONS = (Object.keys(ANNOUNCEMENT_TONE_LABELS) as AnnouncementTone[]).map((t) => ({
   value: t,
   label: ANNOUNCEMENT_TONE_LABELS[t],
@@ -83,31 +75,17 @@ function bold(text: string): React.ReactNode {
   return out;
 }
 
-/** What the dealer sees: the same strip, title and words as the chat card. */
-function CardPreview({
-  tone,
-  title,
-  body,
-}: {
-  tone: AnnouncementTone;
-  title: string;
-  body: string;
-}) {
-  const strip = STRIP[tone];
+/**
+ * What the dealer sees: the same plain card as their chat (a bold title, then the words,
+ * no coloured strip) and the button under it that opens the notice on their Today page.
+ */
+function CardPreview({ title, body }: { title: string; body: string }) {
   return (
     <div className="rounded-md p-3" style={{ background: '#efeae2' }}>
       <div
         className="w-full max-w-[330px] overflow-hidden rounded-md shadow-sm"
         style={{ background: '#ffffff', color: '#111b21' }}
       >
-        <div
-          className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider"
-          style={{ background: strip.bg, color: strip.fg }}
-        >
-          <Megaphone width={14} height={14} strokeWidth={2.4} aria-hidden />
-          <span>{ANNOUNCEMENT_TONE_LABELS[tone]}</span>
-          <span className="ml-auto normal-case tracking-normal opacity-90">MDG</span>
-        </div>
         <div className="px-2.5 pb-2 pt-2">
           <p className="break-words text-[17px] font-bold leading-snug">
             {title.trim() || 'Your title'}
@@ -115,6 +93,12 @@ function CardPreview({
           <div className="mt-1.5 whitespace-pre-wrap break-words text-[15px] leading-[1.4]">
             {body.trim() ? bold(body) : <span style={{ color: '#667781' }}>Your message</span>}
           </div>
+          <p
+            className="mt-1.5 inline-flex min-h-8 items-center rounded-md px-2.5 text-[14px] font-medium"
+            style={{ background: 'rgba(0,0,0,0.05)', color: '#00805f' }}
+          >
+            See it on Today ›
+          </p>
           <p className="mt-1 text-right text-[11px]" style={{ color: '#667781' }}>
             now
           </p>
@@ -257,7 +241,7 @@ export function AnnouncementsPage() {
     <div>
       <PageHeader
         title="Announcements"
-        subtitle="One message to many pumps at once. Each pump sees it in its chat as a coloured card, and the owner can answer by writing."
+        subtitle="One message to many pumps at once. Each pump sees it in its chat as a plain card with a button to its Today page, and the owner can answer by writing."
       />
 
       <div className="grid gap-3 lg:grid-cols-2 md:gap-4 [&>*]:min-w-0">
@@ -270,7 +254,7 @@ export function AnnouncementsPage() {
           </CardHeader>
           <CardContent className="grid gap-4">
             <div>
-              <Label>Kind of message</Label>
+              <Label hint="Important is also listed under Needs a look on Today">Kind of message</Label>
               <SegmentedControl value={tone} onChange={setTone} options={TONE_OPTIONS} aria-label="Kind of message" />
             </div>
             <div>
@@ -308,11 +292,11 @@ export function AnnouncementsPage() {
           <CardHeader>
             <div>
               <CardTitle>How the dealer sees it</CardTitle>
-              <CardSubtitle>The card in their chat. There is no button on it.</CardSubtitle>
+              <CardSubtitle>The card in their chat, with the button to Today under it.</CardSubtitle>
             </div>
           </CardHeader>
           <CardContent>
-            <CardPreview tone={tone} title={title} body={body} />
+            <CardPreview title={title} body={body} />
           </CardContent>
         </Card>
 

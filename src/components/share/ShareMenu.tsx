@@ -22,16 +22,16 @@ export { shareResultMessage } from './shareToast';
 
 /** One line under each choice. Short enough for the 240px desktop list. */
 const HINT: Record<ShareAudience, string> = {
-  owners: 'Every owner, in their own chat',
-  managers: 'Group chat · owners get no ping',
+  owners: 'Every owner: chat note + Today',
+  managers: 'Group chat note · owners get no ping',
   both: 'Every owner and the manager',
 };
 
 /** The same, as the end of "Sending to Owners — …" in a confirmation. */
 const SENTENCE: Record<ShareAudience, string> = {
-  owners: 'every owner gets it in their own chat.',
-  managers: 'the manager gets it in the group chat. Owners can read it there but get no ping.',
-  both: 'every owner in their own chat, and the manager in the group chat, which the owners can read too.',
+  owners: 'every owner gets a message in their own chat, and the report opens on their Today page.',
+  managers: 'the manager gets a message in the group chat, and the report opens on their Today page. Owners can read the message there but get no ping.',
+  both: 'every owner in their own chat, and the manager in the group chat, which the owners can read too. The report opens on Today for each of them.',
 };
 
 export function ShareMenu({

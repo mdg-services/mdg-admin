@@ -5,9 +5,8 @@ import type { Message } from '@dk/shared';
  * the way the dealer sees it.
  *
  * The thread's words (bodies, captions) are the messages' own. The rest — the
- * buttons under a request, the login box, the setup cards, "Instant reply", the
- * day chips — is the app's own text, and the app shows it in the dealer's
- * language. These are the app's exact strings (`mdg-client/src/lib/i18n.ts`),
+ * buttons under a request, the login box, the setup cards, the day chips — is the
+ * app's own text, and the app shows it in the dealer's language. These are the app's exact strings (`mdg-client/src/lib/i18n.ts`),
  * copied rather than shared because only the handful the thread draws are needed.
  */
 
@@ -17,7 +16,6 @@ const WORDS = {
   today: { en: 'Today', hi: 'आज' },
   yesterday: { en: 'Yesterday', hi: 'कल' },
   senderMdg: { en: 'MDG', hi: 'MDG' },
-  aiInstantReply: { en: 'Instant reply', hi: 'तुरंत जवाब' },
   cancel: { en: 'Cancel', hi: 'रद्द करें' },
 
   askSendPhoto: { en: 'Send photo', hi: 'फ़ोटो भेजें' },
@@ -109,10 +107,11 @@ const DEVANAGARI = /[ऀ-ॿ]/;
 const LATIN = /[A-Za-z]/;
 /**
  * The one notice written in English whatever the reader's language: the line an
- * admin's "Resolve" posts (`Resolved — <service>`, routes/v1/conversations.ts).
- * It says nothing about the app's language, so it never decides it.
+ * admin's "Resolve" posts (`This is done: <service>.` or `We have finished this.`,
+ * routes/v1/conversations.ts; `Resolved — <service>` on threads resolved before that
+ * wording changed). It says nothing about the app's language, so it never decides it.
  */
-const RESOLVED_NOTICE = /^Resolved — /;
+const RESOLVED_NOTICE = /^(?:This is done: |We have finished this\.|Resolved — )/;
 
 /**
  * Which language the dealer's app is in, as far as the thread shows it.
@@ -120,7 +119,7 @@ const RESOLVED_NOTICE = /^Resolved — /;
  * The inbox is not told the app's language. MDG's automatic notices are written
  * in it, though (the server picks the reader's language), so the newest notice
  * with words in it decides: any Hindi letter means Hindi. The English-only
- * "Resolved — …" line is skipped. With no notice to go by, Hindi — the app's
+ * resolve notice ("This is done: …") is skipped. With no notice to go by, Hindi — the app's
  * own default (ADR 0008), and what most dealers use.
  */
 export function guessDealerLang(messages: readonly Message[]): DealerLang {

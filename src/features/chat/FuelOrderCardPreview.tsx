@@ -1,23 +1,16 @@
-import { Truck } from 'lucide-react';
-
 import { sayIn, type FuelOrderCard } from '@dk/shared';
 
 /**
- * The tanker card exactly as the dealer's chat draws it (ADR 0041): strip, the
- * tanker number large, then the order's facts one per line. Shown in English
- * here; the dealer sees the same card in their own language.
+ * The tanker card exactly as the dealer's chat draws it (ADR 0041, 0055): a bold
+ * title line with no coloured strip, the tanker number large, then the order's facts
+ * one per line. Shown in English here; the dealer sees the same card in their own language.
  */
 export function FuelOrderCardPreview({ card }: { card: FuelOrderCard }) {
-  const changed = card.kind === 'tanker_changed';
   return (
-    <div className="mb-1 overflow-hidden rounded-md" data-testid="fuel-order-card">
-      <div
-        className="flex items-center gap-1.5 px-2 py-1 text-[12px] font-bold tracking-wide"
-        style={changed ? { background: '#f59e0b', color: '#451a03' } : { background: '#059669', color: '#ffffff' }}
-      >
-        <Truck width={14} strokeWidth={2.4} className="shrink-0" aria-hidden />
-        <span>{sayIn(card.title, 'en')}</span>
-      </div>
+    <div className="mb-1" data-testid="fuel-order-card" data-kind={card.kind}>
+      <p className="px-2 pt-0.5 text-[15px] font-bold leading-snug [overflow-wrap:anywhere]">
+        {sayIn(card.title, 'en')}
+      </p>
       <div className="px-2 pt-1.5">
         {card.hero ? (
           <>
