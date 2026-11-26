@@ -54,6 +54,7 @@ const ALLOWED = {
   'src/features/replyHelper/SuggestedVideos.tsx': { count: 1, why: 'a video page on mdgservices.in' },
   'src/features/videos/VideoDetailDialog.tsx': { count: 2, why: 'a video page on mdgservices.in' },
   'src/pages/FilmsPage.tsx': { count: 2, why: 'a film page on mdgservices.in' },
+  'src/pages/funnel/FunnelPage.tsx': { count: 1, why: 'the website page a funnel row names, on mdgservices.in' },
   'src/pages/whatsapp/WhatsAppResultsPage.tsx': {
     count: 1,
     why: 'the page a sent message pointed at, on another site',
