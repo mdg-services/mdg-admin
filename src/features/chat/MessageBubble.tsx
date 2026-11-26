@@ -30,11 +30,12 @@ import {
   type AskPreviewPhase,
 } from './DealerCards';
 import { bubbleTime, dealerWord } from './dealerView';
+import { FlowCardPreview } from './FlowCardPreview';
 import { FuelOrderCardPreview } from './FuelOrderCardPreview';
 import { replyPreviewText, replySenderLabel } from './replyPreview';
 import { aiChipTitle, dealerSeesLine, reportNoteTitle } from './reportNote';
-import { ReportSummaryCard } from './ReportSummaryCard';
 import { summarizeReport } from './reportSummary';
+import { ReportSummaryCard } from './ReportSummaryCard';
 
 interface MessageBubbleProps {
   message: Message;
@@ -217,6 +218,14 @@ export const MessageBubble = React.memo(function MessageBubble({
 
   // The retired services question: the app draws nothing for it, so neither do we.
   if (isRetiredSetupCard(message)) return null;
+  // A LIVING CARD (ADR 0059): the dealer sees the card itself, not a bubble — so does the team.
+  if (message.flowCard) {
+    return (
+      <div className="flex w-full flex-col items-end" data-testid="flow-card-row">
+        <FlowCardPreview message={message} lang={lang} />
+      </div>
+    );
+  }
 
   const mdgSide = system || message.senderRole === 'admin';
   const own = message.senderId === currentUserId;

@@ -6,14 +6,15 @@ import { useDeclarationsAdminView, useDeclarationsLive } from '@/hooks/api/useDe
 import { useMockDrillAdminView, useMockDrillLive } from '@/hooks/api/useMockDrill';
 import { useOutletSetupQuery } from '@/hooks/api/useOnboarding';
 import { useOutletDetails } from '@/hooks/api/useOutletDetails';
-import { useYourVideosAdmin } from '@/hooks/api/useYourVideos';
 import { usePortalLogins } from '@/hooks/api/usePortalLogins';
+import { useYourVideosAdmin } from '@/hooks/api/useYourVideos';
 import { useStickToBottom } from '@/hooks/useStickToBottom';
 import { cn } from '@/lib/cn';
 import type { DealerOpenRequest, Message, UserRole } from '@dk/shared';
 
 import {
   DealerViewContext,
+  SetupJourneyPreview,
   isRetiredSetupCard,
   setupCardHasBody,
   type AskPreviewPhase,
@@ -22,6 +23,13 @@ import {
 import { dayChipLabel, guessDealerLang } from './dealerView';
 import { MessageActionsMenu, type MenuAnchor } from './MessageActionsMenu';
 import { MessageBubble } from './MessageBubble';
+
+/** The setup messages the one setup card stands for (ADR 0059); `welcome` stays as words. */
+const JOURNEY_KINDS: ReadonlySet<string> = new Set(['company', 'billing', 'payment', 'logins', 'started']);
+/** The stages the dealer's app draws the setup card in. */
+const JOURNEY_OPEN: ReadonlySet<string> = new Set(['sign_in', 'company', 'billing', 'payment', 'logins', 'setup', 'watch']);
+/** The stages at which the setup's login request is still the card's logins row. */
+const LOGIN_ROW_STAGES: ReadonlySet<string> = new Set(['company', 'billing', 'payment', 'logins']);
 
 interface MessageListProps {
   messages: Message[];
@@ -305,6 +313,23 @@ export function MessageList({
     ],
   );
 
+  // THE SETUP AS ONE CARD (ADR 0059), as the dealer's app draws it: the newest setup
+  // message holds the whole card; the older ones (and the setup's own login request,
+  // until the logins step is past) are a one-line note where they were.
+  const journeySetup =
+    dealerView.setup && dealerView.setup.strip && JOURNEY_OPEN.has(dealerView.setup.stage) ? dealerView.setup : null;
+  const isJourney = React.useCallback(
+    (m: Message): boolean =>
+      !!journeySetup &&
+      ((!!m.setupCard && JOURNEY_KINDS.has(m.setupCard.card)) ||
+        (!!m.portalLogin && !m.portalLogin.pick && LOGIN_ROW_STAGES.has(journeySetup.stage))),
+    [journeySetup],
+  );
+  const setupLiveId = React.useMemo(() => {
+    for (let i = ordered.length - 1; i >= 0; i--) if (isJourney(ordered[i]!)) return ordered[i]!.id;
+    return null;
+  }, [ordered, isJourney]);
+
   // The same request posted twice (a nudge): only the newest post carries the
   // buttons, as in the app.
   const newestAskPost = React.useMemo(() => {
@@ -339,6 +364,24 @@ export function MessageList({
           </span>
         </div>,
       );
+    }
+    if (journeySetup && isJourney(m)) {
+      items.push(
+        <div key={m.id} data-message-id={m.id} className="flex flex-col items-end px-3 pt-2">
+          {m.id === setupLiveId ? (
+            <SetupJourneyPreview
+              setup={journeySetup}
+              portalLogins={dealerView.portalLogins}
+              portalLoginsFailed={dealerView.portalLoginsFailed}
+              canEdit={dealerView.canEdit}
+              lang={lang}
+            />
+          ) : (
+            <p className="px-1 text-[12px] italic text-wa-meta">Setup step message — the dealer now sees it in the setup card below.</p>
+          )}
+        </div>,
+      );
+      return;
     }
     items.push(
       <div

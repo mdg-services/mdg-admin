@@ -1065,3 +1065,104 @@ export function SetupCardPreview({
       return null;
   }
 }
+
+// ── The setup as one card (ADR 0059) ──────────────────────────────────────
+
+type Words3 = Record<'hi' | 'hl' | 'en', string>;
+const STEP_WORDS: Record<string, Words3> = {
+  company: { hi: 'कंपनी', hl: 'Company', en: 'Company' },
+  billing: { hi: 'बिल का पता', hl: 'Bill ka pata', en: 'Bill address' },
+  payment: { hi: 'भुगतान', hl: 'Payment', en: 'Payment' },
+  logins: { hi: 'लॉगिन', hl: 'Login', en: 'Logins' },
+  start: { hi: 'शुरू', hl: 'Shuru', en: 'Start' },
+};
+const JOURNEY_TITLE: Words3 = {
+  hi: 'डीलर कवच शुरू करें',
+  hl: 'Dealer Kavach shuru karein',
+  en: 'Start Dealer Kavach',
+};
+const progressWords = (done: number, total: number, lang: DealerLang): string =>
+  lang === 'hi' ? `${total} में से ${done} पूरे` : `${done} of ${total} done`;
+
+/**
+ * The dealer's "डीलर कवच शुरू करें" card as the team sees it: the same five steps, the
+ * same "3 of 5 done" bar, the current step's own preview open inside it. Read-only.
+ */
+export function SetupJourneyPreview({
+  setup,
+  portalLogins,
+  portalLoginsFailed,
+  canEdit,
+  lang,
+}: {
+  setup: OutletSetupAdmin;
+  portalLogins: PortalLoginState[] | undefined;
+  portalLoginsFailed: boolean;
+  canEdit: boolean;
+  lang: DealerLang;
+}) {
+  const steps = (setup.strip ?? []).filter((s) => s.step in STEP_WORDS);
+  const done = steps.filter((s) => s.state === 'done' || s.state === 'skipped').length;
+  const pct = steps.length > 0 ? Math.round((done / steps.length) * 100) : 0;
+  const answerOf = (step: string): string | null => {
+    if (step === 'company') return setup.company ? companyLabel(setup.company, lang) : null;
+    if (step === 'billing') return setup.billing?.name ?? null;
+    if (step === 'logins') return setup.loginsNeeded.join(' · ') || null;
+    return null;
+  };
+  return (
+    <section
+      title={PREVIEW_TITLE}
+      data-testid="setup-journey-preview"
+      className="w-[340px] max-w-full overflow-hidden rounded-lg border border-wa-divider bg-wa-in text-wa-bubble-text shadow-[0_1px_2px_rgba(15,23,42,0.06),0_4px_12px_rgba(15,23,42,0.05)]"
+    >
+      <header className="px-4 pb-3 pt-3.5">
+        <h4 className="text-[17px] font-semibold">{JOURNEY_TITLE[lang]}</h4>
+        <p className="mt-2 text-[13px] font-medium text-wa-meta">{progressWords(done, steps.length, lang)}</p>
+        <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-wa-divider">
+          <div className="h-full rounded-full bg-[#166534]" style={{ width: `${pct}%` }} />
+        </div>
+      </header>
+      <ol>
+        {steps.map(({ step, state }, i) => {
+          const isDone = state === 'done' || state === 'skipped';
+          const answer = isDone ? answerOf(step) : null;
+          return (
+            <li key={step} data-row={step} data-state={state} className={cn('flex gap-3 border-t border-wa-divider px-4 py-3', state === 'todo' && 'opacity-60')}>
+              <span
+                className={cn(
+                  'grid size-6 shrink-0 place-items-center rounded-full text-[12px] font-semibold',
+                  isDone ? 'bg-[#166534] text-white' : state === 'current' ? 'border-2 border-wa-accent' : 'border border-wa-divider text-wa-meta',
+                )}
+              >
+                {isDone ? <Check width={14} strokeWidth={3} /> : i + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                {answer ? (
+                  <>
+                    <p className="text-[13px] text-wa-meta">{STEP_WORDS[step]![lang]}</p>
+                    <p className="text-[16px] font-semibold [overflow-wrap:anywhere]">{answer}</p>
+                  </>
+                ) : (
+                  <p className={cn(state === 'todo' ? 'text-[15px] text-wa-meta' : 'text-[16px] font-semibold')}>{STEP_WORDS[step]![lang]}</p>
+                )}
+                {state === 'current' && step === 'company' ? <CompanyCardPreview setup={setup} canEdit={canEdit} lang={lang} /> : null}
+                {state === 'current' && step === 'billing' ? <BillingCardPreview setup={setup} canEdit={canEdit} lang={lang} /> : null}
+                {state === 'current' && step === 'payment' ? <PaymentCardPreview setup={setup} lang={lang} /> : null}
+                {state === 'current' && step === 'logins' && setup.loginsNeeded.length > 0 ? (
+                  <PortalLoginPreview
+                    portals={setup.loginsNeeded}
+                    states={portalLogins}
+                    failed={portalLoginsFailed}
+                    canEdit={canEdit}
+                    lang={lang}
+                  />
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
