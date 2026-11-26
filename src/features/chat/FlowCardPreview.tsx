@@ -47,8 +47,8 @@ export function OwnWordsPicture({ lang, compact = false }: { lang: DealerLang; c
     <span
       data-testid="own-words-preview"
       className={cn(
-        'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border border-dashed border-wa-meta/60 text-[14px] font-medium text-wa-meta',
-        compact ? 'size-10' : 'px-3',
+        'inline-flex min-h-9 items-center justify-center gap-1 rounded-full text-wa-meta',
+        compact ? 'size-9 border border-dashed border-wa-meta/50' : 'px-1.5 text-[12px] font-medium underline decoration-dotted underline-offset-4',
       )}
     >
       <Pencil width={14} strokeWidth={2} />
@@ -79,11 +79,11 @@ export function FlowCardPreview({ message, lang }: { message: Message; lang: Dea
 }
 
 function Mark({ row }: { row: Pick<FlowRow, 'state'> & { n?: number } }) {
-  const base = 'grid size-6 shrink-0 place-items-center rounded-full text-[12px] font-semibold';
+  const base = 'grid size-5 shrink-0 place-items-center rounded-full text-[11px] font-semibold';
   if (row.state === 'done')
     return (
       <span className={cn(base, 'bg-[#166534] text-white')}>
-        <Check width={14} strokeWidth={3} />
+        <Check width={12} strokeWidth={3} />
       </span>
     );
   if (row.state === 'working') return <span className={cn(base, 'animate-spin border-2 border-wa-divider border-t-wa-accent')} />;
@@ -95,12 +95,12 @@ function Pill({ selected, children, hint }: { selected?: boolean; children: Reac
   return (
     <span
       className={cn(
-        'inline-flex min-h-10 flex-col items-center justify-center rounded-full border px-3.5 py-1 text-center text-[15px] font-semibold leading-tight',
+        'inline-flex min-h-9 min-w-[2.5rem] flex-col items-center justify-center rounded-full border px-3 py-1 text-center text-[14px] font-semibold leading-none',
         selected ? 'border-wa-accent bg-wa-accent text-white' : 'border-wa-divider bg-wa-in text-wa-bubble-text',
       )}
     >
       {children}
-      {hint ? <span className={cn('text-[11px] font-normal', selected ? 'text-white/80' : 'text-wa-meta')}>{hint}</span> : null}
+      {hint ? <span className={cn('mt-0.5 text-[11px] font-normal', selected ? 'text-white/80' : 'text-wa-meta')}>{hint}</span> : null}
     </span>
   );
 }
@@ -118,22 +118,22 @@ export function FlowCardPicture({ card, lang }: { card: FlowCardView; lang: Deal
     for (let j = i + 1; j < card.rows.length && card.rows[j]!.part; j++) parts.push(card.rows[j]!);
     const showChoices = row.state !== 'done' && row.state !== 'later';
     blocks.push(
-      <li key={row.key} className="flex gap-3 border-t border-wa-divider px-4 py-3" data-row={row.key} data-state={row.state}>
+      <li key={row.key} className="flex gap-2.5 border-t border-wa-divider px-3.5 py-2" data-row={row.key} data-state={row.state}>
         <Mark row={{ state: row.state, n }} />
         <div className="min-w-0 flex-1">
           {row.state === 'done' && row.answer ? (
             <>
-              <p className="text-[13px] text-wa-meta">{say(row.label)}</p>
-              <p className="text-[16px] font-semibold [overflow-wrap:anywhere]">{say(row.answer)}</p>
+              <p className="text-[12px] text-wa-meta">{say(row.label)}</p>
+              <p className="text-[14px] font-semibold [overflow-wrap:anywhere]">{say(row.answer)}</p>
             </>
           ) : (
-            <p className={cn('[overflow-wrap:anywhere]', row.state === 'later' ? 'text-[15px] text-wa-meta' : 'text-[16px] font-semibold')}>
+            <p className={cn('[overflow-wrap:anywhere]', row.state === 'later' ? 'text-[14px] text-wa-meta' : 'text-[14px] font-semibold')}>
               {say(row.label)}
             </p>
           )}
-          {row.note ? <p className="mt-0.5 text-[13px] text-wa-meta">{say(row.note)}</p> : null}
+          {row.note ? <p className="text-[12px] text-wa-meta">{say(row.note)}</p> : null}
           {showChoices && row.choices?.length ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               {row.choices.map((c) => (
                 <Pill key={c.value} selected={c.selected} hint={c.hint ? say(c.hint) : undefined}>
                   {say(c.label)}
@@ -143,11 +143,14 @@ export function FlowCardPicture({ card, lang }: { card: FlowCardView; lang: Deal
             </div>
           ) : null}
           {parts.length > 0 && !(folded && row.state === 'done') ? (
-            <div className="mt-2 space-y-2">
+            <div className="mt-1.5 space-y-1.5">
               {parts.map((p) => (
-                <div key={p.key}>
-                  <p className="text-[15px] font-semibold">{say(p.label)}</p>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
+                <div key={p.key} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <p className="w-[4.75rem] shrink-0 text-[14px] font-semibold leading-tight">
+                    {say(p.label)}
+                    {p.typed?.unit ? <span className="block text-[11px] font-normal text-wa-meta">{p.typed.unit}</span> : null}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {(p.choices ?? []).map((c) => (
                       <Pill key={c.value} selected={c.selected}>
                         {say(c.label)}
@@ -170,18 +173,18 @@ export function FlowCardPicture({ card, lang }: { card: FlowCardView; lang: Deal
       data-testid="flow-card-preview"
       className="w-[340px] max-w-full overflow-hidden rounded-lg border border-wa-divider bg-wa-in text-wa-bubble-text shadow-[0_1px_2px_rgba(15,23,42,0.06),0_4px_12px_rgba(15,23,42,0.05)]"
     >
-      <header className="flex flex-wrap items-baseline justify-between gap-x-3 px-4 pb-3 pt-3.5">
-        <h4 className="text-[17px] font-semibold">{say(card.title)}</h4>
-        {card.meta ? <span className="text-[13px] tabular-nums text-wa-meta">{card.meta}</span> : null}
+      <header className="flex flex-wrap items-baseline justify-between gap-x-3 px-3.5 pb-2 pt-2.5">
+        <h4 className="text-[16px] font-semibold">{say(card.title)}</h4>
+        {card.meta ? <span className="text-[12px] tabular-nums text-wa-meta">{card.meta}</span> : null}
       </header>
       <ol>{blocks}</ol>
       {card.problem ? (
-        <div className="flex gap-3 border-t border-wa-divider bg-[#fee2e2] px-4 py-3" data-testid="flow-problem-preview">
+        <div className="flex gap-2.5 border-t border-wa-divider bg-[#fee2e2] px-3.5 py-2.5" data-testid="flow-problem-preview">
           <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#b91c1c] text-[14px] font-bold text-white">!</span>
           <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-semibold text-[#b91c1c]">{say(card.problem.text)}</p>
+            <p className="text-[14px] font-semibold text-[#b91c1c]">{say(card.problem.text)}</p>
             {card.problem.detail.map((d, i) => (
-              <p key={i} className="mt-0.5 text-[13px] text-wa-bubble-text/80">
+              <p key={i} className="mt-0.5 text-[12px] text-wa-bubble-text/80">
                 {say(d)}
               </p>
             ))}
@@ -189,14 +192,14 @@ export function FlowCardPicture({ card, lang }: { card: FlowCardView; lang: Deal
         </div>
       ) : null}
       {card.summary.length > 0 || card.warnings.length > 0 ? (
-        <div className="border-t border-wa-divider px-4 py-3">
+        <div className="border-t border-wa-divider px-3.5 py-2">
           {card.summary.map((s, i) => (
-            <p key={i} className="text-[15px] font-semibold">
+            <p key={i} className="text-[14px] font-semibold">
               {say(s)}
             </p>
           ))}
           {card.warnings.map((w, i) => (
-            <p key={i} className="mt-1 flex gap-1.5 text-[13px] text-[#92400e]">
+            <p key={i} className="mt-1 flex gap-1.5 text-[12px] text-[#92400e]">
               <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
               {say(w)}
             </p>
@@ -204,13 +207,13 @@ export function FlowCardPicture({ card, lang }: { card: FlowCardView; lang: Deal
         </div>
       ) : null}
       {card.actions.length > 0 ? (
-        <div className="flex flex-wrap gap-2 border-t border-wa-divider px-4 py-3">
+        <div className="flex flex-wrap gap-2 border-t border-wa-divider px-3.5 py-2.5">
           {card.actions.map((a) => (
             <span
               key={a.id}
               aria-hidden
               className={cn(
-                'flex min-h-11 min-w-[7rem] flex-1 cursor-default select-none items-center justify-center rounded-lg px-3 text-[15px] font-semibold',
+                'flex min-h-10 min-w-[7rem] flex-1 cursor-default select-none items-center justify-center rounded-lg px-3 text-[14px] font-semibold',
                 a.tone === 'primary' ? 'bg-wa-accent text-white' : 'border border-wa-divider bg-wa-in',
               )}
             >
@@ -220,11 +223,9 @@ export function FlowCardPicture({ card, lang }: { card: FlowCardView; lang: Deal
         </div>
       ) : null}
       {card.video && card.status !== 'closed' ? (
-        <div className="flex items-center gap-3 border-t border-wa-divider px-4 py-2.5">
-          <span className="grid size-8 place-items-center rounded-full bg-wa-row-active">
-            <Play width={14} />
-          </span>
-          <span className="text-[13px] font-medium">{say(card.video.title)}</span>
+        <div className="flex items-center gap-1.5 border-t border-wa-divider px-3.5 py-2 text-[12px] text-wa-meta">
+          <Play width={12} className="fill-current" />
+          <span className="font-medium">{say(card.video.title)}</span>
         </div>
       ) : null}
     </section>

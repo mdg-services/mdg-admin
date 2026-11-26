@@ -1117,10 +1117,10 @@ export function SetupJourneyPreview({
       data-testid="setup-journey-preview"
       className="w-[340px] max-w-full overflow-hidden rounded-lg border border-wa-divider bg-wa-in text-wa-bubble-text shadow-[0_1px_2px_rgba(15,23,42,0.06),0_4px_12px_rgba(15,23,42,0.05)]"
     >
-      <header className="px-4 pb-3 pt-3.5">
-        <h4 className="text-[17px] font-semibold">{JOURNEY_TITLE[lang]}</h4>
-        <p className="mt-2 text-[13px] font-medium text-wa-meta">{progressWords(done, steps.length, lang)}</p>
-        <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-wa-divider">
+      <header className="px-3.5 pb-2 pt-2.5">
+        <h4 className="text-[16px] font-semibold">{JOURNEY_TITLE[lang]}</h4>
+        <p className="mt-1 text-[12px] font-medium text-wa-meta">{progressWords(done, steps.length, lang)}</p>
+        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-wa-divider">
           <div className="h-full rounded-full bg-[#166534]" style={{ width: `${pct}%` }} />
         </div>
       </header>
@@ -1129,23 +1129,23 @@ export function SetupJourneyPreview({
           const isDone = state === 'done' || state === 'skipped';
           const answer = isDone ? answerOf(step) : null;
           return (
-            <li key={step} data-row={step} data-state={state} className={cn('flex gap-3 border-t border-wa-divider px-4 py-3', state === 'todo' && 'opacity-60')}>
+            <li key={step} data-row={step} data-state={state} className={cn('flex gap-2.5 border-t border-wa-divider px-3.5 py-2', state === 'todo' && 'opacity-60')}>
               <span
                 className={cn(
-                  'grid size-6 shrink-0 place-items-center rounded-full text-[12px] font-semibold',
+                  'grid size-5 shrink-0 place-items-center rounded-full text-[11px] font-semibold',
                   isDone ? 'bg-[#166534] text-white' : state === 'current' ? 'border-2 border-wa-accent' : 'border border-wa-divider text-wa-meta',
                 )}
               >
-                {isDone ? <Check width={14} strokeWidth={3} /> : i + 1}
+                {isDone ? <Check width={12} strokeWidth={3} /> : i + 1}
               </span>
               <div className="min-w-0 flex-1">
                 {answer ? (
                   <>
-                    <p className="text-[13px] text-wa-meta">{STEP_WORDS[step]![lang]}</p>
-                    <p className="text-[16px] font-semibold [overflow-wrap:anywhere]">{answer}</p>
+                    <p className="text-[12px] text-wa-meta">{STEP_WORDS[step]![lang]}</p>
+                    <p className="text-[14px] font-semibold [overflow-wrap:anywhere]">{answer}</p>
                   </>
                 ) : (
-                  <p className={cn(state === 'todo' ? 'text-[15px] text-wa-meta' : 'text-[16px] font-semibold')}>{STEP_WORDS[step]![lang]}</p>
+                  <p className={cn(state === 'todo' ? 'text-[14px] text-wa-meta' : 'text-[14px] font-semibold')}>{STEP_WORDS[step]![lang]}</p>
                 )}
                 {state === 'current' && step === 'company' ? (
                   <>
