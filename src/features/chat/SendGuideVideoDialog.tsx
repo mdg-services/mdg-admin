@@ -36,7 +36,12 @@ import { whatsAppVideoCaption, type GuideVideoAdminItem, type SearchableChapter,
 
 /** Where the video goes: a dealer's app chat, or a chat in one of the WhatsApp inboxes. */
 export type SendVideoTarget =
-  | { channel: 'app'; conversationId: string | null | undefined }
+  | {
+      channel: 'app';
+      conversationId: string | null | undefined;
+      /** A Kavach Shuruaat planner's chat (ADR 0058): only the planner's videos are offered. */
+      planner?: boolean;
+    }
   | { channel: 'whatsapp'; line: WhatsAppLine; person: string };
 
 interface Props {
@@ -79,7 +84,11 @@ export function SendGuideVideoDialog({ open, onClose, target, initialVideoId, in
   const pending = sendApp.isPending || sendWa.isPending;
   const library = useGuideVideoLibrary(open);
   const chat = useWhatsAppChat(open && wa ? wa.line : null, open && wa ? wa.person : null);
-  const choices = React.useMemo(() => videoChoices(library.data, channel), [library.data, channel]);
+  const planner = target.channel === 'app' && target.planner === true;
+  const choices = React.useMemo(
+    () => videoChoices(library.data, channel, planner),
+    [library.data, channel, planner],
+  );
   const [pickedId, setPickedId] = React.useState<string | null>(null);
   const [startSec, setStartSec] = React.useState(0);
   const [query, setQuery] = React.useState('');

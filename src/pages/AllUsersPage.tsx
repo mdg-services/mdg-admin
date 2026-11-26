@@ -41,6 +41,7 @@ import {
   Table,
   useToast,
 } from '@/components/ui';
+import { PlannerBadge } from '@/features/planner/PlannerBadge';
 import {
   useAllUsers,
   useDeleteUser,
@@ -51,6 +52,7 @@ import { ApiError } from '@/lib/api';
 import { copyText } from '@/lib/clipboard';
 import { cn } from '@/lib/cn';
 import { generatePassword } from '@/lib/password';
+import { isPlannerStatus } from '@/lib/planner';
 import { selectUser, useAuthStore } from '@/store/auth';
 import {
   ACCOUNT_WIPE_AFTER_DAYS,
@@ -93,6 +95,8 @@ function UserStatusBadge({ user: u }: { user: User }) {
 function DealerStatusBadge({ status }: { status: string }) {
   if (status === 'ACTIVE') return <Badge intent="success">Active</Badge>;
   if (status === 'ONBOARDING') return <Badge intent="info">Onboarding</Badge>;
+  // A person planning a pump (ADR 0058), named the way every other screen names them.
+  if (isPlannerStatus(status)) return <PlannerBadge />;
   return <Badge intent="neutral">{status.charAt(0) + status.slice(1).toLowerCase()}</Badge>;
 }
 

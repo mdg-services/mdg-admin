@@ -101,6 +101,8 @@ export interface ReplyHelperPaneProps {
    * (a hidden box has no height), so it scrolls to the newest turn when shown.
    */
   active?: boolean;
+  /** The app chat is a Kavach Shuruaat planner's (ADR 0058): "Send a video" offers only their videos. */
+  planner?: boolean;
   className?: string;
 }
 
@@ -133,6 +135,7 @@ export function ReplyHelperPane({
   onDraftPlaced,
   boxTagsDraft = false,
   active = true,
+  planner = false,
   className,
 }: ReplyHelperPaneProps) {
   const toast = useToast();
@@ -299,7 +302,7 @@ export function ReplyHelperPane({
         onClose={() => setVideoToSend(null)}
         target={
           target.channel === 'app'
-            ? { channel: 'app', conversationId: target.conversationId }
+            ? { channel: 'app', conversationId: target.conversationId, planner }
             : { channel: 'whatsapp', line: target.line, person: target.person }
         }
         initialVideoId={videoToSend?.id ?? null}

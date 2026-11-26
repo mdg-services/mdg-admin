@@ -75,6 +75,15 @@ describe('what can be sent into a dealer chat', () => {
     assert.ok(!ids.includes('admin_credit_dod'));
   });
 
+  it('offers a planner’s chat only the planner’s videos, and an outlet’s chat never one (ADR 0058)', () => {
+    const lib = [...LIBRARY, video('kavach_shuruaat', { audience: 'planner' })];
+    const ids = (planner: boolean) => allChoices(videoChoices(lib, 'app', planner)).map((v) => v.id);
+    assert.ok(!ids(false).includes('kavach_shuruaat'));
+    assert.deepEqual(ids(true), ['kavach_shuruaat']);
+    // WhatsApp is a phone number, not an account: not narrowed.
+    assert.ok(allChoices(videoChoices(lib, 'whatsapp')).some((v) => v.id === 'kavach_shuruaat'));
+  });
+
   it('puts the first days first, then the other how-tos by name, and the services in their own group', () => {
     const { howTo, services } = videoChoices(LIBRARY);
     assert.deepEqual(

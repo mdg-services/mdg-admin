@@ -40,6 +40,8 @@ export function statusIntent(kind: string, v: string): Intent {
       if (v === 'ACTIVE') return 'success';
       if (v === 'ONBOARDING') return 'warning';
       if (v === 'SUSPENDED') return 'danger';
+      // A New Pump Guide account (ADR 0058): fine as it is, just not an outlet.
+      if (v === 'PLANNING') return 'info';
       return 'neutral';
     case 'dealerService':
       if (v === 'ACTIVE') return 'success';
