@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Play, TriangleAlert } from 'lucide-react';
+import { Check, Pencil, Play, TriangleAlert } from 'lucide-react';
 import * as React from 'react';
 
 import { api } from '@/lib/api';
@@ -39,6 +39,23 @@ export function useAdminFlowCard(flow: string, ref: string) {
 }
 
 const PREVIEW_TITLE = 'What the dealer sees. Only an owner can use it, in their app.';
+
+/** The dashed pill the owner taps to answer in their own words (ADR 0059). */
+const OWN_WORDS = { hi: 'कुछ और? लिखिए', hl: 'Kuch aur? Likhiye', en: 'Something else? Write it' } as const;
+export function OwnWordsPicture({ lang, compact = false }: { lang: DealerLang; compact?: boolean }) {
+  return (
+    <span
+      data-testid="own-words-preview"
+      className={cn(
+        'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border border-dashed border-wa-meta/60 text-[14px] font-medium text-wa-meta',
+        compact ? 'size-10' : 'px-3',
+      )}
+    >
+      <Pencil width={14} strokeWidth={2} />
+      {compact ? null : sayIn(OWN_WORDS, lang)}
+    </span>
+  );
+}
 
 export function FlowCardPreview({ message, lang }: { message: Message; lang: DealerLang }) {
   const marker = message.flowCard!;
@@ -122,6 +139,7 @@ export function FlowCardPicture({ card, lang }: { card: FlowCardView; lang: Deal
                   {say(c.label)}
                 </Pill>
               ))}
+              {card.canAnswer || card.actions.length > 0 ? <OwnWordsPicture lang={lang} /> : null}
             </div>
           ) : null}
           {parts.length > 0 && !(folded && row.state === 'done') ? (
@@ -135,6 +153,7 @@ export function FlowCardPicture({ card, lang }: { card: FlowCardView; lang: Deal
                         {say(c.label)}
                       </Pill>
                     ))}
+                    {card.canAnswer || card.actions.length > 0 ? <OwnWordsPicture lang={lang} compact /> : null}
                   </div>
                 </div>
               ))}

@@ -491,6 +491,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                   {sayIn(o.label, 'hl')}
                 </span>
               ))}
+              <span className="rounded-full border border-dashed border-wa-divider px-2 py-0.5 text-[12.5px] text-wa-meta">Kuch aur? Likhiye</span>
             </div>
           ) : null}
 

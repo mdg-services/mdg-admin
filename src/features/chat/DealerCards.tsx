@@ -51,6 +51,7 @@ import {
   shortDay,
   type DealerLang,
 } from './dealerView';
+import { OwnWordsPicture } from './FlowCardPreview';
 
 /**
  * WHAT THE DEALER SEES UNDER AN MDG MESSAGE, drawn read-only in the inbox.
@@ -1146,7 +1147,14 @@ export function SetupJourneyPreview({
                 ) : (
                   <p className={cn(state === 'todo' ? 'text-[15px] text-wa-meta' : 'text-[16px] font-semibold')}>{STEP_WORDS[step]![lang]}</p>
                 )}
-                {state === 'current' && step === 'company' ? <CompanyCardPreview setup={setup} canEdit={canEdit} lang={lang} /> : null}
+                {state === 'current' && step === 'company' ? (
+                  <>
+                    <CompanyCardPreview setup={setup} canEdit={canEdit} lang={lang} />
+                    <div className="mt-2">
+                      <OwnWordsPicture lang={lang} />
+                    </div>
+                  </>
+                ) : null}
                 {state === 'current' && step === 'billing' ? <BillingCardPreview setup={setup} canEdit={canEdit} lang={lang} /> : null}
                 {state === 'current' && step === 'payment' ? <PaymentCardPreview setup={setup} lang={lang} /> : null}
                 {state === 'current' && step === 'logins' && setup.loginsNeeded.length > 0 ? (
