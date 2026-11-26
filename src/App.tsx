@@ -196,6 +196,11 @@ const LeadsPage = React.lazy(
     import('@/pages/leads/LeadsPage').then((m) => ({ default: m.LeadsPage })),
   ),
 );
+const FunnelPage = React.lazy(
+  retryImport(() =>
+    import('@/pages/funnel/FunnelPage').then((m) => ({ default: m.FunnelPage })),
+  ),
+);
 const AnnouncementsPage = React.lazy(
   retryImport(() =>
     import('@/pages/AnnouncementsPage').then((m) => ({ default: m.AnnouncementsPage })),
@@ -586,6 +591,17 @@ export default function App() {
             element={
               <LazyPage>
                 <LeadsPage />
+              </LazyPage>
+            }
+          />
+          {/* "Website → app" (ADR 0059 §3): taps, sign-ups and payments per website
+              page. Every admin, as the API is (`requireRole('admin')`). Keep in step
+              with navItems.ts. */}
+          <Route
+            path="website-funnel"
+            element={
+              <LazyPage>
+                <FunnelPage />
               </LazyPage>
             }
           />
