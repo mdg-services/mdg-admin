@@ -78,6 +78,21 @@ export default {
           divider: 'var(--wa-divider)',
         },
       },
+      /**
+       * The type scale, the dealer app's own, so the chat thread (and anything else drawn from
+       * `features/chat/chatLook.ts`) sets the same words at the same size in both apps (ADR 0060).
+       * Admin screens keep their own Tailwind sizes (`text-sm`, `text-xs`) until they are moved over.
+       */
+      fontSize: {
+        display: ['2rem', { lineHeight: '2.375rem', letterSpacing: '-0.02em', fontWeight: '600' }],
+        title: ['1.375rem', { lineHeight: '1.75rem', letterSpacing: '-0.01em', fontWeight: '600' }],
+        heading: ['1.125rem', { lineHeight: '1.5rem', letterSpacing: '-0.005em', fontWeight: '600' }],
+        subheading: ['1.0625rem', { lineHeight: '1.5rem', fontWeight: '600' }],
+        body: ['1rem', { lineHeight: '1.5rem' }],
+        cta: ['1rem', { lineHeight: '1.25rem', fontWeight: '600' }],
+        meta: ['0.875rem', { lineHeight: '1.25rem' }],
+        micro: ['0.75rem', { lineHeight: '1rem' }],
+      },
       borderRadius: { sm: '4px', md: '8px', lg: '12px' },
       boxShadow: {
         sm: '0 1px 2px rgba(15,23,42,0.06)',

@@ -50,7 +50,7 @@ export function SegmentedControl<V extends string>({
       role="group"
       aria-label={rest['aria-label']}
       className={cn(
-        'inline-flex gap-0.5 rounded-md border border-border-strong p-0.5',
+        'inline-flex gap-0.5 rounded-lg bg-surface-2 p-1',
         // `w-full` below md, `w-fit` at md. `w-fit` rather than leaving it to
         // `inline-flex`: inside a grid the group's border stretched to whatever
         // the widest sibling row made the column, which is the same trap
@@ -68,11 +68,11 @@ export function SegmentedControl<V extends string>({
             onClick={() => onChange(o.value)}
             aria-pressed={active}
             className={cn(
-              'inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-[5px] px-3 py-1.5',
+              'inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5',
               'text-sm transition-colors md:min-h-8 md:flex-none',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
               active
-                ? 'bg-brand font-semibold text-text-inverse'
+                ? 'bg-surface font-medium text-text shadow'
                 : 'font-medium text-text-muted hover:text-text',
             )}
           >

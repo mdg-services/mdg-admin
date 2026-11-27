@@ -29,6 +29,7 @@ import {
   type ShareAudience,
 } from '@dk/shared';
 
+import { chatLook } from './chatLook';
 import { useVoiceNote } from './useVoiceNote';
 import {
   MIC_ACTION_TEXT,
@@ -479,7 +480,10 @@ export function Composer({
      */
     <div
       ref={rootRef}
-      className="border-t border-border bg-surface px-3 py-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] md:pb-2"
+      className={cn(
+        'border-t border-wa-divider px-3 py-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] md:pb-2',
+        chatLook.composerBar,
+      )}
     >
       {replyingTo ? (
         <div className="mb-2 flex items-center gap-2 rounded-md border-l-[3px] border-brand bg-surface-2 px-2.5 py-1.5">
@@ -693,7 +697,13 @@ export function Composer({
             )}
             <div
               ref={fieldRef}
-              className={cn('min-w-0 flex-1 rounded-md', fromHelper && 'ring-1 ring-assist-line')}
+              // The dealer app's typing box: a white pill on the wallpaper, no frame of its own.
+              className={cn(
+                'min-w-0 flex-1 px-1',
+                chatLook.composerField,
+                '[&_textarea]:border-0 [&_textarea]:bg-transparent [&_textarea]:shadow-none [&_textarea]:ring-0 [&_textarea]:text-body',
+                fromHelper && 'ring-1 ring-assist-line',
+              )}
             >
               <Textarea
                 ref={textareaRef}
@@ -752,41 +762,27 @@ export function Composer({
               )
             ) : null}
             {hasContent ? (
-              // The word "Send" costs ~84px of a 360px row. Below md the glyph
-              // alone says it, at the same 44px target; the labelled button is
-              // still what a desktop gets.
-              isMd ? (
-                <Button
-                  type="button"
-                  onClick={handleSend}
-                  disabled={!hasContent || busy}
-                  loading={sending}
-                  title="Send (Ctrl+Enter)"
-                  leftIcon={sending ? null : <Send width={16} height={16} strokeWidth={1.75} />}
-                >
-                  Send
-                </Button>
-              ) : (
-                <IconButton
-                  aria-label="Send"
-                  variant="primary"
-                  onClick={handleSend}
-                  disabled={!hasContent || busy}
-                  loading={sending}
-                >
-                  <Send width={18} height={18} strokeWidth={1.75} />
-                </IconButton>
-              )
+              // The dealer app's send button: a black round one, the arrow alone. The
+              // word "Send" is its name for a screen reader and its tooltip (Ctrl+Enter).
+              <button
+                type="button"
+                aria-label="Send"
+                title="Send (Ctrl+Enter)"
+                onClick={handleSend}
+                disabled={!hasContent || busy}
+                aria-busy={sending || undefined}
+                className={cn(chatLook.sendButton, 'h-11 w-11 disabled:opacity-60 md:h-10 md:w-10')}
+              >
+                {sending ? <Spinner size={16} /> : <Send width={18} height={18} strokeWidth={1.75} />}
+              </button>
             ) : (
               <button
                 type="button"
                 onClick={() => void voice.start()}
                 disabled={busy}
                 aria-label="Record voice message"
-                className={cn(
-                  'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-text-muted md:h-9 md:w-9',
-                  'hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-60',
-                )}
+                // The dealer app's black round mic: the same button that becomes Send once there are words.
+                className={cn(chatLook.sendButton, 'h-11 w-11 disabled:opacity-60 md:h-10 md:w-10')}
               >
                 <Mic width={18} height={18} strokeWidth={1.75} />
               </button>

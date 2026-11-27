@@ -194,7 +194,7 @@ export function THead({
   return (
     <thead
       className={cn(
-        'bg-surface-2 text-xs uppercase tracking-wide text-text-muted',
+        'bg-surface text-xs font-medium text-text-muted [&_tr]:border-b [&_tr]:border-border',
         // Read off the context rather than taken as a prop, so `THead` keeps the
         // signature every call site already passes nothing to.
         stickyHeader && 'sticky top-0 z-10',

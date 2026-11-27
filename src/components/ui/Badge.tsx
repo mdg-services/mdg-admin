@@ -27,7 +27,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full px-2 text-xs font-medium',
+        'inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-md px-2.5 text-xs font-semibold',
         INTENT_CLASSES[intent],
         className,
       )}

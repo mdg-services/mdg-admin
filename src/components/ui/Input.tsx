@@ -31,10 +31,10 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           // 328px. Without this the field refuses to shrink, pushes its row past
           // the right edge, and `main`'s `overflow-x-hidden` clips it: the
           // reported "date input is going out of the screen".
-          'h-11 md:h-9 w-full min-w-0 rounded-sm border bg-surface px-3 text-base md:text-sm text-text',
+          'h-11 md:h-9 w-full min-w-0 rounded-md border bg-surface px-3 text-base shadow-sm md:text-sm text-text',
           'placeholder:text-text-subtle',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
-          invalid ? 'border-danger' : 'border-border-strong',
+          invalid ? 'border-danger' : 'border-border',
           'disabled:cursor-not-allowed disabled:opacity-60',
           className,
         )}
