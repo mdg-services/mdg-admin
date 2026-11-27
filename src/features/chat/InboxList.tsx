@@ -17,7 +17,9 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { ChatRolePill, OutletTile, chatPeople, chatRoleWord } from '@/features/chat/OutletMark';
 import { chipClass } from '@/features/inbox/chips';
 import { TICKET_CHIPS, type TicketChip } from '@/features/inbox/desk';
+import { PlannerBadge } from '@/features/planner/PlannerBadge';
 import { cn } from '@/lib/cn';
+import { isPlannerCode, PLANNER_BADGE_LABEL } from '@/lib/planner';
 import type { Intent } from '@/lib/statusIntent';
 import { aiInboxChip, dealerCodeLabel, ticketFlagLevel } from '@dk/shared';
 import type { AiInboxChip, Conversation, InboxTab } from '@dk/shared';
@@ -167,7 +169,12 @@ export const ConversationRow = React.memo(function ConversationRow({
   const people = chatPeople(c);
   const unread = c.unreadByAdmin;
   const preview = c.lastMessagePreview || 'No messages yet';
+  // A New Pump Guide chat (ADR 0058) answers itself from the rule books; the
+  // badge tells the desk it needs no reply. Read from the code (P1, P2, …)
+  // because the row carries no dealer status.
+  const planner = isPlannerCode(c.dealerCode);
   const hasChips =
+    planner ||
     c.flagged ||
     ticketFlagLevel(c.awaitingReplySince, now) !== 'none' ||
     (c.openTicketCount ?? 0) > 0 ||
@@ -178,7 +185,7 @@ export const ConversationRow = React.memo(function ConversationRow({
       type="button"
       onClick={() => onOpen(c.id)}
       aria-current={selected ? 'true' : undefined}
-      aria-label={`${dealerCodeLabel(c.dealerCode)}, ${chatRoleWord(c)}, ${people}${unread ? ', unread' : ''}`}
+      aria-label={`${dealerCodeLabel(c.dealerCode)}${planner ? `, ${PLANNER_BADGE_LABEL}` : ''}, ${chatRoleWord(c)}, ${people}${unread ? ', unread' : ''}`}
       className={cn(
         'focus-inset flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left transition-colors duration-150',
         selected ? 'bg-selected' : 'hover:bg-surface-2',
@@ -224,6 +231,7 @@ export const ConversationRow = React.memo(function ConversationRow({
         </span>
         {hasChips ? (
           <span className="mt-1.5 flex flex-wrap items-center gap-1">
+            {planner ? <PlannerBadge /> : null}
             <TicketFlagBadge conversation={c} now={now} />
             <TicketRowChip conversation={c} />
             <AiRowChip conversation={c} />

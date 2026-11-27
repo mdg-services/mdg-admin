@@ -28,11 +28,13 @@ import {
   Tabs,
 } from '@/components/ui';
 import { DealerSetupChip } from '@/features/onboarding/DealerSetupChip';
+import { PlannerBadge } from '@/features/planner/PlannerBadge';
 import { YourVideosAdminCard } from '@/features/yourVideos/YourVideosAdminCard';
 import { useDealerQuery } from '@/hooks/api/useDealers';
 import { useDealerServicesQuery } from '@/hooks/api/useDealerServices';
 import { useOutletSetupQuery } from '@/hooks/api/useOnboarding';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { isPlannerStatus } from '@/lib/planner';
 import { retryImport } from '@/lib/retryImport';
 import { dealerCodeLabel, type Dealer, type OutletSetupAdmin } from '@dk/shared';
 
@@ -141,6 +143,13 @@ const ServicesProvidedTab = React.lazy(
     })),
   ),
 );
+const PlannerTab = React.lazy(
+  retryImport(() =>
+    import('./dealers/PlannerTab').then((m) => ({
+      default: m.PlannerTab,
+    })),
+  ),
+);
 const DealerVaultView = React.lazy(
   retryImport(() =>
     import('./dealers/vault/DealerVaultView').then((m) => ({
@@ -198,6 +207,26 @@ const INFO_TAB: TabDef = {
 };
 
 /**
+ * A New Pump Guide account's own page (ADR 0058 §9): the person planning a pump,
+ * their plan, their chat and the switch to Dealer Kavach. It stands in for Info.
+ */
+const PLANNER_TAB: TabDef = {
+  id: 'planner',
+  label: 'Kavach Shuruaat',
+  placement: 'strip',
+  body: (dealer) => <PlannerTab dealer={dealer} />,
+};
+
+/**
+ * What a planner's page offers: their own tab, and Team, because "I cannot sign
+ * in" is a call a planner makes too. Everything else on this page is about a
+ * running outlet (services, Kavach, warriors, reports, papers, portal logins,
+ * runs, setup) and would only draw empty or failing panels for a person who has
+ * no pump yet.
+ */
+const PLANNER_TAB_IDS: ReadonlySet<string> = new Set([PLANNER_TAB.id, 'members']);
+
+/**
  * Every dealer surface, and where it belongs.
  *
  * Thirteen tabs was more strip than a phone can show and more choices than the
@@ -230,6 +259,7 @@ const INFO_TAB: TabDef = {
  */
 const TABS: TabDef[] = [
   INFO_TAB,
+  PLANNER_TAB,
   {
     id: 'services',
     label: 'Services',
@@ -447,7 +477,7 @@ export function DealerDetailPage() {
       setTab(requested);
       return;
     }
-    setTab('info');
+    setTab(isPlannerStatus(dealer.status) ? PLANNER_TAB.id : INFO_TAB.id);
   }, [dealer, tab, searchParams, setSearchParams]);
 
   if (isLoading) {
@@ -475,6 +505,16 @@ export function DealerDetailPage() {
   if (dealer.pumpLocation?.address) subtitleParts.push(dealer.pumpLocation.address);
 
   const isArchived = !!dealer.archivedAt;
+  // A New Pump Guide account (ADR 0058): a person planning a pump, not an outlet.
+  // Once they switch to Dealer Kavach the status moves on and this page becomes
+  // the outlet's, on the next read.
+  const isPlanner = isPlannerStatus(dealer.status);
+  const homeTab = isPlanner ? PLANNER_TAB : INFO_TAB;
+
+  /** Whether a surface belongs to this kind of account at all. */
+  function fitsAccount(t: TabDef): boolean {
+    return isPlanner ? PLANNER_TAB_IDS.has(t.id) : t.id !== PLANNER_TAB.id;
+  }
 
   // `null` until the query has actually *succeeded* — deliberately keyed on
   // `isSuccess` rather than on `data`, because those two differ exactly where it
@@ -484,11 +524,12 @@ export function DealerDetailPage() {
     : null;
 
   function placementOf(t: TabDef): TabPlacement {
+    if (!fitsAccount(t)) return 'hidden';
     // An archived dealer is read-only: every mutating endpoint 409s or 404s, and
     // its credential/onboarding sub-resources 404 outright, which would render
     // the other tabs as dead or, worse, as empty "not set up yet" states.
     // Collapse to Info, which is where Restore lives.
-    if (isArchived) return t.id === INFO_TAB.id ? 'strip' : 'hidden';
+    if (isArchived) return t.id === homeTab.id ? 'strip' : 'hidden';
     if (t.superAdminOnly && !isSuperAdmin) return 'hidden';
     // Three states, and all three have to be told apart. Collapsing them to
     // "truthy data or not" is what let a failed GET /dealers/:id/services
@@ -518,11 +559,14 @@ export function DealerDetailPage() {
     return t.placement;
   }
 
-  const defaultTabId = INFO_TAB.id;
+  const defaultTabId = homeTab.id;
   // Falling back rather than rendering nothing: an unknown id, or an id whose
-  // def has gone away, resolves to Info instead of an empty page.
-  const activeDef =
-    tabById(isArchived ? INFO_TAB.id : (tab ?? defaultTabId)) ?? INFO_TAB;
+  // def has gone away, resolves to Info instead of an empty page. A surface that
+  // belongs to the other kind of account (an outlet's ?tab=services link opened
+  // on a planner, or the planner tab left open as the account switches) lands on
+  // this account's home tab the same way.
+  const requestedDef = tabById(isArchived ? defaultTabId : (tab ?? defaultTabId));
+  const activeDef = requestedDef && fitsAccount(requestedDef) ? requestedDef : homeTab;
   const activeTab = activeDef.id;
   const activePlacement = placementOf(activeDef);
 
@@ -568,14 +612,24 @@ export function DealerDetailPage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {dealer.archivedAt ? <Badge intent="danger">Deleted</Badge> : null}
-            {/* "Onboarding · waiting for payment · 2 days" says everything the
-                ONBOARDING status chip would, so the two are not shown together. */}
-            {isArchived ? null : <DealerSetupChip setup={setup} />}
-            {setup && !isArchived && dealer.status === 'ONBOARDING' ? null : (
-              <StatusChip kind="dealer" value={dealer.status} />
+            {isPlanner ? (
+              // The badge says what the PLANNING status chip would, in the
+              // words the rest of the app uses. No setup chip (a planner has no
+              // outlet setup) and no Summon menu (it signs in to the oil
+              // company's portals, which a planner has none of).
+              <PlannerBadge />
+            ) : (
+              <>
+                {/* "Onboarding · waiting for payment · 2 days" says everything the
+                    ONBOARDING status chip would, so the two are not shown together. */}
+                {isArchived ? null : <DealerSetupChip setup={setup} />}
+                {setup && !isArchived && dealer.status === 'ONBOARDING' ? null : (
+                  <StatusChip kind="dealer" value={dealer.status} />
+                )}
+                {/* Every admin; a deleted outlet's logins are locked. */}
+                {isArchived ? null : <SummonMenu dealerId={dealer.id} />}
+              </>
             )}
-            {/* Every admin; a deleted outlet's logins are locked. */}
-            {isArchived ? null : <SummonMenu dealerId={dealer.id} />}
           </div>
         }
         // Icon: `dense` keeps the title, subtitle, actions and tools on one row.

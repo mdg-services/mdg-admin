@@ -515,6 +515,7 @@ export function audienceTag(
   if (item.audience === 'admin') return 'Team';
   if (item.audience === 'owner') return 'For owners';
   if (item.audience === 'manager') return 'For managers';
+  if (item.audience === 'planner') return 'For Kavach Shuruaat';
   return 'For dealers';
 }
 

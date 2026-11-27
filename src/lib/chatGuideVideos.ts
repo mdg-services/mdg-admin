@@ -20,6 +20,10 @@ import { searchVideos, type VideoSearchHit } from '../../shared/src/lib/videoSea
  *    inside the app that points at a way to pay), so the app chat's picker leaves
  *    it out and WhatsApp's lists it. The server refuses the same; this keeps the
  *    picker honest, so an admin is never offered a send that cannot happen.
+ *  - WHOSE CHAT. A Kavach Shuruaat planner's app chat (ADR 0058) is offered only
+ *    the planner's videos, and an outlet's app chat never one of them: the other
+ *    side could not play it. The server refuses the same (`VIDEO_NOT_FOR_THIS_CHAT`).
+ *    The WhatsApp inbox is a phone number, not an account, so it is not narrowed.
  *  - WHAT CAN BE SENT NOW. A video that is not uploaded yet is shown, greyed and
  *    marked, and cannot be picked: seeing that it exists is useful, sending a
  *    broken player is not. The server says which (`sendable`, `whatsappSendable`).
@@ -35,13 +39,16 @@ import { searchVideos, type VideoSearchHit } from '../../shared/src/lib/videoSea
 /** Where a video is being sent: a dealer's app chat, or a chat in the WhatsApp inbox. */
 export type VideoChannel = 'app' | 'whatsapp';
 
-/** A video that may go into a chat on this channel at all. */
+/** A video that may go into a chat on this channel at all; in the app chat, `planner` says whose chat it is. */
 export function isSendable(
   v: Pick<GuideVideoAdminItem, 'outsideAppOnly' | 'audience'>,
   channel: VideoChannel = 'app',
+  planner = false,
 ): boolean {
   if (v.audience === 'admin') return false;
-  return channel === 'whatsapp' || !v.outsideAppOnly;
+  if (channel === 'whatsapp') return true;
+  if (planner !== (v.audience === 'planner')) return false;
+  return !v.outsideAppOnly;
 }
 
 /**
@@ -82,13 +89,17 @@ export interface VideoChoices {
   khataKavach: GuideVideoAdminItem[];
 }
 
-/** The library as the picker lists it: what this channel may carry, ordered, split into the four groups. */
+/**
+ * The library as the picker lists it: what this channel may carry, ordered, split into the
+ * four groups. `planner`: the app chat is a Kavach Shuruaat planner's (ADR 0058).
+ */
 export function videoChoices(
   library: readonly GuideVideoAdminItem[] | undefined,
   channel: VideoChannel = 'app',
+  planner = false,
 ): VideoChoices {
   const list = (library ?? [])
-    .filter((v) => isSendable(v, channel))
+    .filter((v) => isSendable(v, channel, planner))
     .slice()
     .sort((a, b) => rank(a) - rank(b) || a.title.en.localeCompare(b.title.en));
   const guides = list.filter((v) => (v.family ?? 'guide') === 'guide');
@@ -139,6 +150,7 @@ export function audienceWord(
   if (v.family === 'khata_kavach') return 'Khata Kavach app';
   if (v.audience === 'owner') return 'Owners';
   if (v.audience === 'manager') return 'Managers';
+  if (v.audience === 'planner') return 'Kavach Shuruaat (planners)';
   return 'Owners and managers';
 }
 
@@ -194,5 +206,6 @@ export function describeVideoSent(
 export function sendFailureMessage(code: string | undefined, message: string | undefined): string {
   if (code === 'VIDEO_NOT_UPLOADED') return 'That video is not uploaded yet.';
   if (code === 'VIDEO_NOT_FOR_APP') return 'That video goes on WhatsApp only, not inside the app.';
+  if (code === 'VIDEO_NOT_FOR_THIS_CHAT') return message || 'That video is not for this chat.';
   return message || 'Could not send the video';
 }

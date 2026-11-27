@@ -131,6 +131,7 @@ export function libraryTag(
   if (v.outsideAppOnly) return 'WhatsApp only';
   if (v.audience === 'owner') return 'Owners';
   if (v.audience === 'manager') return 'Managers';
+  if (v.audience === 'planner') return 'Kavach Shuruaat';
   return 'Owners and managers';
 }
 

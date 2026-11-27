@@ -100,6 +100,7 @@ import {
   sortDeskTickets,
 } from '@/features/inbox/desk';
 import { TicketRows } from '@/features/inbox/TicketRows';
+import { PlannerBadge } from '@/features/planner/PlannerBadge';
 import {
   ReplyHelperPane,
   type ReplyHelperSuggestRequest,
@@ -150,6 +151,7 @@ import {
   writeListHidden,
   type ColumnPrefs,
 } from '@/lib/columnLayout';
+import { isPlannerCode, isPlannerStatus } from '@/lib/planner';
 import { urgentActionLabel } from '@/pages/tickets/format';
 import { useAuthStore } from '@/store/auth';
 import {
@@ -404,14 +406,24 @@ function OutletFacts({ dealer }: { dealer: Dealer }) {
         )}
       </dd>
       <dt className="text-xs text-text-muted">Status</dt>
-      <dd className="text-text">{titleCase(dealer.status.toLowerCase())}</dd>
-      <dt className="text-xs text-text-muted">Reports</dt>
-      <dd className="min-w-0">
-        <Link to={`/dsr/dealers/${dealer.id}`} className={linkClass}>
-          <FileText width={14} height={14} strokeWidth={1.75} aria-hidden />
-          Daily Sales Report
-        </Link>
-      </dd>
+      {/* A New Pump Guide account (ADR 0058) is planning a pump: it has no
+          reports to link to, and "Planning" alone would not say what it is. */}
+      {isPlannerStatus(dealer.status) ? (
+        <dd className="min-w-0">
+          <PlannerBadge />
+        </dd>
+      ) : (
+        <>
+          <dd className="text-text">{titleCase(dealer.status.toLowerCase())}</dd>
+          <dt className="text-xs text-text-muted">Reports</dt>
+          <dd className="min-w-0">
+            <Link to={`/dsr/dealers/${dealer.id}`} className={linkClass}>
+              <FileText width={14} height={14} strokeWidth={1.75} aria-hidden />
+              Daily Sales Report
+            </Link>
+          </dd>
+        </>
+      )}
     </dl>
   );
 }
@@ -1355,6 +1367,7 @@ export function InboxPage() {
       key={`reply-helper:${conversation.id}`}
       className="h-full"
       target={{ channel: 'app', conversationId: conversation.id }}
+      planner={isPlannerCode(conversation.dealerCode)}
       suggestRequest={suggestRequest?.conversationId === conversation.id ? suggestRequest : null}
       onSuggestHandled={handleSuggestHandled}
       // Below xl the drawer covers the reply box, which is what comes next.
@@ -1884,6 +1897,13 @@ export function InboxPage() {
                       >
                         {chatPeople(conversation)}
                       </span>
+                      {/* On the people line rather than beside the code: that
+                          line wraps below lg, the code's line does not. */}
+                      {isPlannerCode(conversation.dealerCode) ? (
+                        <span className="inline-flex shrink-0">
+                          <PlannerBadge />
+                        </span>
+                      ) : null}
                       <span className="inline-flex shrink-0">
                         <TicketFlagBadge conversation={conversation} now={now} />
                       </span>
@@ -2307,7 +2327,7 @@ export function InboxPage() {
       <SendGuideVideoDialog
         open={videoPickerOpen}
         onClose={() => setVideoPickerOpen(false)}
-        target={{ channel: 'app', conversationId: conversation?.id }}
+        target={{ channel: 'app', conversationId: conversation?.id, planner: isPlannerCode(conversation?.dealerCode) }}
       />
 
       <NewConversationDialog

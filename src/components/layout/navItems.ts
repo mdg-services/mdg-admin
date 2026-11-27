@@ -35,6 +35,7 @@ import {
   Users,
   Wrench,
   Warehouse,
+  Waypoints,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
@@ -69,6 +70,10 @@ export const NAV_ITEMS: NavItem[] = [
   // phone it is the first row of the More sheet and its count rides on the More
   // button.
   { to: '/leads', label: 'Leads', icon: Target },
+  // Right under Leads (ADR 0059 §3): which website pages bring people into Kavach
+  // Shuruaat — taps on "Ask in Kavach Shuruaat", sign-ups and payments per page. Every
+  // admin, as the API is: counts and page names only.
+  { to: '/website-funnel', label: 'Website → app', icon: Waypoints },
   // Films and the WhatsApp pair sit next, by request (23 Oct 2026).
   // The two Dealer Kavach films on mdgservices.in: views, how far people get,
   // where they stop, and the share links that send people there (ADR 0015).

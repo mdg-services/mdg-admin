@@ -30,6 +30,7 @@ import { HeldMessagesSection } from '@/features/onboarding/HeldMessagesSection';
 import { MonthlyPriceTool } from '@/features/onboarding/MonthlyPriceTool';
 import { OnboardingFunnel } from '@/features/onboarding/OnboardingFunnel';
 import { PasswordHelpSection } from '@/features/onboarding/PasswordHelpSection';
+import { PlannerBadge } from '@/features/planner/PlannerBadge';
 import { useSentinel } from '@/features/whatsapp/useInView';
 import {
   useCreateDealer,
@@ -42,6 +43,7 @@ import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { formatDate } from '@/lib/format';
 import {
   DEALERS_VIEW_STORAGE_KEY,
   parseDealersView,
@@ -50,9 +52,11 @@ import {
   type DealersView,
   type RosterRow,
 } from '@/lib/onboardingNext';
+import { isPlannerStatus } from '@/lib/planner';
 import {
   dealerCodeLabel,
   ROSTER_SERVICES,
+  type Dealer,
   type DealerServiceSummaryEntry,
   type DealerStatus,
 } from '@dk/shared';
@@ -65,11 +69,17 @@ import {
   serviceStateTitle,
 } from './dealers/ServiceStateChip';
 
+/**
+ * The list's filter. With no status the server leaves New Pump Guide accounts
+ * (people still planning a pump, ADR 0058) out, so the default is every OUTLET
+ * and says so; planners have their own entry at the end.
+ */
 const STATUS_OPTIONS: Array<{ value: '' | DealerStatus; label: string }> = [
-  { value: '', label: 'All statuses' },
+  { value: '', label: 'All outlets' },
   { value: 'ONBOARDING', label: 'Onboarding' },
   { value: 'ACTIVE', label: 'Active' },
   { value: 'SUSPENDED', label: 'Suspended' },
+  { value: 'PLANNING', label: 'Kavach Shuruaat (planning a pump)' },
 ];
 
 const PAGE_SIZE = 20;
@@ -97,6 +107,9 @@ export function DealersPage() {
   const isMd = useMediaQuery('(min-width: 768px)');
   const searchTerm = search.get('q') ?? '';
   const status = (search.get('status') as DealerStatus | null) ?? undefined;
+  // New Pump Guide accounts have no services, so their list has its own columns
+  // (who and when) instead of a row of service chips that could only be dashes.
+  const planningList = isPlannerStatus(status);
   // Held in the URL rather than component state because the list is
   // fetched a page at a time: the flag has to reach the query, not filter
   // the rows already loaded.
@@ -238,9 +251,10 @@ export function DealersPage() {
   // The roster's service columns, fetched a page of ids at a time. Kept out of
   // the dealer list request so the rows draw immediately and the chips fill in
   // behind them.
+  // None for the planners' list: they have no services to summarise.
   const idChunks = React.useMemo(
-    () => (pages?.pages ?? []).map((p) => p.items.map((d) => d.id)),
-    [pages],
+    () => (planningList ? [] : (pages?.pages ?? []).map((p) => p.items.map((d) => d.id))),
+    [pages, planningList],
   );
   const summaries = useDealerServiceSummaryChunks(idChunks);
   const summaryStamp = summaries.map((q) => q.dataUpdatedAt).join(',');
@@ -416,6 +430,7 @@ export function DealersPage() {
             <div className="flex items-center gap-3 md:contents">
               <div className="min-w-0 flex-1 md:w-56 md:flex-none">
                 <Select
+                  aria-label="Which dealers to list"
                   value={status ?? ''}
                   onChange={(e) => setStatus(e.target.value as DealerStatus | '')}
                 >
@@ -465,6 +480,29 @@ export function DealersPage() {
               title="Could not load dealers"
               description={(error as Error).message}
             />
+          ) : pages && items.length === 0 && planningList ? (
+            <EmptyState
+              icon={<Building2 width={28} height={28} strokeWidth={1.75} />}
+              title={searchTerm ? 'No Kavach Shuruaat account matches' : 'No Kavach Shuruaat sign-ups yet'}
+              description="People planning a new pump appear here once they sign up in the app."
+            />
+          ) : pages && planningList ? (
+            <PlannerList
+              items={items}
+              onOpen={(id) => navigate(`/dealers/${id}`)}
+              footer={
+                <>
+                  <div ref={sentinelRef} aria-hidden className="h-px" />
+                  <ListFooter
+                    loadingMore={isFetchingNextPage}
+                    failed={isError}
+                    onRetry={() => void fetchNextPage()}
+                    shown={items.length}
+                    total={total}
+                  />
+                </>
+              }
+            />
           ) : pages && items.length === 0 ? (
             <EmptyState
               icon={<Building2 width={28} height={28} strokeWidth={1.75} />}
@@ -506,6 +544,8 @@ export function DealersPage() {
                             <Badge intent="danger" className="ml-2">
                               Deleted
                             </Badge>
+                          ) : isPlannerStatus(d.status) ? (
+                            <PlannerBadge className="ml-2" />
                           ) : (
                             <SettingUpBadge item={settingUp.get(d.id)} className="ml-2" />
                           )}
@@ -569,6 +609,8 @@ export function DealersPage() {
                     ),
                     primaryRight: d.archivedAt ? (
                       <Badge intent="danger">Deleted</Badge>
+                    ) : isPlannerStatus(d.status) ? (
+                      <PlannerBadge />
                     ) : (
                       <SettingUpBadge item={settingUp.get(d.id)} />
                     ),
@@ -615,27 +657,13 @@ export function DealersPage() {
               {/* Infinite scroll: the sentinel sits under the last row, and
                   the footer says how far along the list is. */}
               <div ref={sentinelRef} aria-hidden className="h-px" />
-              <p
-                className="px-3 py-3 text-sm text-text-muted"
-                aria-live="polite"
-              >
-                {isFetchingNextPage ? (
-                  'Loading more...'
-                ) : isError ? (
-                  <>
-                    Could not load more.{' '}
-                    <button
-                      type="button"
-                      className="font-medium text-text underline"
-                      onClick={() => void fetchNextPage()}
-                    >
-                      Try again
-                    </button>
-                  </>
-                ) : (
-                  `Showing ${items.length} of ${total}`
-                )}
-              </p>
+              <ListFooter
+                loadingMore={isFetchingNextPage}
+                failed={isError}
+                onRetry={() => void fetchNextPage()}
+                shown={items.length}
+                total={total}
+              />
             </>
           ) : null}
         </CardContent>
@@ -686,6 +714,118 @@ function SettingUpBadge({ item, className }: { item: RosterRow | undefined; clas
     >
       {next.urgency === 'now' ? 'Setting up · to do' : 'Setting up'}
     </Badge>
+  );
+}
+
+/** How far along the list is, under its last row; the infinite scroll's status line. */
+function ListFooter({
+  loadingMore,
+  failed,
+  onRetry,
+  shown,
+  total,
+}: {
+  loadingMore: boolean;
+  failed: boolean;
+  onRetry: () => void;
+  shown: number;
+  total: number;
+}) {
+  return (
+    <p className="px-3 py-3 text-sm text-text-muted" aria-live="polite">
+      {loadingMore ? (
+        'Loading more...'
+      ) : failed ? (
+        <>
+          Could not load more.{' '}
+          <button
+            type="button"
+            className="font-medium text-text underline"
+            onClick={onRetry}
+          >
+            Try again
+          </button>
+        </>
+      ) : (
+        `Showing ${shown} of ${total}`
+      )}
+    </p>
+  );
+}
+
+/**
+ * The New Pump Guide accounts (ADR 0058): people planning a pump, newest first.
+ * Who they are and when they joined; their plan, state and oil company are on
+ * their own page, one tap away.
+ */
+function PlannerList({
+  items,
+  onOpen,
+  footer,
+}: {
+  items: Dealer[];
+  onOpen: (id: string) => void;
+  footer: React.ReactNode;
+}) {
+  const mobileOf = (d: Dealer) => d.phone ?? d.ownerContact?.phone ?? '-';
+  return (
+    <>
+      <div className="hidden md:block">
+        <Table>
+          <THead>
+            <TRow>
+              <TH>Code</TH>
+              <TH>Name</TH>
+              <TH>Mobile</TH>
+              <TH>Signed up</TH>
+            </TRow>
+          </THead>
+          <TBody>
+            {items.map((d) => (
+              <TRow
+                key={d.id}
+                clickable
+                onClick={() => onOpen(d.id)}
+                className={d.archivedAt ? 'opacity-60' : undefined}
+              >
+                <TD className="font-mono font-medium">
+                  {dealerCodeLabel(d.code)}
+                  {d.archivedAt ? (
+                    <Badge intent="danger" className="ml-2">
+                      Deleted
+                    </Badge>
+                  ) : (
+                    <PlannerBadge className="ml-2" />
+                  )}
+                </TD>
+                <TD>{d.ownerContact?.name ?? '-'}</TD>
+                <TD className="tabular-nums">{mobileOf(d)}</TD>
+                <TD>{formatDate(d.createdAt)}</TD>
+              </TRow>
+            ))}
+          </TBody>
+        </Table>
+      </div>
+      <MobileCardList
+        variant="rows"
+        cards={items.map((d) => ({
+          key: d.id,
+          onClick: () => onOpen(d.id),
+          primary: (
+            <span className={cn('block break-all font-medium text-text', d.archivedAt && 'opacity-60')}>
+              {dealerCodeLabel(d.code)}
+            </span>
+          ),
+          primaryRight: d.archivedAt ? <Badge intent="danger">Deleted</Badge> : <PlannerBadge />,
+          kv: [
+            { label: 'Name', value: d.ownerContact?.name ?? '-' },
+            { label: 'Mobile', value: mobileOf(d) },
+            { label: 'Signed up', value: formatDate(d.createdAt) },
+          ],
+        }))}
+      />
+      {footer}
+    </>
   );
 }
 
