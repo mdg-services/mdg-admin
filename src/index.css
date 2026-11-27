@@ -3,22 +3,22 @@
 @tailwind utilities;
 
 :root {
-  --color-bg: #fafafa;
+  --color-bg: #f8fafc;
   --color-surface: #ffffff;
-  --color-surface-2: #f4f4f5;
-  --color-border: #e4e4e7;
-  --color-border-strong: #d4d4d8;
+  --color-surface-2: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
 
-  --color-text: #09090b;
-  --color-text-muted: #52525b;
-  --color-text-subtle: #71717a;
+  --color-text: #0f172a;
+  --color-text-muted: #475569;
+  --color-text-subtle: #64748b;
   --color-text-inverse: #ffffff;
 
-  --color-brand: #18181b;
-  --color-brand-hover: #27272a;
-  --color-brand-soft: #f4f4f5;
+  --color-brand: #2563eb;
+  --color-brand-hover: #1d4ed8;
+  --color-brand-soft: #dbeafe;
 
-  --color-focus-ring: #a1a1aa;
+  --color-focus-ring: #60a5fa;
 
   /* ---- The Reply helper's own colour (ADR 0025) ---------------------------
      Violet, used for nothing else in the portal: wherever it shows, the admin
@@ -33,7 +33,7 @@
 
   /* The open conversation's row in the list: a quiet blue wash, lighter than
      brand-soft so the unread dot and the chips on it still read. */
-  --color-selected: #f4f4f5;
+  --color-selected: #eaf1fe;
 
   /* ---- The chat thread, in the dealer app's colours -----------------------
      The inbox draws a thread the way the dealer's app draws it, so an admin
@@ -103,22 +103,22 @@
 }
 
 .dark {
-  --color-bg: #09090b;
-  --color-surface: #111113;
-  --color-surface-2: #1c1c1f;
-  --color-border: #27272a;
-  --color-border-strong: #3f3f46;
+  --color-bg: #0b1220;
+  --color-surface: #111827;
+  --color-surface-2: #1f2937;
+  --color-border: #1f2937;
+  --color-border-strong: #334155;
 
-  --color-text: #fafafa;
-  --color-text-muted: #a1a1aa;
-  --color-text-subtle: #71717a;
-  --color-text-inverse: #18181b;
+  --color-text: #e5e7eb;
+  --color-text-muted: #94a3b8;
+  --color-text-subtle: #64748b;
+  --color-text-inverse: #0f172a;
 
-  --color-brand: #fafafa;
-  --color-brand-hover: #e4e4e7;
-  --color-brand-soft: #27272a;
+  --color-brand: #3b82f6;
+  --color-brand-hover: #2563eb;
+  --color-brand-soft: #1e3a8a;
 
-  --color-focus-ring: #71717a;
+  --color-focus-ring: #60a5fa;
 
   --color-assist: #a78bfa;
   --color-assist-hover: #8b5cf6;
@@ -126,7 +126,7 @@
   --color-assist-line: #4c1d95;
   --color-assist-strong: #ddd6fe;
 
-  --color-selected: #1f1f23;
+  --color-selected: #172554;
 }
 
 @layer base {

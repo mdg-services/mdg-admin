@@ -12,7 +12,6 @@ import { useStickToBottom } from '@/hooks/useStickToBottom';
 import { cn } from '@/lib/cn';
 import type { DealerOpenRequest, Message, UserRole } from '@dk/shared';
 
-import { chatLook } from './chatLook';
 import {
   DealerViewContext,
   SetupJourneyPreview,
@@ -360,7 +359,7 @@ export function MessageList({
     if (showDay) {
       items.push(
         <div key={`day-${m.id}`} className="flex justify-center px-3 pb-1 pt-3">
-          <span className={chatLook.dayChip}>
+          <span className="rounded-lg bg-wa-chip px-3 py-1 text-[12.5px] leading-tight text-wa-chip-text shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
             {dayChipLabel(m.createdAt, lang, now)}
           </span>
         </div>,
@@ -410,7 +409,7 @@ export function MessageList({
     <>
       {/* The dealer app's wallpaper and its faint pattern sit behind the
           thread; the pattern stays put while the messages scroll over it. */}
-      <div className={`relative h-full font-chat ${chatLook.wallpaper}`}>
+      <div className="relative h-full bg-wa-wallpaper font-chat text-wa-bubble-text">
         <Doodles />
         <div ref={scrollRef} className="relative z-10 h-full scroll-py-1.5 overflow-y-auto overscroll-contain">
           {/* ONE wrapper for everything in the scroller: the stick-to-bottom

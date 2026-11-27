@@ -42,8 +42,8 @@ const TOUCH = {
  * way the two stay the same colour when one of them is retinted.
  */
 export const BUTTON_VARIANTS: Record<Variant, string> = {
-  primary: `bg-brand text-text-inverse shadow hover:bg-brand-hover disabled:bg-brand/60 ${TOUCH.primary}`,
-  secondary: `bg-surface text-text border border-border shadow-sm hover:bg-surface-2 ${TOUCH.surface}`,
+  primary: `bg-brand text-text-inverse hover:bg-brand-hover disabled:bg-brand/60 ${TOUCH.primary}`,
+  secondary: `bg-surface text-text border border-border-strong hover:bg-surface-2 ${TOUCH.surface}`,
   ghost: `bg-transparent text-text hover:bg-surface-2 ${TOUCH.clear}`,
   danger: `bg-danger text-white hover:bg-danger/90 ${TOUCH.danger}`,
 };
@@ -58,7 +58,7 @@ export const BUTTON_VARIANTS: Record<Variant, string> = {
  * is already the contrast colour of its fill.
  */
 const BRAND_TONE_VARIANTS: Partial<Record<Variant, string>> = {
-  secondary: `bg-surface text-brand border border-border shadow-sm hover:bg-surface-2 ${TOUCH.surface}`,
+  secondary: `bg-surface text-brand border border-border-strong hover:bg-surface-2 ${TOUCH.surface}`,
   ghost: `bg-transparent text-brand hover:bg-surface-2 ${TOUCH.clear}`,
 };
 
@@ -139,7 +139,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         type={type}
         className={cn(
-          'inline-flex items-center whitespace-nowrap rounded-md font-medium',
+          'inline-flex items-center whitespace-nowrap rounded-md font-semibold',
           align === 'start' ? 'justify-start text-left' : 'justify-center',
           'transition-colors disabled:cursor-not-allowed disabled:opacity-70',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',

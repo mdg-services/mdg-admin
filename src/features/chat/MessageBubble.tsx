@@ -14,7 +14,6 @@ import {
 } from '@dk/shared';
 
 import { BubbleAttachments, splitAttachments } from './AttachmentPreview';
-import { type ChatSide, chatLook, sideOf } from './chatLook';
 import {
   AskFooterPreview,
   AskHeader,
@@ -117,14 +116,18 @@ function senderHue(senderId: string): number {
  * The little wedge on the first bubble of a run, hanging off its top corner —
  * on the side the bubble sits. Drawn in the bubble's own colour.
  */
-function Tail({ fromMdg, side }: { fromMdg: boolean; side: ChatSide }) {
+function Tail({ right, tone }: { right: boolean; tone: 'in' | 'out' }) {
   return (
     <svg
       aria-hidden
       viewBox="0 0 8 10"
       width={8}
       height={10}
-      className={chatLook.tail(fromMdg, side)}
+      className={cn(
+        'pointer-events-none absolute top-0 fill-current',
+        right ? '-right-[7px] scale-x-[-1]' : '-left-[7px]',
+        tone === 'in' ? 'text-wa-in' : 'text-wa-out',
+      )}
     >
       <path d="M8 0H0q5 .5 8 10z" />
     </svg>
@@ -227,8 +230,6 @@ export const MessageBubble = React.memo(function MessageBubble({
   const mdgSide = system || message.senderRole === 'admin';
   const own = message.senderId === currentUserId;
   const tone: 'in' | 'out' = mdgSide ? 'in' : 'out';
-  // The team's own words sit on the right and the dealer's on the left (the dealer's app shows it the other way round).
-  const side = sideOf('admin', mdgSide);
 
   const { images, voices, videos, docs } = splitAttachments(message.attachments);
   const hasBody = !!message.body;
@@ -269,7 +270,10 @@ export const MessageBubble = React.memo(function MessageBubble({
 
   const meta = (overlay: boolean) => (
     <span
-      className={cn(chatLook.meta, overlay ? 'text-white' : 'text-wa-meta')}
+      className={cn(
+        'flex items-center gap-1 whitespace-nowrap text-[11px] leading-none',
+        overlay ? 'text-white' : 'text-wa-meta',
+      )}
     >
       <span>{bubbleTime(message.createdAt, lang)}</span>
       {ticks ? <MessageTicks message={message} dealerIds={view.dealerIds} /> : null}
@@ -286,14 +290,23 @@ export const MessageBubble = React.memo(function MessageBubble({
 
   return (
     <div className={cn('flex w-full flex-col', mdgSide ? 'items-end' : 'items-start')}>
-      {/* The same widths as the dealer's app: a wide bubble is as wide as a picture (330px at
-          most); a text bubble wraps at 80%, capped, because 80% of a desktop column is far
-          wider than any phone. */}
-      <div className={chatLook.column(side, wide)}>
+      <div
+        className={cn(
+          'flex flex-col',
+          mdgSide ? 'items-end' : 'items-start',
+          // The app's widths: a wide bubble is as wide as a picture (330px at
+          // most); a text bubble wraps at 80% — capped here, because 80% of a
+          // desktop column is far wider than any phone.
+          wide ? 'w-[min(80%,330px)]' : 'max-w-[min(80%,420px)]',
+        )}
+      >
         <div
           className={cn(
-            'group',
-            chatLook.bubble({ fromMdg: mdgSide, side, first, wide, padded: !(hasMedia || hasOther) }),
+            'group relative min-w-0 rounded-md text-wa-bubble-text shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]',
+            wide && 'w-full',
+            tone === 'in' ? 'bg-wa-in' : 'bg-wa-out',
+            first && (mdgSide ? 'rounded-tr-none' : 'rounded-tl-none'),
+            hasMedia || hasOther ? 'p-[3px]' : 'px-[9px] pb-[7px] pt-[6px]',
           )}
           onContextMenu={
             menuEnabled
@@ -309,7 +322,7 @@ export const MessageBubble = React.memo(function MessageBubble({
           onPointerCancel={menuEnabled ? longPress.onPointerCancel : undefined}
           onClickCapture={menuEnabled ? longPress.onClickCapture : undefined}
         >
-          {first ? <Tail fromMdg={mdgSide} side={side} /> : null}
+          {first ? <Tail right={mdgSide} tone={tone} /> : null}
 
           {menuEnabled ? (
             <button
@@ -341,7 +354,10 @@ export const MessageBubble = React.memo(function MessageBubble({
 
           {showName ? (
             <span
-              className={cn(chatLook.name, hasMedia || hasOther ? 'px-1.5 pb-1 pt-1' : 'pb-0.5')}
+              className={cn(
+                'block truncate text-[13px] font-medium leading-tight',
+                hasMedia || hasOther ? 'px-1.5 pb-1 pt-1' : 'pb-0.5',
+              )}
               style={{ color: `hsl(${senderHue(message.senderId)} 55% 40%)` }}
             >
               {senderLabel}
@@ -352,14 +368,14 @@ export const MessageBubble = React.memo(function MessageBubble({
             <button
               type="button"
               onClick={() => onJumpTo?.(replyTo.messageId)}
-              className={cn(chatLook.quote, 'hover:bg-black/10')}
+              className="mb-1 flex w-full items-stretch overflow-hidden rounded-md bg-black/[0.06] text-left hover:bg-black/10"
             >
               <span className="w-1 shrink-0 bg-wa-accent" aria-hidden />
               <span className="min-w-0 flex-1 px-2 py-1">
-                <span className={chatLook.quoteName}>
+                <span className="block truncate text-[13px] font-medium leading-tight text-wa-accent-strong">
                   {replySenderLabel(replyTo, currentUserId)}
                 </span>
-                <span className="line-clamp-2 break-words text-meta leading-snug text-wa-meta">
+                <span className="line-clamp-2 break-words text-[13px] leading-snug text-wa-meta">
                   {replyPreviewText(replyTo)}
                 </span>
               </span>
@@ -404,7 +420,7 @@ export const MessageBubble = React.memo(function MessageBubble({
           {announcement ? (
             // A plain card, as the dealer's chat draws it: no coloured strip, no tone label.
             <p
-              className="px-1 pt-0.5 text-subheading font-bold leading-snug [overflow-wrap:anywhere]"
+              className="px-1 pt-0.5 text-[16px] font-bold leading-snug [overflow-wrap:anywhere]"
               data-testid="announcement-card"
             >
               {announcement.title}
@@ -418,8 +434,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                 // `anywhere`, not `break-words`: only it lowers the bubble's
                 // minimum width, so a 55-character invoice number wraps inside
                 // the bubble instead of running out of it.
-                chatLook.words,
-                '[overflow-wrap:anywhere]',
+                'whitespace-pre-wrap [overflow-wrap:anywhere] text-[15px] leading-[1.35] [&_a]:text-wa-accent-strong [&_a]:underline',
                 hasMedia || hasOther ? 'px-[6px] pb-0.5 pt-1' : '',
               )}
             >
@@ -472,11 +487,11 @@ export const MessageBubble = React.memo(function MessageBubble({
           {message.replyChoices ? (
             <div className="flex flex-wrap gap-1 px-1.5 pb-1 pt-1" data-testid="reply-choices-preview">
               {message.replyChoices.options.map((o) => (
-                <span key={o.value} className="rounded-full border border-wa-divider px-2 py-0.5 text-meta text-wa-meta">
+                <span key={o.value} className="rounded-full border border-wa-divider px-2 py-0.5 text-[12.5px] text-wa-meta">
                   {sayIn(o.label, 'hl')}
                 </span>
               ))}
-              <span className="rounded-full border border-dashed border-wa-divider px-2 py-0.5 text-meta text-wa-meta">Kuch aur? Likhiye</span>
+              <span className="rounded-full border border-dashed border-wa-divider px-2 py-0.5 text-[12.5px] text-wa-meta">Kuch aur? Likhiye</span>
             </div>
           ) : null}
 
@@ -486,7 +501,7 @@ export const MessageBubble = React.memo(function MessageBubble({
             <p
               data-testid="dealer-sees-report"
               title={reportNoteTitle(report)}
-              className="px-1.5 pb-0.5 pt-1 text-micro leading-tight text-wa-meta"
+              className="px-1.5 pb-0.5 pt-1 text-[11px] leading-tight text-wa-meta"
             >
               {dealerSeesLine(report)}
             </p>
@@ -533,14 +548,13 @@ export const MessageBubble = React.memo(function MessageBubble({
                 className={cn(
                   // The only route to the who-reacted list; `.tap-target` grows
                   // the hit area without growing the chip.
-                  'tap-target leading-none',
-                  chatLook.reaction,
+                  'tap-target flex items-center gap-0.5 rounded-full border bg-wa-in px-1.5 py-0.5 text-[13px] leading-none shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]',
                   g.mine ? 'border-wa-accent' : 'border-wa-divider',
                 )}
               >
                 <span aria-hidden>{g.emoji}</span>
                 {g.count > 1 ? (
-                  <span className={chatLook.reactionCount}>{g.count}</span>
+                  <span className="text-[11px] tabular-nums text-wa-meta">{g.count}</span>
                 ) : null}
               </button>
             ))}
